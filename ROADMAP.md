@@ -190,7 +190,7 @@ EmailThread
 
 ```
 naavik/
-├── src/naavik/
+├── src/
 │   ├── main.py                    # FastAPI entrypoint
 │   ├── config.py                  # pydantic-settings
 │   ├── api/                       # REST routes
@@ -286,10 +286,10 @@ naavik/
 - `nix develop` → python 3.12.13, uv 0.11.7, typst 0.14.2, ruff 0.15.11, postgresql 17.9, pre-commit 4.5.1
 - `uv sync` → 56 packages installed
 - `nix build` → produces `result/bin/naavik` entrypoint
-- `uv run fastapi dev src/naavik/main.py` → server starts on :8000
+- `uv run fastapi dev src/main.py` → server starts on :8000
 - `GET /api/health` → `{"status":"ok"}`
 - `GET /` → HTTP 200, dashboard renders with sidebar
-- `uv run ruff check src/naavik/` → all checks passed
+- `uv run ruff check src/` → all checks passed
 
 ---
 
@@ -481,7 +481,7 @@ For users who prefer not to self-host. Functionally identical to self-hosted —
 nix develop          # drops into shell with python, uv, typst, postgresql, ruff
 uv sync              # install Python deps
 uv run alembic upgrade head
-uv run fastapi dev src/naavik/main.py
+uv run fastapi dev src/main.py
 ```
 
 ### Nix Flake Outputs
@@ -561,8 +561,8 @@ Naavik DB ──► GET /api/portfolio/cv ──► cryptic-soul cv.astro (build
 
 | Document | Purpose |
 |---|---|
-| `docs/design/DESIGN_SYSTEM.md` | Color tokens, typography, components, voice, motion, accessibility — the visual contract |
-| `docs/design/DESIGN_SYSTEM_UPLOAD.md` | Formatted specifically for Claude Design's "Set up design system" feature — upload this file |
+| `DESIGN.md` | Color tokens, typography, components, voice, motion, accessibility — the visual contract |
+| `DESIGN.md` | Formatted specifically for Claude Design's "Set up design system" feature — upload this file |
 | `docs/design/SCREENS.md` | Complete screen catalog (19 screens, all phases) with routes, layout specs, interactions, states |
 | `docs/design/CLAUDE_DESIGN_PROMPT.md` | Screen descriptions for Claude Design prototype projects (assumes design system already published) |
 | `docs/design/WORKFLOW.md` | Design → implementation pipeline: design system → mockups → component library → pages |
@@ -572,7 +572,7 @@ Naavik DB ──► GET /api/portfolio/cv ──► cryptic-soul cv.astro (build
 
 ```
 PHASE A (Claude Design):
-  Upload DESIGN_SYSTEM_UPLOAD.md → "Set up design system"
+  Point Claude Design at GitHub repo (or upload DESIGN.md) → "Set up design system"
   → Extract tokens → Validate → Publish
 
 PHASE B (Claude Design):
@@ -580,13 +580,13 @@ PHASE B (Claude Design):
   → Generate screens → Iterate → Export PNGs → Commit to mockups/
 
 PHASE C (Claude Code):
-  Read mockups + DESIGN_SYSTEM.md
+  Read mockups + DESIGN.md
   → Build component library (templates/components/)
   → Implement pages (templates/pages/)
 ```
 ROADMAP + SCREENS.md → paste prompt → Claude Design → mockups committed
                                          ↓
-                         Claude Code reads mockups + DESIGN_SYSTEM.md
+                         Claude Code reads mockups + DESIGN.md
                                          ↓
                          Component library built (templates/components/)
                                          ↓
@@ -632,4 +632,4 @@ ROADMAP + SCREENS.md → paste prompt → Claude Design → mockups committed
 | Mono font | JetBrains Mono |
 | Icons | Lucide Icons (stroke 1.5) |
 
-Full spec in `docs/design/DESIGN_SYSTEM.md`.
+Full spec in `DESIGN.md`.

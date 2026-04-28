@@ -39,7 +39,7 @@ dev = [
 ]
 
 [project.scripts]
-naavik = "naavik.main:main"
+naavik = "main:main"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -47,7 +47,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["naavik"]
+packages = ["api", "db", "llm", "models", "scheduler", "scraper", "services", "typst", "ui"]
 
 [tool.ruff]
 target-version = "py312"

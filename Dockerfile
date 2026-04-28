@@ -40,4 +40,4 @@ RUN mkdir -p /app/generated
 
 EXPOSE 8000
 
-ENTRYPOINT ["fastapi", "run", "src/naavik/main.py"]
+ENTRYPOINT ["fastapi", "run", "src/main.py"]

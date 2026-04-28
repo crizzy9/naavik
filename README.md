@@ -138,7 +138,7 @@ docker compose up -d db
 uv run alembic upgrade head
 
 # Start dev server
-uv run fastapi dev src/naavik/main.py
+uv run fastapi dev src/main.py
 ```
 
 ## Configuration
@@ -167,7 +167,7 @@ PORTFOLIO_WEBHOOK_URL=...   # Netlify/Vercel rebuild trigger
 
 ```
 naavik/
-├── src/naavik/
+├── src/
 │   ├── main.py              # FastAPI entrypoint
 │   ├── config.py            # Settings
 │   ├── api/                 # REST API routes

@@ -5,7 +5,7 @@
 > **Stack:** Tailwind CSS + DaisyUI + HTMX (server-rendered Jinja2)
 >
 > This is the canonical visual contract for Naavik. Every mockup and every implemented page must conform to it.
-> See `docs/design/DESIGN_SYSTEM_UPLOAD.md` for the Claude Design-optimized version.
+> This file is also the source material for Claude Design's "Set up design system" feature.
 
 ---
 
@@ -326,7 +326,7 @@ Use this realistic data in all mockups:
 | File | Purpose |
 |---|---|
 | `DESIGN.md` (this file) | Root-level quick reference for all agents |
-| `docs/design/DESIGN_SYSTEM_UPLOAD.md` | Claude Design-optimized upload file |
+| `docs/design/CLAUDE_DESIGN_PROMPT.md` | Screen descriptions for Claude Design prototype projects |
 | `docs/design/CLAUDE_DESIGN_PROMPT.md` | Screen descriptions for prototype generation |
 | `docs/design/SCREENS.md` | Full screen catalog with specs |
 | `docs/design/WORKFLOW.md` | Design → implementation pipeline |

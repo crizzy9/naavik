@@ -62,7 +62,7 @@
 ## Architecture
 
 ```
-src/naavik/
+src/
 ├── main.py              ← FastAPI app entrypoint
 ├── config.py            ← pydantic-settings based config
 ├── api/                 ← REST API routes
@@ -91,8 +91,7 @@ src/naavik/
 | `CLAUDE.md` | Claude Code-specific conventions | When using Claude Code |
 | `ROADMAP.md` | Phase plan, task tracking, progress | Before any work |
 | `DESIGN.md` | Root-level design system quick reference | Before any UI work |
-| `docs/design/DESIGN_SYSTEM.md` | Full design system spec | Before any UI work |
-| `docs/design/DESIGN_SYSTEM_UPLOAD.md` | Claude Design upload file | When setting up design system |
+| `DESIGN.md` | Root-level design system (canonical reference) | Before any UI work |
 | `docs/design/SCREENS.md` | Complete screen catalog with specs | Before any UI work |
 | `docs/design/CLAUDE_DESIGN_PROMPT.md` | Screen descriptions for Claude Design | When designing UI |
 | `docs/design/WORKFLOW.md` | Design → implementation pipeline | When designing or implementing UI |
@@ -116,9 +115,9 @@ src/naavik/
 - Use FastAPI dependency injection for DB sessions, auth, LLM providers
 
 ### Frontend (HTMX)
-- Templates in `src/naavik/ui/templates/`
-- Reusable partials in `src/naavik/ui/templates/components/`
-- Page templates in `src/naavik/ui/templates/pages/`
+- Templates in `src/ui/templates/`
+- Reusable partials in `src/ui/templates/components/`
+- Page templates in `src/ui/templates/pages/`
 - Use `hx-get`, `hx-post`, `hx-swap` for interactivity
 - Tailwind CSS + DaisyUI for styling
 - Alpine.js only if needed for complex client-side state (e.g., drag-and-drop)
@@ -161,7 +160,7 @@ nix develop
 uv sync
 
 # Run dev server
-uv run fastapi dev src/naavik/main.py
+uv run fastapi dev src/main.py
 
 # Database
 uv run alembic upgrade head
@@ -216,7 +215,7 @@ Never let the roadmap drift from the actual state of the codebase. If you discov
 See `docs/design/WORKFLOW.md` for the full pipeline. Summary:
 
 **Phase A — Design System (Claude Design, one-time):**
-1. Upload `docs/design/DESIGN_SYSTEM_UPLOAD.md` to Claude Design's **"Set up design system"**
+1. Point Claude Design's **"Set up design system"** at the GitHub repo (or upload `DESIGN.md`)
 2. Claude extracts tokens, components, patterns
 3. Validate with test prompts
 4. **Publish** the design system
@@ -227,9 +226,9 @@ See `docs/design/WORKFLOW.md` for the full pipeline. Summary:
 7. Iterate and export mockups to `docs/design/mockups/`
 
 **Phase C — Implementation (Claude Code):**
-8. Read mockups + `DESIGN_SYSTEM.md`
-9. Build component library → `src/naavik/ui/templates/components/`
-10. Implement pages → `src/naavik/ui/templates/pages/`
+8. Read mockups + `DESIGN.md`
+9. Build component library → `src/ui/templates/components/`
+10. Implement pages → `src/ui/templates/pages/`
 
 **Critical rule:** Never implement a screen without a mockup. Never build a component without checking if it already exists.
 
@@ -265,7 +264,7 @@ See `docs/design/WORKFLOW.md` for the full pipeline. Summary:
 - When in doubt, check `ROADMAP.md` for current priorities
 
 ### Design Agents
-- The visual contract is `docs/design/DESIGN_SYSTEM.md`
+- The visual contract is `DESIGN.md`
 - When generating mockups, use realistic sample data from the Owner Profile section above
 - Dark mode is primary; light mode is Phase 6
 - Export mockups at 1440×900 (desktop) and 375×812 (mobile)
@@ -277,7 +276,7 @@ See `docs/design/WORKFLOW.md` for the full pipeline. Summary:
 
 | Date | Decision | Context |
 |---|---|---|
-| 2026-04-25 | UI Screens & Design workflow formalized | Added DESIGN_SYSTEM.md, SCREENS.md, WORKFLOW.md, CLAUDE_DESIGN_PROMPT.md |
+| 2026-04-25 | UI Screens & Design workflow formalized | Added DESIGN.md, SCREENS.md, WORKFLOW.md, CLAUDE_DESIGN_PROMPT.md |
 | 2026-04-25 | Phase 0 Complete | Foundation infrastructure shipped |
 | 2026-04-25 | Dark mode primary | Light mode deferred to Phase 6 |
 | 2026-04-25 | Lucide Icons exclusively | No mixing icon sets |
@@ -290,5 +289,5 @@ See `docs/design/WORKFLOW.md` for the full pipeline. Summary:
 
 - Repo: https://github.com/crizzy9/naavik
 - Issues: Use GitHub issues for bugs and feature requests
-- Design questions: Check `docs/design/DESIGN_SYSTEM.md` first
+- Design questions: Check `DESIGN.md` first
 - Architecture questions: Check this file and `ROADMAP.md`

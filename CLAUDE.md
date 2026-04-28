@@ -11,7 +11,7 @@ This file provides Claude Code-specific guidance. For general project convention
 ```
 1. Read AGENTS.md
 2. Read ROADMAP.md
-3. If doing UI work: read docs/design/WORKFLOW.md + docs/design/DESIGN_SYSTEM.md
+3. If doing UI work: read docs/design/WORKFLOW.md + DESIGN.md
 4. Start work. Update ROADMAP.md as you go.
 ```
 
@@ -27,7 +27,7 @@ nix develop
 uv sync
 
 # Run dev server
-uv run fastapi dev src/naavik/main.py
+uv run fastapi dev src/main.py
 
 # Database
 uv run alembic upgrade head
@@ -39,7 +39,7 @@ uv run ruff format .
 uv run pytest
 
 # Typst
-typst compile src/naavik/typst/templates/onepage.typ output.pdf
+typst compile src/typst/templates/onepage.typ output.pdf
 
 # Build
 nix build
@@ -69,9 +69,9 @@ with sync_playwright() as p:
 When implementing a screen:
 1. Read `docs/design/SCREENS.md` for the screen spec
 2. Open `docs/design/mockups/{n}-{slug}-desktop.png` (and `-mobile.png`)
-3. Read `docs/design/DESIGN_SYSTEM.md` for tokens and components
-4. Check `src/naavik/ui/templates/components/` for reusable partials
-5. Build the page in `src/naavik/ui/templates/pages/{slug}.html`
+3. Read `DESIGN.md` for tokens and components
+4. Check `src/ui/templates/components/` for reusable partials
+5. Build the page in `src/ui/templates/pages/{slug}.html`
 6. Add route in the appropriate FastAPI router module
 7. Run `uv run ruff check` before finishing
 
@@ -111,7 +111,7 @@ Never let the roadmap drift. Fix it first, then continue work.
 ## Architecture
 
 ```
-src/naavik/
+src/
 ├── main.py              ← FastAPI app entrypoint
 ├── config.py            ← pydantic-settings based config
 ├── api/                 ← REST API routes
@@ -142,8 +142,8 @@ src/naavik/
 - Use FastAPI dependency injection for DB sessions, auth, LLM providers
 
 ### Frontend (HTMX)
-- Templates in `src/naavik/ui/templates/`
-- Reusable partials in `src/naavik/ui/templates/partials/` (HTMX fragment swaps)
+- Templates in `src/ui/templates/`
+- Reusable partials in `src/ui/templates/components/` (HTMX fragment swaps)
 - Use `hx-get`, `hx-post`, `hx-swap` for interactivity — no custom JavaScript unless absolutely necessary
 - Tailwind CSS + DaisyUI for styling (same stack as the portfolio site crypticsoul.dev)
 - Alpine.js only if needed for complex client-side state (e.g., drag-and-drop)
@@ -173,7 +173,7 @@ src/naavik/
 - AI selects/deselects bullets per job based on tag relevance
 
 ### Typst (PDF Generation)
-- Templates in `src/naavik/typst/templates/`
+- Templates in `src/typst/templates/`
 - Primary template: `onepage.typ` (NEU-style 1-page resume)
 - Typst templates consume JSON data from the profile DB models
 - Compile via `typst compile` CLI (wrapped in `typst/compiler.py`)
@@ -214,7 +214,7 @@ nix develop
 uv sync
 
 # Run dev server
-uv run fastapi dev src/naavik/main.py
+uv run fastapi dev src/main.py
 
 # Database
 uv run alembic upgrade head                   # Run migrations
@@ -226,7 +226,7 @@ uv run ruff format .                          # Format
 uv run pytest                                 # Tests
 
 # Typst
-typst compile src/naavik/typst/templates/onepage.typ output.pdf
+typst compile src/typst/templates/onepage.typ output.pdf
 
 # Build
 nix build                                     # Build Nix package

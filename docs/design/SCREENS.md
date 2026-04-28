@@ -2,8 +2,8 @@
 
 > **Last updated:** 2026-04-25
 > **Product positioning:** Self-hosted first, cloud available ($15/mo, bring-your-own AI credits). The UI feels like a developer tool, not a SaaS product.
-> **Design prompt:** See `CLAUDE_DESIGN_PROMPT.md` for screen descriptions (assumes design system already published). See `DESIGN_SYSTEM_UPLOAD.md` for the design system setup file.
-> **Design system:** See `DESIGN_SYSTEM.md` for color tokens, typography, components, voice.
+> **Design prompt:** See `CLAUDE_DESIGN_PROMPT.md` for screen descriptions (assumes design system already published). See `DESIGN.md` for the design system setup file.
+> **Design system:** See `DESIGN.md` for color tokens, typography, components, voice.
 > **Workflow:** See `WORKFLOW.md` for the design → implementation pipeline.
 >
 > **Maintenance:** Update this file when screens are added, removed, or significantly redesigned. Mockup and implementation status columns must reflect reality.
@@ -19,7 +19,7 @@ Each screen entry has:
 - **Impl** — `[ ]` not built, `[~]` in progress, `[x]` shipped
 - **Purpose** — one sentence
 - **Layout** — high-level structure
-- **Components** — key elements (link to `DESIGN_SYSTEM.md` components when relevant)
+- **Components** — key elements (link to `DESIGN.md` components when relevant)
 - **Interactions** — HTMX swaps, modals, navigation
 - **States** — empty / loading / error variants
 

@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from naavik.config import settings
+from config import settings
 
 
 @asynccontextmanager
@@ -21,9 +21,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.mount("/static", StaticFiles(directory="src/naavik/ui/static"), name="static")
+app.mount("/static", StaticFiles(directory="src/ui/static"), name="static")
 
-templates = Jinja2Templates(directory="src/naavik/ui/templates")
+templates = Jinja2Templates(directory="src/ui/templates")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -42,7 +42,7 @@ async def health_check():
 
 def main():
     uvicorn.run(
-        "naavik.main:app",
+        "main:app",
         host=settings.host,
         port=settings.port,
         reload=False,
