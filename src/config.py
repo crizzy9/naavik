@@ -24,9 +24,8 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     portfolio_webhook_url: str | None = None
 
-    # OAuth (optional)
-    google_client_id: str | None = None
-    google_client_secret: str | None = None
+    # Data dir (mirrors production /app/.naavik in Docker, ~/.naavik on NixOS)
+    data_dir: str = ".naavik"
 
     # Server
     host: str = "0.0.0.0"

@@ -43,14 +43,13 @@ Commercial tools like Sprout ($100/mo), Teal ($29/mo), or Jobsolv ($149/mo) char
 
 - Upload a PDF resume — AI extracts structured profile data automatically
 - Edit experience, skills, projects, certifications in a clean UI
-- Every bullet point has a **detailed** version (for full CV) and a **oneline** version (for 1-page resume)
-- Tag-based system for intelligent bullet selection per job type
+- Each bullet is a **single long-form field**. AI trims it to fit one line at apply time, preserving numbers and verbs — you don't maintain two versions
+- Auto-tagged with a fixed 9-tag vocabulary (`ai-ml · backend · frontend · devops · data-eng · genai · leadership · platform · product`); AI selects relevant bullets per job
 
 ### Resume Generation
 
 - Generates tailored 1-page resumes using [Typst](https://typst.app/) (blazing fast PDF compilation)
-- AI analyzes job descriptions and selects the most relevant bullets from your profile
-- Validates that every bullet fits on exactly one line — no overflow
+- AI analyzes job descriptions and selects the most relevant bullets from your profile, trimming each to a single line
 - Multiple template support (NEU style included)
 
 ### Job Scraping & Discovery
@@ -70,10 +69,11 @@ Commercial tools like Sprout ($100/mo), Teal ($29/mo), or Jobsolv ($149/mo) char
 
 ### Application Tracking
 
-- Status pipeline: Found → Scored → Approved → Docs Generated → Applied → Interviewing → Offer/Rejected
-- Manual application logger for jobs applied outside Naavik
+- Status pipeline: Applied → Recruiter Screen → Onsite / Loop → Offer → Closed (rejected/withdrawn/ghosted)
+- Auto-classified from Gmail/Outlook integration; manual entries supported
+- Outreach pipeline integrated (recruiter follow-ups, referral asks)
 - Discord and Telegram notifications
-- Analytics dashboard (response rates, interview conversion, by company/role)
+- Analytics: response rate, onsite rate, offer rate (90-day windows)
 
 ### Portfolio Integration
 
@@ -92,106 +92,124 @@ Commercial tools like Sprout ($100/mo), Teal ($29/mo), or Jobsolv ($149/mo) char
 | AI/LLM         | Anthropic (Claude) / OpenAI (GPT) / Ollama (local) |
 | PDF Generation | Typst                                              |
 | Scheduling     | APScheduler                                        |
-| Auth           | JWT + Google OAuth                                 |
-| Deployment     | Docker Compose                                     |
+| Auth           | JWT (forms) — OIDC for self-hosted in Phase 2+     |
+| Deployment     | Docker Compose · NixOS module · Nix flake          |
 
 ## Quick Start
 
-### Prerequisites
-
-- Docker and Docker Compose
-- An API key for at least one LLM provider (Anthropic, OpenAI) OR a running Ollama instance
-
-### Deploy
+### Self-host with Docker Compose
 
 ```bash
 git clone https://github.com/crizzy9/naavik.git
 cd naavik
 
-# Configure environment
+# Optional: provide API keys / overrides (defaults work out of the box)
 cp .env.example .env
-# Edit .env with your API keys and settings
 
-# Start services
+# One command — Postgres + auto-migrate + app, all wired
 docker compose up -d
 
-# Run migrations
-docker compose exec naavik alembic upgrade head
-
-# Open in browser
-open http://localhost:8000
+# Open http://localhost:8000
 ```
 
-### Development Setup
+Migrations run automatically on first start. State persists in named volumes (`naavik-db-data`, `naavik-data`).
+
+### Self-host on NixOS
+
+Add Naavik to your flake inputs and enable the module — see `nix/module.nix`. Migrations run automatically as a systemd `ExecStartPre`. Postgres is provisioned via `services.postgresql.ensureDatabases`.
+
+```nix
+inputs.naavik.url = "github:crizzy9/naavik";
+
+# In your host config (Lumino-compatible)
+servicesConfig.apps.tools.naavik = {
+  enable = true;
+  subdomain = "jobs";   # → jobs.your.domain
+};
+```
+
+### Development
+
+The repo is **Nix-first**. One command boots Postgres (with pgvector), runs migrations, and starts FastAPI dev with auto-reload:
 
 ```bash
-# Install uv (Python package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install dependencies
-uv sync
-
-# Start PostgreSQL (via Docker)
-docker compose up -d db
-
-# Run migrations
-uv run alembic upgrade head
-
-# Start dev server
-uv run fastapi dev src/main.py
+nix run .#dev
 ```
+
+That's it. Per-project Postgres data lives in `./.naavik/db/` (gitignored). Ctrl-C tears down cleanly. Open http://localhost:8000.
+
+For an interactive dev shell (uv, ruff, typst, postgresql-client on PATH):
+
+```bash
+nix develop          # or set up direnv to load automatically
+```
+
+`direnv` users: an `.envrc` is included; `direnv allow` once and the shell loads on `cd`.
 
 ## Configuration
 
-Naavik is configured via environment variables or `.env` file:
+All env vars are **optional**. `src/config.py` provides working defaults; override only what differs.
 
 ```bash
-# Required
+# Database (Compose / NixOS provision their own; only override if connecting elsewhere)
 DATABASE_URL=postgresql+asyncpg://naavik:password@localhost:5432/naavik
-SECRET_KEY=your-secret-key
 
-# LLM Providers (at least one required)
+# Override in production!
+SECRET_KEY=<long-random-string>
+
+# LLM providers (at least one for AI features)
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 OLLAMA_BASE_URL=http://localhost:11434
 
-# Optional
+# Optional integrations
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 TELEGRAM_BOT_TOKEN=...
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-PORTFOLIO_WEBHOOK_URL=...   # Netlify/Vercel rebuild trigger
+PORTFOLIO_WEBHOOK_URL=...    # Netlify/Vercel rebuild trigger
+
+# Data dir (mirrors production /app/.naavik in Docker, ~/.naavik on NixOS)
+DATA_DIR=.naavik
 ```
+
+Auth is form-based (email + password) in v1. OIDC support for self-hosted (Authentik / Keycloak / Okta) is on the Phase 2+ roadmap.
 
 ## Project Structure
 
 ```
 naavik/
+├── flake.nix                # Nix-first: devShell + package + NixOS module + `nix run .#dev`
+├── nix/
+│   ├── devshell.nix         # `nix develop` — interactive shell
+│   ├── package.nix          # Nix package; bundles migrations + naavik-migrate wrapper
+│   └── module.nix           # NixOS service module (auto-migrate ExecStartPre)
 ├── src/
 │   ├── main.py              # FastAPI entrypoint
-│   ├── config.py            # Settings
-│   ├── api/                 # REST API routes
-│   ├── ui/                  # HTMX views (Jinja2 templates)
+│   ├── config.py            # Settings (pydantic-settings)
+│   ├── api/                 # REST API routes (/api/v1/)
+│   ├── ui/                  # HTMX views (Jinja2 templates + components/)
 │   ├── models/              # SQLModel DB models
 │   ├── services/            # Business logic
-│   ├── llm/                 # LLM provider abstraction
+│   ├── llm/                 # LLM provider abstraction (anthropic / openai / ollama)
 │   ├── scraper/             # Site-specific scrapers
 │   ├── typst/               # Templates + PDF compilation
-│   ├── scheduler/           # Periodic job definitions
+│   ├── scheduler/           # APScheduler job definitions
 │   └── db/                  # Session management
+├── docs/design/             # SCREENS.md · WORKFLOW.md · HANDOFF_PROMPT.md · mockups/
 ├── migrations/              # Alembic DB migrations
 ├── tests/                   # Test suite
-├── legacy/                  # n8n workflow exports (reference)
-├── docker-compose.yml
-├── pyproject.toml
-└── Dockerfile
+├── docker-compose.yml       # Self-host stack (db + migrate + app)
+├── Dockerfile               # Multi-stage: uv builder + slim runtime
+├── DESIGN.md                # Visual contract (tokens, components, voice)
+├── AGENTS.md                # Canonical agent guide
+├── ROADMAP.md               # Phase plan + progress
+└── pyproject.toml
 ```
 
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for the full development plan.
 
-**Current phase:** Phase 0 — Foundation & Profile System
+**Current phase:** Phase 1 — Profile System & Resume Generation (Phase 0 foundation complete; MVP screens designed and queued for Claude Design handoff)
 
 ## Contributing
 

@@ -1,3 +1,14 @@
+# Naavik self-host stack
+#
+# Quick start:
+#   docker compose up -d
+#
+# Optional .env (auto-loaded if present):
+#   cp .env.example .env  # then edit API keys, secrets
+#
+# Migrations run automatically before the app starts.
+# All app state (PDFs, secrets.enc, snapshots) lives in the `naavik-data` volume.
+
 services:
   db:
     image: pgvector/pgvector:pg17
@@ -5,17 +16,29 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: naavik
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_DB: naavik
     volumes:
       - naavik-db-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U naavik -d naavik"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # One-shot migration runner. Exits 0 on success; the app waits for it.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: naavik-migrate
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://naavik:${POSTGRES_PASSWORD:-password}@db:5432/naavik
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
 
   naavik:
     build:
@@ -23,17 +46,27 @@ services:
       dockerfile: Dockerfile
     container_name: naavik-app
     restart: unless-stopped
-    env_file:
-      - .env
+    # All env vars are optional. config.py provides working defaults.
+    # Override here or in .env (auto-loaded by Compose).
     environment:
-      DATABASE_URL: postgresql+asyncpg://naavik:password@db:5432/naavik
+      DATABASE_URL: postgresql+asyncpg://naavik:${POSTGRES_PASSWORD:-password}@db:5432/naavik
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      PORTFOLIO_WEBHOOK_URL: ${PORTFOLIO_WEBHOOK_URL:-}
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
-      - ./generated:/app/generated
+      - naavik-data:/app/.naavik
 
 volumes:
   naavik-db-data:
+  naavik-data:

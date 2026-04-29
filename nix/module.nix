@@ -21,6 +21,8 @@ in {
       };
 
       serviceConfig = {
+        # Run alembic migrations before the main service starts
+        ExecStartPre = "${naavikPkg}/bin/naavik-migrate";
         ExecStart = "${naavikPkg}/bin/naavik";
         EnvironmentFile = lib.mkIf (config.sops.secrets ? "naavik_env") [
           config.sops.secrets."naavik_env".path

@@ -1,42 +1,36 @@
-# Multi-stage build for Naavik
-# Stage 1: Builder - install dependencies with uv
+# Naavik — multi-stage build
+# Stage 1: Builder — install deps via uv against the locked uv.lock
 FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy dependency files
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
+COPY src/ ./src/
 
-# Install dependencies into a virtual environment
-RUN uv venv /app/.venv && \
-    uv pip install --no-cache -e "." --python /app/.venv/bin/python
+# Reproducible install from uv.lock (frozen = error on drift; --no-dev = production deps only)
+RUN uv sync --frozen --no-dev
 
-# Stage 2: Runtime - minimal image with app
+# Stage 2: Runtime — minimal image with venv + source + migrations
 FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
-# Install runtime system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    typst \
-    && rm -rf /var/lib/apt/lists/*
+# Typst for PDF generation; create state dir
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends typst \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /app/.naavik
 
-# Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/pyproject.toml /app/uv.lock ./
+COPY migrations/ ./migrations/
+COPY alembic.ini ./
 
-# Copy application code
-COPY src/ ./src/
-COPY pyproject.toml ./
-
-# Ensure the virtual environment is used
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/src:$PYTHONPATH"
-
-# Create generated directory for PDF output
-RUN mkdir -p /app/generated
 
 EXPOSE 8000
 
