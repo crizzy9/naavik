@@ -84,29 +84,19 @@ async def discover_review(request: Request, job_id: str):
     )
 
 
-@app.get("/generate/cover-letter", response_class=HTMLResponse)
-async def cover_letter(request: Request):
-    return _placeholder(
-        request,
-        screen="Cover letter generator",
-        route="/generate/cover-letter",
-        section="9",
-    )
-
-
 @app.get("/tracking", response_class=HTMLResponse)
 async def tracking(request: Request):
-    return _placeholder(request, screen="Tracking", route="/tracking", section="10")
+    return _placeholder(request, screen="Tracking", route="/tracking", section="9")
 
 
 @app.get("/outreach", response_class=HTMLResponse)
 async def outreach(request: Request):
-    return _placeholder(request, screen="Outreach", route="/outreach", section="11")
+    return _placeholder(request, screen="Outreach", route="/outreach", section="10")
 
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
-    return _placeholder(request, screen="Settings", route="/settings", section="12")
+    return _placeholder(request, screen="Settings", route="/settings", section="11")
 
 
 @app.get("/api/health")

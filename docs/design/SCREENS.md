@@ -1,9 +1,14 @@
 # Naavik Screen Catalog
 
-> **Last updated:** 2026-04-29
-> **Mockups:** `docs/design/mockups/Naavik — MVP screens (print).pdf` (41 pages, 12 sections, 31 artboards). Per-screen PNGs land alongside when the Claude Design handoff produces them.
-> **Source of truth:** This file. Where this disagrees with `CLAUDE_DESIGN_PROMPT.md` or older drafts, this wins.
-> **Companion files:** `DESIGN.md` (visual contract), `WORKFLOW.md` (design → implementation pipeline), `mockups/` (committed PNGs/PDF).
+> **Last updated:** 2026-04-30
+> **Source of truth:** This file. Where this disagrees with mockups, archived prompts (`docs/prompts/archive/`), or older drafts, this wins.
+> **Companion files:** `DESIGN.md` (visual contract) · `docs/design/WORKFLOW.md` (UI sub-process pipeline).
+>
+> **Mockup references** (gitignored, kept locally; see `docs/design/mockups/README.md` for setup):
+>
+> - **PDF:** `docs/design/mockups/Naavik — MVP screens (print).pdf` — historical 12-section export. PDF sections 1–8 = SCREENS.md sections 1–8; **PDF section 9 (standalone Cover Letter) is orphaned**; PDF sections 10/11/12 → SCREENS.md sections 9/10/11.
+> - **Bundle JSX (most detailed visual reference):** `docs/design/mockups/naavik-handoff/project/screens/<ScreenName>.jsx`. Each screen entry below names the JSX file. The bundle's CSS tokens (`naavik-handoff/project/design-system/colors_and_type.css`) match `DESIGN.md` — read DESIGN.md for tokens, not the bundle.
+> - **Bundle obsolete files** to ignore: `Analytics.jsx`, `Dashboard.jsx`, `Jobs.jsx`, `ResumeGen.jsx`, `CoverLetter.jsx` (see `docs/design/mockups/README.md`).
 
 ---
 
@@ -38,7 +43,9 @@ Naavik tracks applications through five stages. Closed states (rejected / withdr
 | `OFFER` | `bg-emerald-500` | Offer extended (verbal, written, or accepted) |
 | `CLOSED` | `bg-rose-500` | Rejected, withdrawn, or ghosted (sub-reason in `closed_reason`) |
 
-Pre-application discovery (find → score → swipe) lives in Discover (`/discover`), not Tracking. There is **no** `FOUND` / `SCORED` / `APPROVED` / `DOCS_GENERATED` state.
+Pre-application discovery (find → score → swipe) lives in Discover (`/discover`), not Tracking. The Job's pre-application queue lifecycle is a separate axis (`unswiped · saved · skipped · queued_for_auto_apply · applied`) on the Job model, not on Application — the Application row only exists once an application is submitted.
+
+The five `Application.status` values above are the **post-submission** pipeline. **Document generation, referral status, recruiter engagement, and outreach engagement are tracked as orthogonal sub-states on Application — not as additional pipeline stages.** A single application can be `RECRUITER_SCREEN` + `referral_state=provided` + `docs_state=ready` simultaneously. See `docs/design/DATA_MODEL.md` (graduated from plan 05) for the full multi-axis state model. The flat `FOUND · SCORED · APPROVED · DOCS_GENERATED · INTERVIEWING · REJECTED · WITHDRAWN` enumeration is **not** in the model; those concerns live on dedicated axes (queue_state, docs_state, recruiter_state, closed_reason).
 
 ---
 
@@ -57,7 +64,7 @@ Persistent left sidebar, 256px wide on desktop, drawer on mobile.
 
 **Bottom of sidebar:** user avatar + name + deployment badge — `self-hosted` (emerald-tinted) or `cloud` (indigo-tinted).
 
-**Removed from prior IA:** standalone Resume route (folded into Discover/review), Cover Letter as a sidebar item (still exists at `/generate/cover-letter` as a tool), Analytics route (deferred), theme switcher (single dark mode).
+**Removed from prior IA:** standalone Resume route (folded into Discover · review & apply), standalone Cover Letter route (folded into Discover · review & apply — there is no `/generate/*` route), Analytics route (folded into Overview), Jobs route (renamed to Discover at `/discover`), theme switcher (single dark mode).
 
 ---
 
@@ -83,12 +90,11 @@ Tags render as chips: `bg-slate-800 text-slate-300 text-xs font-mono px-2 py-0.5
 | 6 | Bullet editor modal | (component, opens from #5 + #8) | — | 1 | [x] | [ ] |
 | 7 | Discover | `/discover` | Jobs | 1 | [x] | [ ] |
 | 8 | Discover · review & apply | `/discover/:id` | Jobs | 1 | [x] | [ ] |
-| 9 | Cover letter generator | `/generate/cover-letter` | (no sidebar item) | 1 | [x] | [ ] |
-| 10 | Tracking | `/tracking` | Tracking | 1 | [x] | [ ] |
-| 11 | Outreach | `/outreach` | Outreach | 1 | [x] | [ ] |
-| 12 | Settings | `/settings` (+ tab sub-routes) | Settings | 1 | [x] | [ ] |
+| 9 | Tracking | `/tracking` | Tracking | 1 | [x] | [ ] |
+| 10 | Outreach | `/outreach` | Outreach | 1 | [x] | [ ] |
+| 11 | Settings | `/settings` (+ tab sub-routes) | Settings | 1 | [x] | [ ] |
 
-All 12 sections are committed in the MVP-screens PDF. Once the Claude Design handoff produces standalone exports, individual PNGs commit alongside the PDF using the naming `{nn}-{slug}-{desktop|mobile}.png`.
+The MVP set is **11 screens**. The historical mockup PDF (committed at `docs/design/mockups/Naavik — MVP screens (print).pdf`) was generated when there were 12 sections; the prior standalone Cover-letter screen has been folded into Section 8 (Discover · review & apply). Once the next Claude Design handoff produces standalone exports, individual PNGs commit alongside the PDF using the naming `{nn}-{slug}-{desktop|mobile}.png`.
 
 ---
 
@@ -96,6 +102,7 @@ All 12 sections are committed in the MVP-screens PDF. Once the Claude Design han
 
 ### 1. Login
 
+- **Mockup:** PDF § 1 · bundle `screens/Login.jsx`
 - **Route:** `/login`
 - **Sidebar:** none (auth shell)
 - **Purpose:** Single sign-in entry point. Establishes the "self-hosted developer tool" feel before any other surface.
@@ -122,6 +129,7 @@ All 12 sections are committed in the MVP-screens PDF. Once the Claude Design han
 
 ### 2. Onboarding · resume upload
 
+- **Mockup:** PDF § 2 · bundle `screens/Onboarding.jsx`
 - **Route:** `/onboarding` (3-step wizard). Routes to `/` on completion.
 - **Sidebar:** none (full-width centered)
 - **Purpose:** Convert PDF resume → structured profile via local AI extraction. First-run experience.
@@ -164,6 +172,7 @@ All 12 sections are committed in the MVP-screens PDF. Once the Claude Design han
 
 ### 3. Overview
 
+- **Mockup:** PDF § 3 · bundle `screens/Overview.jsx`
 - **Route:** `/`
 - **Sidebar label:** Overview (active)
 - **Purpose:** Daily landing. What to do *today*, KPIs at a glance, live pipeline.
@@ -215,6 +224,7 @@ These are funnel KPIs, not raw counts. (No "Jobs Found / Applied / Interviews / 
 
 ### 4. Profile
 
+- **Mockup:** PDF § 4 · bundle `screens/Profile.jsx`
 - **Route:** `/profile`
 - **Sidebar label:** Profile (active)
 - **Purpose:** Read-only view of the user's full profile. This IS their CV in the system.
@@ -230,7 +240,7 @@ These are funnel KPIs, not raw counts. (No "Jobs Found / Applied / Interviews / 
 
 #### Body sections (anchored)
 - **Summary** — short + full toggle ("Expand"/"Collapse")
-- **Experience** — `{N} of {M} roles` count in subhead. Per-role card: company-letter tile, title, "Company · Location", "Date — Date · {dur}", bullet list (text + tag chips inline). Expand-affordance reveals "detailed only" bullets that don't appear on the 1-page resume.
+- **Experience** — `{N} of {M} roles` count in subhead. Per-role card: company-letter tile, title, "Company · Location", "Date — Date · {dur}", bullet list (text + tag chips inline). Expand-affordance reveals all bullets for the role (each bullet is a single long-form text — at apply time the AI selects which ones land on the tailored resume based on tag relevance + JD signals + per-bullet `selection_override`).
 - **Application details** — read-only display of EEO/visa values (e.g., "Work authorization: US citizen · Visa sponsorship: Not needed · Veteran: Prefer not to say"). Editable in Profile editor's `#application-qs` section.
 - **Skills** — grouped by category, tag chips per group
 - **Education** — card list
@@ -260,6 +270,7 @@ These are funnel KPIs, not raw counts. (No "Jobs Found / Applied / Interviews / 
 
 ### 5. Profile editor
 
+- **Mockup:** PDF § 5 · bundle `screens/ProfileEdit.jsx`
 - **Route:** `/profile/edit`
 - **Sidebar label:** Profile (active)
 - **Purpose:** Edit every field. Tag autosuggest, EEO/visa Qs, autosave (no Save button).
@@ -272,7 +283,7 @@ These are funnel KPIs, not raw counts. (No "Jobs Found / Applied / Interviews / 
 - Header: "Experience · {Company}" + "Duplicate role" + "Remove" actions
 - 3-column inputs: `TITLE` · `START` · `END` (with `Present` sentinel)
 - `BULLETS · {N}` list:
-  - Each row: drag-handle (`grip-vertical`), bullet text (truncated preview), tag chips, "✓ in 1-page resume" or "detailed only" indicator, edit-pencil + trash icons on hover
+  - Each row: drag-handle (`grip-vertical`), bullet text (truncated preview, single long-form), tag chips, edit-pencil + trash icons on hover. If `selection_override` is set, a small `pinned · always` (emerald) or `pinned · never` (slate) chip appears; default null = AI auto-decides per JD with no chip.
   - Edit-pencil opens **Bullet editor modal** (Section 6)
   - "+ Add bullet" ghost button
 
@@ -291,6 +302,7 @@ These are funnel KPIs, not raw counts. (No "Jobs Found / Applied / Interviews / 
 
 ### 6. Bullet editor modal
 
+- **Mockup:** PDF § 6 · bundle `screens/BulletModal.jsx`
 - **Component, no route.** Opens from Profile editor and from Discover · review & apply.
 - **Purpose:** Edit a single bullet. **Single field — no oneline/detailed split.** AI trims at apply time.
 - **Layout:** Modal, ~720px wide on desktop; bottom sheet on mobile.
@@ -326,6 +338,7 @@ These are funnel KPIs, not raw counts. (No "Jobs Found / Applied / Interviews / 
 
 ### 7. Discover
 
+- **Mockup:** PDF § 7 · bundle `screens/Discover.jsx`
 - **Route:** `/discover`
 - **Sidebar label:** Jobs (with live unswiped-count badge)
 - **Purpose:** Tinder-style swipe queue. ←skip · →auto-apply · ↑save · tap=expand.
@@ -383,9 +396,10 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 
 ### 8. Discover · review & apply
 
+- **Mockup:** PDF § 8 · bundle `screens/DiscoverDetail.jsx`
 - **Route:** `/discover/:id`
 - **Sidebar label:** Jobs (active)
-- **Purpose:** Full-fidelity application workspace. JD context + tailored resume + cover letter + screener questions, all editable before submission. **Replaces the prior `/generate/resume` standalone screen.**
+- **Purpose:** Full-fidelity application workspace. JD context + tailored resume + cover letter + screener questions, all editable before submission. **Subsumes both prior `/generate/resume` and `/generate/cover-letter` standalone screens — there is no separate `/generate/*` route in the MVP.** All resume tailoring and cover letter drafting happens here.
 - **Layout:** Top context bar + 3-column workspace + sticky bottom action bar.
 
 #### Top context bar
@@ -438,50 +452,9 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 
 ---
 
-### 9. Cover letter generator (standalone tool)
+### 9. Tracking
 
-- **Route:** `/generate/cover-letter`
-- **Sidebar:** none (not a top-level item; reachable from Tracking job detail and from manually-tracked jobs)
-- **Purpose:** Draft a cover letter outside the Discover apply flow. For manually-tracked applications or quick one-offs.
-- **Layout:** sidebar + main. Main = 2-column (form left ~1/3, editor right ~2/3).
-
-#### Top bar
-- "← Back" · "Cover letter · {Company} / {Role}"
-- Subtitle: "{tone} tone · {N} words · last edited {Nm} ago"
-- Top-right: **Regenerate** (sparkle) · **Copy** (primary)
-
-#### Left form (1/3)
-- `COMPANY` input
-- `ROLE` input
-- `HIRING MANAGER (OPTIONAL)` input
-- `JOB DESCRIPTION` textarea
-- `TONE` segmented control: **Professional · Enthusiastic · Direct**
-- `OUTPUT AS` card group (radio):
-  - **Body text** — "paste into email or one textarea" *(default)*
-  - **PDF** — "Typst — letter format"
-  - **Per-field** — "split for screener questions"
-- Note (info-tinted): "The letter is generated as a whole. Edit it freely — your changes stay even if you regenerate (we'll merge instead of overwriting)."
-
-#### Right editor (2/3)
-- Top: `AI draft · claude-3.5-sonnet` (or current model) attribution chip + `edited` indigo badge if user-modified · Undo edits · **Rewrite selection**
-- Letter rendered serif (`font-serif text-slate-200 leading-relaxed`)
-- Bottom-right: live word count (mono)
-
-#### Footer hints
-`⌘K rewrite selection · ⌘↵ regenerate (preserves edits) · ⌘C copy` · "autosaved · {Nm} ago"
-
-- **Mobile:** stacks. Top tabs **Body / PDF / Fields** + **Pro / Enth / Direct**. Single editor below.
-- **Interactions:**
-  - Generate → `POST /api/v1/cover-letter/generate` → SSE-stream the letter body
-  - Tone change → triggers regenerate (with merge)
-  - Rewrite selection → highlight text, `⌘K` → modal "More concise / friendlier / more specific" → swap selection
-  - Output mode change: PDF triggers Typst compile, Per-field triggers per-paragraph split
-- **Components:** `letter_editor.html`, `tone_picker.html`, `output_mode_card.html`, `model_attribution_chip.html`
-
----
-
-### 10. Tracking
-
+- **Mockup:** PDF § 10 (was numbered 10 in the historical 12-section PDF) · bundle `screens/Tracking.jsx`
 - **Route:** `/tracking`
 - **Sidebar label:** Tracking (with live "needs followup" badge)
 - **Purpose:** Application lifecycle from APPLIED → CLOSED. Auto-classified from email signals. Manual entries supported.
@@ -532,8 +505,9 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 
 ---
 
-### 11. Outreach
+### 10. Outreach
 
+- **Mockup:** PDF § 11 (was numbered 11 in the historical 12-section PDF) · bundle `screens/Outreach.jsx`
 - **Route:** `/outreach`
 - **Sidebar label:** Outreach
 - **Purpose:** AI-assisted recruiter / employee follow-ups across LinkedIn + email. Tied to active applications.
@@ -579,8 +553,9 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 
 ---
 
-### 12. Settings
+### 11. Settings
 
+- **Mockup:** PDF § 12 (was numbered 12 in the historical 12-section PDF) · bundle `screens/Settings.jsx`
 - **Route:** `/settings` (with sub-routes `/settings/{tab}` for deep-linking)
 - **Sidebar label:** Settings
 - **Purpose:** All configuration in one place. 6 tabs.
@@ -647,12 +622,13 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 
 The mockups make Tracking and Outreach MVP-essential. ROADMAP.md still puts them in later phases — this needs reconciling in Block C of the design-realignment plan.
 
-**Phase 1 (MVP)** — Login · Onboarding · Overview · Profile · Profile editor · Bullet editor modal · Discover · Discover/review · Cover letter generator · Tracking · Outreach · Settings (12 sections, all mockups committed).
+**Phase 1 (MVP)** — Login · Onboarding · Overview · Profile · Profile editor · Bullet editor modal · Discover · Discover · review & apply · Tracking · Outreach · Settings (**11 sections**; all mockups committed in the historical 12-section PDF, but the standalone Cover-letter screen has been folded into Discover · review & apply).
 
 **Deferred / Phase 2+** (no mockups yet)
-- Application detail slide-over (deeper view of submitted bundle)
+- Application detail slide-over (deeper view of submitted bundle, accessed from Tracking)
 - Manual job entry modal (`+ Add by URL` is the partial Phase 1 path; the full modal comes later)
-- Score-card / match-explanation as a standalone (currently embedded in Discover/review)
+- Score-card / match-explanation as a standalone (currently embedded in Discover · review & apply)
+- Cover letter / resume generation as standalone tools (no plan to bring back; both happen inside Discover · review & apply)
 - Light mode (Phase 6)
 - OIDC for self-hosted (Authentik / Keycloak / Okta)
 

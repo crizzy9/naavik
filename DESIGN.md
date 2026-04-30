@@ -1,7 +1,7 @@
 # Naavik Design System
 
-> **Version:** 1.1
-> **Last updated:** 2026-04-29
+> **Version:** 1.2
+> **Last updated:** 2026-04-30
 > **Stack:** Tailwind CSS + DaisyUI + HTMX (server-rendered Jinja2)
 >
 > This is the canonical visual contract for Naavik. Every mockup and every implemented page must conform to it.
@@ -82,7 +82,9 @@ Five stages. Closed states (rejected, withdrawn, ghosted) collapse into one buck
 | `OFFER` | `bg-emerald-500` | Offer extended (verbal, written, or accepted) |
 | `CLOSED` | `bg-rose-500` | Rejected, withdrawn, or ghosted (sub-reason in `closed_reason`) |
 
-Pre-application discovery (find → score → swipe) lives in `/discover`, **not** Tracking. There is no `FOUND` / `SCORED` / `APPROVED` / `DOCS_GENERATED` / `INTERVIEWING` state.
+Pre-application discovery (find → score → swipe) lives in `/discover`, **not** Tracking. The Job's pre-application queue lifecycle (`unswiped · saved · skipped · queued_for_auto_apply · applied`) is a separate axis on the Job model. The Application row only exists once an application is submitted.
+
+The five stages above are the **post-submission** pipeline. Document generation, referral status, recruiter engagement, and outreach engagement are tracked as **orthogonal sub-states** on the Application model — not as additional pipeline stages. A single application can be `RECRUITER_SCREEN` + `referral_state=provided` + `docs_state=ready` simultaneously. See `docs/design/DATA_MODEL.md` (graduated from plan 05) for the full multi-axis state model. The flat `FOUND · SCORED · APPROVED · DOCS_GENERATED · INTERVIEWING · REJECTED · WITHDRAWN` enumeration is **not** in the model — those concerns live on dedicated axes (queue_state, docs_state, recruiter_state, closed_reason).
 
 ---
 
@@ -427,18 +429,22 @@ Use this realistic data in all mockups:
 
 ## File Map
 
-| File | Purpose |
-|---|---|
-| `DESIGN.md` (this file) | Root-level visual contract for all agents |
-| `docs/design/SCREENS.md` | Canonical screen catalog with per-screen specs |
-| `docs/design/WORKFLOW.md` | Design → implementation pipeline (Stage 1 / 2 / 3) |
-| `docs/design/HANDOFF_PROMPT.md` | Hand-edited README that rides inside the Claude Design "Hand off to Claude Code" bundle, overriding the generic default |
-| `docs/design/CLAUDE_DESIGN_PROMPT.md` | Screen descriptions for any *future* Claude Design prototype projects — only used when adding entirely new screens |
-| `docs/design/mockups/` | Committed mockup PDFs and PNGs |
+DESIGN.md is the **visual contract** only — tokens, typography, components, motion, voice. Process artifacts (plans, prompts, agent guides) and other design contracts (screens, routes, data model, interactions) live elsewhere.
+
+For directory layout and where everything lives, see `AGENTS.md` § Documentation locations. For the lifecycle that produces design contracts and feeds them into implementation, see `AGENTS.md` § Workflow.
+
+The other always-present design docs to know about:
+
+- `docs/design/SCREENS.md` — screen catalog
+- `docs/design/WORKFLOW.md` — UI sub-process pipeline
+- `docs/design/mockups/` — visual reference (gitignored, locally only)
+
+Other docs in `docs/design/` (COMPONENTS.md, ROUTES.md, DATA_MODEL.md, INTERACTIONS.md, SAMPLE_DATA.md) graduate from approved plans in `docs/plans/`. List the directory when you need to see what's currently there.
 
 ---
 
 ## Version History
 
+- **1.2** (2026-04-30): Status pipeline clarified as multi-axis: 5-stage `Application.status` is post-submission only; document generation / referral / recruiter engagement / outreach engagement live on orthogonal sub-states. Standalone `/generate/cover-letter` and `/generate/resume` routes removed (folded into Discover · review & apply). MVP screen count: 12 → 11. Prompts moved to `docs/prompts/`. New design docs queued via plans 03–07.
 - **1.1** (2026-04-29): Aligned to MVP-screens mockups. New 5-stage pipeline (`APPLIED · RECRUITER_SCREEN · ONSITE_LOOP · OFFER · CLOSED`). Tag vocabulary fixed at 9 (added `product`). Added components: `score_circle`, `status_dot`, `kpi_card`, `ai_badge`, `followup_banner`. Tag chips clarified as no-sparkle. Sidebar bottom: deployment badge instead of theme toggle.
 - **1.0** (2026-04-25): Initial design system. Indigo/cyan palette, slate neutrals, Inter + JetBrains Mono, Lucide icons.

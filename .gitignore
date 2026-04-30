@@ -27,6 +27,16 @@ env/
 generated/
 *.pdf
 
+# Design mockups — heavy artifacts (PDFs, bundle exports). Kept locally only;
+# regenerate via Claude Design when needed. README is committed so the dir is
+# discoverable; everything else inside is gitignored.
+docs/design/mockups/*
+!docs/design/mockups/README.md
+!docs/design/mockups/.gitkeep
+
+# Personal scratchpad — agent must not implement from this file
+TODO.md
+
 # Dev state (Postgres data, snapshots, logs) — mirrors production ~/.naavik
 .naavik/
 

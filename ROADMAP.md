@@ -1,6 +1,6 @@
 # Naavik Development Roadmap
 
-> Last updated: 2026-04-25
+> Last updated: 2026-04-30
 
 ## Maintenance
 
@@ -101,7 +101,7 @@ No commercial platform is self-hostable. Naavik fills a real gap — and even op
 
 1. **Profile in DB, not YAML** — Users manage profiles via UI (resume upload + manual editing). API serves data. No config files to maintain.
 
-2. **Two-form bullets** — Every experience bullet has `oneline` (strict 1-line for 1-page resume) and `detailed` (full description for portfolio/extended CV). AI selects bullets per job using tags.
+2. **Single long-form bullets** — Every experience bullet is a single canonical text (the long, full version, no length cap). At apply time, AI trims each selected bullet to a single resume line while preserving numbers and verbs. Selection per job is driven by tag relevance + JD signals; users can pin via per-bullet `selection_override` (`always_include` / `never_include` / `null` = AI auto-decides). The prior `oneline` / `detailed` split, `default_include` toggle, and metric fields (revenue / percentage / team_size) were removed in 2026-04 — see `docs/design/SCREENS.md` § Section 6.
 
 3. **Typst over LaTeX** — 10-100x faster PDF compilation, clean programmatic data ingestion, single binary. LaTeX compatibility is a future roadmap item.
 
@@ -119,7 +119,11 @@ No commercial platform is self-hostable. Naavik fills a real gap — and even op
 
 ```
 Profile
-├── meta (name, email, phone, location, portfolio, github, linkedin, visa_status)
+├── meta (name, email, phone, location, portfolio, github, linkedin)
+├── application_questions (US-only Phase 1):
+│     work_authorization, visa_sponsorship_needed, willing_to_relocate,
+│     notice_period, salary_expectation, earliest_start,
+│     veteran_status, disability_status, race_ethnicity (EEOC), gender (EEOC)
 ├── summary (full + short versions)
 ├── education[]
 │   └── institution, school, location, degree, dates, gpa, courses[]
@@ -127,33 +131,46 @@ Profile
 │   ├── company, team, title, location, dates
 │   └── bullets[]
 │       ├── id (stable identifier)
-│       ├── oneline (validated: must render as exactly 1 line in Typst)
-│       ├── detailed (no length constraint)
-│       ├── tags[] (ai-ml, backend, devops, frontend, leadership, genai, data-eng, platform)
-│       ├── default_include (appears in generic 1-page resume)
-│       └── metrics{} (revenue, percentage, team_size — for AI reference)
+│       ├── text (single long-form, no length cap — AI trims at apply time)
+│       ├── tags[] (9-tag vocab: ai-ml, backend, frontend, devops, data-eng,
+│       │           genai, leadership, platform, product)
+│       └── selection_override (always_include / never_include / null = AI auto-decides per JD)
 ├── skills[] → (category, items[])
-├── projects[] → (title, date, oneline, detailed, tags[], portfolio_slug)
-├── certifications[] → (title, issuer, date, detailed)
-├── open_source[] → (title, date, detailed)
+├── projects[] → (title, date, text, tags[], portfolio_slug)
+├── certifications[] → (title, issuer, date, description)
+├── open_source[] → (title, date, description)
 └── cover_letter_base → (template paragraphs with placeholders)
 ```
 
-### Job Application
+**Authoritative reference:** `docs/design/DATA_MODEL.md` (graduated from `docs/plans/05-data-model.md`). The diagram above is a sketch; all enum tables, indexes, validation rules, and relationships live in DATA_MODEL.md once that doc lands.
+
+### Job + Application (multi-axis state, see plan 05)
 
 ```
-Job
+Job (pre-application: a discovered or manually-added opportunity)
 ├── id, source (AUTOMATED/MANUAL), url, url_type
 ├── company, position, team, location
-├── dates (posted, found, applied)
+├── dates (posted, found)
 ├── description, criteria, skills_required
 ├── visa_restrictions, salary_range
 ├── compatibility_score (0-1), score_explanation
-├── status (FOUND → SCORED → APPROVED → DOCS_GENERATED → APPLIED → INTERVIEWING → OFFER → REJECTED → WITHDRAWN)
-├── status_history[]
-├── generated_resume_path, generated_cover_letter_path
-└── referral info, notes
+└── queue_state (unswiped / saved / skipped / queued_for_auto_apply / applied)
+   ↑ flips to `applied` when an Application row is created from this Job
+
+Application (one row per submitted job; carries multi-axis post-submission state)
+├── id, job_id, applied_at, board (greenhouse / workday / lever / ashby / manual)
+├── status (APPLIED · RECRUITER_SCREEN · ONSITE_LOOP · OFFER · CLOSED)
+├── closed_reason (rejected_by_them / withdrawn_by_me / ghosted / accepted_other; required when status=CLOSED)
+├── docs_state (none / generating / ready / stale / failed) — drives doc-readiness UI
+├── referral_state (none / requested / in_flight / provided / declined) — drives warm-intro pill
+├── recruiter_state (none / engaged / responded / silent / stalled) — drives "silent N days" urgency
+├── outreach_engagement (computed view: cold / active / awaiting_reply / referred / converted)
+├── status_history[] (timeline events; see AppEvent)
+├── generated_documents[] → GeneratedDocument (resume PDF + cover letter PDF/text)
+└── notes
 ```
+
+**Lifecycle is multi-axis, not a flat enum.** The five `Application.status` values are the post-submission pipeline. Document generation, referral status, recruiter engagement, and outreach engagement are tracked as **orthogonal sub-states**, not as additional pipeline stages. A single application can be `RECRUITER_SCREEN` + `referral_state=provided` + `docs_state=ready` simultaneously. See `docs/design/DATA_MODEL.md` (graduated from plan 05) for the full multi-axis state model, transitions per axis, and timeline event taxonomy. The flat `FOUND → SCORED → APPROVED → DOCS_GENERATED → INTERVIEWING → REJECTED → WITHDRAWN` enumeration was removed in 2026-04 — those concerns now live on dedicated axes.
 
 ### Outreach & Contacts
 
@@ -302,15 +319,15 @@ naavik/
 | # | Task | Status | Priority | Notes |
 |---|---|---|---|---|
 | **UI & Design** | | | | |
-| D.1 | Generate mockups for Phase 1 screens (Claude Design) | [ ] | CRITICAL | Screens 1–9: login, dashboard, onboarding, profile view, profile editor, bullet editor, resume generator, cover letter generator, settings |
+| D.1 | Generate mockups for Phase 1 screens (Claude Design) | [x] | CRITICAL | All 11 MVP screens per `docs/design/SCREENS.md`: login, onboarding, overview, profile, profile editor, bullet editor (modal), discover, discover · review & apply, tracking, outreach, settings. Historical 12-section PDF committed at `docs/design/mockups/` (the prior standalone Cover-letter screen was folded into Discover · review & apply). |
 | D.2 | Derive component library from mockups (Claude Code) | [ ] | CRITICAL | Build `templates/components/` — button, card, input, tag, badge, stat_card, bullet_editor, etc. |
 | D.3 | Implement Phase 1 UI pages (Claude Code) | [ ] | CRITICAL | One mockup → one page per screen. See `docs/design/WORKFLOW.md` |
 | **Profile System** | | | | |
-| 1.1 | SQLModel models: Profile, Experience, Bullet, Skill, Education, Project, Certification | [ ] | CRITICAL | `oneline` + `detailed` + `tags` + `default_include` |
+| 1.1 | SQLModel models: Profile, Experience, Bullet, Skill, Education, Project, Certification (+ EEO/visa application questions on Profile) | [ ] | CRITICAL | Bullet schema: `text` (single long-form) + `tags[]` (9-tag vocab) + `selection_override` (always_include / never_include / null). See `docs/design/DATA_MODEL.md` (plan 05). |
 | 1.2 | Profile CRUD API (`/api/v1/profile/`) | [ ] | CRITICAL | |
 | 1.3 | LLM provider abstraction (`llm/base.py` + anthropic + openai + ollama) | [ ] | HIGH | Structured output via Pydantic |
 | 1.4 | Resume upload + AI extraction service (PDF → LLM → structured profile → DB) | [ ] | CRITICAL | Core onboarding flow |
-| 1.6 | Inline bullet editor (oneline/detailed side-by-side, tag chips, default_include toggle) | [ ] | HIGH | HTMX partials |
+| 1.6 | Bullet editor modal (single-text textarea + 9-tag picker + selection_override radios; opens from Profile editor and from Discover · review & apply) | [ ] | HIGH | HTMX-loaded modal; see `docs/design/SCREENS.md` § Section 6 |
 | 1.7 | Auth: Google OAuth + JWT, multi-user | [ ] | MEDIUM | FastAPI security |
 | 1.8 | Seed existing profile data from cryptic-soul resume files | [ ] | HIGH | Consolidate OnePage + FullProfile |
 | **Resume & Cover Letter Generation** | | | | |
@@ -372,7 +389,7 @@ naavik/
 
 | # | Task | Priority | Notes |
 |---|---|---|---|
-| 4.1 | Status pipeline: FOUND → SCORED → APPROVED → DOCS_GENERATED → APPLIED → INTERVIEWING → OFFER/REJECTED/WITHDRAWN | CRITICAL | |
+| 4.1 | Application multi-axis state model: `status` (APPLIED → RECRUITER_SCREEN → ONSITE_LOOP → OFFER → CLOSED) + `closed_reason` (rejected_by_them / withdrawn_by_me / ghosted / accepted_other) + orthogonal sub-states `docs_state`, `referral_state`, `recruiter_state`, computed `outreach_engagement`. State machine + transitions per axis. See `docs/design/DATA_MODEL.md` (plan 05) for authoritative definitions. | CRITICAL | |
 | 4.2 | Manual application logger (form for external applications) | HIGH | |
 | 4.3 | Semi-auto flow: generate docs → notification → human approves → submit → update status | HIGH | Default mode |
 | 4.4 | Auto-apply flow: high-score jobs → generate → submit automatically (user setting, default OFF) | HIGH | Configurable threshold |
@@ -384,8 +401,8 @@ naavik/
 
 ---
 
-### Phase 5: Email Monitoring & Interview Pipeline
-> **Goal:** Monitor emails, classify responses, manage interviews, and track recruiter/employee outreach.
+### Phase 5: Email Monitoring & Outreach
+> **Goal:** Monitor emails, classify responses, manage interview prep, and track recruiter/employee outreach. (Email auto-classification feeds the multi-axis Application sub-states defined in Phase 4 — `recruiter_state`, `outreach_engagement` — via Tracking; this phase adds the email + outreach mechanics behind that.)
 
 | # | Task | Priority | Notes |
 |---|---|---|---|
@@ -396,8 +413,8 @@ naavik/
 | 5.4 | Priority notifications (HIGH for interviews/offers) | MEDIUM | |
 | 5.5 | Email thread tracking per application | HIGH | |
 | 5.6 | AI draft response generation | MEDIUM | |
-| **Interview Pipeline** | | | |
-| 5.7 | Interview scheduling integration (Calendly/webhook) | MEDIUM | |
+| **Interview Prep** | | | |
+| 5.7 | Interview scheduling integration (Calendly/webhook) — surfaces on Tracking application detail and Overview priority actions | MEDIUM | |
 | 5.8 | Interview prep: role-specific questions from job desc + profile gaps | LOW | |
 | **Recruiter & Employee Outreach** | | | |
 | 5.9 | LinkedIn connection tracker: store recruiter/employee contacts per company | HIGH | |
@@ -522,7 +539,7 @@ This is reflected in the design: Settings has a "Deployment" tab that shows your
 | n8n Component | Naavik Equivalent | When |
 |---|---|---|
 | Main Workflow (Lw1uK5APIhIeUeem) | `scheduler/` + `services/job_scraper.py` | Phase 2 |
-| Manual Logger (xSIGv47G2Porc0S9) | `api/jobs.py` + `ui/templates/jobs/` | Phase 4 |
+| Manual Logger (xSIGv47G2Porc0S9) | `api/applications.py` + `ui/templates/pages/discover.html` (`+ Add by URL`) and `ui/templates/pages/tracking.html` (`+ Add manually`) | Phase 4 |
 | Job Page Parser (PQAGv5qUajzBP5wm) | `scraper/*.py` | Phase 2 |
 | DataTable (Job Applications) | PostgreSQL `jobs` table | Phase 2 |
 | Google Sheets sync | Optional sync in Phase 4 | Phase 4 |
@@ -559,14 +576,7 @@ Naavik DB ──► GET /api/portfolio/cv ──► cryptic-soul cv.astro (build
 
 ### Design Documents
 
-| Document | Purpose |
-|---|---|
-| `DESIGN.md` | Color tokens, typography, components, voice, motion, accessibility — the visual contract |
-| `DESIGN.md` | Formatted specifically for Claude Design's "Set up design system" feature — upload this file |
-| `docs/design/SCREENS.md` | Complete screen catalog (19 screens, all phases) with routes, layout specs, interactions, states |
-| `docs/design/CLAUDE_DESIGN_PROMPT.md` | Screen descriptions for Claude Design prototype projects (assumes design system already published) |
-| `docs/design/WORKFLOW.md` | Design → implementation pipeline: design system → mockups → component library → pages |
-| `docs/design/mockups/` | Committed mockup PNGs — never implement without one |
+Canonical anchors and directory layout live in `AGENTS.md` § Documentation locations. The lifecycle that produces design contracts is `AGENTS.md` § Workflow. Always-present design docs: `DESIGN.md` (visual contract), `docs/design/SCREENS.md` (screen catalog), `docs/design/WORKFLOW.md` (UI sub-process). Mockups (visual reference, gitignored) at `docs/design/mockups/` — see `docs/design/mockups/README.md`.
 
 ### Design Workflow
 
@@ -595,29 +605,11 @@ ROADMAP + SCREENS.md → paste prompt → Claude Design → mockups committed
 
 ### Screen Index
 
-| # | Screen | Route | Phase | Mockup | Impl |
-|---|---|---|---|---|---|
-| 1 | Login / OAuth | `/login` | 1 | [ ] | [ ] |
-| 2 | Dashboard | `/` | 1 | [ ] | [~] (placeholder) |
-| 3 | Onboarding — Resume Upload | `/onboarding` | 1 | [ ] | [ ] |
-| 4 | Profile View | `/profile` | 1 | [ ] | [ ] |
-| 5 | Profile Editor | `/profile/edit` | 1 | [ ] | [ ] |
-| 6 | Bullet Editor (modal) | (component) | 1 | [ ] | [ ] |
-| 7 | Resume Generator | `/generate/resume` | 1 | [ ] | [ ] |
-| 8 | Cover Letter Generator | `/generate/cover-letter` | 1 | [ ] | [ ] |
-| 9 | Settings | `/settings` | 1 | [ ] | [ ] |
-| 10 | Jobs List | `/jobs` | 2 | [ ] | [ ] |
-| 11 | Job Detail | `/jobs/:id` | 2 | [ ] | [ ] |
-| 12 | Manual Job Entry | `/jobs/new` (modal) | 2 | [ ] | [ ] |
-| 13 | Score Card / Match Explanation | (component) | 3 | [ ] | [ ] |
-| 14 | Kanban Pipeline | `/jobs?view=kanban` | 4 | [ ] | [ ] |
-| 15 | Analytics Dashboard | `/analytics` | 4 | [ ] | [ ] |
-| 16 | Email Inbox | `/inbox` | 5 | [ ] | [ ] |
-| 17 | Contacts List | `/contacts` | 5 | [ ] | [ ] |
-| 18 | Outreach Composer | `/contacts/:id/compose` | 5 | [ ] | [ ] |
-| 19 | Interview Pipeline | `/interviews` | 5 | [ ] | [ ] |
+**Canonical screen index lives in [`docs/design/SCREENS.md`](docs/design/SCREENS.md).** That document tracks per-screen mockup status (`Mockup [ ]` / `[~]` / `[x]`) and impl status (`Impl [ ]` / `[~]` / `[x]`). ROADMAP.md tracks phase progress; SCREENS.md tracks per-screen progress. Maintaining two parallel tables produces drift — they were drifting badly until 2026-04-30 — so the table that used to live here has been removed.
 
-**Next design batch:** Screens 1–9 (Phase 1 MVP).
+**Phase 1 (MVP) at a glance:** 11 screens — Login · Onboarding · Overview · Profile · Profile editor · Bullet editor (modal) · Discover · Discover · review & apply · Tracking · Outreach · Settings. Mockups for all 11 are committed in `docs/design/mockups/`.
+
+**Deferred / Phase 2+ screens** (Manual job entry modal, Application detail slide-over, etc.) are listed in `docs/design/SCREENS.md` § Phase mapping > Deferred.
 
 ### Design System (Summary)
 

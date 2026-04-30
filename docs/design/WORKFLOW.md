@@ -1,8 +1,10 @@
-# Design → Implementation Workflow
+# Design → Implementation Workflow (UI sub-process)
 
-> **Last updated:** 2026-04-25
+> **Last updated:** 2026-04-30
 >
-> This document defines the cohesive pipeline: from design intent → mockup → implemented UI. Every screen ships through this pipeline.
+> **This is the UI sub-process.** The master workflow — plan → review → design doc → prompt → implement → archive — lives in `AGENTS.md` § Workflow. That's the lifecycle every non-trivial change goes through. WORKFLOW.md describes the screen-design pipeline (mockup → component derivation → page implementation) that runs *inside* the master workflow's "implement" step for UI tasks.
+>
+> Companion: `docs/plans/README.md` for plan-file conventions.
 
 ---
 
@@ -104,11 +106,10 @@ Claude Design has **two distinct phases** that must happen in order:
 
 ### Inputs
 
-| File | Purpose | When to use |
-|---|---|---|
-| `docs/design/DESIGN.md` | Formatted for Claude Design's asset upload | Phase A — upload as source material |
-| `docs/design/CLAUDE_DESIGN_PROMPT.md` | Screen descriptions only (tokens already in design system) | Phase B — paste into prototype project |
-| `docs/design/SCREENS.md` | Full screen catalog with specs | Reference for which screens to design |
+- **Phase A (design system setup)** uses `DESIGN.md` (root) as source material uploaded to Claude Design.
+- **Phase B (screen-batch prompt)** is authored fresh under `docs/prompts/NN-name.md` per `AGENTS.md` § Workflow. The prior batch's prompt is archived under `docs/prompts/archive/` for reference.
+- **Phase C (handoff)** uses a similarly-authored prompt; the prior handoff prompt is also archived.
+- **Reference for scope:** `docs/design/SCREENS.md` (which screens to design).
 
 ### Process
 
@@ -227,47 +228,44 @@ Run before merging any screen implementation:
 
 ## File Reference
 
-| File | Owner | Update when |
-|---|---|---|
-| `docs/design/DESIGN.md` | Designer + Implementer | Tokens or components change |
-| `docs/design/SCREENS.md` | Designer + PM | Screens added, designed, or implemented |
-| `docs/design/CLAUDE_DESIGN_PROMPT.md` | Designer | Design system version bumps; new batch screens added |
-| `docs/design/WORKFLOW.md` (this file) | All | Process changes |
-| `docs/design/mockups/*.png` | Designer | New mockup generated |
-| `src/ui/templates/components/*.html` | Implementer | Component library evolves |
-| `src/ui/templates/pages/*.html` | Implementer | Per-screen, after mockup exists |
-| `ROADMAP.md` | All | Phase progress, scope changes |
+For the full directory layout, see `AGENTS.md` § Documentation locations. Touch points specific to the UI sub-process:
+
+- `DESIGN.md` (root) — visual contract; update when tokens or component primitives change.
+- `docs/design/SCREENS.md` — screen catalog; update when screens are added, designed, or marked implemented.
+- `docs/design/mockups/` — mockup PDFs / bundle JSX (gitignored, locally only); regenerate via Claude Design when needed.
+- `src/ui/templates/components/*.html` — component library produced in Stage 2.
+- `src/ui/templates/pages/*.html` — page templates produced in Stage 3.
+- `ROADMAP.md` — phase progress.
 
 ---
 
-## First Run (Phase 1 — happening now)
+## First Run (Phase 1 — current state, 2026-04-30)
 
-### Phase A: Design System Setup (CRITICAL — do not skip)
+### Phase A: Design System Setup ✅ DONE
 
-1. ✅ Design system documented (`DESIGN.md` + `DESIGN.md`)
-2. ✅ Screens cataloged (`SCREENS.md`)
-3. ✅ Screen prompt prepared (`CLAUDE_DESIGN_PROMPT.md`)
-4. ⏳ **YOU ARE HERE:**
-   - Go to **claude.ai/design**
-   - Click **"Set up design system"**
-   - Upload `docs/design/DESIGN.md`
-   - Optionally upload screenshots of Linear, Cursor, or Plausible as visual references
-   - Let Claude extract (~5 min)
-   - Validate with test prompt
-   - **Publish** the design system
+1. ✅ Design system documented (`DESIGN.md`)
+2. ✅ Screens cataloged (`docs/design/SCREENS.md`)
+3. ✅ Screen prompt authored and used (now archived at `docs/prompts/archive/CLAUDE_DESIGN_PROMPT.md`)
+4. ✅ Design system uploaded and **Published** in claude.ai/design
 
-### Phase B: Generate Screens
+### Phase B: Generate Screens ✅ DONE
 
-5. ⏳ Click **"Create"** → **"Prototype"** → **"High fidelity"** → Name: "Naavik Phase 1"
-6. ⏳ Paste screen descriptions from `CLAUDE_DESIGN_PROMPT.md`
-7. ⏳ Iterate until satisfied with all 9 screens
-8. ⏳ Export mockups → commit to `docs/design/mockups/`
+5. ✅ Prototype project created in claude.ai/design
+6. ✅ Screen descriptions iterated through multiple revisions
+7. ✅ All 11 MVP screens approved
+8. ✅ Mockups exported and committed to `docs/design/mockups/` (the historical 12-section PDF, with the prior standalone Cover-letter screen folded into Discover · review & apply)
 
-### Phase C: Implementation
+### Phase C: Implementation 🟡 IN PROGRESS
 
-9. ⏳ Run Stage 2 (Claude Code component derivation) → builds component library
-10. ⏳ Run Stage 3 per screen → ships Phase 1 UI
-11. ⏳ Phase 1 backend work (models, API, services) plugs into the components
+The implementation now follows the Wave-based plan in `docs/plans/02-mvp-master-plan.md`. Summary:
+
+- **Wave 0** ✅ Doc realignment (plan 01 — executed 2026-04-30)
+- **Wave 1** 🟡 Author 4 design docs in `docs/design/`: COMPONENTS.md, ROUTES.md, DATA_MODEL.md, INTERACTIONS.md, plus SAMPLE_DATA.md (plans 03–07)
+- **Wave 2** ⏳ Stage 2 component library implementation (plan 08)
+- **Wave 3** ⏳ Backend models + initial routes (plan 10)
+- **Wave 4** ⏳ Stage 3 page implementation (plan 09)
+- **Wave 5** ⏳ Wire interactions per INTERACTIONS.md
+- **Wave 6** ⏳ Real backend integration (replaces hardcoded sample data)
 
 The UI shell can be built in parallel with the data/AI layer; integration happens at Stage 3 when routes get real handlers.
 

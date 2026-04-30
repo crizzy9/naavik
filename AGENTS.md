@@ -1,7 +1,7 @@
 # Naavik — Agent Guide
 
 > **This is the canonical reference for AI agents working on Naavik.**
-> **Last updated:** 2026-04-25
+> **Last updated:** 2026-04-30
 > **Always read this before starting work.**
 
 ---
@@ -83,19 +83,31 @@ src/
 
 ---
 
-## Documentation Map
+## Documentation locations
 
-| Document | What it is | Read when |
-|---|---|---|
-| `AGENTS.md` (this file) | Canonical agent guide | Every session |
-| `CLAUDE.md` | Claude Code-specific conventions | When using Claude Code |
-| `ROADMAP.md` | Phase plan, task tracking, progress | Before any work |
-| `DESIGN.md` | Root-level design system quick reference | Before any UI work |
-| `DESIGN.md` | Root-level design system (canonical reference) | Before any UI work |
-| `docs/design/SCREENS.md` | Complete screen catalog with specs | Before any UI work |
-| `docs/design/CLAUDE_DESIGN_PROMPT.md` | Screen descriptions for Claude Design | When designing UI |
-| `docs/design/WORKFLOW.md` | Design → implementation pipeline | When designing or implementing UI |
-| `docs/design/mockups/` | Committed mockup PNGs | When implementing a screen |
+A handful of canonical files have specific roles. Everything else is discovered by reading the relevant directory on demand — don't expect a maintained file index.
+
+**Canonical anchors (always present, named):**
+
+- `AGENTS.md` (this file) — agent guide + workflow
+- `CLAUDE.md` — Claude Code conventions
+- `ROADMAP.md` — phase plan + task tracking
+- `DESIGN.md` (root) — visual contract (tokens, typography, components, voice)
+- `docs/design/SCREENS.md` — screen catalog (functional contract per screen)
+- `docs/design/WORKFLOW.md` — UI sub-process (mockup → component → page)
+- `docs/plans/README.md` — plan-file conventions
+
+**Directories — read on demand:**
+
+- `docs/design/` — canonical design docs (SCREENS.md, WORKFLOW.md, plus any graduated docs like COMPONENTS.md, ROUTES.md, DATA_MODEL.md, INTERACTIONS.md, SAMPLE_DATA.md)
+- `docs/design/mockups/` — visual reference (gitignored). PDF + Claude Design bundle JSX. See `docs/design/mockups/README.md` for what should be there and how to regenerate if missing.
+- `docs/plans/` — active plans (numbered `NN-name.md`)
+- `docs/plans/archive/` — executed plans (audit trail)
+- `docs/prompts/` — active kickoff prompts (one per active implementation plan, numbered to match)
+- `docs/prompts/archive/` — used prompts
+- `docs/misc/` — reference material that doesn't fit elsewhere
+
+When you need to know what's currently in any of these directories, **list them**. The state changes as plans are authored, executed, and archived; a maintained file table would drift.
 
 ---
 
@@ -194,6 +206,68 @@ DATA_DIR=.naavik
 
 ---
 
+## Workflow (canonical lifecycle for non-trivial change)
+
+Every meaningful change — features, models, screens, refactors, doc surgery — follows the same lifecycle. The agent (Claude) authors the artifacts; the user (you) reviews, approves, and drives implementation by using the prompts.
+
+```
+ROADMAP.md       →  Plan         →  user review  →  Design doc       →  Prompt           →  Implementation  →  Archive + roadmap mark
+(scope source)      docs/plans/      (approval)      docs/design/        docs/prompts/        (user runs it)      (agent files away)
+```
+
+### The eight steps
+
+1. **Scope** — read `ROADMAP.md`, pick a coherent unit of work (one phase task, one feature, one refactor). Larger items get split.
+
+2. **Plan** *(agent → `docs/plans/NN-name.md`)* — agent authors a plan with required front-matter (`Status`, `Type`, `Authored`, `Last updated`, `Depends on`) and an explicit approval checklist at the bottom. One plan per coherent unit. Conventions live in `docs/plans/README.md`.
+
+3. **Review** *(user)* — user reads the plan, ticks the approval checklist, calls out any open questions inline. Agent revises until APPROVED.
+
+4. **Design doc** *(agent → `docs/design/NAME.md`)* — for **design plans** (those that propose a new contract — components, routes, data model, interactions, etc.), the approved plan content graduates into a permanent design doc with a semantic name (e.g. `COMPONENTS.md`, `DATA_MODEL.md`). For **execution plans** (housekeeping, doc surgery, config), this step is skipped.
+
+5. **Implementation prompt** *(agent → `docs/prompts/NN-name.md`)* — for plans whose execution actually writes code, agent authors a self-contained kickoff prompt. The prompt references the relevant design doc(s), the plan, any mockups, and lists concrete deliverables. This prompt is what the user pastes into a fresh Claude Code session (or runs in the current one). For plan-01-style doc-only execution, no prompt is needed — agent executes inline.
+
+6. **Implement** *(user drives, agent or fresh agent executes)* — user uses the prompt to start implementation. Code, tests, migrations, templates, etc. land. Implementation can iterate; the design doc is the contract that survives.
+
+7. **Archive** *(agent)* — once implementation is verified:
+   - Plan → `docs/plans/archive/NN-name.md`, `Status: EXECUTED` (or `Status: GRADUATED → docs/design/NAME.md` if it produced a design doc)
+   - Prompt → `docs/prompts/archive/NN-name.md`, `Status: USED`
+   - Design doc stays at `docs/design/NAME.md` (canonical, permanent)
+
+8. **Roadmap update** *(agent)* — mark the corresponding `ROADMAP.md` task(s) `[x]` with a one-line deliverable note. Bump "Last updated" if the change is meaningful. See § Roadmap Maintenance Rules below.
+
+### Naming convention
+
+`NN` is a two-digit ordinal shared across plan / prompt (and referenced from the design doc). The design doc itself uses a SEMANTIC name because it's permanent and gets cross-referenced widely.
+
+| Artifact | Active path | Archived path | Naming |
+|---|---|---|---|
+| Plan | `docs/plans/03-component-catalog.md` | `docs/plans/archive/03-component-catalog.md` | `NN-kebab-name` |
+| Design doc | `docs/design/COMPONENTS.md` | (stays canonical, never archived) | `SEMANTIC_NAME.md` |
+| Prompt | `docs/prompts/03-component-catalog.md` | `docs/prompts/archive/03-component-catalog.md` | `NN-kebab-name` (matches plan) |
+
+### When to skip parts of the lifecycle
+
+- **Trivial typos / one-line clarifications** — just edit. No plan needed. Use a `TaskCreate` to track if it helps.
+- **Bug fixes that don't change architecture** — `TaskCreate` for tracking; skip plan/prompt unless the fix is non-obvious or touches >2 files.
+- **Doc realignments / config tweaks** — plan + execute inline; no design doc, no prompt.
+- **Emergencies** — fix first, document the workflow cleanup after.
+
+When unsure, default to authoring a plan. Plans are cheap to write and prevent rework.
+
+### What goes in a prompt (`docs/prompts/NN-name.md`)
+
+A kickoff prompt is self-contained for a fresh agent session. Required sections:
+
+1. **Goal** — one sentence
+2. **Required reading** — paths to the design doc, plan, AGENTS.md, DESIGN.md, SCREENS.md, etc. in the order they should be read
+3. **Deliverables** — concrete files to write/modify with one-line descriptions
+4. **Quality bar** — `uv run ruff check`, `uv run pytest`, Playwright screenshots, etc.
+5. **Forbidden patterns** — copy from HANDOFF_PROMPT-style § 7 (no React/Vue, no inline styles, no non-Lucide icons, no `console.log`, etc.)
+6. **Hand-back format** — what to report when done (file list, screenshot paths, follow-up notes)
+
+---
+
 ## Roadmap Maintenance Rules
 
 `ROADMAP.md` is the **single source of truth** for project progress. It must always be kept in sync with reality:
@@ -210,25 +284,15 @@ Never let the roadmap drift from the actual state of the codebase. If you discov
 
 ---
 
-## Design Workflow (UI Work)
+## Design pipeline (sub-process within step 6 of the workflow)
 
-See `docs/design/WORKFLOW.md` for the full pipeline. Summary:
+UI work plugs into the broader workflow above. The design pipeline (`docs/design/WORKFLOW.md`) is the per-screen sub-process that runs inside step 6 (Implement) for screens:
 
-**Phase A — Design System (Claude Design, one-time):**
-1. Point Claude Design's **"Set up design system"** at the GitHub repo (or upload `DESIGN.md`)
-2. Claude extracts tokens, components, patterns
-3. Validate with test prompts
-4. **Publish** the design system
+**Phase A — Design System (Claude Design, one-time, ✅ done):** design system published in claude.ai/design with `DESIGN.md` as source material.
 
-**Phase B — Screens (Claude Design, per batch):**
-5. Create **Prototype** project (auto-inherits published design system)
-6. Paste `docs/design/CLAUDE_DESIGN_PROMPT.md` screen descriptions
-7. Iterate and export mockups to `docs/design/mockups/`
+**Phase B — Screens (Claude Design, per batch, ✅ done for MVP):** create Prototype project, paste screen descriptions, iterate, export mockups to `docs/design/mockups/`.
 
-**Phase C — Implementation (Claude Code):**
-8. Read mockups + `DESIGN.md`
-9. Build component library → `src/ui/templates/components/`
-10. Implement pages → `src/ui/templates/pages/`
+**Phase C — Implementation (Claude Code):** read mockups + `DESIGN.md` + `SCREENS.md` → build component library → implement pages.
 
 **Critical rule:** Never implement a screen without a mockup. Never build a component without checking if it already exists.
 

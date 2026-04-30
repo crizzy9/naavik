@@ -1,10 +1,21 @@
-# Naavik · Claude Code handoff prompt
+---
+Status: ARCHIVED
+Type: prompt
+Authored: 2026-04-25
+Last updated: 2026-04-30
+Used: 2026-04-29 (drove the Claude Design handoff that produced `docs/design/mockups/naavik-handoff/`)
+Archived: 2026-04-30
+---
 
-> **Purpose:** This file is the hand-edited `README.md` / `PROMPT.md` that rides inside the Claude Design "Hand off to Claude Code" bundle. It overrides Claude Design's generic default. Paste it into the bundle's prompt slot before triggering the handoff.
+# Naavik · Claude Code handoff prompt (ARCHIVED)
+
+> **Status:** Archived. This prompt was used once on 2026-04-29 to override Claude Design's default handoff message and produce the bundle now committed at `docs/design/mockups/naavik-handoff/`. Kept for reference if a future Claude Design handoff is triggered. If you need a fresh handoff prompt, copy this file out of the archive and update the design system version, current MVP screen count, and any new forbidden-pattern rules.
+>
+> **Original purpose:** Hand-edited prompt that rides inside the Claude Design "Hand off to Claude Code" bundle. Overrides Claude Design's generic default. Paste into the bundle's prompt slot before triggering the handoff.
 >
 > **Audience:** the Claude Code agent that receives the bundle. Treat this as instructions to that agent, not to a human.
 >
-> **Last updated:** 2026-04-29 — reflects current Naavik design system v1.0 + 12 MVP screens.
+> **Original last-updated:** 2026-04-30 — reflected design system v1.1 + 11 MVP screens (the prior standalone Cover-letter screen had been folded into Discover · review & apply; no `/generate/*` routes).
 
 ---
 
@@ -52,7 +63,7 @@ The Claude Design export should include:
 - *(this file)* — `README.md` / `PROMPT.md` — overrides defaults
 - A machine-readable component spec + design tokens used on the canvas
 
-**Mockup PDF source of truth** (already committed): `docs/design/mockups/Naavik — MVP screens (print).pdf` (41 pages, 12 sections, 31 artboards). If `screenshots/` and the PDF disagree, the PDF is canonical.
+**Mockup PDF source of truth** (already committed): `docs/design/mockups/Naavik — MVP screens (print).pdf` (41 pages, 12 historical sections — the prior standalone Cover-letter section #9 has been folded into Discover · review & apply, so the canonical MVP is **11 screens** per `docs/design/SCREENS.md`). If `screenshots/` and the PDF disagree, the PDF is canonical for visuals; if the PDF and `docs/design/SCREENS.md` disagree, **SCREENS.md is canonical for the functional contract**.
 
 ---
 
@@ -175,14 +186,13 @@ Recommended implementation order (simplest first, let components stabilize befor
 2. **Settings** (`/settings`) — single tabbed page; great for validating the component library
 3. **Profile** (`/profile`) — read-only with sticky right rail
 4. **Profile editor** (`/profile/edit`) — same shell + autosave + Bullet editor modal
-5. **Bullet editor modal** — pure component, opens from #4 and later #8
+5. **Bullet editor modal** — pure component, opens from #4 and later #10
 6. **Onboarding** (`/onboarding`) — wizard shell, step 2 is the hero
 7. **Overview** (`/`) — most components, but most stable layout
 8. **Tracking** (`/tracking`) — Kanban + List view toggle, gmail status row
 9. **Outreach** (`/outreach`) — 2-pane app list + detail
-10. **Cover letter generator** (`/generate/cover-letter`) — 2-column tool with SSE streaming
-11. **Discover** (`/discover`) — swipe stack + keyboard handlers
-12. **Discover · review & apply** (`/discover/:id`) — 3-column workspace, the most complex screen — do this last, after everything else is stable
+10. **Discover** (`/discover`) — swipe stack + keyboard handlers
+11. **Discover · review & apply** (`/discover/:id`) — 3-column workspace including tailored resume + cover letter editor + screener questions; the most complex screen — do this last, after everything else is stable. Subsumes the prior `/generate/resume` and `/generate/cover-letter` standalone routes (neither exists in the MVP).
 
 ---
 
@@ -219,8 +229,8 @@ Before reporting any screen as done:
 - Putting `%` or the word "match" inside the score circle
 - Putting an AI sparkle icon on a tag chip
 - Bringing back FOUND / SCORED / APPROVED / DOCS_GENERATED / INTERVIEWING / REJECTED / WITHDRAWN as separate pipeline states
-- Adding a Resume sidebar item or `/generate/resume` route (folded into Discover/review)
-- Adding an Analytics sidebar item (deferred)
+- Adding a Resume or Cover Letter sidebar item, or any `/generate/*` route (resume tailoring and cover letter drafting both happen inside Discover · review & apply — `/discover/:id`. There is no separate `/generate/resume` or `/generate/cover-letter` route in the MVP.)
+- Adding an Analytics sidebar item (folded into Overview)
 - Introducing any JS framework
 - Light-mode variants (Phase 6)
 - Comments in code that explain what the next-doored line does, or that describe history/refactor context — write self-documenting code, leave history in commit messages and SCREENS.md

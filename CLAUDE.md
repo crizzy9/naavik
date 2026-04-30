@@ -2,7 +2,7 @@
 
 > **For Claude Code sessions.**
 > **Canonical guide:** `AGENTS.md` — always read that first.
-> **Last updated:** 2026-04-25
+> **Last updated:** 2026-04-30
 
 This file provides Claude Code-specific guidance. For general project conventions, architecture, and the design workflow, see `AGENTS.md`.
 
