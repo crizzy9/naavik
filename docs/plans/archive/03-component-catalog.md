@@ -1,11 +1,25 @@
 ---
-Status: APPROVED
+Status: GRADUATED → docs/design/COMPONENTS.md
 Type: design
 Authored: 2026-04-30
 Last updated: 2026-04-30
-Approved: 2026-04-30
+Graduated: 2026-04-30
 Depends on: 02-mvp-master-plan
 ---
+
+> **Graduated 2026-04-30** to `docs/design/COMPONENTS.md` (2111 lines, 85 component specs). Tier-1/2/3 fixes folded in during graduation:
+>
+> **Tier 1 (missing components, 13 added):** `bullet_textarea.html` (was in SCREENS.md § 6 but missing from inventory); `confirm_modal.html` (per INTERACTIONS.md § E.4); `spinner.html`, `toast.html`, `empty_state.html`, `avatar.html` (atomics — bundle exposes EmptyState; avatar inlined everywhere); `connection_status_card.html` (BACKEND.md § C `/_fragments/settings/test-connection`); `deployment_badge.html` (Shell — sidebar bottom + Settings · Deployment); 5 skeletons (`swipe_card_skeleton`, `tracking_card_skeleton`, `priority_action_row_skeleton`, `email_signal_row_skeleton`, `bullet_edit_row_skeleton`).
+>
+> **Tier 1 (full spec fill-in):** all 85 components specified per § B template (purpose, used-by, API table, visual spec, Lucide icons, variants, example invocation, mockup reference).
+>
+> **Tier 2 (cleanups):** front-matter `Approved` field omitted from canonical doc; duplicate `## Approval checklist` header removed; build order reversed — Shell first (auth_shell + sidebar + base.html refinements needed for any page render), then Atomics → Forms → ... → Skeletons last.
+>
+> **Tier 2 (base.html refinements expanded):** § F.1 full base.html structure with persistent IDs, hx-* attrs, script load order; § F.2 enumerates all required `base.js` handlers (Lucide reinit, Sortable.js auto-init, modal-close listener, toast auto-dismiss, optimistic rollback, upload progress); § F.3 component fixture page at `/_design/components` gated on `Settings.debug`.
+>
+> **Tier 3:** § J component-to-screen index added — every screen lists every component it consumes for plan 09 hand-off; common components called out separately.
+>
+> **Spec discrepancies resolved:** Tracking sidebar icon uses `inbox` (per SCREENS.md, not `kanban-square` from bundle); sidebar width 256px (per DESIGN.md, not 240px); Funnel/BarChart/LineChart components from bundle's Overview.jsx are leftovers from Analytics-on-Overview era — explicitly NOT in MVP, deferred to Phase 6.
 
 # 03 · Component catalog
 

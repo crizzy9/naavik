@@ -1,10 +1,13 @@
 ---
-Status: ACTIVE
+Status: USED
 Type: prompt
 Authored: 2026-04-30
 Last updated: 2026-04-30
+Used: 2026-04-30
 Purpose: Kickoff prompt for a fresh Claude Code session to continue Naavik MVP plan/design/implementation work.
 ---
+
+> **Used 2026-04-30.** Drove a session that: reviewed + approved plans 05 + 06; authored + approved plan 07; graduated plans 03–07 into canonical `docs/design/` docs (COMPONENTS.md, BACKEND.md, DATA_MODEL.md, INTERACTIONS.md, SAMPLE_DATA.md); cascaded a new `DRAFT` status through DESIGN.md (v1.3), SCREENS.md, and all five graduated docs to give pre-submission Application bundles a persistent home. Plans 03–07 archived with `Status: GRADUATED → ...`. Wave 1 complete. Successor prompt: `docs/prompts/00-session-continue.md`.
 
 # Naavik · session-continue prompt (2026-04-30)
 

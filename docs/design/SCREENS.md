@@ -33,19 +33,22 @@ Each screen entry has:
 
 ## Application status pipeline
 
-Naavik tracks applications through five stages. Closed states (rejected / withdrawn / ghosted) collapse into one bucket, hidden by default.
+Naavik tracks applications through six stages. The visible pipeline on Tracking is five (`APPLIED` → `CLOSED`); `DRAFT` and `CLOSED` are hidden by default. Closed states (rejected / withdrawn / ghosted) collapse into one bucket via `closed_reason`.
 
 | Status | Dot color | Meaning |
 |---|---|---|
+| `DRAFT` | `bg-slate-500` | Pre-submission bundle exists (auto-apply queued OR manual review-and-apply in flight). Hidden in Tracking by default; surfaced in Discover · review & apply and the Auto-apply queue card on Discover. |
 | `APPLIED` | `bg-indigo-500` | Submitted; awaiting recruiter response |
 | `RECRUITER_SCREEN` | `bg-cyan-500` | Recruiter-side conversation underway |
 | `ONSITE_LOOP` | `bg-amber-500` | In onsite / interview loop |
 | `OFFER` | `bg-emerald-500` | Offer extended (verbal, written, or accepted) |
 | `CLOSED` | `bg-rose-500` | Rejected, withdrawn, or ghosted (sub-reason in `closed_reason`) |
 
-Pre-application discovery (find → score → swipe) lives in Discover (`/discover`), not Tracking. The Job's pre-application queue lifecycle is a separate axis (`unswiped · saved · skipped · queued_for_auto_apply · applied`) on the Job model, not on Application — the Application row only exists once an application is submitted.
+Pre-application discovery (find → score → swipe) lives in Discover (`/discover`), not Tracking. The Job's pre-application queue lifecycle is a separate axis (`unswiped · saved · skipped · queued_for_auto_apply · applied`) on the Job model, not on Application. The Application row exists from the moment a bundle is generated (auto-apply queue or manual review entry) — `DRAFT` is its initial status; `APPLIED` is set on successful ATS submit.
 
-The five `Application.status` values above are the **post-submission** pipeline. **Document generation, referral status, recruiter engagement, and outreach engagement are tracked as orthogonal sub-states on Application — not as additional pipeline stages.** A single application can be `RECRUITER_SCREEN` + `referral_state=provided` + `docs_state=ready` simultaneously. See `docs/design/DATA_MODEL.md` (graduated from plan 05) for the full multi-axis state model. The flat `FOUND · SCORED · APPROVED · DOCS_GENERATED · INTERVIEWING · REJECTED · WITHDRAWN` enumeration is **not** in the model; those concerns live on dedicated axes (queue_state, docs_state, recruiter_state, closed_reason).
+The five visible `Application.status` values (`APPLIED` → `CLOSED`) are the **post-submission** pipeline. `DRAFT` is the pre-submission bucket. **Document generation, referral status, recruiter engagement, and outreach engagement are tracked as orthogonal sub-states on Application — not as additional pipeline stages.** A single application can be `RECRUITER_SCREEN` + `referral_state=provided` + `docs_state=ready` simultaneously. See `docs/design/DATA_MODEL.md` (graduated from plan 05) for the full multi-axis state model. The flat `FOUND · SCORED · APPROVED · DOCS_GENERATED · INTERVIEWING · REJECTED · WITHDRAWN` enumeration is **not** in the model; those concerns live on dedicated axes (queue_state, docs_state, recruiter_state, closed_reason).
+
+**Tracking visibility rule:** Board / List views default to `status IN (APPLIED, RECRUITER_SCREEN, ONSITE_LOOP, OFFER)`. Closed bucket toggle adds CLOSED. A `Show drafts` filter (deferred to Phase 1.x) reveals DRAFT rows for users who want to see the queue depth.
 
 ---
 

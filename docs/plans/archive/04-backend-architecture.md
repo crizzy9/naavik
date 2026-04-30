@@ -1,11 +1,21 @@
 ---
-Status: APPROVED
+Status: GRADUATED → docs/design/BACKEND.md
 Type: design
 Authored: 2026-04-30
 Last updated: 2026-04-30
-Approved: 2026-04-30
+Graduated: 2026-04-30
 Depends on: 02-mvp-master-plan, 05-data-model
 ---
+
+> **Graduated 2026-04-30** to `docs/design/BACKEND.md`. Tier-1/2/3 fixes folded in during graduation:
+>
+> **Tier 1:** DRAFT cascade (§ K rewritten with full DRAFT lifecycle subsection K.1; § B `/discover/{job_id}` documents auto-create-DRAFT behavior; § D.4 adds `/applications/{id}/submit` and `/applications/{id}/discard`); modal-confirm route changed to query-param `/_modal/confirm?...` (§ C); resume upload route confirmed at `/api/v1/extraction/upload` (§ D.2); `/applications/{id}/manual` fixed to `/applications/manual` (§ D.4); `vault_service` and `ats_credentials_service` added to § H.1 catalog; § K.4 `document_generator.answer_screeners` references full ApplicationScreenerAnswer model; `submission_artifacts` JSONB referenced throughout § K and § D.4; `services/ats/__init__.py` dispatcher named in § A; `ats.dispatch(board)` pattern called out in § K cross-service flows.
+>
+> **Tier 2:** front-matter `Approved` field removed from canonical doc (kept here in archive for audit); Telegram inbound long-poll moved out of APScheduler into a worker task (§ I.3); auto-apply cron tightened from 10min to 5min (§ I.1); `/_fragments/profile/autosave` route removed (autosave indicator returned as OOB on `PUT /api/v1/profile/{field}`); auto-apply queue timing clarified (right-swipe queues, cron processes).
+>
+> **Tier 3:** `/settings/{tab}` enum validation noted (§ G.12); ATS dispatcher service named explicitly (§ A `services/ats/__init__.py`); vault audit trail added to § N observability.
+>
+> **Bonus consistency fixes:** § O "Settings shape consumed by services" added — surfaces every `Settings.X` field referenced in the doc + flags that secrets live in vault, not Settings; `prompts.extract_job(provider, html)` naming corrected throughout; POST→SSE hybrid (cover letter generate) noted in § E.
 
 # 04 · Backend architecture & API design
 

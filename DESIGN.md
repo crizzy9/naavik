@@ -1,6 +1,6 @@
 # Naavik Design System
 
-> **Version:** 1.2
+> **Version:** 1.3
 > **Last updated:** 2026-04-30
 > **Stack:** Tailwind CSS + DaisyUI + HTMX (server-rendered Jinja2)
 >
@@ -72,19 +72,20 @@ Dark mode is the **primary** experience. Light mode is Phase 6.
 
 ### Status Pipeline
 
-Five stages. Closed states (rejected, withdrawn, ghosted) collapse into one bucket, hidden by default in Tracking.
+Six stages. The visible pipeline is five (`APPLIED` through `CLOSED`); `DRAFT` and `CLOSED` are hidden by default in Tracking. Closed states (rejected, withdrawn, ghosted) collapse into one bucket via `closed_reason`.
 
 | Status | Dot color | Meaning |
 |---|---|---|
+| `DRAFT` | `bg-slate-500` | Pre-submission — bundle generated, edits in flight. Hidden in Tracking by default; lives in Discover · review & apply or the Auto-apply queue. |
 | `APPLIED` | `bg-indigo-500` | Submitted; awaiting recruiter response |
 | `RECRUITER_SCREEN` | `bg-cyan-500` | Recruiter-side conversation underway |
 | `ONSITE_LOOP` | `bg-amber-500` | In onsite / interview loop |
 | `OFFER` | `bg-emerald-500` | Offer extended (verbal, written, or accepted) |
 | `CLOSED` | `bg-rose-500` | Rejected, withdrawn, or ghosted (sub-reason in `closed_reason`) |
 
-Pre-application discovery (find → score → swipe) lives in `/discover`, **not** Tracking. The Job's pre-application queue lifecycle (`unswiped · saved · skipped · queued_for_auto_apply · applied`) is a separate axis on the Job model. The Application row only exists once an application is submitted.
+Pre-application discovery (find → score → swipe) lives in `/discover`, **not** Tracking. The Job's pre-application queue lifecycle (`unswiped · saved · skipped · queued_for_auto_apply · applied`) is a separate axis on the Job model. The Application row exists from the moment a bundle is generated (auto-apply queue or manual review entry) — `DRAFT` is its initial status; `APPLIED` is set on successful ATS submit.
 
-The five stages above are the **post-submission** pipeline. Document generation, referral status, recruiter engagement, and outreach engagement are tracked as **orthogonal sub-states** on the Application model — not as additional pipeline stages. A single application can be `RECRUITER_SCREEN` + `referral_state=provided` + `docs_state=ready` simultaneously. See `docs/design/DATA_MODEL.md` (graduated from plan 05) for the full multi-axis state model. The flat `FOUND · SCORED · APPROVED · DOCS_GENERATED · INTERVIEWING · REJECTED · WITHDRAWN` enumeration is **not** in the model — those concerns live on dedicated axes (queue_state, docs_state, recruiter_state, closed_reason).
+The five visible stages (`APPLIED` → `CLOSED`) are the **post-submission** pipeline. `DRAFT` is the pre-submission bucket. Document generation, referral status, recruiter engagement, and outreach engagement are tracked as **orthogonal sub-states** on the Application model — not as additional pipeline stages. A single application can be `RECRUITER_SCREEN` + `referral_state=provided` + `docs_state=ready` simultaneously. See `docs/design/DATA_MODEL.md` (graduated from plan 05) for the full multi-axis state model. The flat `FOUND · SCORED · APPROVED · DOCS_GENERATED · INTERVIEWING · REJECTED · WITHDRAWN` enumeration is **not** in the model — those concerns live on dedicated axes (queue_state, docs_state, recruiter_state, closed_reason).
 
 ---
 
@@ -445,6 +446,7 @@ Other docs in `docs/design/` (COMPONENTS.md, ROUTES.md, DATA_MODEL.md, INTERACTI
 
 ## Version History
 
+- **1.3** (2026-04-30): `DRAFT` added as a sixth status (hidden in Tracking by default) so the pre-submission bundle has a persistent home — auto-apply pipeline pre-submit + manual review-and-apply pre-submit. APPLIED+ remain post-submission. Cascaded to DATA_MODEL.md, BACKEND.md, SAMPLE_DATA.md, INTERACTIONS.md, SCREENS.md.
 - **1.2** (2026-04-30): Status pipeline clarified as multi-axis: 5-stage `Application.status` is post-submission only; document generation / referral / recruiter engagement / outreach engagement live on orthogonal sub-states. Standalone `/generate/cover-letter` and `/generate/resume` routes removed (folded into Discover · review & apply). MVP screen count: 12 → 11. Prompts moved to `docs/prompts/`. New design docs queued via plans 03–07.
 - **1.1** (2026-04-29): Aligned to MVP-screens mockups. New 5-stage pipeline (`APPLIED · RECRUITER_SCREEN · ONSITE_LOOP · OFFER · CLOSED`). Tag vocabulary fixed at 9 (added `product`). Added components: `score_circle`, `status_dot`, `kpi_card`, `ai_badge`, `followup_banner`. Tag chips clarified as no-sparkle. Sidebar bottom: deployment badge instead of theme toggle.
 - **1.0** (2026-04-25): Initial design system. Indigo/cyan palette, slate neutrals, Inter + JetBrains Mono, Lucide icons.
