@@ -90,14 +90,14 @@ The state of plans changes — list this directory and `./archive/` to see what'
 
 - 01 — Docs realignment (archived; executed 2026-04-30)
 - 02 — MVP master plan (active; APPROVED)
-- 03 — Component catalog (design plan; produces `docs/design/COMPONENTS.md`)
-- 04 — Route table (design plan; produces `docs/design/ROUTES.md`)
-- 05 — Data model (design plan; produces `docs/design/DATA_MODEL.md`)
-- 06 — Interactions spec (design plan; produces `docs/design/INTERACTIONS.md`)
-- 07 — Sample data (design plan; produces `docs/design/SAMPLE_DATA.md`)
-- 08 — Stage 2 — component library implementation
-- 09 — Stage 3 — page implementation
-- 10 — Backend models + initial routes
+- 03 — Component catalog (active; APPROVED; produces `docs/design/COMPONENTS.md`)
+- 04 — Backend architecture & API design (active; APPROVED; produces `docs/design/BACKEND.md` — covers HTTP routes + services + cron + scraping + application logic + integrations + LLM abstraction + observability)
+- 05 — Data model (active; AWAITING REVIEW; produces `docs/design/DATA_MODEL.md`)
+- 06 — Interactions spec (active; AWAITING REVIEW; produces `docs/design/INTERACTIONS.md`)
+- 07 — Sample data (held; spawns after plan 05 is approved; produces `docs/design/SAMPLE_DATA.md`)
+- 08 — Stage 2 — component library implementation (held; spawns after plan 03 graduates)
+- 09 — Stage 3 — page implementation (held; spawns after plan 08 is approved)
+- 10 — Backend models + initial routes (held; spawns after plans 04 and 05 graduate)
 
 Open `02-mvp-master-plan.md` for the wave dependencies between them.
 

@@ -260,7 +260,7 @@ For the full directory layout, see `AGENTS.md` § Documentation locations. Touch
 The implementation now follows the Wave-based plan in `docs/plans/02-mvp-master-plan.md`. Summary:
 
 - **Wave 0** ✅ Doc realignment (plan 01 — executed 2026-04-30)
-- **Wave 1** 🟡 Author 4 design docs in `docs/design/`: COMPONENTS.md, ROUTES.md, DATA_MODEL.md, INTERACTIONS.md, plus SAMPLE_DATA.md (plans 03–07)
+- **Wave 1** 🟡 Author 4 design docs in `docs/design/`: COMPONENTS.md (plan 03), BACKEND.md (plan 04 — full backend incl. routes + services + cron + scraping + integrations), DATA_MODEL.md (plan 05), INTERACTIONS.md (plan 06), plus SAMPLE_DATA.md (plan 07)
 - **Wave 2** ⏳ Stage 2 component library implementation (plan 08)
 - **Wave 3** ⏳ Backend models + initial routes (plan 10)
 - **Wave 4** ⏳ Stage 3 page implementation (plan 09)

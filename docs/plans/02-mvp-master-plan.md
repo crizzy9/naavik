@@ -54,7 +54,7 @@ docs/
 │   ├── README.md
 │   ├── 02-mvp-master-plan.md       ← this file
 │   ├── 03-component-catalog.md     ← spawned from this plan (when authored)
-│   ├── 04-route-table.md           ← spawned
+│   ├── 04-backend-architecture.md  ← spawned (expanded from "route table" to full backend)
 │   ├── 05-data-model.md            ← spawned
 │   ├── 06-interactions-spec.md     ← spawned
 │   ├── 07-sample-data.md           ← spawned
@@ -75,7 +75,7 @@ docs/
     ├── SCREENS.md                  ← canonical (already exists)
     ├── WORKFLOW.md                 ← UI sub-process (already exists)
     ├── COMPONENTS.md               ← graduated from plan 03
-    ├── ROUTES.md                   ← graduated from plan 04
+    ├── BACKEND.md                   ← graduated from plan 04
     ├── DATA_MODEL.md               ← graduated from plan 05
     ├── INTERACTIONS.md             ← graduated from plan 06
     ├── SAMPLE_DATA.md              ← graduated from plan 07
@@ -105,15 +105,18 @@ Each entry:
 
 Estimated: ~70 components grouped into 11 sections (Shell, Atomics, Forms, Onboarding, Profile/Bullet, Overview, Discover, Discover-review, Tracking, Outreach, Settings).
 
-#### `docs/design/ROUTES.md` (planned in `04-route-table.md`)
+#### `docs/design/BACKEND.md` (planned in `04-backend-architecture.md`)
 
-Three tables:
+Comprehensive backend contract — far broader than just routes:
 
-1. **Page routes** — return `HTMLResponse` from `templates.TemplateResponse(...)`. URL · method · template · auth required · description.
-2. **HTMX fragment routes** — return HTML partials (component templates, OOB markers). URL · method · target template · trigger event · description.
-3. **JSON API routes** — under `/api/v1/`. URL · method · request schema · response schema · description.
-
-Plus per-screen interaction map: which fragments each page swaps in, which JSON endpoints are called, which SSE streams are subscribed to.
+1. **HTTP route table** — page routes (HTML), HTMX fragment routes (`/_fragments/...`), JSON API routes (`/api/v1/...`), SSE streams. Per-screen interaction map.
+2. **Service layer architecture** — 14 services (auth, profile, extraction, scraper, scorer, document_generator, application_service, email_monitor, email_classifier, contact_tracker, outreach_generator, notifications, portfolio_sync, llm_tracker) + 7 ATS adapters. Service patterns (async-first, Pydantic in/out, typed exceptions, idempotency, event emission).
+3. **Scheduled jobs (cron)** — APScheduler catalog across phases 2-6: scraping cron per source, dedup, scoring, auto-apply, email sync, classification, recruiter-state derivation, outreach DM batching, admin (snapshots, costs, cleanup).
+4. **Scraping architecture** — `BaseScraper` interface, 7 per-source scrapers (LinkedIn via RSShub, Workday, Greenhouse, Lever, Ashby, Indeed, generic), pipeline (extract → dedup → score → visa-filter → persist), anti-detection, n8n migration story.
+5. **Application logic** — auto-apply background pipeline + manual review-and-apply foreground; document generation (bullet selection + trimming + Typst compilation + page-count validation); ATS submission per board (Greenhouse / Lever / Ashby APIs, Workday / LinkedIn / Indeed / generic Playwright).
+6. **External integrations** — Gmail/Outlook OAuth + IMAP, LinkedIn Playwright DM (Phase 5), Discord webhook, Telegram bot, Google Calendar, n8n legacy import.
+7. **LLM provider abstraction** — `LLMProvider` interface, Anthropic/OpenAI/Ollama implementations, versioned prompt templates, cost tracking via `ApiUsage`, error handling + provider fallback.
+8. **Observability** — request logging, LLM tracking, scheduler status, error reporting, health check; Phase 6 Prometheus/Sentry/OTel additions.
 
 #### `docs/design/DATA_MODEL.md` (planned in `05-data-model.md`)
 
@@ -207,7 +210,7 @@ Wave dependencies:
 - Wave 0 must finish first (otherwise we're building from drifted specs).
 - Wave 1 plans 03, 04, 05, 06 can be authored in parallel — they describe orthogonal axes (UI / routes / data / interactions). Plan 07 (sample data) depends on plan 05 (data model) so it lands slightly after.
 - Wave 2 (component library) consumes COMPONENTS.md and DESIGN.md.
-- Wave 3 (backend) consumes DATA_MODEL.md + ROUTES.md.
+- Wave 3 (backend) consumes DATA_MODEL.md + BACKEND.md (in particular § H services, § I cron, § J scrapers, § K application logic).
 - Wave 4 (page templates) consumes everything.
 - Wave 5 wires interactions on top of Wave 4 pages.
 - Wave 6 swaps hardcoded sample data for real DB-backed handlers.
@@ -264,17 +267,21 @@ Contents:
 
 Tools used: `Read` SCREENS.md per-screen Components lists; `context7` for DaisyUI / Lucide reference.
 
-#### Plan 04 — Route table (graduates to `docs/design/ROUTES.md`)
+#### Plan 04 — Backend architecture & API design (graduates to `docs/design/BACKEND.md`)
 
-Contents:
+Originally scoped to "route table"; expanded after review feedback to cover the full backend stack. Contents:
 
-- Page routes table (URL, template, auth, description)
-- HTMX fragment routes table
-- JSON API routes table
-- Per-screen interaction map (which routes each screen calls)
-- File layout under `src/api/v1/` and `src/main.py` (or per-domain routers under `src/api/`)
+- HTTP route layer (page routes, HTMX fragment routes, JSON API, SSE streams, per-screen interaction map, conventions)
+- Service layer (14 services + 7 ATS adapters; patterns; cross-service flows)
+- Scheduled jobs (APScheduler catalog phases 2-6)
+- Scraping architecture (`BaseScraper`, per-source modules, pipeline, anti-detection, n8n migration)
+- Application logic (auto-apply + manual paths, document generation, ATS submission per board)
+- External integrations (Gmail/Outlook OAuth, LinkedIn Playwright, Discord/Telegram/Calendar, n8n legacy)
+- LLM provider abstraction (interface, implementations, prompt templates, cost tracking)
+- Observability (Phase 1 minimum, Phase 6 expansion)
+- File layout under `src/`
 
-Tools used: `Read` SCREENS.md per-screen Interactions sections; `context7` for FastAPI router patterns.
+Tools used: `Read` SCREENS.md per-screen Interactions sections + ROADMAP.md phase tasks; `context7` for FastAPI / APScheduler / Crawl4AI / Playwright patterns; `claude-api` skill for LLM-abstraction design.
 
 #### Plan 05 — Data model (graduates to `docs/design/DATA_MODEL.md`)
 
@@ -346,7 +353,7 @@ Mockup reference per screen comes from SCREENS.md § "Mockup:" line. The impleme
 
 Tools: `Write` per page; `Bash` to run Playwright; `impeccable` skill on screens that need design judgement (Discover swipe card, Discover · review & apply); `simplify` post-build.
 
-#### Plan 10 — Backend implementation (no graduation; references DATA_MODEL.md, ROUTES.md)
+#### Plan 10 — Backend implementation (no graduation; references DATA_MODEL.md, BACKEND.md exhaustively)
 
 Contents:
 
