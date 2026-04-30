@@ -83,6 +83,45 @@ In order:
 
 You don't write actual application code in this session — that happens in the implementation sessions triggered by `docs/prompts/08`, `09`, `10`. The deliverable here is plans + prompts.
 
+## What this session does NOT do
+
+- ❌ No application code (`src/**/*.py`, `src/ui/templates/**/*.html`, `migrations/versions/*.py`)
+- ❌ No `nix run .#dev`, no Playwright screenshots, no `uv run alembic upgrade`, no `uv run ruff check` against actual code
+- ❌ No graduating already-graduated docs in `docs/design/`
+- ❌ No modifying SCREENS.md / DESIGN.md / DATA_MODEL.md / BACKEND.md / INTERACTIONS.md / SAMPLE_DATA.md / COMPONENTS.md unless the user explicitly identifies a contract bug that needs fixing before plan 08–10 can be authored coherently
+- ❌ No skipping plan-review gates ("just go ahead and author the prompt") — each plan must be APPROVED by the user before its kickoff prompt is authored
+
+## What comes after this session (separate fresh sessions, kicked off by the prompts authored here)
+
+The lifecycle (per `AGENTS.md` § Workflow) for each implementation plan:
+
+```
+This session              Implementation session (fresh paste of the prompt)
+─────────────────────     ──────────────────────────────────────────────
+Author plan 08    ──→     Implement 85 Jinja partials + base.html refinements
+Author prompt 08          + _macros.html + /_design/components fixture page
+                          (paste docs/prompts/08-stage-2-impl.md)
+
+Author plan 09    ──→     Implement 11 page templates + Playwright visual QA
+Author prompt 09          (paste docs/prompts/09-stage-3-impl.md)
+
+Author plan 10    ──→     Implement SQLModel models + Alembic + LLM abstraction
+Author prompt 10          + auth + services. Plan 10 may split into per-wave
+                          sub-prompts (10a Wave 3, 10b Wave 6, 10c Phase 2+).
+                          Each sub-prompt = its own fresh impl session.
+```
+
+**Minimum 4 fresh sessions ahead** (1 planning [this one] + 3 implementation). Realistically 5–7 because plan 10 splits per-wave and Discover · review & apply (the most complex Stage 3 screen) may escalate to its own sub-plan.
+
+After each implementation session lands code:
+
+- Plan moves to `docs/plans/archive/` with `Status: EXECUTED` (or `GRADUATED → ...` if the plan also produced a design doc, but plans 08–10 are pure execution plans, no graduation).
+- Prompt moves to `docs/prompts/archive/` with `Status: USED`.
+- ROADMAP.md task(s) marked `[x]` with deliverable note.
+- The implementation-session's agent does this archival as the last step before handing back.
+
+**You (the user) drive the implementation sessions** by pasting the kickoff prompt into a fresh Claude Code window. The prompts are self-contained — they list every file to read, every file to write, every check to run, and every forbidden pattern. You don't have to re-explain context.
+
 ## Hard rules (non-negotiable)
 
 - **Tech stack:** HTMX + Jinja2 + Tailwind CSS + DaisyUI + Lucide icons (stroke 1.5). No JS framework (no React, Vue, Svelte, Solid). No Bootstrap. No Heroicons / Phosphor.
