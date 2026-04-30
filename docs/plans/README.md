@@ -44,7 +44,7 @@ Two flavors of plan:
 
 ## Plan file conventions
 
-- **Filename:** `NN-kebab-case-name.md` where `NN` is a two-digit ordinal (e.g. `01-docs-realignment.md`, `02-mvp-master-plan.md`). Ordinal reflects authoring order, not priority.
+- **Filename:** `NN-kebab-case-name.md` where `NN` is a two-digit ordinal (e.g. `01-docs-realignment.md`, `08-stage-2-impl.md`). Ordinal reflects authoring order, not priority.
 - **Front-matter required at top:**
   - `Status:` `DRAFT` · `AWAITING REVIEW` · `APPROVED` · `EXECUTED` · `GRADUATED → docs/design/<name>.md`
   - `Type:` `execution` · `design`
@@ -86,18 +86,20 @@ When authoring or executing a plan, prefer these (cheaper / faster / more accura
 
 ## Index
 
-The state of plans changes — list this directory and `./archive/` to see what's currently in each. Plans on the implementation roadmap (per `02-mvp-master-plan.md`):
+The state of plans changes — list this directory and `./archive/` to see what's currently in each. **Wave structure + per-wave checklists live in `ROADMAP.md` § Phase 1.** This README only tracks plan-file conventions and historical authoring order.
 
-- 01 — Docs realignment (archived; executed 2026-04-30)
-- 02 — MVP master plan (active; APPROVED)
-- 03 — Component catalog (active; APPROVED; produces `docs/design/COMPONENTS.md`)
-- 04 — Backend architecture & API design (active; APPROVED; produces `docs/design/BACKEND.md` — covers HTTP routes + services + cron + scraping + application logic + integrations + LLM abstraction + observability)
-- 05 — Data model (active; AWAITING REVIEW; produces `docs/design/DATA_MODEL.md`)
-- 06 — Interactions spec (active; AWAITING REVIEW; produces `docs/design/INTERACTIONS.md`)
-- 07 — Sample data (held; spawns after plan 05 is approved; produces `docs/design/SAMPLE_DATA.md`)
-- 08 — Stage 2 — component library implementation (held; spawns after plan 03 graduates)
-- 09 — Stage 3 — page implementation (held; spawns after plan 08 is approved)
-- 10 — Backend models + initial routes (held; spawns after plans 04 and 05 graduate)
+Authoring history (plans on the MVP implementation arc, per `ROADMAP.md`):
 
-Open `02-mvp-master-plan.md` for the wave dependencies between them.
+- 01 — Docs realignment (archived; EXECUTED 2026-04-30)
+- 02 — MVP master plan (archived; EXECUTED 2026-04-30; content distributed to `ROADMAP.md` § Phase 1, `AGENTS.md` § Workflow, `docs/prompts/00-session-continue.md`, this README)
+- 03 — Component catalog (archived; GRADUATED → `docs/design/COMPONENTS.md`)
+- 04 — Backend architecture & API design (archived; GRADUATED → `docs/design/BACKEND.md`)
+- 05 — Data model (archived; GRADUATED → `docs/design/DATA_MODEL.md`)
+- 06 — Interactions spec (archived; GRADUATED → `docs/design/INTERACTIONS.md`)
+- 07 — Sample data (archived; GRADUATED → `docs/design/SAMPLE_DATA.md`)
+- 08 — Stage 2 component library implementation (pending; spawns from `docs/prompts/00-session-continue.md`)
+- 09 — Stage 3 page implementation (pending; spawns after plan 08 is approved)
+- 10 — Backend implementation (multi-wave) (pending; spawns after plan 09 is approved)
+
+Wave dependencies between them are captured in `ROADMAP.md` § Phase 1 § Implementation waves.
 

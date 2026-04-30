@@ -257,16 +257,16 @@ For the full directory layout, see `AGENTS.md` § Documentation locations. Touch
 
 ### Phase C: Implementation 🟡 IN PROGRESS
 
-The implementation now follows the Wave-based plan in `docs/plans/02-mvp-master-plan.md`. Summary:
+The implementation follows the Wave-based plan in `ROADMAP.md` § Phase 1 § Implementation waves. Summary:
 
 - **Wave 0** ✅ Doc realignment (plan 01 — executed 2026-04-30)
-- **Wave 1** 🟡 Author 4 design docs in `docs/design/`: COMPONENTS.md (plan 03), BACKEND.md (plan 04 — full backend incl. routes + services + cron + scraping + integrations), DATA_MODEL.md (plan 05), INTERACTIONS.md (plan 06), plus SAMPLE_DATA.md (plan 07)
+- **Wave 1** ✅ Author 5 design docs in `docs/design/`: COMPONENTS.md (plan 03), BACKEND.md (plan 04 — full backend), DATA_MODEL.md (plan 05), INTERACTIONS.md (plan 06), SAMPLE_DATA.md (plan 07) — all GRADUATED + archived 2026-04-30
 - **Wave 2** ⏳ Stage 2 component library implementation (plan 08)
-- **Wave 3** ⏳ Backend models + initial routes (plan 10)
+- **Wave 3** ⏳ Backend models + auth + LLM (plan 10 Wave 3)
 - **Wave 4** ⏳ Stage 3 page implementation (plan 09)
-- **Wave 5** ⏳ Wire interactions per INTERACTIONS.md
-- **Wave 6** ⏳ Real backend integration (replaces hardcoded sample data)
+- **Wave 5** ⏳ Wire interactions per INTERACTIONS.md (extends plan 09)
+- **Wave 6** ⏳ Real backend integration (plan 10 Wave 6 — replaces hardcoded sample data)
 
-The UI shell can be built in parallel with the data/AI layer; integration happens at Stage 3 when routes get real handlers.
+The UI shell (Wave 2) can be built in parallel with the backend models layer (Wave 3); integration happens at Wave 4 when page handlers wire HTMX against either sample data or DB-backed services. See `ROADMAP.md` for the per-wave checklist.
 
 **Design principle throughout:** Self-hosted first. The UI should feel like a developer tool you run in your homelab — dark mode, data-dense, no SaaS bloat. The cloud tier ($15/mo, bring-your-own AI credits) is mentioned in Settings as a deployment option, never as a premium upsell.

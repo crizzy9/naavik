@@ -1,10 +1,33 @@
 ---
-Status: APPROVED
+Status: EXECUTED
 Type: design
 Authored: 2026-04-30
 Last updated: 2026-04-30
+Executed: 2026-04-30
 Depends on: 01-docs-realignment
 ---
+
+> **Executed 2026-04-30.** This master plan orchestrated Wave 0 (doc realignment, plan 01) and Wave 1 (design docs, plans 03–07) successfully. Both waves complete; their outputs landed at:
+>
+> - Plan 01 → archived (EXECUTED)
+> - Plan 03 → `docs/design/COMPONENTS.md`
+> - Plan 04 → `docs/design/BACKEND.md`
+> - Plan 05 → `docs/design/DATA_MODEL.md`
+> - Plan 06 → `docs/design/INTERACTIONS.md`
+> - Plan 07 → `docs/design/SAMPLE_DATA.md`
+>
+> **Content distributed to keep ROADMAP.md as single source of truth (no drift):**
+>
+> - § A document map → actual filesystem state in `docs/` (filesystem wins).
+> - § B four canonical design docs → the graduated docs themselves at `docs/design/*.md` (docs win).
+> - § C implementation waves → `ROADMAP.md` § Phase 1 § Implementation waves (with per-wave checklists for Waves 2–6).
+> - § D tools / skills / MCPs strategy → `docs/plans/README.md` § Tooling strategy reminders + `AGENTS.md` § Workflow.
+> - § E per-plan scope sketches (03–07) → graduation notes on each archived plan.
+> - § E per-plan scope sketches (08, 09, 10) → `docs/prompts/00-session-continue.md` § Per-plan scope sketches.
+> - § F phase mapping → `ROADMAP.md` § Phase 1 cross-references to BACKEND.md / DATA_MODEL.md / etc.
+> - § G open questions → all locked; answers folded into the graduated design docs.
+>
+> **Going forward:** every active plan in `docs/plans/` is a single in-flight piece of work — never a "master" or "meta" plan. `ROADMAP.md` alone tracks the long arc + per-wave checklists.
 
 # 02 · MVP master plan
 

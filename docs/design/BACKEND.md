@@ -982,7 +982,7 @@ The full `Settings` model shape is canonical in DATA_MODEL.md § L. Cross-refere
 
 ## P · Phase mapping
 
-This contract describes the full backend across all phases. Implementation lands in waves per master plan § C:
+This contract describes the full backend across all phases. Implementation lands in waves per `ROADMAP.md` § Phase 1 § Implementation waves:
 
 | Wave | Sections in scope | ROADMAP phase |
 |---|---|---|

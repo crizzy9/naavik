@@ -11,9 +11,9 @@ Purpose: Kickoff prompt for a fresh Claude Code session to author plans 08–10 
 You're picking up Naavik mid-stream in a fresh session. The repo lives at `/home/nightwatcher/personal/dev/naavik`. Read these files in order — they're the canonical context:
 
 1. `AGENTS.md` — agent guide + canonical workflow lifecycle (read § Workflow carefully)
-2. `ROADMAP.md` — phase plan + progress
-3. `DESIGN.md` (root) — visual contract: tokens, typography, components, voice
-4. `docs/design/SCREENS.md` — 11-screen MVP catalog (functional contract per screen)
+2. `ROADMAP.md` — **single source of truth for project progress.** Per-phase wave/task tables with checkboxes. Phase 1 § Implementation waves shows where Wave 2/3/4/5/6 land in this session's plans.
+3. `DESIGN.md` (root) — visual contract: tokens, typography, components, voice (v1.3, includes DRAFT in Status Pipeline)
+4. `docs/design/SCREENS.md` — 11-screen MVP catalog (functional contract per screen; DRAFT visibility rule)
 5. `docs/design/COMPONENTS.md` — 85-component library (graduated from plan 03)
 6. `docs/design/BACKEND.md` — backend architecture (HTTP routes + services + cron + scrapers + ATS adapters + LLM + observability; graduated from plan 04)
 7. `docs/design/DATA_MODEL.md` — 18 SQLModel entities + Settings (graduated from plan 05)
@@ -21,7 +21,7 @@ You're picking up Naavik mid-stream in a fresh session. The repo lives at `/home
 9. `docs/design/SAMPLE_DATA.md` — Phase 1 hardcoded fixtures (graduated from plan 07)
 10. `docs/design/WORKFLOW.md` — UI sub-process (mockup → component → page)
 11. `docs/plans/README.md` — plan-file conventions
-12. `docs/plans/02-mvp-master-plan.md` — master plan (APPROVED, active)
+12. `docs/plans/archive/02-mvp-master-plan.md` — historical record (EXECUTED 2026-04-30; content distributed to ROADMAP.md, AGENTS.md, this prompt)
 13. `docs/plans/archive/03-component-catalog.md` through `07-sample-data.md` — graduation notes (each archived plan front-matter carries a detailed list of every Tier-1/2/3 fix folded in during graduation)
 14. `docs/plans/archive/01-docs-realignment.md` — historical record (executed 2026-04-30)
 15. `docs/prompts/archive/00-session-continue-2026-04-30.md` — predecessor session-continue prompt (USED)
@@ -46,11 +46,14 @@ Mockups (gitignored, locally only): `docs/design/mockups/Naavik — MVP screens 
 
 **Plan status:**
 
-- 02 (Master plan) — APPROVED, active.
+- 01 (Docs realignment) — EXECUTED + archived 2026-04-30.
+- 02 (MVP master plan) — EXECUTED + archived 2026-04-30. Content distributed: wave structure → `ROADMAP.md` § Phase 1, workflow → `AGENTS.md`, current-session scope → this prompt, tooling strategy → `docs/plans/README.md`. **Do not reference plan 02 — refer to its successor docs.**
 - 03 / 04 / 05 / 06 / 07 — GRADUATED + archived.
 - 08 (Stage 2 component library impl) — **NOT YET AUTHORED**. Spawns from this prompt.
 - 09 (Stage 3 page implementation) — **NOT YET AUTHORED**. Spawns after plan 08 is approved.
 - 10 (Backend implementation, multi-wave) — **NOT YET AUTHORED**. Spawns after plan 09 is approved (it consumes BACKEND.md + DATA_MODEL.md exhaustively).
+
+**Wave-level checklists:** every plan above is tracked at task-level in `ROADMAP.md` § Phase 1 § Wave N. As implementation lands, tick checkboxes there with deliverable notes.
 
 **Prompts status:**
 
