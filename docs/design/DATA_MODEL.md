@@ -1,6 +1,6 @@
 # Naavik Data Model
 
-> **Last updated:** 2026-04-30
+> **Last updated:** 2026-05-01 (Phase 1 entity inventory + CHECK constraint refinements per the cross-plan triage)
 > **Status:** Canonical — graduated from `docs/plans/05-data-model.md` (archived).
 > **Scope:** SQLModel definitions for the entire MVP — every entity, every field, every enum, every relationship, every index — including the multi-axis Application state model. Backend implementation (plan 10) builds `src/models/*.py` from this 1:1; sample data (`docs/design/SAMPLE_DATA.md`) populates with realistic fixtures.
 > **Companion docs:** `DESIGN.md` (visual contract), `docs/design/SCREENS.md` (functional contract), `docs/design/BACKEND.md` (services + routes consuming this), `docs/design/SAMPLE_DATA.md` (Phase 1 fixtures).
@@ -36,7 +36,7 @@ See § J for the full screener-answer model and lifecycle.
 
 ## B · Entity inventory
 
-18 SQLModel entities + 1 settings singleton. Phase 1 ships all of them; Phase 2+ extends some (e.g. scraping sources, semantic embeddings).
+19 SQLModel entities + 1 settings singleton. Phase 1 ships all of them; Phase 2+ extends some (e.g. scraping sources, semantic embeddings).
 
 | # | Entity | Purpose | Phase 1 row count (per SAMPLE_DATA.md) |
 |---|---|---|---|
@@ -58,9 +58,12 @@ See § J for the full screener-answer model and lifecycle.
 | 16 | `GeneratedDocument` | Resume PDF + cover letter PDF artifacts | ~30 |
 | 17 | `ApplicationScreenerAnswer` | Per-job custom screener questions + drafted/user answers (see § J) | ~20 |
 | 18 | `ATSCredential` | Per-board login state metadata (DB row only; secret material in `~/.naavik/secrets.enc`) | 0 in Phase 1 fixtures |
+| 19 | `ApiUsage` | Per-LLM-call cost + token + latency log; powers Settings · LLM Provider cost cards | grows with usage; fixtures seed ~30 historical rows |
 | – | `Settings` (singleton) | Per-user LLM provider, auto-apply config, etc. (see § L for full shape) | 1 |
 
-Phase 2+ adds: `ScrapingSource`, `Notification`, `CalendarEvent`, `JobEmbedding` (pgvector), `ProfileAnswer` (screener-answer reuse cache; see § J), `ApiUsage` (LLM cost tracking).
+Phase 2+ adds: `ScrapingSource`, `Notification`, `CalendarEvent`, `JobEmbedding` (pgvector), `ProfileAnswer` (screener-answer reuse cache; see § J).
+
+`ApiUsage` was promoted from Phase 2+ to Phase 1 entity #19 on 2026-05-01 because Settings · LLM Provider's "THIS MONTH" / "AVG / GENERATION" / "RATE LIMIT" cost cards (SCREENS.md § 11) need it from day one. Adding the table later would mean a migration + a broken cost-card interim.
 
 ---
 
@@ -412,7 +415,11 @@ class Application(SQLModel, table=True):
     screener_answers: list["ApplicationScreenerAnswer"] = Relationship(back_populates="application")
 ```
 
-**Indexes:** `(user_id, status)`, `job_id`, `applied_at desc`, `(user_id, status, recruiter_state)` for the "needs followup" scan, partial unique `(user_id, job_id) WHERE deleted_at IS NULL` to prevent duplicate live applications per job. **Validation:** `closed_reason IS NOT NULL WHEN status = 'CLOSED'`; `applied_at IS NOT NULL WHEN status != 'DRAFT'`. **Transitions** are enforced at the service layer (see § E). **`submission_artifacts`** is opaque JSONB written by ATS adapters (BACKEND.md § K) — Naavik never queries by its contents, only reads it for retry / debugging.
+**Indexes:** `(user_id, status)`, `job_id`, `applied_at desc`, `(user_id, status, recruiter_state)` for the "needs followup" scan, partial unique `(user_id, job_id) WHERE deleted_at IS NULL` to prevent duplicate live applications per job. **CHECK constraints:**
+- `closed_reason IS NOT NULL WHEN status = 'CLOSED'`
+- `applied_at IS NOT NULL OR status = 'DRAFT' OR deleted_at IS NOT NULL` — covers (a) DRAFT rows that haven't been submitted yet, (b) submitted rows in any post-submission status, and (c) discarded DRAFTs that flip to `CLOSED` with `closed_reason = withdrawn_by_me` and a non-null `deleted_at` (soft-delete) without ever having an `applied_at`. The previous "applied_at NOT NULL when status != DRAFT" formulation rejected discarded DRAFTs and was corrected 2026-05-01.
+
+**Transitions** are enforced at the service layer (see § E). **`submission_artifacts`** is opaque JSONB written by ATS adapters (BACKEND.md § K) — Naavik never queries by its contents, only reads it for retry / debugging. When `submission_artifacts.last_failure` is populated AND `status = DRAFT`, the row surfaces in Discover's "Stuck in queue · {N}" right-rail card (`up_next_card` `state="stuck"`).
 
 ### `Contact`
 
@@ -655,6 +662,39 @@ class ATSCredential(SQLModel, table=True):
 
 **No secret material here.** Cookies, tokens, 2FA backups all live in `~/.naavik/secrets.enc` (see § H).
 
+### `ApiUsage`
+
+Per-call audit + cost tracking for every LLM invocation. Wrapped around every `LLMProvider.complete / structured / stream` call by `services/llm_tracker.py` (BACKEND.md § M.4). Aggregated daily by the `admin.aggregate_costs` cron and surfaced in Settings · LLM Provider cost cards.
+
+```python
+class ApiUsage(SQLModel, table=True):
+    __tablename__ = "api_usage"
+
+    id: int = Field(primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    application_id: Optional[int] = Field(default=None, foreign_key="application.id", index=True)
+    # Optional FK so cost can be attributed to a specific Application bundle when relevant
+    # (e.g. document_generator pre_generate calls); user-level / scraping-level calls leave it null.
+
+    provider: LLMProvider              # anthropic | openai | ollama
+    model: str                         # e.g. "claude-3.5-sonnet-20250219"
+    method: str                        # "complete" | "structured" | "stream"
+    prompt_name: Optional[str] = None  # e.g. "score_job", "draft_cover_letter" — blank for ad-hoc
+
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float                    # provider.estimate_cost(input_tokens, output_tokens)
+    latency_ms: int
+
+    succeeded: bool = Field(default=True)
+    error_kind: Optional[str] = None   # "rate_limit" | "timeout" | "schema_validation" | "provider_error" | None
+
+    occurred_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+```
+
+**Indexes:** `(user_id, occurred_at desc)`, `(user_id, provider, occurred_at desc)`, `(application_id)` (partial). Aggregation queries hit the (user_id, occurred_at) index for time-window sums.
+
 ### `Settings` (singleton)
 
 See § L for the full field listing and consumer mapping. Model definition:
@@ -676,6 +716,15 @@ class Settings(SQLModel, table=True):
     auto_apply_score_threshold: float = Field(default=0.85)
     auto_apply_daily_cap: Optional[int] = None  # None = unlimited
 
+    # Cost-aware DRAFT generation
+    eager_review_generation: bool = Field(default=True)
+    # True (default): /discover/{id} GET auto-creates DRAFT + pre_generates resume + cover letter + screeners
+    # False: lazy path — empty workspace with explicit "Tailor for this job" CTA on first visit;
+    #        DRAFT created and bundle generated only on click. Cost-conscious users opt in.
+    daily_llm_cost_cap_usd: Optional[float] = None
+    # When set, hitting the cap auto-flips eager_review_generation to lazy for the remainder of the day
+    # (resets at midnight UTC). UI shows a banner on Discover · review when capped.
+
     # Notifications
     notify_threshold: float = Field(default=0.80)  # score gate for new-job alerts
     notify_on_errors: bool = Field(default=True)
@@ -687,6 +736,11 @@ class Settings(SQLModel, table=True):
     discord_webhook_configured: bool = Field(default=False)
     telegram_bot_configured: bool = Field(default=False)
     portfolio_webhook_configured: bool = Field(default=False)
+    portfolio_cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: ["https://crypticsoul.dev"],
+        sa_column=Column(ARRAY(String)),
+    )
+    # Self-hosters can edit to point at their own portfolio domain(s) without code changes.
 
     # Sources
     sources_enabled: dict = Field(default_factory=dict, sa_column=Column(JSON))
@@ -1061,6 +1115,7 @@ Critical indexes for Phase 1:
 - `AppEvent.(application_id, occurred_at desc)`, `(user_id, kind, occurred_at desc)`
 - `ApplicationScreenerAnswer.(application_id)`, `ApplicationScreenerAnswer.(question_fingerprint)` (Phase 2+ for reuse cache)
 - `ATSCredential.(user_id, board)` unique
+- `ApiUsage.(user_id, occurred_at desc)`, `ApiUsage.(user_id, provider, occurred_at desc)`, `ApiUsage.(application_id)` partial
 - `GeneratedDocument.(application_id, kind, compiled_at desc)`
 
 Phase 6 adds `JobEmbedding` with pgvector index for semantic match (`Job.title || description` embedded; cosine sim search). Phase 2+ adds an index on `ApplicationScreenerAnswer.(question_fingerprint, user_id)` to power the reuse-cache lookup.
@@ -1143,6 +1198,8 @@ The full Settings model (per § C) carries these fields. The mapping below shows
 | `llm_api_key_fingerprint` | UI (Settings · LLM Provider) | sha256 of the key for "key set" display — never the key itself |
 | `llm_fallback_provider` | `llm_tracker.tracked_call` (M.5) | Optional |
 | `auto_apply_enabled`, `auto_apply_score_threshold`, `auto_apply_daily_cap` | `application_service.process_auto_apply_queue()` (K.2) | |
+| `eager_review_generation`, `daily_llm_cost_cap_usd` | `application_service.get_or_create_draft()` (K.3) | Default eager (matches SCREENS.md § 8 "generating skeletons"). Lazy path = empty `pages/discover_review.html` with explicit "Tailor for this job" CTA. Cap-trigger flips eager → lazy mid-day. |
+| `portfolio_cors_allowed_origins` | `services/portfolio_sync.py` CORS middleware | Default `["https://crypticsoul.dev"]`; self-hosters edit Settings · Account to point at their own portfolio domain(s). |
 | `notify_threshold` | `scraper_service.scrape()` (J.3) | High-score Discord/Telegram notification gate |
 | `notify_on_errors` | `services/notifications.py` (N) | Critical-error Discord gate |
 | `notifications_enabled` (JSONB dict) | `services/notifications.py` | Per-event-type toggles |

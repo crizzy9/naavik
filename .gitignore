@@ -43,9 +43,10 @@ TODO.md
 # Typst build artifacts
 *.typst.pdf
 
-# IDE
+# IDE / agent state
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 *~

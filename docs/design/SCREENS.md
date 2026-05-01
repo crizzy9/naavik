@@ -1,6 +1,6 @@
 # Naavik Screen Catalog
 
-> **Last updated:** 2026-04-30
+> **Last updated:** 2026-05-01 (Discover § 7 right rail gains "Stuck in queue · {N}" card per cross-plan triage)
 > **Source of truth:** This file. Where this disagrees with mockups, archived prompts (`docs/prompts/archive/`), or older drafts, this wins.
 > **Companion files:** `DESIGN.md` (visual contract) · `docs/design/WORKFLOW.md` (UI sub-process pipeline).
 >
@@ -381,6 +381,7 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 #### Right rail
 - **Today** — applied cards (collapsed placeholders showing what's already done today)
 - **Up next** (header + count) — 4 queued cards: company tile, role, "$range", match score
+- **Stuck in queue · {N}** (only when count > 0) — DRAFT applications whose auto-apply submission hit `captcha` / `auth_required` / `field_mismatch` / `unknown` and now need manual fix-up. Renders `up_next_card.html` with `state="stuck"` (amber border for `auth_required`; rose for the rest). Click → `/discover/{job_id}` shows the DRAFT with a failure banner + retry / discard actions. Added 2026-05-01 per the cross-plan triage so failed auto-applies have a discoverable surface (otherwise they're silently stuck on the DRAFT row).
 - **Saved for later · {N} →** card: "You've stashed {N} jobs to revisit. They won't be auto-applied until you decide."
 - **Tip** card (lightbulb): "Tap to expand a job and refine the resume / cover letter before applying. Right-swipe lets Naavik tailor and submit on its own."
 

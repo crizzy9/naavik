@@ -1,6 +1,6 @@
 # Naavik Development Roadmap
 
-> Last updated: 2026-04-30 (Wave 1 complete — design docs graduated)
+> Last updated: 2026-05-01 (Phase 1 wave order linearized to Scenario A — 08 → 09 → 10 W3 → 10 W6)
 >
 > **This is the single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. The master plan (formerly `docs/plans/02-mvp-master-plan.md`) is archived — its content lives here, in `AGENTS.md` § Workflow, and in the active session-continue prompt at `docs/prompts/00-session-continue.md`.
 
@@ -330,17 +330,18 @@ naavik/
 
 #### Implementation waves
 
+Phase 1 ships in **5 sequential waves** (Scenario A). Each wave passes acceptance criteria before the next starts; they do **not** run in parallel. Plan 08 lays the component library, plan 09 composes pages on top with sample-data accessors + stub endpoints, plan 10 Wave 3 lands the data substrate (DB + auth + LLM) and swaps the stubs for real handlers without UI churn, plan 10 Wave 6 completes services + Typst + DRAFT lifecycle + 3 ATS adapters. Interactions per INTERACTIONS.md fold into Wave 3 (no separate Wave 5).
+
 | Wave | Scope | Plan | Prompt | Status | Done |
 |---|---|---|---|---|---|
 | 0 | Doc realignment | `docs/plans/archive/01-docs-realignment.md` | (executed inline) | ✅ EXECUTED | 2026-04-30 |
 | 1 | Author 5 design docs (COMPONENTS / BACKEND / DATA_MODEL / INTERACTIONS / SAMPLE_DATA) | plans 03–07 (all GRADUATED + archived) | (no separate prompts — design plans graduate inline) | ✅ COMPLETE | 2026-04-30 |
-| 2 | Stage 2 component library impl (85 partials + base.html refinements) | `docs/plans/08-stage-2-impl.md` | `docs/prompts/08-stage-2-impl.md` | ⏳ pending | — |
-| 3 | Backend models + auth + LLM (initial) | `docs/plans/10-backend-impl.md` (Wave 3) | `docs/prompts/10-backend-impl.md` (Wave 3) | ⏳ pending | — |
-| 4 | Stage 3 page templates impl (11 screens) | `docs/plans/09-stage-3-impl.md` | `docs/prompts/09-stage-3-impl.md` | ⏳ pending | — |
-| 5 | Wire interactions per INTERACTIONS.md (extends Wave 4) | merges into plan 09 | merges into prompt 09 | ⏳ pending | — |
-| 6 | Real backend integration (replace sample data; services complete) | `docs/plans/10-backend-impl.md` (Wave 6) | `docs/prompts/10-backend-impl.md` (Wave 6) | ⏳ pending | — |
+| 2 | Stage 2 component library impl (85 partials + base.html refinements + macros + base.js + fixture page) | `docs/plans/08-stage-2-impl.md` | `docs/prompts/08-stage-2-impl.md` | ✅ APPROVED · ⏳ pending impl | — |
+| 3 | Stage 3 page templates impl (11 screens, sample_data accessors, stub fragment + JSON endpoints, Discover keyboard map, Playwright snapshots) — folds in interactions per INTERACTIONS.md § J | `docs/plans/09-stage-3-impl.md` | `docs/prompts/09-stage-3-impl.md` | ⏳ pending | — |
+| 4 | Backend Wave 3 — models + auth + LLM abstraction + vault + initial services + db/seed; **swaps plan 09 stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged) | `docs/plans/10-backend-impl.md` § B | `docs/prompts/10-backend-impl.md` (Wave 3 part) | ⏳ pending | — |
+| 5 | Backend Wave 6 — all 14 services + Typst document generator + DRAFT lifecycle + Greenhouse / Lever / Ashby ATS adapters + portfolio_sync + auto-apply cron + notifications | `docs/plans/10-backend-impl.md` § C | `docs/prompts/10-backend-impl.md` (Wave 6 part) | ⏳ pending | — |
 
-Each wave passes acceptance criteria before the next starts. Waves 2 and 3 can run in parallel (no shared state). Wave 4 consumes Wave 2 + Wave 3. Wave 5 extends Wave 4. Wave 6 swaps sample-data accessors for DB-backed handlers.
+After Wave 5 ships, **Phase 2–6 work** (scrapers, scoring, email + auto-classification, LinkedIn DMs + outreach, observability + light mode + LaTeX) graduates to plans 11+ as outlined in plan 10 § D.
 
 #### Wave 1 completion log (2026-04-30)
 
@@ -374,79 +375,72 @@ DESIGN.md bumped to v1.3 (DRAFT row added to Status Pipeline). SCREENS.md DRAFT 
 | 2.12 | Skeletons (5) | `swipe_card_skeleton`, `tracking_card_skeleton`, `priority_action_row_skeleton`, `email_signal_row_skeleton`, `bullet_edit_row_skeleton` | [ ] |
 | 2.13 | `/_design/components` fixture page (gated on `Settings.debug`) | — | [ ] |
 
-#### Wave 3 — Backend models + auth + LLM (plan 10 Wave 3)
+#### Wave 3 — Stage 3 page templates (plan 09)
 
-> Plan + prompt to be authored next session. Initial backend; supports plan 09 page handlers wiring real auth + sample-data accessors. Acceptance: `uv run alembic upgrade head` succeeds, auth path passes `security-review`, vault boundary verified, models round-trip through fixtures via `tests/test_sample_data.py`.
-
-| # | Task | Source contract | Status |
-|---|---|---|---|
-| 3.1 | SQLModel models for all 18 entities + Settings | DATA_MODEL.md § C | [ ] |
-| 3.2 | Alembic initial migration (every table + enum + index; pgvector extension enabled) | DATA_MODEL.md § H | [ ] |
-| 3.3 | Auth — JWT cookie + bcrypt; `/api/v1/auth/login`, `/logout`, `/me`, `/csrf` | BACKEND.md § D.1 | [ ] |
-| 3.4 | LLM provider abstraction — `llm/base.py` + anthropic + openai + ollama | BACKEND.md § M.1, M.2 | [ ] |
-| 3.5 | LLM cost tracking — `llm_tracker` service + `ApiUsage` model | BACKEND.md § M.4 | [ ] |
-| 3.6 | Vault service — `services/vault.py` (`~/.naavik/secrets.enc`, AES-256-GCM, key from `SECRET_KEY`) | BACKEND.md § H.1, § L.1 | [ ] |
-| 3.7 | `ats_credentials` service — DB row metadata + vault-backed credential resolution | BACKEND.md § H.1, § K.5 | [ ] |
-| 3.8 | Profile service partial (CRUD + per-field PUT) | BACKEND.md § H.1 | [ ] |
-| 3.9 | Settings persistence | BACKEND.md § D.7 | [ ] |
-| 3.10 | `db/seed.py` consuming `db/sample_data.py` | SAMPLE_DATA.md § A | [ ] |
-| 3.11 | Tests: auth path, profile CRUD, LLM abstraction, fixtures round-trip | — | [ ] |
-
-#### Wave 4 — Stage 3 page templates (plan 09)
-
-> Plan + prompt to be authored next session. Page handlers in `src/ui/routes/` returning `HTMLResponse` with sample data. Acceptance: every screen renders without error; matches mockup at desktop (1440×900) + mobile (375×812) via Playwright; all interactions in SCREENS.md exist (stub-handler-backed if backend not ready); SCREENS.md per-screen `Impl:` checkbox flips to `[x]`.
+> Page handlers in `src/ui/routes/` returning `HTMLResponse`; pages compose only plan-08 partials; data backed by `src/db/sample_data.py` (per SAMPLE_DATA.md); accessors are **async from day one** so Wave 4's swap is body-only. Stub fragment + JSON endpoints match BACKEND.md § C / § D shape exactly. Per-screen interaction patterns from INTERACTIONS.md § J fire end-to-end. Acceptance: every screen renders without error; matches mockup at desktop (1440×900) + mobile (375×812) via Playwright; SCREENS.md per-screen `Impl:` checkbox flips to `[x]`.
 
 Build order: simplest first.
 
-| # | Screen | Mockup ref | Page handler | Status |
+| # | Screen / artifact | Mockup ref | Page handler | Status |
 |---|---|---|---|---|
-| 4.1 | Login | `screens/Login.jsx` | `src/ui/routes/auth.py:get_login` | [ ] |
-| 4.2 | Settings (6 tabs) | `screens/Settings.jsx` | `src/ui/routes/settings.py:get_settings` | [ ] |
-| 4.3 | Profile (read-only) | `screens/Profile.jsx` | `src/ui/routes/profile.py:get_profile` | [ ] |
-| 4.4 | Profile editor | `screens/ProfileEdit.jsx` | `src/ui/routes/profile.py:get_edit` | [ ] |
-| 4.5 | Bullet editor (modal) | `screens/BulletModal.jsx` | `src/ui/routes/fragments.py:bullet_editor_modal` | [ ] |
-| 4.6 | Onboarding (3-step wizard) | `screens/Onboarding.jsx` | `src/ui/routes/auth.py:get_onboarding` | [ ] |
-| 4.7 | Overview | `screens/Overview.jsx` | `src/ui/routes/overview.py:get_overview` | [ ] |
-| 4.8 | Tracking (board + list) | `screens/Tracking.jsx` | `src/ui/routes/tracking.py:get_tracking` | [ ] |
-| 4.9 | Outreach | `screens/Outreach.jsx` | `src/ui/routes/outreach.py:get_outreach` | [ ] |
-| 4.10 | Discover | `screens/Discover.jsx` | `src/ui/routes/discover.py:get_discover` | [ ] |
-| 4.11 | Discover · review & apply | `screens/DiscoverDetail.jsx` | `src/ui/routes/discover.py:get_review` | [ ] |
+| 3.0 | `src/db/sample_data.py` + `sample_data_models.py` (frozen Pydantic per SAMPLE_DATA.md) | — | — | [ ] |
+| 3.1 | Login | `screens/Login.jsx` | `src/ui/routes/auth.py:get_login` | [ ] |
+| 3.2 | Settings (all 6 tabs — full UI scaffolding; Wave 4 wires real persistence) | `screens/Settings.jsx` | `src/ui/routes/settings.py:get_settings` | [ ] |
+| 3.3 | Profile (read-only) | `screens/Profile.jsx` | `src/ui/routes/profile.py:get_profile` | [ ] |
+| 3.4 | Profile editor | `screens/ProfileEdit.jsx` | `src/ui/routes/profile.py:get_edit` | [ ] |
+| 3.5 | Bullet editor (modal) | `screens/BulletModal.jsx` | `src/ui/routes/fragments.py:bullet_editor_modal` | [ ] |
+| 3.6 | Onboarding (3-step; SSE done auto-progresses to step 3 via `HX-Trigger`) | `screens/Onboarding.jsx` | `src/ui/routes/auth.py:get_onboarding` | [ ] |
+| 3.7 | Overview | `screens/Overview.jsx` | `src/ui/routes/overview.py:get_overview` | [ ] |
+| 3.8 | Tracking (board + list) | `screens/Tracking.jsx` | `src/ui/routes/tracking.py:get_tracking` | [ ] |
+| 3.9 | Outreach | `screens/Outreach.jsx` | `src/ui/routes/outreach.py:get_outreach` | [ ] |
+| 3.10 | Discover (incl. `Stuck in queue · {N}` right-rail card via `up_next_card` `state="stuck"`) | `screens/Discover.jsx` | `src/ui/routes/discover.py:get_discover` | [ ] |
+| 3.11 | Discover · review & apply | `screens/DiscoverDetail.jsx` | `src/ui/routes/discover.py:get_review` | [ ] |
+| 3.12 | Per-screen interactions per INTERACTIONS.md § J (autosave, drag-drop, modal, SSE, optimistic rollback, keyboard shortcuts) | INTERACTIONS.md § B–H | — | [ ] |
+| 3.13 | Per-screen Playwright snapshot baseline at desktop + mobile | — | `tests/visual/capture.py` | [ ] |
 
-#### Wave 5 — Wire interactions (extends Wave 4)
+#### Wave 4 — Backend Wave 3 (plan 10 § B)
 
-Per-pattern checklist from INTERACTIONS.md. Acceptance: every per-screen pattern in INTERACTIONS.md § J fires correctly end-to-end.
+> Initial backend lands the data substrate; **swaps plan 09's stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged). Acceptance: `uv run alembic upgrade head` succeeds, `db/seed.py` populates from sample data, `tests/test_sample_data.py` round-trip via SQLModel passes, auth path passes `security-review`, vault boundary verified.
 
-| # | Interaction pattern | Source | Status |
+| # | Task | Source contract | Status |
 |---|---|---|---|
-| 5.1 | Per-field autosave (Profile editor) | INTERACTIONS.md § B.1 | [ ] |
-| 5.2 | Full-form submit (Login) | INTERACTIONS.md § B.2 | [ ] |
-| 5.3 | Inline edit (cover letter sections, screener answers) | INTERACTIONS.md § B.3 | [ ] |
-| 5.4 | File upload (Onboarding resume) | INTERACTIONS.md § B.5 | [ ] |
-| 5.5 | Tag chip click-to-toggle (Bullet editor) | INTERACTIONS.md § B.6 | [ ] |
-| 5.6 | SSE streams (extraction + cover letter + email signals + log tail) | INTERACTIONS.md § C | [ ] |
-| 5.7 | Sortable.js drag-drop (bullets + Kanban) | INTERACTIONS.md § D | [ ] |
-| 5.8 | Modal pattern (E.1, E.2, E.3, E.4 confirm) | INTERACTIONS.md § E | [ ] |
-| 5.9 | Keyboard shortcuts (`/discover`, `/discover/:id` cover-letter mode) | INTERACTIONS.md § F | [ ] |
-| 5.10 | Toast region + auto-dismiss policy | INTERACTIONS.md § G | [ ] |
-| 5.11 | Optimistic UI rollback (Discover swipe, Kanban drop) | INTERACTIONS.md § H.4 | [ ] |
+| 4.1 | SQLModel models for all 19 entities + Settings (incl. `ApiUsage`) | DATA_MODEL.md § C | [ ] |
+| 4.2 | Alembic initial migration (every table + enum + index + CHECK; pgvector extension enabled) | DATA_MODEL.md § H | [ ] |
+| 4.3 | Auth — JWT cookie + bcrypt; `/api/v1/auth/login`, `/logout`, `/me`, `/csrf`; brute-force rate limit | BACKEND.md § D.1 | [ ] |
+| 4.4 | LLM provider abstraction — `llm/base.py` + anthropic + openai + ollama; structured-output retry policy | BACKEND.md § M.1, M.2 | [ ] |
+| 4.5 | LLM cost tracking — `llm_tracker` service + `ApiUsage` table (powers Settings cost cards from day one) | BACKEND.md § M.4 + DATA_MODEL.md § C `ApiUsage` | [ ] |
+| 4.6 | Vault service — `services/vault.py` (`~/.naavik/secrets.enc`, AES-256-GCM, PBKDF2 from `SECRET_KEY`) + audit log | BACKEND.md § H.1, § L.1 | [ ] |
+| 4.7 | Vault key rotation CLI — `naavik vault rotate-key --old=... --new=...` re-decrypts + re-encrypts | plan 10 § B.5 | [ ] |
+| 4.8 | Settings · Deployment UI: warning when `SECRET_KEY` env mismatches the vault's encryption key fingerprint | plan 10 § B.5 | [ ] |
+| 4.9 | `ats_credentials` service — DB row metadata + vault-backed credential resolution | BACKEND.md § H.1, § K.5 | [ ] |
+| 4.10 | Profile service partial (CRUD + per-field PUT) | BACKEND.md § H.1 | [ ] |
+| 4.11 | Settings persistence (incl. `eager_review_generation` flag for cost-aware DRAFT generation) | BACKEND.md § D.7 + DATA_MODEL.md § L | [ ] |
+| 4.12 | `db/seed.py` consuming `db/sample_data.py` (idempotent ON CONFLICT DO NOTHING) | SAMPLE_DATA.md § A | [ ] |
+| 4.13 | `/_design/components` swap from `NAAVIK_DEBUG` env var → persisted `Settings.debug` | plan 08 § H + plan 10 § B.8 | [ ] |
+| 4.14 | Page-handler accessor body swap — sample-data lists → DB queries (signatures already async from Wave 3) | plan 10 § B.10 | [ ] |
+| 4.15 | Tests — `test_models`, `test_seed`, `test_auth`, `test_llm_provider`, `test_vault` | — | [ ] |
 
-#### Wave 6 — Real backend integration (plan 10 Wave 6)
+#### Wave 5 — Backend Wave 6 (plan 10 § C)
 
-> Plan + prompt to be authored next session. Replace `db/sample_data.py` accessors with DB queries; complete the 14 services from BACKEND.md § H.1. Acceptance: all sample-data imports gone from page handlers; services pass unit tests; `security-review` on doc generation + portfolio public API; vault audit log captures every secret access.
+> Real services, document generation, full DRAFT lifecycle, ATS adapters for boards with public APIs, auto-apply cron, notifications, portfolio sync. Acceptance: all 14 services pass tests; `document_generator` produces real PDFs end-to-end; DRAFT submit / discard / auto-apply queue works; `security-review` on doc-gen + portfolio API + vault audit clean.
 
 | # | Service / artifact | Source contract | Status |
 |---|---|---|---|
-| 6.1 | `auth` service complete | BACKEND.md § H.1 | [ ] |
-| 6.2 | `profile_service` (full CRUD + bullet ops + tag inference) | BACKEND.md § H.1 | [ ] |
-| 6.3 | `extraction` (PDF → AI → Profile + SSE event emission) | BACKEND.md § H.1 | [ ] |
-| 6.4 | `document_generator` (resume + cover letter + screener answers) | BACKEND.md § K.4 | [ ] |
-| 6.5 | `application_service` (DRAFT lifecycle, submit/discard, ATS dispatch) | BACKEND.md § K | [ ] |
-| 6.6 | `notifications` (Discord + Telegram + in-app toast) | BACKEND.md § L.3, L.4 | [ ] |
-| 6.7 | `portfolio_sync` (public CV API + Netlify webhook) | BACKEND.md § L (Portfolio) | [ ] |
-| 6.8 | Typst templates (`onepage.typ`, `cover_letter.typ`) | BACKEND.md § K.4 | [ ] |
-| 6.9 | Typst compiler + page-count validator | BACKEND.md § K.4 | [ ] |
-| 6.10 | DB-backed page handlers (replace sample-data accessors per screen) | BACKEND.md § B | [ ] |
-| 6.11 | Tests for each service | — | [ ] |
+| 5.1 | `auth` service complete (refresh-token rotation; OIDC scaffolding stub) | BACKEND.md § H.1 | [ ] |
+| 5.2 | `profile_service` (full CRUD + bullet ops + tag inference) | BACKEND.md § H.1 | [ ] |
+| 5.3 | `extraction` (PDF → AI → Profile + SSE event emission) | BACKEND.md § H.1 | [ ] |
+| 5.4 | `document_generator` (bullet selection + AI trim + Typst compile + native page-count validation; `answer_screeners` auto + drafted; **`pre_generate` no-op when `docs_state=READY` and no `Bullet.edited_at > GeneratedDocument.compiled_at` — DRAFT reuse heuristic**) | BACKEND.md § K.4 | [ ] |
+| 5.5 | `application_service` (DRAFT lifecycle, submit/discard, ATS dispatch, `validate_submittable`, `process_auto_apply_queue`); orthogonal-state derivation lives here (`Job.queue_state=APPLIED` flip-on-submit; `outreach_engagement` computed) | BACKEND.md § K + DATA_MODEL.md § E, § F | [ ] |
+| 5.6 | `scorer` Wave-6 visa filter (deterministic: `Profile.visa_sponsorship_needed × Job.visa_restrictions` zero-out; no LLM dep) | BACKEND.md § H.1 | [ ] |
+| 5.7 | `prompts/score_job` skeleton in Wave 4; full tag-matching + gap analysis lives in plan 12 (Phase 3) | BACKEND.md § M.3 | [ ] |
+| 5.8 | `notifications` (Discord webhook + Telegram outbound + in-app toast routing; per-event toggle) | BACKEND.md § L.3, L.4 | [ ] |
+| 5.9 | `portfolio_sync` (public CV API filtered for EEO/visa/salary; **portfolio resume PDF regen on Profile-update debounced 60s, cached at `~/.naavik/data/documents/portfolio/resume.pdf`**; Netlify webhook) | BACKEND.md § L (Portfolio) | [ ] |
+| 5.10 | Typst templates (`onepage.typ`, `cover_letter.typ`) | BACKEND.md § K.4 | [ ] |
+| 5.11 | Typst compiler + native page-count validator (`typst compile --emit metadata`; **no `pdfinfo`/poppler dep**) | plan 10 § C.2.1 | [ ] |
+| 5.12 | ATS adapters — Greenhouse + Lever + Ashby (Workday / LinkedIn / Indeed / Generic deferred to Phase 1.x sub-prompt) | BACKEND.md § K.5 | [ ] |
+| 5.13 | Cron registration: `applications.auto_apply` (5min), `admin.aggregate_costs`, `admin.cleanup_stale_docs`, `admin.daily_db_snapshot`, `admin.refresh_oauth_tokens` | BACKEND.md § I.1 | [ ] |
+| 5.14 | Stuck-queue surface wiring — failed-DRAFT detection populates Discover right rail (`up_next_card` `state="stuck"`) | plan 10 § C.3 + COMPONENTS.md `up_next_card` | [ ] |
+| 5.15 | Tests — `test_application_service`, `test_document_generator`, `test_typst`, `test_ats_adapters`, `test_notifications`, `test_portfolio_sync` | — | [ ] |
 
 #### Phase 1 deferred items (Phase 1.x)
 
@@ -454,14 +448,23 @@ Items called out in design docs as "Phase 1.x optional / Phase 2+":
 
 | Item | Source | Notes |
 |---|---|---|
+| Workday / LinkedIn / Indeed / Generic ATS adapters | plan 10 § C.4 | Need credentials + Playwright + manual review queue. Greenhouse / Lever / Ashby ship in Wave 5 |
+| Stale-DRAFT cleanup cron (`admin.cleanup_stale_drafts`) | this triage 2026-05-01 | Auto-discard or auto-archive DRAFTs idle >30 days; otherwise queue accumulates |
+| Postmortem-on-failure: Playwright screenshot + AI summary on ATS failure | this triage 2026-05-01 | Surfaces in stuck-queue card; helps diagnose recurring CAPTCHA / field_mismatch |
 | Manual job entry modal (full) | SCREENS.md § Phase mapping > Deferred | `+ Add by URL` is the partial Phase 1 path |
 | Application detail slide-over | SCREENS.md § Phase mapping > Deferred | Phase 2 introduces `/tracking/:id` route |
 | OIDC for self-hosted (Authentik / Keycloak / Okta) | SCREENS.md § Phase mapping > Deferred | Phase 2+ |
 | Onboarding offline retry buffer for autosave | INTERACTIONS.md § H.3 | Optional, not blocking MVP |
-| `Show drafts` filter on Tracking | SCREENS.md § Tracking visibility rule | Surfaces DRAFT applications |
+| `Show drafts` filter UI on Tracking | SCREENS.md § Tracking visibility rule | Endpoint stubbed in Wave 3; UI toggle Phase 1.x |
 | `ProfileAnswer` reuse cache (screener answer memory) | DATA_MODEL.md § J | Phase 2+ entity |
+| Auto-apply immediate dispatch on right-swipe (vs current 5-min cron) | this triage 2026-05-01 | Refinement; user expectation may grow once auto-apply ships |
+| `Settings.scraper_aggressiveness` (rate-limit dial) | this triage 2026-05-01 | Phase 2+; default conservative |
+| Portfolio API versioning (`/api/portfolio/cv?version=v1`) | this triage 2026-05-01 | Lets crypticsoul.dev pin its consumer; Phase 2+ |
+| JWT signing-key rotation (multi-tenant cloud tier) | plan 10 Q7 | Phase 2+; single-key fine for self-hosted |
 | `JobEmbedding` semantic match (pgvector) | DATA_MODEL.md § H | Phase 6 |
 | LinkedIn proxy support | BACKEND.md § J.4 | Phase 6+ |
+| Submission-result observability dashboard (failure-kind aggregates) | this triage 2026-05-01 | Phase 6 — helps user spot recurring board-side failures |
+| Argon2id vault upgrade (vs PBKDF2) | plan 10 Q6 | Phase 6 polish if security review flags |
 | Light mode | DESIGN.md | Phase 6 |
 
 **Deliverable (end of Phase 1):** User uploads resume → AI extracts profile → user edits in UI → Discover queue scored + filtered → tailored resume + cover letter generated for any job → submit application via supported ATS → email-signal-driven Tracking → outreach drafts go to LinkedIn / email → portfolio API serves profile + downloadable resume.

@@ -1,6 +1,6 @@
 # Design → Implementation Workflow (UI sub-process)
 
-> **Last updated:** 2026-04-30
+> **Last updated:** 2026-05-01
 >
 > **This is the UI sub-process.** The master workflow — plan → review → design doc → prompt → implement → archive — lives in `AGENTS.md` § Workflow. That's the lifecycle every non-trivial change goes through. WORKFLOW.md describes the screen-design pipeline (mockup → component derivation → page implementation) that runs *inside* the master workflow's "implement" step for UI tasks.
 >
@@ -239,7 +239,7 @@ For the full directory layout, see `AGENTS.md` § Documentation locations. Touch
 
 ---
 
-## First Run (Phase 1 — current state, 2026-04-30)
+## First Run (Phase 1 — current state, 2026-05-01)
 
 ### Phase A: Design System Setup ✅ DONE
 
@@ -257,16 +257,17 @@ For the full directory layout, see `AGENTS.md` § Documentation locations. Touch
 
 ### Phase C: Implementation 🟡 IN PROGRESS
 
-The implementation follows the Wave-based plan in `ROADMAP.md` § Phase 1 § Implementation waves. Summary:
+The implementation follows the **5 sequential waves** in `ROADMAP.md` § Phase 1 § Implementation waves. Each wave passes acceptance before the next starts; **they do not run in parallel** (an earlier doc revision claimed parallelism — corrected 2026-05-01).
 
 - **Wave 0** ✅ Doc realignment (plan 01 — executed 2026-04-30)
-- **Wave 1** ✅ Author 5 design docs in `docs/design/`: COMPONENTS.md (plan 03), BACKEND.md (plan 04 — full backend), DATA_MODEL.md (plan 05), INTERACTIONS.md (plan 06), SAMPLE_DATA.md (plan 07) — all GRADUATED + archived 2026-04-30
-- **Wave 2** ⏳ Stage 2 component library implementation (plan 08)
-- **Wave 3** ⏳ Backend models + auth + LLM (plan 10 Wave 3)
-- **Wave 4** ⏳ Stage 3 page implementation (plan 09)
-- **Wave 5** ⏳ Wire interactions per INTERACTIONS.md (extends plan 09)
-- **Wave 6** ⏳ Real backend integration (plan 10 Wave 6 — replaces hardcoded sample data)
+- **Wave 1** ✅ Author 5 design docs (COMPONENTS / BACKEND / DATA_MODEL / INTERACTIONS / SAMPLE_DATA) — graduated + archived 2026-04-30
+- **Wave 2** ⏳ Stage 2 component library implementation (plan 08) — APPROVED 2026-05-01
+- **Wave 3** ⏳ Stage 3 page templates + sample-data accessors + stub fragment / JSON endpoints + interaction wiring (plan 09)
+- **Wave 4** ⏳ Backend Wave 3 — models + auth + LLM + vault + initial services + accessor body swap (plan 10 § B)
+- **Wave 5** ⏳ Backend Wave 6 — services + Typst + DRAFT lifecycle + Greenhouse/Lever/Ashby ATS adapters + portfolio sync + auto-apply cron (plan 10 § C)
 
-The UI shell (Wave 2) can be built in parallel with the backend models layer (Wave 3); integration happens at Wave 4 when page handlers wire HTMX against either sample data or DB-backed services. See `ROADMAP.md` for the per-wave checklist.
+The wave order is **08 → 09 → 10 W3 → 10 W6** (Scenario A). Plan 09 ships pages with sample-data accessors + stub endpoints whose URLs and response shapes match BACKEND.md § C / § D verbatim; plan 10 Wave 3 then swaps the accessor bodies (sync→async signatures preserved from day one) for DB-backed implementations without touching the page templates. This deliberate stub-then-swap pattern lets visual + interaction QA run independently of backend stability; plan 09's stub work is small and deletes cleanly when Wave 4 lands.
+
+**Visual contract evolution.** The **bundle JSX** (`docs/design/mockups/naavik-handoff/project/screens/<ScreenName>.jsx`) is the canonical visual reference until plan 09 ships. Once Wave 3 lands its **Playwright snapshot baseline** at `tests/visual/screenshots/<screen>-{desktop,mobile}.png`, those committed snapshots become the canonical visual contract — bundle JSX stays as the design-intent reference, but parity drift between snapshot and bundle is judged in the snapshot's favor (since it reflects the implemented system).
 
 **Design principle throughout:** Self-hosted first. The UI should feel like a developer tool you run in your homelab — dark mode, data-dense, no SaaS bloat. The cloud tier ($15/mo, bring-your-own AI credits) is mentioned in Settings as a deployment option, never as a premium upsell.

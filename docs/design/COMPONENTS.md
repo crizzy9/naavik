@@ -1369,18 +1369,32 @@ Mobile variant: circular `h-14 w-14 rounded-full` with icon only.
 
 #### `up_next_card.html`
 
-**Purpose:** Mini-card in Discover right rail showing one queued job preview.
-**Used by:** Screen 7 (Discover right rail "Up next").
+**Purpose:** Mini-card in Discover right rail showing one queued job preview, OR a stuck-in-queue DRAFT whose auto-apply submission failed and needs manual fix-up.
+**Used by:** Screen 7 (Discover right rail "Up next" group + "Stuck in queue · {N}" group).
 **API:**
 | Variable | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `job` | dict | yes | — | Job record (compact) |
+| `state` | enum (`default` / `stuck`) | no | `default` | `default` renders the up-next variant; `stuck` renders the failed-auto-apply variant with tinted border + failure-kind chip |
+| `last_failure` | dict | no | — | Required when `state="stuck"`: `{kind, message, captured_at}` from `Application.submission_artifacts.last_failure`. Drives chip label + tooltip |
 
-**Visual spec:** `flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition cursor-pointer`. Company avatar (`size=sm`). Body: role (`text-sm text-slate-100 truncate`), `$range` (`text-xs text-slate-400 mono`). Right: `score_circle` (size=compact).
-**Lucide icons:** none.
-**Variants:** none.
-**Example invocation:** `{% include "components/up_next_card.html" with {"job": next_job} %}`
-**Mockup reference:** bundle `screens/Discover.jsx:DiscoverSideRail`.
+**Visual spec (default):** `flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition cursor-pointer`. Company avatar (`size=sm`). Body: role (`text-sm text-slate-100 truncate`), `$range` (`text-xs text-slate-400 mono`). Right: `score_circle` (size=compact). Click → `/discover/{job.id}`.
+**Visual spec (stuck):** same shape but border + bg per failure-kind: `auth_required` → `border-amber-500/40 bg-amber-500/5`; `captcha` / `field_mismatch` / `unknown` → `border-rose-500/40 bg-rose-500/5`. Failure-kind chip prefixes the score circle: `inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono uppercase tracking-wide` with `alert-triangle` icon (h-3.5 w-3.5) + chip text — `auth needed` / `captcha` / `field mismatch` / `failed`. Click → `/discover/{job.id}`; the DRAFT-attached review page surfaces a failure banner with retry / discard actions.
+**Lucide icons:** `alert-triangle` (stuck variant only).
+**Variants:** `default`, `stuck`.
+**Example invocation:**
+```jinja
+{# Default — Up next group #}
+{% include "components/up_next_card.html" with {"job": next_job} %}
+
+{# Stuck — failed auto-apply group #}
+{% include "components/up_next_card.html" with {
+  "job": stuck_job,
+  "state": "stuck",
+  "last_failure": stuck_job.application.submission_artifacts.last_failure,
+} %}
+```
+**Mockup reference:** bundle `screens/Discover.jsx:DiscoverSideRail` (default). Stuck variant added 2026-05-01 per the cross-plan triage to surface failed auto-apply DRAFTs; visual derives from the default plus the amber/rose tint pattern used on `followup_banner` + `warm_intro_card`.
 
 #### `tip_card.html`
 
