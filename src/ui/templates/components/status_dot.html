@@ -1,0 +1,9 @@
+{#
+  status_dot.html — colored dot for status pipeline + auxiliary indicators.
+  Mirrors the `status_dot(status)` macro; keep both in sync.
+
+  Args:
+    status : one of DRAFT / APPLIED / RECRUITER_SCREEN / ONSITE_LOOP / OFFER / CLOSED
+             or the aux tones: info / warning / success / danger
+#}
+<span class="inline-block h-2 w-2 rounded-full {{ STATUS_DOT_COLORS.get(status, 'bg-slate-500') }}" aria-hidden="true"></span>

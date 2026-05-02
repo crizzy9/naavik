@@ -1,0 +1,39 @@
+{#
+  score_circle.html — 0–100 number centered in a colored ring.
+  Mirrors the `score_circle(score, size, ...)` macro.
+
+  **No `%` mark, no "match" word.**
+
+  Args:
+    score                : int 0–100 (required)
+    size                 : "compact" (40px) / "default" (64px) / "hero" (96px)
+    ring_color_override  : Tailwind stroke-* class to override threshold-based color
+    text_color_override  : override the centered number color
+#}
+{% set size = size | default("default") %}
+{% set _score = score | int %}
+{% set _ring = ring_color_override or (
+  'stroke-emerald-400' if _score >= 80 else
+  ('stroke-indigo-400' if _score >= 60 else
+   ('stroke-amber-400' if _score >= 40 else 'stroke-rose-400'))) %}
+{% set _bg = (
+  'bg-emerald-500/10' if _score >= 80 else
+  ('bg-indigo-500/10' if _score >= 60 else
+   ('bg-amber-500/10' if _score >= 40 else 'bg-rose-500/10'))) %}
+{% set _text = text_color_override or 'text-slate-50' %}
+{% set _wh = {'compact': 'h-10 w-10', 'default': 'h-16 w-16', 'hero': 'h-24 w-24'} %}
+{% set _font = {'compact': 'text-sm', 'default': 'text-xl', 'hero': 'text-3xl'} %}
+{% set _box = _wh.get(size, _wh['default']) %}
+{% set _fs = _font.get(size, _font['default']) %}
+{% set _frac = (_score | float) / 100.0 %}
+{% set _arc = 263.89 * _frac %}
+{% set _gap = 263.89 - _arc %}
+<span class="relative inline-flex items-center justify-center {{ _box }} rounded-full {{ _bg }}" role="img" aria-label="score {{ _score }}">
+  <svg class="absolute inset-0" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+    <circle cx="50" cy="50" r="42" class="stroke-slate-700" stroke-width="8"></circle>
+    <circle cx="50" cy="50" r="42" class="{{ _ring }}" stroke-width="8" stroke-linecap="round"
+            stroke-dasharray="{{ '%.2f' | format(_arc) }} {{ '%.2f' | format(_gap) }}"
+            transform="rotate(-90 50 50)"></circle>
+  </svg>
+  <span class="relative font-mono font-semibold tabular-nums {{ _fs }} {{ _text }}">{{ _score }}</span>
+</span>

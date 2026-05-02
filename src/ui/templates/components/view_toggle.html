@@ -1,0 +1,28 @@
+{#
+  view_toggle.html — Board / List segmented toggle.
+
+  Args:
+    current_view : "board" / "list" (required)
+    board_url    : default "/tracking?view=board"
+    list_url     : default "/tracking?view=list"
+#}
+{% set board_url = board_url | default("/tracking?view=board") %}
+{% set list_url = list_url | default("/tracking?view=list") %}
+<div class="inline-flex p-0.5 rounded-lg bg-slate-900 border border-slate-800" role="tablist" aria-label="View mode">
+  <a href="{{ board_url }}"
+     hx-get="{{ board_url }}" hx-target="#tracking-main" hx-swap="innerHTML" hx-push-url="true"
+     class="px-3 py-1 rounded-md text-sm transition inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40
+            {% if current_view == 'board' %}bg-slate-800 text-slate-50{% else %}text-slate-400 hover:text-slate-200{% endif %}"
+     role="tab" aria-selected="{{ 'true' if current_view == 'board' else 'false' }}">
+    <i data-lucide="kanban" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+    Board
+  </a>
+  <a href="{{ list_url }}"
+     hx-get="{{ list_url }}" hx-target="#tracking-main" hx-swap="innerHTML" hx-push-url="true"
+     class="px-3 py-1 rounded-md text-sm transition inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40
+            {% if current_view == 'list' %}bg-slate-800 text-slate-50{% else %}text-slate-400 hover:text-slate-200{% endif %}"
+     role="tab" aria-selected="{{ 'true' if current_view == 'list' else 'false' }}">
+    <i data-lucide="list" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+    List
+  </a>
+</div>

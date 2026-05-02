@@ -1,0 +1,28 @@
+{#
+  extraction_checklist.html — live checklist showing AI extraction progress.
+
+  Args:
+    items : list of {label, status (done/active/queued), count?, sub?}
+
+  Per-row OOB-swap from SSE events (`event: field`).
+#}
+<ul class="flex flex-col gap-2" aria-label="Extraction progress">
+  {% for it in items %}
+    <li id="extract-row-{{ loop.index }}"
+        class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-900 border border-slate-800">
+      {% if it.status == "done" %}
+        <i data-lucide="check-circle-2" class="h-4 w-4 text-emerald-400 shrink-0" stroke-width="1.5"></i>
+      {% elif it.status == "active" %}
+        <i data-lucide="loader-2" class="h-4 w-4 text-indigo-400 animate-spin shrink-0" stroke-width="1.5"></i>
+      {% else %}
+        <i data-lucide="circle" class="h-4 w-4 text-slate-500 shrink-0" stroke-width="1.5"></i>
+      {% endif %}
+      <span class="text-sm text-slate-200 flex-1 truncate">{{ it.label }}</span>
+      {% if it.count %}
+        <span class="text-xs text-slate-500 ml-auto font-mono shrink-0">{{ it.count }}</span>
+      {% elif it.sub %}
+        <span class="text-xs text-slate-500 ml-auto font-mono shrink-0">{{ it.sub }}</span>
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>

@@ -1,0 +1,16 @@
+{#
+  field_label.html — caption-style label above a form field.
+
+  Args:
+    label  : caption text (required)
+    for_id : HTML `for` attr
+    hint   : right-aligned secondary hint (e.g. "Tags · 3 selected")
+#}
+<div class="flex items-baseline justify-between mb-1.5">
+  {% if for_id %}
+    <label for="{{ for_id }}" class="text-xs uppercase tracking-wide text-slate-400 font-medium">{{ label }}</label>
+  {% else %}
+    <span class="text-xs uppercase tracking-wide text-slate-400 font-medium">{{ label }}</span>
+  {% endif %}
+  {% if hint %}<span class="text-xs text-slate-500">{{ hint }}</span>{% endif %}
+</div>

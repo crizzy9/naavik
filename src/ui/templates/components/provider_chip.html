@@ -1,0 +1,21 @@
+{#
+  provider_chip.html — compact integration provider chip.
+
+  Args:
+    provider  : display name ("gmail", "linkedin", "outlook")
+    connected : bool
+    sub       : secondary line ("synced 2m ago", "@shyampadia · 487 connections")
+    icon      : Lucide icon name (required)
+#}
+{% set _icon_color_map = {"gmail": "text-rose-400", "outlook": "text-sky-400", "linkedin": "text-sky-400", "calendar": "text-amber-400"} %}
+{% set _icon_color = _icon_color_map.get(provider, "text-slate-400") %}
+<span class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+  <i data-lucide="{{ icon }}" class="h-3.5 w-3.5 {{ _icon_color }}" stroke-width="1.5"></i>
+  <span class="text-slate-300 font-medium">{{ provider }}</span>
+  {% if sub %}
+    <span class="text-slate-500">· {{ sub }}</span>
+  {% endif %}
+  {% if not connected %}
+    <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-200 text-[10px] font-mono uppercase tracking-wide ring-1 ring-rose-500/30">disconnected</span>
+  {% endif %}
+</span>

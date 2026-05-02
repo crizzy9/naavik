@@ -1,0 +1,52 @@
+{#
+  application_qs_form.html — form section for the EEO/visa application questions.
+  Anchored at #application-qs.
+
+  Args:
+    profile : dict with EEO/visa fields populated
+    region  : "US" (default)
+#}
+{% set region = region | default("US") %}
+{% set p = profile %}
+{% set _editor_inline = (
+  '<div class="flex items-center gap-2 px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700">'
+  '<span class="font-mono text-[10px] uppercase tracking-wide text-slate-400">United States</span>'
+  '</div>'
+) %}
+<section id="application-qs" class="bg-slate-900 border border-slate-800 rounded-lg p-6 scroll-mt-6">
+  <header class="flex items-baseline justify-between mb-3 gap-3">
+    <div>
+      <h3 class="text-base font-medium text-slate-50">US application questions</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Region: {{ region }}</p>
+    </div>
+    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 font-mono text-[10px] uppercase tracking-wide text-slate-400">
+      United States
+    </span>
+  </header>
+  <div class="flex items-start gap-2 mb-4 text-xs text-slate-400 leading-relaxed">
+    <i data-lucide="lock" class="h-3.5 w-3.5 mt-0.5 shrink-0" stroke-width="1.5"></i>
+    <p>Most US-based job applications ask these. We answer them once and apply automatically. We never share these outside Naavik.</p>
+  </div>
+  <div class="grid sm:grid-cols-2 gap-4">
+    {% with label="WORK AUTHORIZATION", name="work_authorization", value=p.work_authorization | default(""), placeholder="US citizen / Green card / H1B / ..." %}
+      {% include "components/editor_field.html" %}{% endwith %}
+    {% with label="VISA SPONSORSHIP NEEDED", name="visa_sponsorship_needed", value=p.visa_sponsorship_needed | default(""), placeholder="Yes / No" %}
+      {% include "components/editor_field.html" %}{% endwith %}
+    {% with label="WILLING TO RELOCATE", name="willing_to_relocate", value=p.willing_to_relocate | default(""), placeholder="Yes / No / Maybe" %}
+      {% include "components/editor_field.html" %}{% endwith %}
+    {% with label="NOTICE PERIOD (DAYS)", name="notice_period_days", type="number", value=p.notice_period_days | default("") %}
+      {% include "components/editor_field.html" %}{% endwith %}
+    {% with label="SALARY EXPECTATION (USD)", name="salary_expectation_usd", type="number", value=p.salary_expectation_usd | default("") %}
+      {% include "components/editor_field.html" %}{% endwith %}
+    {% with label="EARLIEST START", name="earliest_start", type="date", value=p.earliest_start | default("") %}
+      {% include "components/editor_field.html" %}{% endwith %}
+    {% with label="VETERAN STATUS", name="veteran_status", value=p.veteran_status | default(""), placeholder="Veteran / Not veteran / Prefer not to say" %}
+      {% include "components/editor_field.html" %}{% endwith %}
+    {% with label="DISABILITY STATUS", name="disability_status", value=p.disability_status | default(""), placeholder="Yes / No / Prefer not to say" %}
+      {% include "components/editor_field.html" %}{% endwith %}
+    {% with label="RACE / ETHNICITY (EEO)", name="race_ethnicity", value=p.race_ethnicity | default("") %}
+      {% include "components/editor_field.html" %}{% endwith %}
+    {% with label="GENDER IDENTITY", name="gender_identity", value=p.gender_identity | default("") %}
+      {% include "components/editor_field.html" %}{% endwith %}
+  </div>
+</section>

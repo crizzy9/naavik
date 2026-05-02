@@ -1,0 +1,36 @@
+{#
+  priority_action_row.html — numbered priority action row on Overview.
+
+  Args:
+    index         : numbered prefix (e.g. 1, 2, 3 — formatted as "01", "02"…)
+    kind          : "offer" / "interview" / "reply" / "silent"
+    title         : main label (required)
+    subtitle      : secondary context
+    urgency       : "today" / "tomorrow" / "silent_n" / "relative"
+    urgency_label : e.g. "TODAY", "6D SILENT"
+    cta_label     : CTA button label (required)
+    cta_url       : CTA target (required)
+#}
+{% set _icon_map = {"offer": "sparkles", "interview": "video", "reply": "inbox", "silent": "clock"} %}
+{% set _icon_color = {"offer": "text-emerald-400", "interview": "text-indigo-400", "reply": "text-slate-400", "silent": "text-rose-400"} %}
+{% set _urgency_color = {
+  "today": "bg-rose-500/15 text-rose-200 ring-1 ring-rose-500/30",
+  "tomorrow": "bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/30",
+  "silent_n": "bg-rose-500/15 text-rose-200 ring-1 ring-rose-500/30",
+  "relative": "bg-slate-800 text-slate-300",
+} %}
+{% set _icon = _icon_map.get(kind, "circle") %}
+{% set _color = _icon_color.get(kind, "text-slate-400") %}
+{% set _u = _urgency_color.get(urgency, "bg-slate-800 text-slate-300") %}
+<div class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800/50 transition group">
+  <span class="font-mono text-[11px] text-slate-500 w-7 shrink-0 tabular-nums">{{ "%02d" | format(index) }}</span>
+  <i data-lucide="{{ _icon }}" class="h-5 w-5 shrink-0 {{ _color }}" stroke-width="1.5"></i>
+  <div class="flex-1 min-w-0">
+    <div class="text-sm font-medium text-slate-100 truncate">{{ title }}</div>
+    <div class="text-xs text-slate-400 truncate">{{ subtitle }}</div>
+  </div>
+  <span class="font-mono text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 {{ _u }}">{{ urgency_label }}</span>
+  <a href="{{ cta_url }}" class="text-sm text-slate-300 hover:text-slate-50 transition shrink-0 px-3 py-1 rounded hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+    {{ cta_label }}
+  </a>
+</div>

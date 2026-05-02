@@ -1,0 +1,53 @@
+{% from "components/_macros.html" import score_circle %}
+{#
+  up_next_card.html — mini-card in Discover right rail showing one queued job
+  preview, OR a stuck-in-queue DRAFT (per the 2026-05-01 cross-plan triage).
+
+  Args:
+    job          : dict (compact) — id, role, salary_range, company_initial, company_color, score
+    state        : "default" / "stuck"
+    last_failure : dict (required when state="stuck"): {kind, message, captured_at}
+                   kind ∈ {auth_required, captcha, field_mismatch, unknown}
+#}
+{% set state = state | default("default") %}
+{% set j = job %}
+
+{% if state == "stuck" %}
+  {% set _kind = (last_failure.kind if last_failure else "unknown") %}
+  {% if _kind == "auth_required" %}
+    {% set _border = "border-amber-500/40 bg-amber-500/5" %}
+    {% set _chip = "auth needed" %}
+  {% elif _kind == "captcha" %}
+    {% set _border = "border-rose-500/40 bg-rose-500/5" %}
+    {% set _chip = "captcha" %}
+  {% elif _kind == "field_mismatch" %}
+    {% set _border = "border-rose-500/40 bg-rose-500/5" %}
+    {% set _chip = "field mismatch" %}
+  {% else %}
+    {% set _border = "border-rose-500/40 bg-rose-500/5" %}
+    {% set _chip = "failed" %}
+  {% endif %}
+{% else %}
+  {% set _border = "border-slate-800 hover:border-slate-700 bg-slate-900" %}
+{% endif %}
+
+<a href="/discover/{{ j.id }}"
+   class="flex items-center gap-3 px-3 py-2.5 rounded-lg border transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/40 {{ _border }}">
+  {% with kind="company", text=j.company_initial | default(j.company[:1] | upper) if j.company else "?", size="sm", color_override=j.company_color | default("bg-slate-700") %}
+    {% include "components/avatar.html" %}
+  {% endwith %}
+  <div class="flex-1 min-w-0">
+    <div class="text-sm text-slate-100 truncate">{{ j.role }}</div>
+    <div class="text-xs text-slate-400 truncate font-mono">{{ j.salary_range | default("") }}</div>
+  </div>
+  {% if state == "stuck" %}
+    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono uppercase tracking-wide text-slate-300 shrink-0"
+          title="{{ last_failure.message | default('') }}">
+      <i data-lucide="alert-triangle" class="h-3 w-3 text-amber-300" stroke-width="1.5"></i>
+      {{ _chip }}
+    </span>
+  {% endif %}
+  {% if j.score is defined and j.score is not none %}
+    <span class="shrink-0">{{ score_circle(score=j.score, size="compact") }}</span>
+  {% endif %}
+</a>

@@ -1,0 +1,29 @@
+{#
+  provider_card.html — LLM provider option card.
+
+  Args:
+    provider : dict — id, name, model_default, description, kind ("CLOUD"/"LOCAL")
+    selected : bool
+#}
+{% set p = provider %}
+{% set _is_local = p.kind == "LOCAL" %}
+{% set _kind_class = "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30" if _is_local else "bg-indigo-500/15 text-indigo-300 ring-indigo-500/30" %}
+<label class="flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition focus-within:ring-2 focus-within:ring-indigo-500/40
+              {% if selected %}border-indigo-500 bg-indigo-500/5{% else %}border-slate-700 hover:border-slate-600{% endif %}">
+  <input type="radio" name="llm_provider" value="{{ p.id }}" class="sr-only" {% if selected %}checked{% endif %}>
+  <div class="mt-0.5 shrink-0">
+    {% if selected %}
+      <i data-lucide="circle-check" class="h-5 w-5 text-indigo-400" stroke-width="1.5"></i>
+    {% else %}
+      <i data-lucide="circle" class="h-5 w-5 text-slate-600" stroke-width="1.5"></i>
+    {% endif %}
+  </div>
+  <div class="flex-1 min-w-0">
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="text-base font-medium text-slate-100">{{ p.name }}</span>
+      <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide ring-1 {{ _kind_class }}">{{ p.kind }}</span>
+    </div>
+    {% if p.description %}<p class="text-xs text-slate-400 mt-1 leading-relaxed">{{ p.description }}</p>{% endif %}
+    {% if p.model_default %}<p class="text-xs text-slate-500 mt-1 font-mono">{{ p.model_default }}</p>{% endif %}
+  </div>
+</label>

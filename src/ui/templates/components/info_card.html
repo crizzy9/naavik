@@ -1,0 +1,24 @@
+{#
+  info_card.html — tinted info / warning / success / danger card with icon + body.
+
+  Args:
+    tone  : "info" / "success" / "warning" / "danger" (default: "info")
+    icon  : Lucide icon name (required)
+    title : optional title (bold, leads body)
+    body  : raw HTML body content
+#}
+{% set tone = tone | default("info") %}
+{% set _tone_map = {
+  "info":    {"bg": "bg-indigo-500/10",  "border": "border-indigo-500/30",  "text": "text-indigo-200",  "icon": "text-indigo-300"},
+  "success": {"bg": "bg-emerald-500/10", "border": "border-emerald-500/30", "text": "text-emerald-200", "icon": "text-emerald-300"},
+  "warning": {"bg": "bg-amber-500/10",   "border": "border-amber-500/30",   "text": "text-amber-200",   "icon": "text-amber-300"},
+  "danger":  {"bg": "bg-rose-500/10",    "border": "border-rose-500/30",    "text": "text-rose-200",    "icon": "text-rose-300"},
+} %}
+{% set _t = _tone_map.get(tone, _tone_map["info"]) %}
+<div class="flex items-start gap-3 p-4 rounded-lg border {{ _t.bg }} {{ _t.border }} {{ _t.text }}">
+  <i data-lucide="{{ icon }}" class="h-5 w-5 mt-0.5 shrink-0 {{ _t.icon }}" stroke-width="1.5"></i>
+  <div class="flex-1 min-w-0 text-sm leading-relaxed">
+    {% if title %}<div class="font-semibold mb-0.5">{{ title }}</div>{% endif %}
+    {% if body is defined and body %}{{ body | safe }}{% endif %}
+  </div>
+</div>

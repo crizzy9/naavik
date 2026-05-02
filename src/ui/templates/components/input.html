@@ -1,0 +1,64 @@
+{#
+  input.html — text / email / password / number / textarea form input.
+
+  Args:
+    name         : HTML name attr (required)
+    type         : "text" / "email" / "password" / "number" / "textarea" (default: "text")
+    value        : initial value (default: "")
+    placeholder  : placeholder text
+    required     : bool
+    autocomplete : HTML autocomplete hint
+    extra_attrs  : raw attribute string for HTMX
+    aria_label   : auto-falls-back to name
+    error        : inline error message (renders rose alert below)
+    mono         : use JetBrains Mono (for IDs / API keys)
+    id           : explicit DOM id (defaults to name)
+    disabled     : bool
+#}
+{% set type_ = type | default("text") %}
+{% set value = value | default("") %}
+{% set required = required | default(false) %}
+{% set mono = mono | default(false) %}
+{% set disabled = disabled | default(false) %}
+{% set _id = id | default(name) %}
+{% set _aria = aria_label | default(name) %}
+
+{% set _base = "w-full bg-slate-900 border rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 transition focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed" %}
+{% if error %}
+  {% set _border_focus = "border-rose-500/50 focus:border-rose-500 focus:ring-rose-500/20" %}
+{% else %}
+  {% set _border_focus = "border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/20" %}
+{% endif %}
+{% set _font = "font-mono" if mono else "" %}
+
+<div class="w-full">
+  {% if type_ == "textarea" %}
+    <textarea
+      id="{{ _id }}"
+      name="{{ name }}"
+      {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+      {% if required %}required{% endif %}
+      {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
+      {% if disabled %}disabled{% endif %}
+      aria-label="{{ _aria }}"
+      class="{{ _base }} {{ _border_focus }} {{ _font }} min-h-[100px] resize-y leading-relaxed"
+      {{ extra_attrs | default('') | safe }}>{{ value }}</textarea>
+  {% else %}
+    <input
+      id="{{ _id }}"
+      name="{{ name }}"
+      type="{{ type_ }}"
+      value="{{ value }}"
+      {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+      {% if required %}required{% endif %}
+      {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
+      {% if disabled %}disabled{% endif %}
+      aria-label="{{ _aria }}"
+      class="{{ _base }} {{ _border_focus }} {{ _font }}"
+      {{ extra_attrs | default('') | safe }}
+    />
+  {% endif %}
+  {% if error %}
+    <p class="mt-1 text-xs text-rose-300">{{ error }}</p>
+  {% endif %}
+</div>

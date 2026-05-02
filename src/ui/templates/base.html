@@ -1,165 +1,60 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-theme="naavik">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Naavik{% endblock %}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css" rel="stylesheet" type="text/css" />
-    <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmwyVSeQMYAcbWz3lOi0/8i6b0w4r1mL+g2jL9i" crossorigin="anonymous"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-                        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
-                    },
-                },
-            },
-        };
-    </script>
-    <style>
-        body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
-        .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
-        .drawer-content { min-height: 100vh; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Naavik{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token | default('') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
 </head>
-<body class="bg-slate-950 text-slate-100">
-    <div class="drawer lg:drawer-open">
-        <input id="sidebar-drawer" type="checkbox" class="drawer-toggle" />
+<body
+  hx-boost="true"
+  hx-headers='{"X-CSRF-Token": "{{ csrf_token | default("") }}"}'
+  hx-ext="sse,response-targets"
+  data-template="{{ active_template_path | default('') }}"
+  data-sidebar-open="false"
+  class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen">
 
-        <div class="drawer-content flex flex-col">
-            <!-- Mobile-only navbar -->
-            <div class="bg-slate-900 border-b border-slate-800 lg:hidden flex items-center px-4 h-14">
-                <label for="sidebar-drawer" aria-label="Open sidebar"
-                       class="p-2 -ml-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-slate-50 transition">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24"
-                         fill="none" stroke="currentColor" stroke-width="1.5"
-                         stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="4" x2="20" y1="6" y2="6"/>
-                        <line x1="4" x2="20" y1="12" y2="12"/>
-                        <line x1="4" x2="20" y1="18" y2="18"/>
-                    </svg>
-                </label>
-                <a href="/" class="ml-2 font-semibold text-lg text-slate-50">Naavik</a>
-            </div>
-
-            <main class="flex-1 p-6 lg:p-8">
-                {% block content %}{% endblock %}
-            </main>
-        </div>
-
-        <!-- Sidebar -->
-        <div class="drawer-side z-20">
-            <label for="sidebar-drawer" aria-label="Close sidebar" class="drawer-overlay"></label>
-            <aside class="bg-slate-900 border-r border-slate-800 min-h-full w-64 flex flex-col">
-                <!-- Brand lockup -->
-                <a href="/" class="px-4 pt-6 pb-5 flex items-center gap-2.5 group">
-                    <div class="h-9 w-9 rounded-lg bg-indigo-500 flex items-center justify-center
-                                ring-1 ring-indigo-400/40 group-hover:ring-indigo-300/60 transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" viewBox="0 0 24 24"
-                             fill="none" stroke="currentColor" stroke-width="1.5"
-                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10"/>
-                            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
-                        </svg>
-                    </div>
-                    <span class="font-semibold text-lg text-slate-50 tracking-tight">Naavik</span>
-                </a>
-
-                <!-- Nav -->
-                {% set path = request.url.path %}
-                {% set is_overview = path == '/' %}
-                {% set is_profile = path.startswith('/profile') %}
-                {% set is_jobs = path.startswith('/discover') %}
-                {% set is_tracking = path.startswith('/tracking') %}
-                {% set is_outreach = path.startswith('/outreach') %}
-                {% set is_settings = path.startswith('/settings') %}
-
-                <nav class="px-3 flex-1 space-y-0.5" aria-label="Primary">
-                    <a href="/" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition
-                                       {% if is_overview %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
-                        <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <rect width="7" height="9" x="3" y="3" rx="1"/>
-                            <rect width="7" height="5" x="14" y="3" rx="1"/>
-                            <rect width="7" height="9" x="14" y="12" rx="1"/>
-                            <rect width="7" height="5" x="3" y="16" rx="1"/>
-                        </svg>
-                        <span>Overview</span>
-                    </a>
-
-                    <a href="/profile" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition
-                                              {% if is_profile %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
-                        <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="8" r="5"/>
-                            <path d="M20 21a8 8 0 0 0-16 0"/>
-                        </svg>
-                        <span>Profile</span>
-                    </a>
-
-                    <a href="/discover" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition
-                                               {% if is_jobs %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
-                        <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-                            <rect width="20" height="14" x="2" y="6" rx="2"/>
-                        </svg>
-                        <span class="flex-1">Jobs</span>
-                        {# Stage 2 will wire a live unswiped-count badge here. #}
-                    </a>
-
-                    <a href="/tracking" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition
-                                               {% if is_tracking %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
-                        <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
-                            <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
-                        </svg>
-                        <span class="flex-1">Tracking</span>
-                    </a>
-
-                    <a href="/outreach" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition
-                                               {% if is_outreach %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
-                        <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/>
-                            <path d="m21.854 2.147-10.94 10.939"/>
-                        </svg>
-                        <span>Outreach</span>
-                    </a>
-
-                    <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition
-                                               {% if is_settings %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
-                        <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                        <span>Settings</span>
-                    </a>
-                </nav>
-
-                <!-- Bottom: user avatar + deployment badge -->
-                <div class="px-3 py-4 border-t border-slate-800">
-                    <div class="flex items-center gap-3 px-2">
-                        <div class="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500
-                                    flex items-center justify-center text-xs font-semibold text-white shrink-0">
-                            SP
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="text-sm font-medium text-slate-200 truncate">Shyam Padia</div>
-                            <div class="text-[10px] uppercase tracking-wide font-mono text-emerald-400">self-hosted</div>
-                        </div>
-                    </div>
-                </div>
-            </aside>
-        </div>
+  {% block body %}
+    <div class="flex min-h-screen">
+      {% include "components/sidebar.html" %}
+      <main class="flex-1 min-w-0">
+        {% block main %}{% endblock %}
+      </main>
     </div>
+  {% endblock %}
+
+  <div id="modal-region"></div>
+  <div
+    id="toast-region"
+    class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-md pointer-events-none"
+    aria-live="polite"
+    aria-atomic="false"></div>
+  <div id="sidebar-badge-jobs" hx-swap-oob="true"></div>
+  <div id="sidebar-badge-tracking" hx-swap-oob="true"></div>
+
+  <script src="https://unpkg.com/[email protected]/dist/umd/lucide.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/sse.js"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/response-targets.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/[email protected]/Sortable.min.js"></script>
+  <script src="/static/keys.js"></script>
+  <script src="/static/base.js"></script>
 </body>
 </html>

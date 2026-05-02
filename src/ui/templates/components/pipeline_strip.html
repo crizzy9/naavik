@@ -1,0 +1,26 @@
+{% from "components/_macros.html" import status_dot %}
+{#
+  pipeline_strip.html — compact horizontal mini-Kanban showing 5 stage counts.
+
+  Args:
+    counts : dict {APPLIED, RECRUITER_SCREEN, ONSITE_LOOP, OFFER, CLOSED}
+#}
+{% set _stages = [
+  {"key": "APPLIED",          "label": "Applied"},
+  {"key": "RECRUITER_SCREEN", "label": "Recruiter"},
+  {"key": "ONSITE_LOOP",      "label": "Onsite"},
+  {"key": "OFFER",            "label": "Offer"},
+  {"key": "CLOSED",           "label": "Closed"},
+] %}
+<div id="overview-pipeline" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-4 bg-slate-900 border border-slate-800 rounded-lg">
+  {% for st in _stages %}
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-center gap-1.5 px-1 text-[11px] uppercase tracking-wide font-medium text-slate-400">
+        {{ status_dot(st.key) }}
+        <span class="truncate">{{ st.label }}</span>
+        <span class="ml-auto text-slate-50 font-mono tabular-nums">{{ counts.get(st.key, 0) }}</span>
+      </div>
+      <div class="h-12 rounded bg-slate-950 border border-slate-800/60"></div>
+    </div>
+  {% endfor %}
+</div>

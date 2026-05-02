@@ -1,8 +1,9 @@
 ---
-Status: ACTIVE
+Status: USED
 Type: implementation kickoff
-Plan: docs/plans/08-stage-2-impl.md
+Plan: docs/plans/archive/08-stage-2-impl.md
 Authored: 2026-05-01
+Used: 2026-05-01
 ---
 
 # Naavik · Stage 2 component library — implementation kickoff

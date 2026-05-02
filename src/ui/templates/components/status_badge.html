@@ -1,0 +1,15 @@
+{#
+  status_badge.html — status dot + label (uppercase, mono).
+
+  Args:
+    status         : ApplicationStatus (drives dot color and default label)
+    label_override : custom label (defaults to status name with underscores → spaces)
+    pill           : bool (default true) — render as rounded-full pill, else inline
+#}
+{% set pill = pill | default(true) %}
+{% set _label = label_override | default((status or '') | replace('_', ' ')) %}
+{% set _wrapper = "px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700" if pill else "" %}
+<span class="inline-flex items-center gap-1.5 {{ _wrapper }}">
+  <span class="inline-block h-2 w-2 rounded-full {{ STATUS_DOT_COLORS.get(status, 'bg-slate-500') }}" aria-hidden="true"></span>
+  <span class="text-[11px] font-medium uppercase tracking-wide text-slate-300">{{ _label }}</span>
+</span>

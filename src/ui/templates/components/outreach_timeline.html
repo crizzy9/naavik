@@ -1,0 +1,33 @@
+{#
+  outreach_timeline.html — chronological timeline of outreach + email events.
+
+  Args:
+    events : list of {kind, description, relative_time, payload_preview}
+             kind ∈ {linkedin_dm, email, referral, interview, note}
+#}
+{% set _icon_map = {
+  "linkedin_dm": {"icon": "linkedin",     "color": "text-sky-400"},
+  "email":       {"icon": "mail",         "color": "text-rose-400"},
+  "referral":    {"icon": "users-round",  "color": "text-emerald-400"},
+  "interview":   {"icon": "phone",        "color": "text-amber-400"},
+  "note":        {"icon": "sticky-note",  "color": "text-slate-400"},
+} %}
+<ol class="flex flex-col gap-3 p-4">
+  {% for e in events %}
+    {% set _ic = _icon_map.get(e.kind, _icon_map["note"]) %}
+    <li class="flex items-start gap-3">
+      <span class="mt-0.5 shrink-0">
+        <i data-lucide="{{ _ic.icon }}" class="h-4 w-4 {{ _ic.color }}" stroke-width="1.5"></i>
+      </span>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm text-slate-200 leading-relaxed">
+          {{ e.description }}
+          <span class="text-slate-500 font-mono ml-1">· {{ e.relative_time }}</span>
+        </p>
+        {% if e.payload_preview %}
+          <p class="text-xs text-slate-500 mt-0.5 italic truncate">{{ e.payload_preview }}</p>
+        {% endif %}
+      </div>
+    </li>
+  {% endfor %}
+</ol>

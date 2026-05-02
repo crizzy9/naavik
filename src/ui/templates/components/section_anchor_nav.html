@@ -1,0 +1,23 @@
+{#
+  section_anchor_nav.html — sticky right-rail "ON THIS PAGE" navigation.
+
+  Args:
+    anchors    : list of {id, label, count?}
+    active_id  : currently-active anchor (scroll-spy)
+    title      : section header text (default "ON THIS PAGE")
+#}
+{% set title = title | default("ON THIS PAGE") %}
+<nav class="sticky top-6 w-60 flex flex-col gap-1" aria-label="Section navigation">
+  <div class="text-xs uppercase tracking-wide text-slate-500 mb-3 px-3">{{ title }}</div>
+  {% for a in anchors %}
+    {% set _is_active = a.id == active_id %}
+    <a href="#{{ a.id }}" class="block px-3 py-1.5 rounded text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40
+              {% if _is_active %}bg-indigo-500/10 text-indigo-300 border-l-2 border-indigo-500
+              {% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100 border-l-2 border-transparent{% endif %}">
+      <span>{{ a.label }}</span>
+      {% if a.count is defined and a.count is not none %}
+        <span class="ml-2 text-xs text-slate-500 font-mono tabular-nums">{{ a.count }}</span>
+      {% endif %}
+    </a>
+  {% endfor %}
+</nav>

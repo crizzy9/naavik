@@ -1,0 +1,34 @@
+{% from "components/_macros.html" import score_circle %}
+{#
+  tracking_list_row.html — single application row on Tracking list view.
+  Renders as a <tr>.
+
+  Args:
+    application : dict
+#}
+{% set a = application %}
+<tr class="border-b border-slate-800 hover:bg-slate-800/30 transition">
+  <td class="px-4 py-3 align-middle">
+    <div class="flex items-center gap-3 min-w-0">
+      {% with kind="company", text=a.company_initial | default(a.company[:1] | upper), size="sm", color_override=a.company_color | default("bg-slate-700") %}
+        {% include "components/avatar.html" %}
+      {% endwith %}
+      <span class="text-sm text-slate-100 truncate">{{ a.company }}</span>
+    </div>
+  </td>
+  <td class="px-4 py-3 align-middle text-sm text-slate-200">{{ a.role }}{% if a.team %} <span class="text-slate-500">· {{ a.team }}</span>{% endif %}</td>
+  <td class="px-4 py-3 align-middle">
+    {% with status=a.status %}{% include "components/status_badge.html" %}{% endwith %}
+  </td>
+  <td class="px-4 py-3 align-middle">
+    {% if a.score is defined and a.score is not none %}{{ score_circle(score=a.score, size="compact") }}{% endif %}
+  </td>
+  <td class="px-4 py-3 align-middle font-mono text-xs text-slate-400">{{ a.salary_range | default("") }}</td>
+  <td class="px-4 py-3 align-middle text-xs text-slate-400 font-mono">{{ a.last_activity | default("") }}</td>
+  <td class="px-4 py-3 align-middle text-xs text-slate-500">{{ a.source | default("manual") }}</td>
+  <td class="px-2 py-3 align-middle text-right">
+    <button type="button" class="p-1.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800" aria-label="More actions">
+      <i data-lucide="more-vertical" class="h-4 w-4" stroke-width="1.5"></i>
+    </button>
+  </td>
+</tr>

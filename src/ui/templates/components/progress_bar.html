@@ -1,0 +1,37 @@
+{#
+  progress_bar.html — linear progress bar with optional gradient or custom fill.
+
+  Args:
+    value      : float 0–1 (required)
+    gradient   : bool (default false) — indigo→cyan
+    fill_color : Tailwind bg-* class (overrides gradient/default; e.g. "bg-emerald-400")
+    height     : "thin" / "default" / "thick"  → 2 / 4 / 6 px
+    id         : DOM id for OOB swap targets
+    aria_label : accessibility label override
+
+  **Single documented exception** to the no-inline-style rule: width must be a
+  runtime fraction. Tailwind can't cleanly express arbitrary widths in CDN mode.
+#}
+{% set gradient = gradient | default(false) %}
+{% set height = height | default("default") %}
+{% set _h = {"thin": "h-0.5", "default": "h-1", "thick": "h-1.5"} %}
+{% if fill_color %}
+  {% set _fill = fill_color %}
+{% elif gradient %}
+  {% set _fill = "bg-gradient-to-r from-indigo-500 to-cyan-400" %}
+{% else %}
+  {% set _fill = "bg-indigo-500" %}
+{% endif %}
+{% set _v = (value | float * 100) %}
+{% if _v < 0 %}{% set _v = 0 %}{% endif %}
+{% if _v > 100 %}{% set _v = 100 %}{% endif %}
+<div
+  {% if id %}id="{{ id }}"{% endif %}
+  class="relative w-full bg-slate-800 rounded-full overflow-hidden {{ _h.get(height, _h['default']) }}"
+  role="progressbar"
+  aria-valuenow="{{ '%.0f' | format(_v) }}"
+  aria-valuemin="0"
+  aria-valuemax="100"
+  {% if aria_label %}aria-label="{{ aria_label }}"{% endif %}>
+  <div class="h-full {{ _fill }} transition-all" style="width: {{ '%.2f' | format(_v) }}%"></div>
+</div>

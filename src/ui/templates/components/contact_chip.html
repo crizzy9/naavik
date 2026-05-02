@@ -1,0 +1,27 @@
+{#
+  contact_chip.html — rounded-pill contact info chip.
+
+  Args:
+    kind  : "mail" / "phone" / "github" / "linkedin" / "portfolio"
+    value : display value (required)
+    href  : optional link target
+#}
+{% set _icon_map = {
+  "mail": "mail",
+  "phone": "phone",
+  "github": "github",
+  "linkedin": "linkedin",
+  "portfolio": "globe",
+} %}
+{% set _icon = _icon_map.get(kind, "link") %}
+{% if href %}
+  <a href="{{ href }}" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 transition text-xs text-slate-300 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+    <i data-lucide="{{ _icon }}" class="h-3 w-3" stroke-width="1.5"></i>
+    <span class="truncate">{{ value }}</span>
+  </a>
+{% else %}
+  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800 text-xs text-slate-300 border border-slate-700">
+    <i data-lucide="{{ _icon }}" class="h-3 w-3" stroke-width="1.5"></i>
+    <span class="truncate">{{ value }}</span>
+  </span>
+{% endif %}

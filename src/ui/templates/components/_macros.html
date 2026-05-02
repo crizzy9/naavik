@@ -1,0 +1,102 @@
+{#
+  _macros.html — single shared macros file per COMPONENTS.md § I.
+
+  Imported via `{% from "components/_macros.html" import tag_chip, score_circle, status_dot, kbd, meta_item, chip, log_line, deployment_badge %}`.
+
+  STATUS_DOT_COLORS is registered as a Jinja global in `templates_setup.py` so
+  `status_dot` can look up colors without arg threading.
+#}
+
+{% macro tag_chip(label, selected=False) -%}
+  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono transition
+              {% if selected %}bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/40
+              {% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro score_circle(score, size="default", ring_color_override=none, text_color_override=none) -%}
+  {#
+    SVG circle with thresholded ring color per DESIGN.md.
+    Sizes: compact=40px, default=64px, hero=96px.
+  #}
+  {% set _score = score | int %}
+  {% set _ring = ring_color_override or (
+       'stroke-emerald-400' if _score >= 80 else
+       ('stroke-indigo-400' if _score >= 60 else
+        ('stroke-amber-400' if _score >= 40 else 'stroke-rose-400'))) %}
+  {% set _bg = (
+       'bg-emerald-500/10' if _score >= 80 else
+       ('bg-indigo-500/10' if _score >= 60 else
+        ('bg-amber-500/10' if _score >= 40 else 'bg-rose-500/10'))) %}
+  {% set _text = text_color_override or 'text-slate-50' %}
+  {% set _wh = {'compact': 'h-10 w-10', 'default': 'h-16 w-16', 'hero': 'h-24 w-24'} %}
+  {% set _font = {'compact': 'text-sm', 'default': 'text-xl', 'hero': 'text-3xl'} %}
+  {% set _box = _wh.get(size, _wh['default']) %}
+  {% set _fs = _font.get(size, _font['default']) %}
+  {# circumference for r=42 ≈ 263.89; SVG viewBox 100x100. #}
+  {% set _frac = (_score | float) / 100.0 %}
+  {% set _arc = 263.89 * _frac %}
+  {% set _gap = 263.89 - _arc %}
+  <span class="relative inline-flex items-center justify-center {{ _box }} rounded-full {{ _bg }}" role="img" aria-label="score {{ _score }}">
+    <svg class="absolute inset-0" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+      <circle cx="50" cy="50" r="42" class="stroke-slate-700" stroke-width="8"></circle>
+      <circle cx="50" cy="50" r="42" class="{{ _ring }}" stroke-width="8" stroke-linecap="round"
+              stroke-dasharray="{{ '%.2f' | format(_arc) }} {{ '%.2f' | format(_gap) }}"
+              transform="rotate(-90 50 50)"></circle>
+    </svg>
+    <span class="relative font-mono font-semibold tabular-nums {{ _fs }} {{ _text }}">{{ _score }}</span>
+  </span>
+{%- endmacro %}
+
+{% macro status_dot(status) -%}
+  <span class="inline-block h-2 w-2 rounded-full {{ STATUS_DOT_COLORS.get(status, 'bg-slate-500') }}" aria-hidden="true"></span>
+{%- endmacro %}
+
+{% macro kbd(key) -%}
+  <span class="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-300">{{ key }}</span>
+{%- endmacro %}
+
+{% macro meta_item(icon, value) -%}
+  <span class="inline-flex items-center gap-1 font-mono text-xs text-slate-300">
+    <i data-lucide="{{ icon }}" class="h-3.5 w-3.5 text-slate-500" stroke-width="1.5"></i>
+    {{ value }}
+  </span>
+{%- endmacro %}
+
+{% macro chip(label, tone="slate") -%}
+  {#
+    Generic small chip — used inline in tailored_bullet_row, swipe_card, tracking_card.
+    Tones: slate (default neutral) / indigo / cyan / emerald / amber / rose.
+  #}
+  {% set _tone_map = {
+    "slate":   "bg-slate-800 text-slate-300",
+    "indigo":  "bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/30",
+    "cyan":    "bg-cyan-400/10 text-cyan-200 ring-1 ring-cyan-400/30",
+    "emerald": "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30",
+    "amber":   "bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/30",
+    "rose":    "bg-rose-500/15 text-rose-200 ring-1 ring-rose-500/30",
+  } -%}
+  <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono {{ _tone_map.get(tone, _tone_map['slate']) }}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro log_line(timestamp, level, message) -%}
+  {#
+    Single line of log_tail body. Levels: INFO (cyan), WARN (amber), ERROR (rose).
+  #}
+  {% set _level_color = {
+    "INFO": "text-cyan-400",
+    "WARN": "text-amber-400",
+    "ERROR": "text-rose-400",
+    "DEBUG": "text-slate-400",
+  } -%}
+  <div class="flex gap-3">
+    <span class="text-slate-500 tabular-nums">{{ timestamp }}</span>
+    <span class="{{ _level_color.get(level, 'text-slate-300') }} font-medium">{{ level }}</span>
+    <span class="text-slate-300">{{ message }}</span>
+  </div>
+{%- endmacro %}
+
+{% macro deployment_badge(mode) -%}
+  <span class="inline-flex px-1.5 py-0.5 rounded font-mono text-[10px] uppercase tracking-wide
+              {% if mode == 'cloud' %}bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30
+              {% else %}bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30{% endif %}">{{ mode }}</span>
+{%- endmacro %}

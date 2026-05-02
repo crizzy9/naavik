@@ -1,0 +1,13 @@
+{#
+  cost_card.html — small cost / usage card.
+
+  Args:
+    label : caption (required)
+    value : big value (required)
+    sub   : smaller subtitle (optional)
+#}
+<div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+  <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">{{ label }}</div>
+  <div class="mt-1.5 font-sans text-2xl font-semibold tabular-nums text-slate-50">{{ value }}</div>
+  {% if sub %}<div class="mt-1 text-xs text-slate-400">{{ sub }}</div>{% endif %}
+</div>

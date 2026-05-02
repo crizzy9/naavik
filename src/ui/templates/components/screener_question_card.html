@@ -1,0 +1,27 @@
+{#
+  screener_question_card.html — screener question card with status chip + answer + AI hint.
+
+  Args:
+    answer : dict — id, question, body, source ("drafted"/"auto"/"user"), reviewed_at
+#}
+{% set a = answer %}
+{% set _source = a.source | default("user") %}
+{% set _chip_map = {
+  "drafted": {"text": "drafted", "bg": "bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/30", "icon": "sparkles"},
+  "auto":    {"text": "auto",    "bg": "bg-slate-800 text-slate-300", "icon": "check"},
+  "user":    {"text": "user",    "bg": "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30", "icon": "check-circle-2"},
+} %}
+{% set _chip = _chip_map.get(_source, _chip_map["user"]) %}
+<article class="p-4 rounded-lg bg-slate-900 border border-slate-800">
+  <header class="flex items-start justify-between gap-3 mb-2">
+    <p class="text-sm text-slate-100 flex-1 min-w-0">{{ a.question }}</p>
+    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide shrink-0 {{ _chip.bg }}">
+      <i data-lucide="{{ _chip.icon }}" class="h-3 w-3" stroke-width="1.5"></i>
+      {{ _chip.text }}
+    </span>
+  </header>
+  <p class="mt-2 text-sm text-slate-300 leading-relaxed whitespace-pre-line">{{ a.body }}</p>
+  {% if _source == "drafted" and not a.reviewed_at %}
+    <p class="mt-2 text-xs text-slate-500 italic">(AI drafted from your profile + JD — review before submit)</p>
+  {% endif %}
+</article>

@@ -1,0 +1,52 @@
+{#
+  confirm_modal.html — confirmation gate for destructive actions per
+  INTERACTIONS.md § E.4.
+
+  Returned from `GET /_modal/confirm?title=&message=&action=&label=&tone=&method=`.
+
+  Args (passed via query params on the route):
+    title              : modal heading (required)
+    message            : body explanation (required)
+    confirm_action_url : URL for the confirm button HTMX call (required)
+    confirm_label      : "Confirm" (default)
+    confirm_tone       : "danger" (default) / "warning" / "primary"
+    confirm_method     : "post" (default) / "delete" / "put" / "patch"
+    cancel_label       : "Cancel" (default)
+#}
+{% set confirm_label = confirm_label | default("Confirm") %}
+{% set confirm_tone = confirm_tone | default("danger") %}
+{% set confirm_method = confirm_method | default("post") %}
+{% set cancel_label = cancel_label | default("Cancel") %}
+
+{% set _tone_btn = {
+  "danger":  "bg-rose-500 hover:bg-rose-400 text-white",
+  "warning": "bg-amber-500 hover:bg-amber-400 text-slate-950",
+  "primary": "bg-indigo-500 hover:bg-indigo-400 text-white",
+} %}
+{% set _btn_class = _tone_btn.get(confirm_tone, _tone_btn["danger"]) %}
+
+<dialog
+  id="confirm-modal"
+  open
+  class="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl shadow-black/45 p-0 w-full max-w-[520px] mx-auto my-auto">
+  <div class="fixed inset-0 -z-10 bg-black/40" aria-hidden="true"
+       hx-on:click="this.closest('dialog').close()"></div>
+
+  <div class="px-6 pt-6 pb-4">
+    <h3 class="text-lg font-semibold text-slate-50">{{ title }}</h3>
+    <p class="mt-2 text-sm text-slate-300 leading-relaxed">{{ message }}</p>
+  </div>
+  <footer class="px-6 py-4 flex items-center justify-end gap-3 border-t border-slate-800 bg-slate-950/30">
+    <button type="button"
+            class="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-slate-50 hover:bg-slate-800 transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+            hx-on:click="document.getElementById('confirm-modal').close()">
+      {{ cancel_label }}
+    </button>
+    <button type="button"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 {{ _btn_class }}"
+            hx-{{ confirm_method }}="{{ confirm_action_url }}"
+            hx-on:htmx:after-request="document.getElementById('confirm-modal').close()">
+      {{ confirm_label }}
+    </button>
+  </footer>
+</dialog>

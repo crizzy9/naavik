@@ -1,0 +1,46 @@
+{% from "components/_macros.html" import chip %}
+{#
+  tailored_bullet_row.html — one bullet row on Discover · review middle column.
+
+  Args:
+    bullet       : dict — id, text (full), tags
+    selected     : bool — whether AI selected for this resume
+    trimmed_line : string — the AI-trimmed line for selected; full text for excluded
+    chips        : list[str] — tag-like chips ("jd", "personalization", "scale", ...)
+#}
+{% set selected = selected | default(false) %}
+<div class="flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/30 transition group">
+  <input type="checkbox"
+         class="mt-1 h-4 w-4 accent-indigo-500 shrink-0"
+         {% if selected %}checked{% endif %}
+         aria-label="Include bullet">
+  <div class="flex-1 min-w-0">
+    <p class="text-sm leading-relaxed
+              {% if selected %}text-slate-200{% else %}text-slate-500 line-through{% endif %}">
+      {{ trimmed_line | default(bullet.text) }}
+    </p>
+    {% if chips %}
+      <div class="mt-1.5 flex flex-wrap gap-1">
+        {% for c in chips %}
+          {% if c in ['jd','personalization','scale'] %}
+            {{ chip("# " ~ c, tone="indigo") }}
+          {% elif c in ['edited for jd','you tweaked'] %}
+            {{ chip("# " ~ c, tone="cyan") }}
+          {% elif c in ['duplicate signal','trimmed','older role'] %}
+            {{ chip("# " ~ c, tone="slate") }}
+          {% else %}
+            {{ chip("# " ~ c, tone="slate") }}
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+  <button type="button"
+          class="opacity-0 group-hover:opacity-100 p-1.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition shrink-0 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+          aria-label="Edit bullet"
+          hx-get="/_modal/bullet-editor/{{ bullet.id }}"
+          hx-target="#modal-region"
+          hx-swap="innerHTML">
+    <i data-lucide="pencil" class="h-4 w-4" stroke-width="1.5"></i>
+  </button>
+</div>

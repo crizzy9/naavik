@@ -1,0 +1,62 @@
+{#
+  modal.html — native <dialog> wrapper per INTERACTIONS.md § E.
+
+  Args:
+    id           : DOM id for <dialog> (required)
+    title        : header title (required)
+    subtitle     : header subtitle (e.g. "· Intuit · Senior SWE")
+    body         : raw HTML body content
+    footer       : raw HTML for action buttons (Cancel + Save / Delete)
+    size         : "sm" (480px) / "md" (640px) / "lg" (720px, default)
+    mobile_sheet : bool (default true) — mobile renders as bottom-sheet
+    extra_classes: additional outer classes
+#}
+{% set size = size | default("lg") %}
+{% set mobile_sheet = mobile_sheet | default(true) %}
+{% set _w = {"sm": "max-w-[480px]", "md": "max-w-[640px]", "lg": "max-w-[720px]"} %}
+{% set _maxw = _w.get(size, _w["lg"]) %}
+
+{# Bottom-sheet at <md, centered card at >=md. #}
+{% if mobile_sheet %}
+  {% set _placement = "fixed left-0 right-0 bottom-0 mx-auto md:left-auto md:right-auto md:bottom-auto md:my-auto" %}
+  {% set _radius = "rounded-t-2xl rounded-b-none md:rounded-xl" %}
+{% else %}
+  {% set _placement = "mx-auto my-auto" %}
+  {% set _radius = "rounded-xl" %}
+{% endif %}
+
+<dialog
+  id="{{ id }}"
+  open
+  class="bg-slate-900 border border-slate-800 {{ _radius }} shadow-2xl shadow-black/45 p-0 w-full {{ _maxw }} {{ _placement }} {{ extra_classes | default('') }}">
+
+  {# Backdrop sits behind the dialog and closes on click. #}
+  <div
+    class="fixed inset-0 -z-10 bg-black/40"
+    aria-hidden="true"
+    hx-on:click="this.closest('dialog').close()"></div>
+
+  <div class="flex flex-col max-h-[90vh] overflow-hidden">
+    <header class="px-6 pt-5 pb-3 flex items-start justify-between gap-3 border-b border-slate-800">
+      <div class="min-w-0">
+        <h2 class="text-base font-semibold text-slate-50 truncate">{{ title }}</h2>
+        {% if subtitle %}<div class="text-xs text-slate-400 mt-0.5 truncate">{{ subtitle }}</div>{% endif %}
+      </div>
+      <button type="button" class="text-slate-400 hover:text-slate-100 shrink-0 -mt-1 -mr-1 p-1.5 rounded hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              aria-label="Close"
+              hx-on:click="document.getElementById('{{ id }}').close()">
+        <i data-lucide="x" class="h-4 w-4" stroke-width="1.5"></i>
+      </button>
+    </header>
+
+    <div class="px-6 py-5 overflow-auto flex-1">
+      {% if body is defined and body %}{{ body | safe }}{% endif %}
+    </div>
+
+    {% if footer %}
+      <footer class="px-6 py-4 flex items-center justify-between gap-3 border-t border-slate-800 bg-slate-950/30">
+        {{ footer | safe }}
+      </footer>
+    {% endif %}
+  </div>
+</dialog>

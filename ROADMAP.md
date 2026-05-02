@@ -1,6 +1,6 @@
 # Naavik Development Roadmap
 
-> Last updated: 2026-05-01 (Phase 1 wave order linearized to Scenario A — 08 → 09 → 10 W3 → 10 W6)
+> Last updated: 2026-05-01 (Wave 2 / plan 08 EXECUTED — 85-component library, base.html rewrite, route reorganization, fixture page, 100 tests passing)
 >
 > **This is the single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. The master plan (formerly `docs/plans/02-mvp-master-plan.md`) is archived — its content lives here, in `AGENTS.md` § Workflow, and in the active session-continue prompt at `docs/prompts/00-session-continue.md`.
 
@@ -336,7 +336,7 @@ Phase 1 ships in **5 sequential waves** (Scenario A). Each wave passes acceptanc
 |---|---|---|---|---|---|
 | 0 | Doc realignment | `docs/plans/archive/01-docs-realignment.md` | (executed inline) | ✅ EXECUTED | 2026-04-30 |
 | 1 | Author 5 design docs (COMPONENTS / BACKEND / DATA_MODEL / INTERACTIONS / SAMPLE_DATA) | plans 03–07 (all GRADUATED + archived) | (no separate prompts — design plans graduate inline) | ✅ COMPLETE | 2026-04-30 |
-| 2 | Stage 2 component library impl (85 partials + base.html refinements + macros + base.js + fixture page) | `docs/plans/08-stage-2-impl.md` | `docs/prompts/08-stage-2-impl.md` | ✅ APPROVED · ⏳ pending impl | — |
+| 2 | Stage 2 component library impl (85 partials + base.html refinements + macros + base.js + fixture page) | `docs/plans/archive/08-stage-2-impl.md` | `docs/prompts/archive/08-stage-2-impl.md` | ✅ EXECUTED | 2026-05-01 |
 | 3 | Stage 3 page templates impl (11 screens, sample_data accessors, stub fragment + JSON endpoints, Discover keyboard map, Playwright snapshots) — folds in interactions per INTERACTIONS.md § J | `docs/plans/09-stage-3-impl.md` | `docs/prompts/09-stage-3-impl.md` | ⏳ pending | — |
 | 4 | Backend Wave 3 — models + auth + LLM abstraction + vault + initial services + db/seed; **swaps plan 09 stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged) | `docs/plans/10-backend-impl.md` § B | `docs/prompts/10-backend-impl.md` (Wave 3 part) | ⏳ pending | — |
 | 5 | Backend Wave 6 — all 14 services + Typst document generator + DRAFT lifecycle + Greenhouse / Lever / Ashby ATS adapters + portfolio_sync + auto-apply cron + notifications | `docs/plans/10-backend-impl.md` § C | `docs/prompts/10-backend-impl.md` (Wave 6 part) | ⏳ pending | — |
@@ -355,25 +355,25 @@ After Wave 5 ships, **Phase 2–6 work** (scrapers, scoring, email + auto-classi
 
 DESIGN.md bumped to v1.3 (DRAFT row added to Status Pipeline). SCREENS.md DRAFT visibility rule added.
 
-#### Wave 2 — Stage 2 component library (plan 08)
+#### Wave 2 — Stage 2 component library (plan 08) — ✅ EXECUTED 2026-05-01
 
-> Plan + prompt to be authored next session. Build batches per `docs/design/COMPONENTS.md` § G. Acceptance: 85 component partials exist; every component renders in `/_design/components`; `uv run ruff check` passes; Lucide icons render after fragment swaps.
+> Build batches per `docs/design/COMPONENTS.md` § G. Acceptance: 85 component partials exist; every component renders in `/_design/components`; `uv run ruff check` passes; Lucide icons render after fragment swaps. **All 100 tests pass.**
 
 | # | Build batch | Components | Status |
 |---|---|---|---|
-| 2.1 | Shell + base.html refinements | `auth_shell`, `sidebar`, `version_pill`, `api_status_dot`, `deployment_badge`; `base.html` layout + `base.js` (Lucide reinit, Sortable.js auto-init, modal-close listener, toast auto-dismiss, optimistic rollback, upload progress) | [ ] |
-| 2.2 | Atomics (15) | `button`, `input`, `card`, `tag_chip`, `status_dot`, `status_badge`, `score_circle`, `ai_badge`, `kbd`, `field_label`, `info_card`, `spinner`, `toast`, `empty_state`, `avatar` | [ ] |
-| 2.3 | Forms (5) | `editor_field`, `editor_card`, `autosave_indicator`, `modal`, `confirm_modal` | [ ] |
-| 2.4 | Onboarding (5) | `step_indicator`, `dropzone`, `extraction_checklist`, `extracted_field_row`, `progress_bar` | [ ] |
-| 2.5 | Profile / Bullet (11) | `profile_hero`, `contact_chip`, `experience_card`, `bullet_row`, `section_anchor_nav`, `application_readiness_card`, `application_qs_form`, `bullet_edit_row`, `tag_picker`, `selection_override`, `bullet_textarea` | [ ] |
-| 2.6 | Overview (4) | `kpi_card`, `priority_action_row`, `email_signal_row`, `pipeline_strip` | [ ] |
-| 2.7 | Discover (8) | `swipe_card`, `match_breakdown`, `discover_action_bar`, `swipe_action_btn`, `discover_stats_strip`, `up_next_card`, `tip_card`, `keyboard_hints` | [ ] |
-| 2.8 | Discover · review & apply (6) | `apply_topbar`, `warm_intro_card`, `tailored_bullet_row`, `cover_letter_section`, `screener_question_card`, `apply_action_bar` | [ ] |
-| 2.9 | Tracking (8) | `view_toggle`, `provider_chip`, `integration_card`, `followup_banner`, `stage_column`, `tracking_card`, `tracking_list_row`, `tracking_board` | [ ] |
-| 2.10 | Outreach (6) | `outreach_app_row`, `recommended_move_card`, `outreach_message_card`, `contact_card`, `linkedin_status_chip`, `outreach_timeline` | [ ] |
-| 2.11 | Settings (7) | `settings_tabs`, `provider_card`, `cost_card`, `deployment_status_card`, `log_tail`, `on_disk_card`, `connection_status_card` | [ ] |
-| 2.12 | Skeletons (5) | `swipe_card_skeleton`, `tracking_card_skeleton`, `priority_action_row_skeleton`, `email_signal_row_skeleton`, `bullet_edit_row_skeleton` | [ ] |
-| 2.13 | `/_design/components` fixture page (gated on `Settings.debug`) | — | [ ] |
+| 2.1 | Shell + base.html refinements | `auth_shell`, `sidebar`, `version_pill`, `api_status_dot`, `deployment_badge`; `base.html` layout + `base.js` (Lucide reinit, Sortable.js auto-init, modal-close listener, toast auto-dismiss, optimistic rollback, upload progress) | [x] |
+| 2.2 | Atomics (15) | `button`, `input`, `card`, `tag_chip`, `status_dot`, `status_badge`, `score_circle`, `ai_badge`, `kbd`, `field_label`, `info_card`, `spinner`, `toast`, `empty_state`, `avatar` | [x] |
+| 2.3 | Forms (5) | `editor_field`, `editor_card`, `autosave_indicator`, `modal`, `confirm_modal` | [x] |
+| 2.4 | Onboarding (5) | `step_indicator`, `dropzone`, `extraction_checklist`, `extracted_field_row`, `progress_bar` | [x] |
+| 2.5 | Profile / Bullet (11) | `profile_hero`, `contact_chip`, `experience_card`, `bullet_row`, `section_anchor_nav`, `application_readiness_card`, `application_qs_form`, `bullet_edit_row`, `tag_picker`, `selection_override`, `bullet_textarea` | [x] |
+| 2.6 | Overview (4) | `kpi_card`, `priority_action_row`, `email_signal_row`, `pipeline_strip` | [x] |
+| 2.7 | Discover (8) | `swipe_card`, `match_breakdown`, `discover_action_bar`, `swipe_action_btn`, `discover_stats_strip`, `up_next_card`, `tip_card`, `keyboard_hints` | [x] |
+| 2.8 | Discover · review & apply (6) | `apply_topbar`, `warm_intro_card`, `tailored_bullet_row`, `cover_letter_section`, `screener_question_card`, `apply_action_bar` | [x] |
+| 2.9 | Tracking (8) | `view_toggle`, `provider_chip`, `integration_card`, `followup_banner`, `stage_column`, `tracking_card`, `tracking_list_row`, `tracking_board` | [x] |
+| 2.10 | Outreach (6) | `outreach_app_row`, `recommended_move_card`, `outreach_message_card`, `contact_card`, `linkedin_status_chip`, `outreach_timeline` | [x] |
+| 2.11 | Settings (7) | `settings_tabs`, `provider_card`, `cost_card`, `deployment_status_card`, `log_tail`, `on_disk_card`, `connection_status_card` | [x] |
+| 2.12 | Skeletons (5) | `swipe_card_skeleton`, `tracking_card_skeleton`, `priority_action_row_skeleton`, `email_signal_row_skeleton`, `bullet_edit_row_skeleton` | [x] |
+| 2.13 | `/_design/components` fixture page (gated on `NAAVIK_DEBUG=1` env var; plan 10 Wave 3 swap to `Settings.debug`) | — | [x] |
 
 #### Wave 3 — Stage 3 page templates (plan 09)
 

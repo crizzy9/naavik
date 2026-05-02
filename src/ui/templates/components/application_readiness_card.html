@@ -1,0 +1,37 @@
+{#
+  application_readiness_card.html — right-rail card on Profile that flags missing
+  EEO/visa fields. Hidden when missing_count == 0.
+
+  Args:
+    missing_count : int (required)
+    fields        : list of {name, label, value, filled (bool)}
+#}
+{% if missing_count and missing_count > 0 %}
+<aside class="p-4 bg-slate-900 border border-amber-500/30 rounded-lg">
+  <div class="flex items-baseline justify-between mb-3">
+    <span class="text-xs uppercase tracking-wide text-amber-300 font-medium">{{ missing_count }} missing</span>
+  </div>
+  <p class="text-xs text-slate-400 leading-relaxed mb-4">
+    Required by most US applications. Without these, jobs needing them will be skipped.
+  </p>
+  <ul class="flex flex-col gap-0">
+    {% for f in fields %}
+      <li class="flex items-center justify-between py-1.5 border-t border-slate-800/50 first:border-0">
+        <span class="text-xs text-slate-300 truncate">{{ f.label }}</span>
+        <span class="flex items-center gap-1.5 shrink-0 ml-3">
+          {% if f.filled %}
+            <i data-lucide="check-circle-2" class="h-3.5 w-3.5 text-emerald-400" stroke-width="1.5"></i>
+            <span class="text-xs text-slate-400 truncate max-w-[140px]">{{ f.value }}</span>
+          {% else %}
+            <i data-lucide="circle" class="h-3.5 w-3.5 text-slate-600" stroke-width="1.5"></i>
+            <span class="text-xs text-slate-500 italic">add</span>
+          {% endif %}
+        </span>
+      </li>
+    {% endfor %}
+  </ul>
+  <a href="/profile/edit#application-qs" class="mt-4 inline-flex items-center gap-1 text-xs text-amber-200 hover:text-amber-100">
+    Complete now <i data-lucide="arrow-right" class="h-3 w-3" stroke-width="1.5"></i>
+  </a>
+</aside>
+{% endif %}

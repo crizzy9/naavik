@@ -1,0 +1,22 @@
+{#
+  editor_card.html — card wrapping a group of editor fields.
+
+  Args:
+    title      : card title (required)
+    subtitle   : subtitle (e.g. "Experience · Intuit")
+    actions    : raw HTML for top-right action area (Duplicate / Remove)
+    body       : raw HTML for the field grid (expected to contain editor_field.html)
+    anchor_id  : HTML id for section anchor scrolling
+#}
+<section
+  {% if anchor_id %}id="{{ anchor_id }}"{% endif %}
+  class="bg-slate-900 border border-slate-800 rounded-lg p-6 scroll-mt-6">
+  <div class="flex items-baseline justify-between mb-5 gap-3">
+    <div class="min-w-0">
+      <div class="text-base font-medium text-slate-50 truncate">{{ title }}</div>
+      {% if subtitle %}<div class="text-xs text-slate-400 mt-0.5 truncate">{{ subtitle }}</div>{% endif %}
+    </div>
+    {% if actions %}<div class="flex items-center gap-2 shrink-0">{{ actions | safe }}</div>{% endif %}
+  </div>
+  {% if body is defined and body %}{{ body | safe }}{% endif %}
+</section>

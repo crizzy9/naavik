@@ -1,0 +1,50 @@
+{#
+  dropzone.html — drag-drop file area for resume PDF upload.
+  Per INTERACTIONS.md § B.5.
+
+  Args:
+    accept       : MIME types (default: "application/pdf")
+    max_size_mb  : advisory cap (default: 10)
+    upload_url   : HTMX POST target (default: "/api/v1/extraction/upload")
+
+  Drag-drop wiring lives inline using `hx-on:` attributes — no <script> tags
+  inside this partial.
+#}
+{% set accept = accept | default("application/pdf") %}
+{% set max_size_mb = max_size_mb | default(10) %}
+{% set upload_url = upload_url | default("/api/v1/extraction/upload") %}
+
+<form
+  class="dropzone-form"
+  hx-post="{{ upload_url }}"
+  hx-encoding="multipart/form-data"
+  hx-target="#onboarding-step-content"
+  hx-swap="innerHTML"
+  hx-indicator="#upload-progress">
+
+  <label for="dropzone-input"
+         class="dropzone-target h-96 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center gap-4 hover:border-indigo-500/50 transition cursor-pointer focus-within:ring-2 focus-within:ring-indigo-500/40"
+         hx-on:dragover="event.preventDefault(); this.classList.add('border-indigo-500/70','bg-indigo-500/5');"
+         hx-on:dragleave="this.classList.remove('border-indigo-500/70','bg-indigo-500/5');"
+         hx-on:drop="event.preventDefault(); this.classList.remove('border-indigo-500/70','bg-indigo-500/5'); var f=event.dataTransfer.files; if(f &amp;&amp; f.length){ this.querySelector('input[type=file]').files=f; this.querySelector('input[type=file]').dispatchEvent(new Event('change')); }">
+    <i data-lucide="upload-cloud" class="h-12 w-12 text-slate-500" stroke-width="1.5"></i>
+    <div class="text-base text-slate-300">Drop your resume here</div>
+    <div class="text-xs text-slate-500 uppercase tracking-wide">— or —</div>
+    <span class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition">
+      Browse files
+    </span>
+    <div class="text-xs text-slate-500">PDF only · max {{ max_size_mb }} MB</div>
+    <input id="dropzone-input" name="resume" type="file" accept="{{ accept }}" class="sr-only" required>
+  </label>
+
+  <div class="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
+    <i data-lucide="lock" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+    Parsed locally · never sent to third parties
+  </div>
+
+  <progress
+    id="upload-progress"
+    class="htmx-indicator htmx-progress mt-4 hidden htmx-show-loading"
+    value="0"
+    max="100"></progress>
+</form>

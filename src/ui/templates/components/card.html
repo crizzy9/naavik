@@ -1,0 +1,34 @@
+{#
+  card.html — generic surface with optional title / sub / actions / body.
+
+  Args:
+    title    : card title
+    sub      : subtitle below title
+    actions  : raw HTML for top-right action area (use a `caller` block in callers
+               that need rich actions — for partials, this is a simple slot)
+    padding  : "compact" (p-5) / "standard" (p-6, default)
+    hover    : bool — adds hover:border-slate-700 transition
+    extra_classes : additional outer classes
+    body     : raw HTML body content (preferred when included as a partial)
+
+  When you have rich body content, prefer composing the card by hand using these
+  classes; this partial is for the simple title/sub/body case.
+#}
+{% set padding = padding | default("standard") %}
+{% set hover = hover | default(false) %}
+{% set _pad = "p-5" if padding == "compact" else "p-6" %}
+{% set _hover = "hover:border-slate-700 transition" if hover else "" %}
+{% set _extra = extra_classes | default("") %}
+
+<div class="bg-slate-900 border border-slate-800 rounded-lg {{ _pad }} {{ _hover }} {{ _extra }}">
+  {% if title or sub or actions %}
+    <div class="flex items-baseline justify-between mb-3 gap-3">
+      <div>
+        {% if title %}<div class="text-base font-medium text-slate-50">{{ title }}</div>{% endif %}
+        {% if sub %}<div class="text-xs text-slate-400 mt-0.5">{{ sub }}</div>{% endif %}
+      </div>
+      {% if actions %}<div class="shrink-0">{{ actions | safe }}</div>{% endif %}
+    </div>
+  {% endif %}
+  {% if body is defined and body %}{{ body | safe }}{% endif %}
+</div>

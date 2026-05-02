@@ -1,0 +1,31 @@
+{#
+  auth_shell.html — centered-card layout for Login + Onboarding.
+  Per COMPONENTS.md § H.1, this is a base extender (not a partial include) so pages
+  override `{% block caller %}` and supply their own card body.
+
+  Usage:
+    {% extends "components/auth_shell.html" %}
+    {% block caller %}<div class="...">login form</div>{% endblock %}
+#}
+{% extends "base.html" %}
+{% block body %}
+<div class="min-h-screen relative bg-slate-950">
+  {# Faint compass-pattern motif. The static SVG is sourced lazily from /static/compass-pattern.svg
+     once produced; for now the bg is a soft radial gradient so visual density doesn't fall apart. #}
+  <div
+    aria-hidden="true"
+    class="absolute inset-0 opacity-5 pointer-events-none bg-[radial-gradient(circle_at_30%_20%,_rgba(99,102,241,0.6)_0%,_transparent_45%)]"></div>
+
+  {# Top-left: version pill. Top-right: API status dot. #}
+  <div class="absolute top-5 left-5 z-10">
+    {% include "components/version_pill.html" with context %}
+  </div>
+  <div class="absolute top-5 right-5 z-10">
+    {% include "components/api_status_dot.html" with context %}
+  </div>
+
+  <div class="relative flex items-center justify-center min-h-screen px-4 py-10">
+    {% block caller %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

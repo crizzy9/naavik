@@ -1,0 +1,31 @@
+{#
+  toast.html — notification toast for OOB swap into #toast-region.
+
+  Args:
+    tone        : "success" / "info" / "warning" / "danger" (required)
+    message     : body text (required)
+    dismissable : bool (default: true)
+
+  Auto-dismiss policy: success/info self-remove after 4s via base.js.
+  warning/danger persist until manual dismiss.
+#}
+{% set dismissable = dismissable | default(true) %}
+{% set _tone_map = {
+  "success": {"bg": "bg-emerald-500/10", "border": "border-emerald-500/30", "text": "text-emerald-200", "icon_color": "text-emerald-300", "icon": "check-circle-2"},
+  "info":    {"bg": "bg-sky-500/10",     "border": "border-sky-500/30",     "text": "text-sky-200",     "icon_color": "text-sky-300",     "icon": "info"},
+  "warning": {"bg": "bg-amber-500/10",   "border": "border-amber-500/30",   "text": "text-amber-200",   "icon_color": "text-amber-300",   "icon": "alert-triangle"},
+  "danger":  {"bg": "bg-rose-500/10",    "border": "border-rose-500/30",    "text": "text-rose-200",    "icon_color": "text-rose-300",    "icon": "alert-circle"},
+} %}
+{% set _t = _tone_map.get(tone, _tone_map["info"]) %}
+{% set _role = "alert" if tone in ("warning", "danger") else "status" %}
+
+<div class="toast toast-{{ tone }} flex items-start gap-2.5 px-3 py-2.5 rounded-lg shadow-lg max-w-md border {{ _t.bg }} {{ _t.border }} {{ _t.text }}" role="{{ _role }}" aria-live="polite">
+  <i data-lucide="{{ _t.icon }}" class="h-4 w-4 mt-0.5 shrink-0 {{ _t.icon_color }}" stroke-width="1.5"></i>
+  <div class="flex-1 min-w-0 text-sm leading-relaxed">{{ message }}</div>
+  {% if dismissable %}
+    <button type="button" class="text-current opacity-70 hover:opacity-100 shrink-0" aria-label="Dismiss"
+            hx-on:click="this.closest('.toast').remove()">
+      <i data-lucide="x" class="h-4 w-4" stroke-width="1.5"></i>
+    </button>
+  {% endif %}
+</div>

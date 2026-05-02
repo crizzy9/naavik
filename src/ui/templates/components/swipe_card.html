@@ -1,0 +1,81 @@
+{% from "components/_macros.html" import score_circle, tag_chip, meta_item, chip %}
+{#
+  swipe_card.html — full job card on Discover.
+
+  Args:
+    job         : dict — id, company, company_initial, company_color, role, team,
+                  score (0–100), location, salary_range, work_mode, posted_relative,
+                  jd_bullets (list[str]), warm_intro_label (optional),
+                  tags (list[str]), match_breakdown (dict), match_overall (float)
+    dimmed      : bool — background-stack rendering
+    swiping_dir : "left" / "right" / "up" / null — directional Stamp overlay
+#}
+{% set dimmed = dimmed | default(false) %}
+{% set swiping_dir = swiping_dir | default(none) %}
+{% set j = job %}
+<article id="discover-card"
+         class="relative w-full max-w-[460px] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-black/45 overflow-hidden transition
+                {% if dimmed %}opacity-60 scale-95{% endif %}">
+  {# Top band — gradient + brand color. #}
+  <header class="h-20 px-5 py-4 flex items-center gap-3 bg-gradient-to-br {{ j.gradient_from | default('from-indigo-600') }} {{ j.gradient_to | default('to-purple-600') }}">
+    {% with kind="company", text=j.company_initial | default(j.company[:1] | upper), size="md", color_override="bg-white/10 ring-1 ring-white/30" %}
+      {% include "components/avatar.html" %}
+    {% endwith %}
+    <div class="flex-1 min-w-0">
+      <div class="text-[10px] uppercase tracking-wide text-white/80 font-mono">COMPANY</div>
+      <div class="text-base font-semibold text-white truncate">{{ j.role }}{% if j.team %} · {{ j.team }}{% endif %}</div>
+    </div>
+    <div class="shrink-0">
+      {{ score_circle(score=j.score, size="default", text_color_override="text-white") }}
+    </div>
+  </header>
+
+  <div class="p-5 flex flex-col gap-4">
+    {# Meta row #}
+    <div class="flex items-center gap-3 flex-wrap">
+      {% if j.location %}{{ meta_item("map-pin", j.location) }}{% endif %}
+      {% if j.salary_range %}{{ meta_item("dollar-sign", j.salary_range) }}{% endif %}
+      {% if j.work_mode %}{{ meta_item("laptop", j.work_mode) }}{% endif %}
+      {% if j.team_size %}{{ meta_item("users-round", j.team_size) }}{% endif %}
+      {% if j.visa_friendly %}{{ meta_item("user-check", "sponsorship ok") }}{% endif %}
+      {% if j.posted_relative %}{{ meta_item("clock", j.posted_relative) }}{% endif %}
+    </div>
+
+    {# Tag row — warm intro chip first if applicable. #}
+    <div class="flex items-center gap-1.5 flex-wrap">
+      {% if j.warm_intro_label %}
+        {{ chip("👥 warm intro · " ~ j.warm_intro_label, tone="emerald") }}
+      {% endif %}
+      {% for t in j.tags or [] %}{{ tag_chip(t) }}{% endfor %}
+    </div>
+
+    {# Two-column lower body. #}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
+      <div>
+        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">WHAT THEY WANT</div>
+        <ul class="flex flex-col gap-1.5 text-sm text-slate-200 leading-relaxed">
+          {% for b in j.jd_bullets or [] %}
+            <li class="flex gap-2">
+              <span class="text-slate-500 shrink-0" aria-hidden="true">•</span>
+              <span>{{ b }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        {% with breakdown=j.match_breakdown or {}, overall=j.match_overall %}
+          {% include "components/match_breakdown.html" %}
+        {% endwith %}
+      </div>
+    </div>
+  </div>
+
+  {# Stamp overlay — directional swipe feedback. #}
+  {% if swiping_dir %}
+    {% set _stamp_text = {"left": "SKIP", "right": "APPLY", "up": "SAVE"}[swiping_dir] %}
+    {% set _stamp_color = {"left": "text-rose-400 border-rose-400", "right": "text-emerald-400 border-emerald-400", "up": "text-indigo-400 border-indigo-400"}[swiping_dir] %}
+    <div class="absolute top-6 right-6 px-4 py-2 rounded-lg border-4 font-semibold text-2xl tracking-widest -rotate-12 {{ _stamp_color }}" aria-hidden="true">
+      {{ _stamp_text }}
+    </div>
+  {% endif %}
+</article>

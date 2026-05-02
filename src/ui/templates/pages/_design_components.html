@@ -1,0 +1,924 @@
+{% extends "base.html" %}
+{% from "components/_macros.html" import tag_chip, score_circle, status_dot, kbd, meta_item, chip, log_line, deployment_badge %}
+{% block title %}Component fixture · Naavik{% endblock %}
+
+{% block main %}
+<div class="max-w-6xl mx-auto p-6 lg:p-8">
+  <header class="mb-8">
+    <h1 class="text-3xl font-semibold text-slate-50 tracking-tight">Component fixture</h1>
+    <p class="text-sm text-slate-400 mt-1">Every component in every variant, gated on
+      <code class="font-mono text-cyan-400 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">NAAVIK_DEBUG=1</code>.
+      Used for visual QA during plan 08 implementation.</p>
+    <nav class="mt-4 flex flex-wrap gap-2 text-xs">
+      <a href="#batch-1-shell" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">1 Shell</a>
+      <a href="#batch-2-atomics" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">2 Atomics</a>
+      <a href="#batch-3-forms" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">3 Forms</a>
+      <a href="#batch-4-onboarding" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">4 Onboarding</a>
+      <a href="#batch-5-profile" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">5 Profile / Bullet</a>
+      <a href="#batch-6-overview" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">6 Overview</a>
+      <a href="#batch-7-discover" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">7 Discover</a>
+      <a href="#batch-8-discover-review" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">8 Discover · review</a>
+      <a href="#batch-9-tracking" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">9 Tracking</a>
+      <a href="#batch-10-outreach" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">10 Outreach</a>
+      <a href="#batch-11-settings" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">11 Settings</a>
+      <a href="#batch-12-skeletons" class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800">12 Skeletons</a>
+    </nav>
+  </header>
+
+  {# ============================================================== #}
+  {# Batch 1 · Shell                                                  #}
+  {# ============================================================== #}
+  <section id="batch-1-shell" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">1 · Shell + global</h2>
+    <p class="text-sm text-slate-400 mb-6">The sidebar is rendered around this fixture page (see the left rail). The five shell components are inventory; smaller ones inline below.</p>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">version_pill</h3>
+    <div class="flex flex-wrap gap-3">
+      {% with version="0.4.2", mode="self-hosted" %}{% include "components/version_pill.html" %}{% endwith %}
+      {% with version="0.4.2", mode="cloud" %}{% include "components/version_pill.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">api_status_dot</h3>
+    <div class="flex flex-wrap gap-3">
+      {% with online=True %}{% include "components/api_status_dot.html" %}{% endwith %}
+      {% with online=False %}{% include "components/api_status_dot.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">deployment_badge</h3>
+    <div class="flex flex-wrap gap-3 items-center">
+      {{ deployment_badge("self-hosted") }}
+      {{ deployment_badge("cloud") }}
+      {% with mode="self-hosted" %}{% include "components/deployment_badge.html" %}{% endwith %}
+      {% with mode="cloud" %}{% include "components/deployment_badge.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">auth_shell + sidebar</h3>
+    <p class="text-sm text-slate-400">Auth shell (<code class="font-mono text-cyan-400">/login</code>,
+      <code class="font-mono text-cyan-400">/onboarding</code>) overrides <code>{% raw %}{% block body %}{% endraw %}</code>;
+      sidebar wraps every authenticated screen and is visible on this fixture page.</p>
+  </section>
+
+  {# Sections 2–12 grow with each batch. #}
+  <section id="batch-2-atomics" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">2 · Atomics (15)</h2>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">button — variants</h3>
+    <div class="flex flex-wrap gap-3 items-center">
+      {% with variant="primary", label="Primary" %}{% include "components/button.html" %}{% endwith %}
+      {% with variant="secondary", label="Secondary" %}{% include "components/button.html" %}{% endwith %}
+      {% with variant="ghost", label="Ghost" %}{% include "components/button.html" %}{% endwith %}
+      {% with variant="danger", label="Delete", icon="trash-2" %}{% include "components/button.html" %}{% endwith %}
+      {% with variant="icon", icon="x", aria_label="Close" %}{% include "components/button.html" %}{% endwith %}
+      {% with variant="primary", label="Disabled", disabled=True %}{% include "components/button.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">button — sizes</h3>
+    <div class="flex flex-wrap gap-3 items-center">
+      {% with variant="primary", label="Small", size="sm" %}{% include "components/button.html" %}{% endwith %}
+      {% with variant="primary", label="Medium", size="md" %}{% include "components/button.html" %}{% endwith %}
+      {% with variant="primary", label="Large", size="lg" %}{% include "components/button.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">input</h3>
+    <div class="grid gap-3 max-w-md">
+      {% with name="email_demo", type="email", placeholder="you@example.com" %}{% include "components/input.html" %}{% endwith %}
+      {% with name="password_demo", type="password", placeholder="••••••••" %}{% include "components/input.html" %}{% endwith %}
+      {% with name="api_key_demo", type="text", value="sk-ant-api03-...redacted...", mono=True %}{% include "components/input.html" %}{% endwith %}
+      {% with name="bullet_demo", type="textarea", value="Built Intuit's ML personalization platform from prototype to production, serving 100M+ users across QuickBooks and TurboTax surfaces." %}{% include "components/input.html" %}{% endwith %}
+      {% with name="invalid_demo", type="email", value="not-an-email", error="Enter a valid email address" %}{% include "components/input.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">card</h3>
+    <div class="grid gap-3 sm:grid-cols-2 max-w-3xl">
+      {% with title="Recent activity", sub="last 24h", body='<p class="text-sm text-slate-300">Pulled 24 jobs · scored 18 · auto-applied 3.</p>' %}
+        {% include "components/card.html" %}
+      {% endwith %}
+      {% with title="Hover me", hover=True, body='<p class="text-sm text-slate-300">Subtle border highlight on hover.</p>' %}
+        {% include "components/card.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">tag_chip — full vocabulary</h3>
+    <div class="flex flex-wrap gap-1.5">
+      {% for t in TAG_VOCAB %}{{ tag_chip(t) }}{% endfor %}
+    </div>
+    <h4 class="text-xs uppercase tracking-wide text-slate-500 mt-3 mb-2">selected variant</h4>
+    <div class="flex flex-wrap gap-1.5">
+      {% for t in TAG_VOCAB %}{{ tag_chip(t, selected=loop.index <= 4) }}{% endfor %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">status_dot — all 6 statuses</h3>
+    <div class="flex flex-wrap gap-4 items-center text-xs text-slate-400">
+      {% for s in ['DRAFT','APPLIED','RECRUITER_SCREEN','ONSITE_LOOP','OFFER','CLOSED'] %}
+        <span class="inline-flex items-center gap-1.5">{{ status_dot(s) }} <span class="font-mono">{{ s }}</span></span>
+      {% endfor %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">status_badge</h3>
+    <div class="flex flex-wrap gap-3 items-center">
+      {% for s in ['DRAFT','APPLIED','RECRUITER_SCREEN','ONSITE_LOOP','OFFER','CLOSED'] %}
+        {% with status=s %}{% include "components/status_badge.html" %}{% endwith %}
+      {% endfor %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">score_circle — sizes × thresholds</h3>
+    <div class="flex flex-wrap gap-6 items-center">
+      {{ score_circle(score=92, size="hero") }}
+      {{ score_circle(score=72, size="default") }}
+      {{ score_circle(score=51, size="default") }}
+      {{ score_circle(score=28, size="compact") }}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">ai_badge</h3>
+    <div class="flex flex-wrap gap-3 items-center">
+      {% include "components/ai_badge.html" %}
+      {% with qualifier="enthusiastic" %}{% include "components/ai_badge.html" %}{% endwith %}
+      {% with qualifier="claude-3.5-sonnet" %}{% include "components/ai_badge.html" %}{% endwith %}
+      {% with variant="draft", qualifier="draft" %}{% include "components/ai_badge.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">kbd</h3>
+    <div class="flex items-center gap-2 text-xs text-slate-400">
+      {{ kbd("←") }} skip · {{ kbd("→") }} auto-apply · {{ kbd("↑") }} save · {{ kbd("↵") }} review · {{ kbd("⌘K") }}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">field_label</h3>
+    <div class="max-w-md">
+      {% with label="FULL NAME", for_id="fl-demo" %}{% include "components/field_label.html" %}{% endwith %}
+      {% with label="TAGS", for_id="fl-demo2", hint="3 selected" %}{% include "components/field_label.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">info_card — all tones</h3>
+    <div class="grid gap-3 max-w-2xl">
+      {% with tone="info", icon="key", title="SSO coming soon", body="Self-hosted instances will support OIDC providers like Authentik, Keycloak, and Okta." %}
+        {% include "components/info_card.html" %}
+      {% endwith %}
+      {% with tone="success", icon="check-circle-2", title="Connection ok", body="Responded in 412ms · model claude-3.5-sonnet-20250219" %}
+        {% include "components/info_card.html" %}
+      {% endwith %}
+      {% with tone="warning", icon="alert-triangle", title="Rate-limit hit", body="Slow down — Naavik will send the next batch in 12m." %}
+        {% include "components/info_card.html" %}
+      {% endwith %}
+      {% with tone="danger", icon="alert-circle", title="Couldn't reach Anthropic API", body="401 Unauthorized — check your key in Settings." %}
+        {% include "components/info_card.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">spinner — sizes</h3>
+    <div class="flex flex-wrap gap-4 items-center text-slate-300">
+      {% with size="xs" %}{% include "components/spinner.html" %}{% endwith %}
+      {% with size="sm" %}{% include "components/spinner.html" %}{% endwith %}
+      {% with size="md" %}{% include "components/spinner.html" %}{% endwith %}
+      <span class="text-cyan-300">{% with size="md", color="text-cyan-300" %}{% include "components/spinner.html" %}{% endwith %} colored</span>
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">toast — all tones</h3>
+    <div class="flex flex-col gap-3 max-w-md">
+      {% with tone="success", message="Bullet saved" %}{% include "components/toast.html" %}{% endwith %}
+      {% with tone="info", message="Naavik scanned 24 jobs · 11 above your score threshold" %}{% include "components/toast.html" %}{% endwith %}
+      {% with tone="warning", message="LinkedIn rate-limit nearing — pausing outbound DMs for 12m" %}{% include "components/toast.html" %}{% endwith %}
+      {% with tone="danger", message="Couldn't compile resume — see logs in Settings · Deployment" %}{% include "components/toast.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">empty_state</h3>
+    <div class="border border-slate-800 rounded-lg max-w-2xl">
+      {% with icon="search", line="No new matches today. Naavik scans hourly — check back soon.", cta_label="Find jobs", cta_url="/discover" %}
+        {% include "components/empty_state.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">avatar — sizes × shapes</h3>
+    <div class="flex flex-wrap gap-3 items-end">
+      {% for sz in ['xs','sm','md','lg','xl'] %}
+        {% with kind="user", text="SP", size=sz, shape="circle" %}{% include "components/avatar.html" %}{% endwith %}
+      {% endfor %}
+      <span class="text-slate-500 mx-3">|</span>
+      {% with kind="company", text="S", size="lg", color_override="bg-purple-600" %}{% include "components/avatar.html" %}{% endwith %}
+      {% with kind="company", text="A", size="lg", color_override="bg-orange-500" %}{% include "components/avatar.html" %}{% endwith %}
+      {% with kind="company", text="L", size="lg", color_override="bg-violet-600" %}{% include "components/avatar.html" %}{% endwith %}
+    </div>
+  </section>
+  <section id="batch-3-forms" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">3 · Forms / editor (5)</h2>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">editor_field</h3>
+    <div class="grid sm:grid-cols-2 gap-4 max-w-3xl">
+      {% with label="FULL NAME", name="demo_full_name", value="Shyam Padia" %}
+        {% include "components/editor_field.html" %}
+      {% endwith %}
+      {% with label="HEADLINE", name="demo_headline", value="Senior Software Engineer" %}
+        {% include "components/editor_field.html" %}
+      {% endwith %}
+      {% with label="API KEY", name="demo_api_key", value="sk-ant-api03-...", mono=True, autosave_enabled=False %}
+        {% include "components/editor_field.html" %}
+      {% endwith %}
+      {% with label="SUMMARY", name="demo_summary", type="textarea", value="Senior software engineer with 8+ years of experience building ML personalization systems at consumer scale." %}
+        {% include "components/editor_field.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">editor_card</h3>
+    <div class="max-w-3xl">
+      {% with title="Identity", subtitle="Required across every application", anchor_id="demo-identity",
+              actions='<button type="button" class="text-xs text-slate-400 hover:text-slate-200">Reset</button>',
+              body='<div class="grid sm:grid-cols-2 gap-4"><div class="text-xs text-slate-400">FULL NAME<div class="text-sm text-slate-100 mt-1">Shyam Padia</div></div><div class="text-xs text-slate-400">LOCATION<div class="text-sm text-slate-100 mt-1">San Francisco, CA</div></div></div>' %}
+        {% include "components/editor_card.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">autosave_indicator — three states</h3>
+    <div class="flex flex-wrap gap-3 items-center">
+      {% with state="saved", relative_time="12s ago" %}{% include "components/autosave_indicator.html" %}{% endwith %}
+      {% with state="saving" %}{% include "components/autosave_indicator.html" %}{% endwith %}
+      {% with state="error", error_message="Couldn't save — retry" %}{% include "components/autosave_indicator.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">modal — trigger</h3>
+    <p class="text-sm text-slate-400">Click the button to open the centralized confirm modal via
+      <code class="font-mono text-cyan-400 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">GET /_modal/confirm</code>.
+      Press Escape, click the backdrop, or click Cancel to close.</p>
+    <div class="flex flex-wrap gap-3 mt-3">
+      <button type="button"
+              class="px-4 py-2 rounded-lg bg-rose-500 hover:bg-rose-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              hx-get="/_modal/confirm?title=Delete+bullet&message=This+can%27t+be+undone.+The+bullet%27s+history+will+remain+in+audit+logs.&action=/api/v1/bullets/42&label=Delete&tone=danger&method=delete"
+              hx-target="#modal-region"
+              hx-swap="innerHTML">
+        Open delete confirm
+      </button>
+      <button type="button"
+              class="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              hx-get="/_modal/confirm?title=Discard+changes%3F&message=You+have+unsaved+edits.+Discarding+resets+them.&action=/profile&label=Discard&tone=warning&method=post"
+              hx-target="#modal-region"
+              hx-swap="innerHTML">
+        Open warning confirm
+      </button>
+      <button type="button"
+              class="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              hx-get="/_modal/confirm?title=Start+auto-apply%3F&message=Naavik+will+submit+to+12+jobs+over+the+next+hour.&action=/api/v1/applications/auto&label=Start&tone=primary&method=post"
+              hx-target="#modal-region"
+              hx-swap="innerHTML">
+        Open primary confirm
+      </button>
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">modal — inline</h3>
+    <p class="text-sm text-slate-400 mb-3">Inline render so you can see the chrome without opening.</p>
+    <div class="relative h-[280px] bg-slate-950 border border-slate-800 rounded-lg overflow-hidden">
+      {% with id="demo-modal-inline", title="Edit bullet", subtitle="· Intuit · Senior SWE", size="md",
+              body='<p class="text-sm text-slate-300">This is the modal body. In real usage it contains a form, a tag picker, etc.</p>',
+              footer='<button type="button" class="text-sm text-slate-300 hover:text-slate-100">Cancel</button><button type="button" class="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm">Save bullet</button>' %}
+        {% include "components/modal.html" %}
+      {% endwith %}
+    </div>
+  </section>
+  <section id="batch-4-onboarding" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">4 · Onboarding (5)</h2>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">step_indicator — three steps</h3>
+    <div class="flex flex-col gap-4">
+      {% with current_step=1 %}{% include "components/step_indicator.html" %}{% endwith %}
+      {% with current_step=2 %}{% include "components/step_indicator.html" %}{% endwith %}
+      {% with current_step=3 %}{% include "components/step_indicator.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">dropzone</h3>
+    <div class="max-w-2xl">
+      {% include "components/dropzone.html" %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">extraction_checklist — all 3 statuses</h3>
+    <div class="max-w-2xl">
+      {% with items=[
+        {"label": "Reading PDF structure", "status": "done", "count": "4 pages · 1.2 MB"},
+        {"label": "Identifying experience", "status": "active", "count": "2 of 4 roles parsed"},
+        {"label": "Extracting skills", "status": "active", "count": "17 found"},
+        {"label": "Categorizing bullets", "status": "queued", "count": "queued"},
+        {"label": "Generating summary", "status": "queued", "count": "queued"},
+      ] %}{% include "components/extraction_checklist.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">extracted_field_row — three states</h3>
+    <div class="max-w-2xl bg-slate-900 border border-slate-800 rounded-lg p-4">
+      {% with id="er-1", label="NAME", value="Shyam Padia", confidence=0.99, state="extracted" %}
+        {% include "components/extracted_field_row.html" %}{% endwith %}
+      {% with id="er-2", label="TITLE", value="Senior Software Engineer · Intuit", confidence=0.96, state="extracted" %}
+        {% include "components/extracted_field_row.html" %}{% endwith %}
+      {% with id="er-3", label="LOCATION", value="San Francisco, CA", confidence=0.92, state="extracted" %}
+        {% include "components/extracted_field_row.html" %}{% endwith %}
+      {% with id="er-4", label="SKILLS", state="extracting" %}
+        {% include "components/extracted_field_row.html" %}{% endwith %}
+      {% with id="er-5", label="EDUCATION", state="queued" %}
+        {% include "components/extracted_field_row.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">progress_bar — gradient + heights</h3>
+    <div class="grid gap-4 max-w-md">
+      {% with value=0.42, gradient=True %}{% include "components/progress_bar.html" %}{% endwith %}
+      {% with value=0.78, gradient=False, height="thick" %}{% include "components/progress_bar.html" %}{% endwith %}
+      {% with value=0.15, height="thin" %}{% include "components/progress_bar.html" %}{% endwith %}
+    </div>
+  </section>
+  <section id="batch-5-profile" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">5 · Profile / Bullet (11)</h2>
+
+    {% set _profile_demo = {
+      "name": "Shyam Padia",
+      "initials": "SP",
+      "title": "Senior Software Engineer",
+      "company": "Intuit",
+      "location": "San Francisco, CA",
+      "open_to_opportunities": True,
+      "visa_label": "H1B · Requires sponsorship",
+      "contacts": [
+        {"kind": "mail", "value": "shyam@example.com", "href": "mailto:shyam@example.com"},
+        {"kind": "phone", "value": "+1 415 555 0102", "href": None},
+        {"kind": "github", "value": "/crizzy9", "href": "https://github.com/crizzy9"},
+        {"kind": "linkedin", "value": "/in/shyampadia", "href": None},
+        {"kind": "portfolio", "value": "crypticsoul.dev", "href": "https://crypticsoul.dev"},
+      ],
+    } %}
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">profile_hero — read-only + editable</h3>
+    <div class="flex flex-col gap-4 max-w-4xl">
+      {% with profile=_profile_demo, editable=False %}{% include "components/profile_hero.html" %}{% endwith %}
+      {% with profile=_profile_demo, editable=True %}{% include "components/profile_hero.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">contact_chip — all kinds</h3>
+    <div class="flex flex-wrap gap-2">
+      {% with kind="mail", value="shyam@example.com", href="mailto:shyam@example.com" %}{% include "components/contact_chip.html" %}{% endwith %}
+      {% with kind="phone", value="+1 415 555 0102" %}{% include "components/contact_chip.html" %}{% endwith %}
+      {% with kind="github", value="/crizzy9", href="https://github.com/crizzy9" %}{% include "components/contact_chip.html" %}{% endwith %}
+      {% with kind="linkedin", value="/in/shyampadia" %}{% include "components/contact_chip.html" %}{% endwith %}
+      {% with kind="portfolio", value="crypticsoul.dev", href="https://crypticsoul.dev" %}{% include "components/contact_chip.html" %}{% endwith %}
+    </div>
+
+    {% set _bullets_demo = [
+      {"id": 1, "text": "Built Intuit's ML personalization platform from prototype to production, serving 100M+ users across QuickBooks and TurboTax surfaces. Lifted homepage CTR by 23% and recovered $4.2M in annual revenue.", "tags": ["ai-ml", "platform", "leadership"], "selection_override": None},
+      {"id": 2, "text": "Owned the full stack — feature pipelines in Airflow, ranking models in PyTorch, online inference in Go.", "tags": ["backend", "platform", "data-eng"], "selection_override": "always_include"},
+      {"id": 3, "text": "Mentored 4 engineers through the IC4 ladder; 2 promoted in 2024.", "tags": ["leadership"], "selection_override": "never_include"},
+      {"id": 4, "text": "Scaled GenAI assist features to 12M monthly users with sub-200ms p95 latency.", "tags": ["genai", "platform"], "selection_override": None},
+    ] %}
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">experience_card — collapsed</h3>
+    <div class="max-w-3xl">
+      {% with experience={"company": "Intuit", "team": "Personalization & Marketing Tech", "title": "Senior Software Engineer", "location": "San Francisco, CA", "dates": "Sep 2019 — Present", "duration": "5y 8m", "initial": "I", "color": "bg-emerald-600"}, bullets=_bullets_demo, expanded=False %}
+        {% include "components/experience_card.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">bullet_row</h3>
+    <div class="max-w-3xl bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-2">
+      {% for b in _bullets_demo[:2] %}{% with bullet=b %}{% include "components/bullet_row.html" %}{% endwith %}{% endfor %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">section_anchor_nav</h3>
+    <div class="max-w-xs">
+      {% with anchors=[
+        {"id": "summary", "label": "Summary"},
+        {"id": "experience", "label": "Experience", "count": 4},
+        {"id": "application-qs", "label": "Application details"},
+        {"id": "skills", "label": "Skills"},
+        {"id": "education", "label": "Education"},
+      ], active_id="experience" %}{% include "components/section_anchor_nav.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">application_readiness_card</h3>
+    <div class="max-w-sm">
+      {% with missing_count=4, fields=[
+        {"name": "work_authorization", "label": "Work authorization", "value": "H1B", "filled": True},
+        {"name": "visa_sponsorship_needed", "label": "Visa sponsorship needed", "value": "Yes", "filled": True},
+        {"name": "veteran_status", "label": "Veteran status", "value": "", "filled": False},
+        {"name": "disability_status", "label": "Disability status", "value": "", "filled": False},
+        {"name": "race_ethnicity", "label": "Race / ethnicity (EEO)", "value": "", "filled": False},
+        {"name": "gender_identity", "label": "Gender", "value": "Prefer not to say", "filled": True},
+      ] %}{% include "components/application_readiness_card.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">application_qs_form</h3>
+    <div class="max-w-3xl">
+      {% with profile={
+        "work_authorization": "H1B",
+        "visa_sponsorship_needed": "Yes",
+        "willing_to_relocate": "Yes",
+        "notice_period_days": 14,
+        "salary_expectation_usd": 245000,
+        "earliest_start": "2026-06-01",
+        "veteran_status": "",
+        "disability_status": "",
+        "race_ethnicity": "",
+        "gender_identity": "Prefer not to say",
+      } %}{% include "components/application_qs_form.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">bullet_edit_row — drag handle + actions on hover</h3>
+    <div class="max-w-3xl bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-1" data-sortable="true">
+      {% for b in _bullets_demo %}
+        {% with bullet=b %}{% include "components/bullet_edit_row.html" %}{% endwith %}
+      {% endfor %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">tag_picker</h3>
+    <div class="max-w-md">
+      {% with selected=["ai-ml", "platform"] %}{% include "components/tag_picker.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">selection_override — three states</h3>
+    <div class="grid sm:grid-cols-3 gap-4 max-w-4xl">
+      <div>
+        <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">always_include</div>
+        {% with current="always_include", name="so-1" %}{% include "components/selection_override.html" %}{% endwith %}
+      </div>
+      <div>
+        <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">never_include</div>
+        {% with current="never_include", name="so-2" %}{% include "components/selection_override.html" %}{% endwith %}
+      </div>
+      <div>
+        <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">auto (neither)</div>
+        {% with current=None, name="so-3" %}{% include "components/selection_override.html" %}{% endwith %}
+      </div>
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">bullet_textarea</h3>
+    <div class="max-w-2xl bg-slate-900 border border-slate-800 rounded-lg p-5">
+      {% with value="Built Intuit's ML personalization platform from prototype to production, serving 100M+ users across QuickBooks and TurboTax surfaces." %}
+        {% include "components/bullet_textarea.html" %}
+      {% endwith %}
+    </div>
+  </section>
+  <section id="batch-6-overview" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">6 · Overview (4)</h2>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">kpi_card — 4 KPIs</h3>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-6xl">
+      {% with label="ACTIVE APPLICATIONS", value="29", sub="across 5 stages" %}{% include "components/kpi_card.html" %}{% endwith %}
+      {% with label="RESPONSE RATE · 90D", value="11.3%", delta="+2.1%", delta_trend="up", sub="3× market avg" %}{% include "components/kpi_card.html" %}{% endwith %}
+      {% with label="ONSITE RATE", value="4.2%", delta="-0.4%", delta_trend="down" %}{% include "components/kpi_card.html" %}{% endwith %}
+      {% with label="OFFER RATE", value="1.4%", delta="+0.7%", delta_trend="up", sub="2 offers · 1 pending" %}{% include "components/kpi_card.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">priority_action_row — 4 kinds</h3>
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-2 flex flex-col max-w-3xl">
+      {% with index=1, kind="offer", title="Respond to Figma offer", subtitle="$290k base + 0.04% · verbal extended Apr 28 · they expect a reply by Thu", urgency="today", urgency_label="TODAY", cta_label="Open offer", cta_url="/tracking/123" %}
+        {% include "components/priority_action_row.html" %}{% endwith %}
+      {% with index=2, kind="interview", title="Stripe — Sr ML Engineer · onsite loop", subtitle="3 panels · 09:00–13:00 PT · prep notes 60% complete", urgency="tomorrow", urgency_label="TOMORROW", cta_label="Open prep notes", cta_url="/tracking/124" %}
+        {% include "components/priority_action_row.html" %}{% endwith %}
+      {% with index=3, kind="reply", title="Linear — Founding Engineer · recruiter reply", subtitle="Priya: \"Got time for a 30-min chat next week?\"", urgency="relative", urgency_label="14M AGO", cta_label="Reply", cta_url="/tracking/125" %}
+        {% include "components/priority_action_row.html" %}{% endwith %}
+      {% with index=4, kind="silent", title="Anthropic — Founding ML · no reply", subtitle="Last message Apr 23 · 6 days silent · consider a nudge", urgency="silent_n", urgency_label="6D SILENT", cta_label="Send nudge", cta_url="/outreach/126" %}
+        {% include "components/priority_action_row.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">email_signal_row — by classification</h3>
+    <div class="max-w-md bg-slate-900 border border-slate-800 rounded-lg p-3 flex flex-col">
+      {% with signal={"sender": "Priya · Linear", "sender_initial": "L", "sender_color": "bg-violet-600", "subject": "Re: Founding Engineer chat?", "classification": "INTERVIEW", "classification_label": "Interviewing", "score": 88, "relative_time": "14m"} %}
+        {% include "components/email_signal_row.html" %}{% endwith %}
+      {% with signal={"sender": "Andrea · Figma", "sender_initial": "F", "sender_color": "bg-rose-600", "subject": "Offer details — base + equity", "classification": "OFFER", "classification_label": "Offer", "score": 95, "relative_time": "2h"} %}
+        {% include "components/email_signal_row.html" %}{% endwith %}
+      {% with signal={"sender": "Anthropic Recruiting", "sender_initial": "A", "sender_color": "bg-orange-500", "subject": "Re: Founding ML · timing", "classification": "REJECTION", "classification_label": "Rejected", "score": 64, "relative_time": "3d"} %}
+        {% include "components/email_signal_row.html" %}{% endwith %}
+      {% with signal={"sender": "Stripe Talent", "sender_initial": "S", "sender_color": "bg-purple-600", "subject": "Coding assessment link", "classification": "ASSESSMENT", "classification_label": "Assessment", "score": 81, "relative_time": "1d"} %}
+        {% include "components/email_signal_row.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">pipeline_strip</h3>
+    <div class="max-w-5xl">
+      {% with counts={"APPLIED": 14, "RECRUITER_SCREEN": 5, "ONSITE_LOOP": 3, "OFFER": 1, "CLOSED": 6} %}
+        {% include "components/pipeline_strip.html" %}
+      {% endwith %}
+    </div>
+  </section>
+  <section id="batch-7-discover" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">7 · Discover (8)</h2>
+
+    {% set _job_demo = {
+      "id": 42,
+      "company": "Stripe",
+      "company_initial": "S",
+      "company_color": "bg-purple-600",
+      "gradient_from": "from-indigo-600",
+      "gradient_to": "to-purple-600",
+      "role": "Senior ML Engineer",
+      "team": "Atlas",
+      "score": 86,
+      "location": "San Francisco",
+      "salary_range": "$240-290k + 0.05%",
+      "work_mode": "Hybrid",
+      "team_size": "team of 12",
+      "visa_friendly": True,
+      "posted_relative": "2h ago",
+      "jd_bullets": [
+        "5+ years building ranking / personalization at consumer scale",
+        "Strong systems chops — own a streaming pipeline end-to-end",
+        "Comfortable with PyTorch + Go, ideally both",
+        "Experience working with applied research in production",
+      ],
+      "warm_intro_label": "Priya",
+      "tags": ["ai-ml", "platform", "leadership"],
+      "match_breakdown": {"ai-ml": 0.95, "platform": 0.88, "leadership": 0.82, "visa": 0.70},
+      "match_overall": 0.86,
+    } %}
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">discover_stats_strip</h3>
+    <div class="max-w-3xl">
+      {% with stats={"applied": 4, "auto": 2, "manual": 1, "saved": 8, "skipped": 12, "scanned": 247} %}
+        {% include "components/discover_stats_strip.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">match_breakdown — with overall</h3>
+    <div class="max-w-md p-4 bg-slate-900 border border-slate-800 rounded-lg">
+      {% with breakdown={"ai-ml": 0.95, "platform": 0.88, "leadership": 0.82, "visa": 0.70, "data-eng": 0.55}, overall=0.86 %}
+        {% include "components/match_breakdown.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">swipe_action_btn — 4 tones + disabled</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-3xl">
+      {% with icon="x", label="Skip", tone="skip", key_hint="←", action_url="/api/v1/discover/42/skip" %}{% include "components/swipe_action_btn.html" %}{% endwith %}
+      {% with icon="bookmark", label="Save", tone="save", key_hint="↑", action_url="/api/v1/discover/42/save" %}{% include "components/swipe_action_btn.html" %}{% endwith %}
+      {% with icon="sparkles", label="Review & apply", tone="review", key_hint="↵", action_method="get", action_url="/discover/42" %}{% include "components/swipe_action_btn.html" %}{% endwith %}
+      {% with icon="zap", label="Auto-apply", tone="auto-apply", key_hint="→", action_url="/api/v1/applications/42/auto-submit" %}{% include "components/swipe_action_btn.html" %}{% endwith %}
+    </div>
+    <h4 class="text-xs uppercase tracking-wide text-slate-500 mt-4 mb-2">mobile circular variant</h4>
+    <div class="flex items-center gap-3">
+      {% with icon="x", label="Skip", tone="skip", action_url="/api/v1/discover/42/skip", mobile=True %}{% include "components/swipe_action_btn.html" %}{% endwith %}
+      {% with icon="bookmark", label="Save", tone="save", action_url="/api/v1/discover/42/save", mobile=True %}{% include "components/swipe_action_btn.html" %}{% endwith %}
+      {% with icon="sparkles", label="Review", tone="review", action_method="get", action_url="/discover/42", mobile=True %}{% include "components/swipe_action_btn.html" %}{% endwith %}
+      {% with icon="zap", label="Auto-apply", tone="auto-apply", action_url="/api/v1/applications/42/auto-submit", mobile=True %}{% include "components/swipe_action_btn.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">discover_action_bar</h3>
+    <div class="max-w-3xl">
+      {% with job_id=42 %}{% include "components/discover_action_bar.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">up_next_card — default + stuck variants</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
+      {% with job={"id": 51, "company": "Anthropic", "company_initial": "A", "company_color": "bg-orange-500", "role": "Founding ML Engineer", "salary_range": "$300-380k", "score": 91} %}
+        {% include "components/up_next_card.html" %}
+      {% endwith %}
+      {% with job={"id": 52, "company": "Linear", "company_initial": "L", "company_color": "bg-violet-600", "role": "Founding Engineer · platform", "salary_range": "$240-300k + 0.5%", "score": 78} %}
+        {% include "components/up_next_card.html" %}
+      {% endwith %}
+      {% with job={"id": 53, "company": "Vercel", "company_initial": "V", "company_color": "bg-slate-800", "role": "Sr Designer · platform", "salary_range": "$200-260k", "score": 64}, state="stuck", last_failure={"kind": "auth_required", "message": "Workday login expired", "captured_at": "2026-04-30T12:00Z"} %}
+        {% include "components/up_next_card.html" %}
+      {% endwith %}
+      {% with job={"id": 54, "company": "Zed Industries", "company_initial": "Z", "company_color": "bg-emerald-700", "role": "Sr Fullstack", "salary_range": "$220-290k", "score": 73}, state="stuck", last_failure={"kind": "captcha", "message": "hCaptcha intercepted", "captured_at": "2026-04-30T12:30Z"} %}
+        {% include "components/up_next_card.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">tip_card</h3>
+    <div class="max-w-sm">
+      {% with title="Tip", body="Tap to expand a job and refine the resume / cover letter before applying. Right-swipe lets Naavik tailor and submit on its own." %}
+        {% include "components/tip_card.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">keyboard_hints</h3>
+    {% include "components/keyboard_hints.html" %}
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">swipe_card — full</h3>
+    <div class="flex justify-start">
+      {% with job=_job_demo %}{% include "components/swipe_card.html" %}{% endwith %}
+    </div>
+    <h4 class="text-xs uppercase tracking-wide text-slate-500 mt-6 mb-2">swipe_card — swiping right (APPLY stamp)</h4>
+    <div class="flex justify-start">
+      {% with job=_job_demo, swiping_dir="right" %}{% include "components/swipe_card.html" %}{% endwith %}
+    </div>
+  </section>
+  <section id="batch-8-discover-review" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">8 · Discover · review &amp; apply (6)</h2>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">apply_topbar</h3>
+    <div class="border border-slate-800 rounded-lg overflow-hidden max-w-5xl">
+      {% with job={"id": 42, "company": "Stripe", "company_initial": "S", "company_color": "bg-purple-600", "role": "Senior ML Engineer", "team": "Atlas", "location": "San Francisco", "salary_range": "$240-290k", "equity_pct": "0.05", "jd_url": "https://stripe.com/jobs/listing/42", "score": 86}, application={"id": 99} %}
+        {% include "components/apply_topbar.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">warm_intro_card</h3>
+    <div class="max-w-md">
+      {% with contact={"name": "Priya", "title": "Sr ML Engineer", "company": "Stripe", "linkedin_degree": "1st"}, referrals_this_year=4 %}
+        {% include "components/warm_intro_card.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">tailored_bullet_row — selected + excluded</h3>
+    <div class="max-w-3xl bg-slate-900 border border-slate-800 rounded-lg p-3 flex flex-col">
+      {% with bullet={"id": 1, "text": "Built Intuit's ML personalization platform...", "tags": ["ai-ml", "platform"]}, selected=True, trimmed_line="Built Intuit's ML personalization platform; +23% homepage CTR / $4.2M revenue", chips=["jd", "scale", "personalization"] %}
+        {% include "components/tailored_bullet_row.html" %}
+      {% endwith %}
+      {% with bullet={"id": 2, "text": "Owned Airflow pipelines and PyTorch ranking models", "tags": ["backend", "data-eng"]}, selected=True, trimmed_line="Owned end-to-end ML platform: Airflow + PyTorch + Go inference at p95 200ms", chips=["jd", "edited for jd", "platform"] %}
+        {% include "components/tailored_bullet_row.html" %}
+      {% endwith %}
+      {% with bullet={"id": 3, "text": "Mentored 4 engineers", "tags": ["leadership"]}, selected=False, trimmed_line="Mentored 4 engineers through the IC4 ladder; 2 promoted in 2024", chips=["older role", "duplicate signal"] %}
+        {% include "components/tailored_bullet_row.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">cover_letter_section — view + edit modes</h3>
+    <div class="grid sm:grid-cols-2 gap-4 max-w-4xl">
+      {% with application_id=99, section="intro", label="INTRO", text="The way Atlas is rebuilding ranking from first principles is exactly the kind of problem I look for. After eight years in personalization, I want to ship at this scale of leverage." %}
+        {% include "components/cover_letter_section.html" %}
+      {% endwith %}
+      {% with application_id=99, section="why_company", label="WHY STRIPE", text="Stripe's bet on infrastructure for the rest of the economy resonates with how I think about platform work.", mode="edit" %}
+        {% include "components/cover_letter_section.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">screener_question_card — three sources</h3>
+    <div class="grid sm:grid-cols-2 gap-3 max-w-4xl">
+      {% with answer={"id": 1, "question": "Why are you interested in this role?", "body": "Atlas is rebuilding ranking from first principles, and that's exactly the kind of problem I want to ship next.", "source": "drafted", "reviewed_at": None} %}
+        {% include "components/screener_question_card.html" %}
+      {% endwith %}
+      {% with answer={"id": 2, "question": "Earliest start date?", "body": "June 1, 2026 (current notice period: 2 weeks)", "source": "auto", "reviewed_at": "2026-04-25"} %}
+        {% include "components/screener_question_card.html" %}
+      {% endwith %}
+      {% with answer={"id": 3, "question": "Do you require visa sponsorship?", "body": "Yes — H1B with i-140 pending.", "source": "user", "reviewed_at": "2026-04-25"} %}
+        {% include "components/screener_question_card.html" %}
+      {% endwith %}
+      {% with answer={"id": 4, "question": "How would you approach building a real-time ranking pipeline at our scale?", "body": "I'd start by separating offline training from online inference: train candidate generators and rerankers in PyTorch on a feature store backed by S3 + Iceberg, then serve predictions through a Go inference layer that hydrates features at request time. Logging and shadow traffic at every stage.", "source": "drafted", "reviewed_at": None} %}
+        {% include "components/screener_question_card.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">apply_action_bar — enabled + disabled</h3>
+    <div class="space-y-4 max-w-5xl">
+      <div class="border border-slate-800 rounded-lg overflow-hidden">
+        {% with application={"id": 99}, screener_count=3, unreviewed_count=0, cost_estimate_usd=0.12, board_label="greenhouse.io" %}
+          {% include "components/apply_action_bar.html" %}
+        {% endwith %}
+      </div>
+      <div class="border border-slate-800 rounded-lg overflow-hidden">
+        {% with application={"id": 99}, screener_count=3, unreviewed_count=2, cost_estimate_usd=0.12, board_label="greenhouse.io" %}
+          {% include "components/apply_action_bar.html" %}
+        {% endwith %}
+      </div>
+    </div>
+  </section>
+  <section id="batch-9-tracking" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">9 · Tracking (8)</h2>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">view_toggle — board / list</h3>
+    <div class="flex gap-3">
+      {% with current_view="board" %}{% include "components/view_toggle.html" %}{% endwith %}
+      {% with current_view="list" %}{% include "components/view_toggle.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">provider_chip — connected + disconnected</h3>
+    <div class="flex flex-wrap gap-2">
+      {% with provider="gmail", icon="mail", connected=True, sub="synced 2m ago" %}{% include "components/provider_chip.html" %}{% endwith %}
+      {% with provider="linkedin", icon="linkedin", connected=True, sub="@shyampadia · 487 connections" %}{% include "components/provider_chip.html" %}{% endwith %}
+      {% with provider="outlook", icon="mail", connected=False %}{% include "components/provider_chip.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">integration_card — all states</h3>
+    <div class="grid sm:grid-cols-2 gap-3 max-w-3xl">
+      {% with name="Gmail", icon="mail", state="connected", account="shyam@gmail.com", disconnect_url="/api/v1/integrations/gmail/disconnect" %}
+        {% include "components/integration_card.html" %}{% endwith %}
+      {% with name="Outlook", icon="mail", state="not_connected", connect_url="/api/v1/integrations/outlook/connect" %}
+        {% include "components/integration_card.html" %}{% endwith %}
+      {% with name="Calendar", icon="calendar", state="expired", account="shyam@gmail.com", connect_url="/api/v1/integrations/calendar/reconnect" %}
+        {% include "components/integration_card.html" %}{% endwith %}
+      {% with name="LinkedIn", icon="linkedin", state="error", description="Token revoked", connect_url="/api/v1/integrations/linkedin/connect" %}
+        {% include "components/integration_card.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">followup_banner</h3>
+    <div class="max-w-2xl">
+      {% with count=4, items=[
+        {"contact": {"name": "Priya · Linear", "initial": "L", "color": "bg-violet-600"}, "application": {"company": "Linear"}, "last_touch_label": "sent 3d ago · no reply", "action_label": "Draft reply", "action_url": "/outreach"},
+        {"contact": {"name": "Andrea · Figma", "initial": "F", "color": "bg-rose-600"}, "application": {"company": "Figma"}, "last_touch_label": "asked you back 2d ago", "action_label": "Reply", "action_url": "/outreach"},
+        {"contact": {"name": "Anthropic Talent", "initial": "A", "color": "bg-orange-500"}, "application": {"company": "Anthropic"}, "last_touch_label": "sent 7d ago · no reply", "action_label": "Send nudge", "action_url": "/outreach"},
+      ] %}{% include "components/followup_banner.html" %}{% endwith %}
+    </div>
+
+    {% set _apps_demo = [
+      {"id": 101, "company": "Stripe", "company_initial": "S", "company_color": "bg-purple-600", "role": "Sr ML Engineer", "team": "Atlas", "score": 86, "salary_range": "$240-290k", "status": "APPLIED", "context_chip": "screen Apr 30", "context_chip_tone": "indigo"},
+      {"id": 102, "company": "Linear", "company_initial": "L", "company_color": "bg-violet-600", "role": "Founding Engineer", "score": 78, "salary_range": "$220-280k", "status": "RECRUITER_SCREEN", "context_chip": "referral · Priya", "context_chip_tone": "emerald"},
+      {"id": 103, "company": "Figma", "company_initial": "F", "company_color": "bg-rose-600", "role": "Sr SWE · platform", "score": 81, "salary_range": "$260-320k", "status": "ONSITE_LOOP", "context_chip": "final round May 8", "context_chip_tone": "amber"},
+      {"id": 104, "company": "Anthropic", "company_initial": "A", "company_color": "bg-orange-500", "role": "Founding ML", "score": 91, "salary_range": "$300-380k", "status": "OFFER", "context_chip": "verbal · Apr 28", "context_chip_tone": "emerald"},
+    ] %}
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">tracking_card — variants</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {% for a in _apps_demo %}{% with application=a %}{% include "components/tracking_card.html" %}{% endwith %}{% endfor %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">stage_column — single column</h3>
+    <div class="max-w-xs">
+      {% with status="APPLIED", cards=_apps_demo[:2], column_id="demo-col-applied" %}{% include "components/stage_column.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">tracking_list_row — table view</h3>
+    <div class="max-w-5xl border border-slate-800 rounded-lg overflow-x-auto">
+      <table class="w-full">
+        <thead class="bg-slate-900">
+          <tr class="text-xs uppercase tracking-wide text-slate-400">
+            <th class="px-4 py-2 text-left font-medium">Company</th>
+            <th class="px-4 py-2 text-left font-medium">Role</th>
+            <th class="px-4 py-2 text-left font-medium">Stage</th>
+            <th class="px-4 py-2 text-left font-medium">Score</th>
+            <th class="px-4 py-2 text-left font-medium">Salary</th>
+            <th class="px-4 py-2 text-left font-medium">Last activity</th>
+            <th class="px-4 py-2 text-left font-medium">Source</th>
+            <th class="px-2 py-2 text-right font-medium"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in _apps_demo %}
+            {% with application=dict(a, last_activity="2d ago", source="manual") %}
+              {% include "components/tracking_list_row.html" %}
+            {% endwith %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">tracking_board — 4 columns + closed toggle</h3>
+    <div class="max-w-full">
+      {% with columns=[
+        {"status": "APPLIED", "cards": [_apps_demo[0]]},
+        {"status": "RECRUITER_SCREEN", "cards": [_apps_demo[1]]},
+        {"status": "ONSITE_LOOP", "cards": [_apps_demo[2]]},
+        {"status": "OFFER", "cards": [_apps_demo[3]]},
+      ], show_closed=False, closed_count=6 %}
+        {% include "components/tracking_board.html" %}
+      {% endwith %}
+    </div>
+  </section>
+  <section id="batch-10-outreach" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">10 · Outreach (6)</h2>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">outreach_app_row — selected + unselected</h3>
+    <div class="max-w-md bg-slate-900 border border-slate-800 rounded-lg p-2 flex flex-col">
+      {% with application={"id": 1, "company": "Stripe", "company_initial": "S", "company_color": "bg-purple-600", "role": "Sr ML Engineer", "team": "Atlas", "contacts_count": 3, "last_touch": "sent 5d ago", "status_label": "recruiter screen", "outreach_engagement": "awaiting_reply"}, selected=True %}
+        {% include "components/outreach_app_row.html" %}{% endwith %}
+      {% with application={"id": 2, "company": "Linear", "company_initial": "L", "company_color": "bg-violet-600", "role": "Founding Engineer", "contacts_count": 2, "last_touch": "replied 2d ago", "status_label": "recruiter screen", "outreach_engagement": "call_booked"} %}
+        {% include "components/outreach_app_row.html" %}{% endwith %}
+      {% with application={"id": 3, "company": "Anthropic", "company_initial": "A", "company_color": "bg-orange-500", "role": "Founding ML", "contacts_count": 1, "last_touch": "referral confirmed", "status_label": "applied", "outreach_engagement": "referred"} %}
+        {% include "components/outreach_app_row.html" %}{% endwith %}
+      {% with application={"id": 4, "company": "Vercel", "company_initial": "V", "company_color": "bg-slate-800", "role": "Sr Designer", "contacts_count": 4, "last_touch": "sent 7d ago", "status_label": "applied", "outreach_engagement": "no_reply_7d"} %}
+        {% include "components/outreach_app_row.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">recommended_move_card</h3>
+    <div class="max-w-2xl">
+      {% with application={"id": 1, "company": "Stripe"}, contact={"name": "Priya", "title": "Sr ML Engineer", "company": "Stripe"}, tone_recommendation="warm + direct", last_touch_relative="5d ago", context="they asked you back · expect referral", draft_body="Hey Priya — quick nudge on the Atlas role. The team's challenge of rebuilding ranking from first principles is the kind of problem I want to ship next, and your earlier note about the team's bias toward systems-first ML really resonated. Happy to share a one-pager on how I'd structure week 1 if helpful." %}
+        {% include "components/recommended_move_card.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">outreach_message_card — draft + sent</h3>
+    <div class="grid sm:grid-cols-2 gap-3 max-w-4xl">
+      {% with message={"id": 1, "body": "Hey Priya — quick nudge on the Atlas role. Excited to chat.", "status": "DRAFT", "ai_generated": True, "contact_name": "Priya"}, editable=True %}
+        {% include "components/outreach_message_card.html" %}
+      {% endwith %}
+      {% with message={"id": 2, "body": "Got it — sending you to the hiring manager directly. They'll reach out tomorrow.", "status": "RESPONDED", "ai_generated": False, "contact_name": "Priya", "sent_at": "Apr 24", "responded_at": "Apr 25"} %}
+        {% include "components/outreach_message_card.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">contact_card — all 4 states</h3>
+    <div class="max-w-2xl bg-slate-900 border border-slate-800 rounded-lg p-2 flex flex-col">
+      {% with contact={"name": "Priya R.", "initial": "PR", "color": "bg-purple-600", "title": "Sr ML Engineer", "team": "Atlas / Stripe", "school": "CMU", "mutuals_count": 14, "degree": "1st", "last_activity": "replied 3d ago — referred you"}, state="referred_you" %}
+        {% include "components/contact_card.html" %}{% endwith %}
+      {% with contact={"name": "Andrea W.", "initial": "AW", "color": "bg-rose-600", "title": "Recruiter", "team": "Talent / Figma", "school": "USC", "mutuals_count": 3, "degree": "1st", "last_activity": "sent 5d ago · awaiting reply"}, state="awaiting_reply" %}
+        {% include "components/contact_card.html" %}{% endwith %}
+      {% with contact={"name": "Anthropic Recruiting", "initial": "AR", "color": "bg-orange-500", "title": "Talent ops", "team": "Anthropic", "mutuals_count": 0, "degree": "2nd · via Priya", "last_activity": "sent 7d ago · no reply"}, state="no_reply_7d" %}
+        {% include "components/contact_card.html" %}{% endwith %}
+      {% with contact={"name": "Eng Manager · Vercel", "initial": "EV", "color": "bg-slate-700", "title": "Engineering Manager", "team": "Platform / Vercel", "school": None, "mutuals_count": 0, "degree": "3rd"}, state="cold" %}
+        {% include "components/contact_card.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">linkedin_status_chip — connected / disconnected / rate-limited</h3>
+    <div class="flex flex-wrap gap-2">
+      {% with connected=True, handle="shyampadia", dms_today=7, connections=487 %}{% include "components/linkedin_status_chip.html" %}{% endwith %}
+      {% with connected=False %}{% include "components/linkedin_status_chip.html" %}{% endwith %}
+      {% with connected=True, handle="shyampadia", dms_today=50, connections=487 %}{% include "components/linkedin_status_chip.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">outreach_timeline</h3>
+    <div class="max-w-2xl bg-slate-900 border border-slate-800 rounded-lg">
+      {% with events=[
+        {"kind": "referral", "description": "Priya referred you to the hiring manager", "relative_time": "3d ago", "payload_preview": "via warm intro"},
+        {"kind": "linkedin_dm", "description": "You sent a follow-up to Priya", "relative_time": "5d ago", "payload_preview": "Hey Priya — quick nudge on Atlas..."},
+        {"kind": "email", "description": "Andrea (Figma Talent) replied", "relative_time": "1w ago", "payload_preview": "Got time for a 30-min chat next week?"},
+        {"kind": "interview", "description": "Recruiter screen booked with Anthropic", "relative_time": "2w ago", "payload_preview": "Tue · 09:00 PT · 30m"},
+        {"kind": "note", "description": "Marked Vercel application as Awaiting Reply", "relative_time": "3w ago"},
+      ] %}
+        {% include "components/outreach_timeline.html" %}
+      {% endwith %}
+    </div>
+  </section>
+  <section id="batch-11-settings" class="mt-12">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">11 · Settings (7)</h2>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">settings_tabs — active state</h3>
+    <div class="border border-slate-800 rounded-t-lg overflow-hidden">
+      {% with current_tab="llm-provider" %}{% include "components/settings_tabs.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">provider_card — selected + unselected + LOCAL</h3>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 max-w-5xl">
+      {% with provider={"id": "anthropic", "name": "Anthropic Claude", "kind": "CLOUD", "description": "Recommended · best resume bullet quality", "model_default": "claude-3.5-sonnet"}, selected=True %}
+        {% include "components/provider_card.html" %}{% endwith %}
+      {% with provider={"id": "openai", "name": "OpenAI GPT", "kind": "CLOUD", "description": "GPT-4o · faster, slightly cheaper", "model_default": "gpt-4o"}, selected=False %}
+        {% include "components/provider_card.html" %}{% endwith %}
+      {% with provider={"id": "ollama", "name": "Ollama (Local)", "kind": "LOCAL", "description": "Llama 3.1 70B on your machine · private", "model_default": "llama3.1:70b"}, selected=False %}
+        {% include "components/provider_card.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">cost_card — 3 metrics</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl">
+      {% with label="THIS MONTH", value="$3.42", sub="≈412k tokens" %}{% include "components/cost_card.html" %}{% endwith %}
+      {% with label="AVG / GENERATION", value="$0.04", sub="resume + cover letter" %}{% include "components/cost_card.html" %}{% endwith %}
+      {% with label="RATE LIMIT", value="50 / min", sub="tier 2" %}{% include "components/cost_card.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">deployment_status_card — both modes</h3>
+    <div class="space-y-3 max-w-5xl">
+      {% with mode="self-hosted", status="active", version="0.4.2", meta="docker-compose · uptime 14d 6h · last restart Apr 14", update_available_version="0.4.3" %}
+        {% include "components/deployment_status_card.html" %}{% endwith %}
+      {% with mode="cloud", status="active", version="0.4.2", meta="region us-west-2 · plan $15/mo · billing May 14" %}
+        {% include "components/deployment_status_card.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">log_tail — streaming</h3>
+    <div class="max-w-4xl">
+      {% with log_path="~/.naavik/logs · live tail", streaming=True, lines=[
+        {"timestamp": "14:02:41", "level": "INFO",  "message": "discover.fetch  · pulled 24 jobs from greenhouse · 312ms"},
+        {"timestamp": "14:02:41", "level": "INFO",  "message": "discover.match  · scored 24 jobs · avg fit 71%"},
+        {"timestamp": "14:03:02", "level": "INFO",  "message": "apply.submit    · zed industries / sr fullstack · ok · 4.2s"},
+        {"timestamp": "14:03:18", "level": "INFO",  "message": "resume.tailor   · llm=claude-3.5-sonnet · 412ms · 1184 tok"},
+        {"timestamp": "14:03:18", "level": "INFO",  "message": "cover.draft     · llm=claude-3.5-sonnet · 689ms · 2104 tok"},
+        {"timestamp": "14:04:55", "level": "WARN",  "message": "tracking.imap   · gmail oauth token refreshing · 1 retry"},
+        {"timestamp": "14:05:14", "level": "ERROR", "message": "apply.submit    · vercel / sr designer · captcha required → moved to review queue"},
+        {"timestamp": "14:05:30", "level": "INFO",  "message": "outreach.send   · 3 linkedin DMs queued · sending in 4m"},
+        {"timestamp": "14:05:48", "level": "INFO",  "message": "db.snapshot     · ~/.naavik/data/snapshots/2026-04-29.sql.gz"},
+      ] %}
+        {% include "components/log_tail.html" %}
+      {% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">on_disk_card</h3>
+    <div class="max-w-4xl">
+      {% with paths=[
+        {"label": "DATA DIR",  "path": "~/.naavik/data",         "sub": "12 MB · 47 jobs · 12 applications", "icon": "database"},
+        {"label": "SECRETS",   "path": "~/.naavik/secrets.enc",   "sub": "aes-256-gcm · 3 keys",            "icon": "lock"},
+        {"label": "CONFIG",    "path": "~/.naavik/config.toml",   "sub": "last edited 4d ago",              "icon": "file-text"},
+        {"label": "SNAPSHOTS", "path": "~/.naavik/snapshots/",    "sub": "12 daily · auto-prune at 30",     "icon": "archive"},
+      ] %}{% include "components/on_disk_card.html" %}{% endwith %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">connection_status_card — ok + error</h3>
+    <div class="grid sm:grid-cols-2 gap-3 max-w-3xl">
+      {% with ok=True, latency_ms=412, model="claude-3.5-sonnet-20250219", provider="Anthropic" %}
+        {% include "components/connection_status_card.html" %}{% endwith %}
+      {% with ok=False, error_code=401, error_message="Unauthorized", provider="Anthropic API" %}
+        {% include "components/connection_status_card.html" %}{% endwith %}
+    </div>
+  </section>
+  <section id="batch-12-skeletons" class="mt-12 mb-20">
+    <h2 class="text-xl font-semibold text-slate-50 mb-4">12 · Skeletons (5)</h2>
+    <p class="text-sm text-slate-400 mb-4">Skeletons render with the <code class="font-mono text-cyan-400">.htmx-indicator</code> class so HTMX shows them during in-flight requests. Outer dimensions match each loaded counterpart. Demo with the indicator class stripped so they render unconditionally.</p>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">swipe_card_skeleton</h3>
+    <div class="demo-skeleton flex justify-start">
+      {% include "components/swipe_card_skeleton.html" %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">tracking_card_skeleton</h3>
+    <div class="demo-skeleton grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-4xl">
+      {% include "components/tracking_card_skeleton.html" %}
+      {% include "components/tracking_card_skeleton.html" %}
+      {% include "components/tracking_card_skeleton.html" %}
+      {% include "components/tracking_card_skeleton.html" %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">priority_action_row_skeleton</h3>
+    <div class="demo-skeleton bg-slate-900 border border-slate-800 rounded-lg p-2 flex flex-col max-w-3xl">
+      {% include "components/priority_action_row_skeleton.html" %}
+      {% include "components/priority_action_row_skeleton.html" %}
+      {% include "components/priority_action_row_skeleton.html" %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">email_signal_row_skeleton</h3>
+    <div class="demo-skeleton max-w-md bg-slate-900 border border-slate-800 rounded-lg p-3 flex flex-col">
+      {% include "components/email_signal_row_skeleton.html" %}
+      {% include "components/email_signal_row_skeleton.html" %}
+      {% include "components/email_signal_row_skeleton.html" %}
+      {% include "components/email_signal_row_skeleton.html" %}
+    </div>
+
+    <h3 class="text-sm uppercase tracking-wide text-slate-500 mt-6 mb-3">bullet_edit_row_skeleton</h3>
+    <div class="demo-skeleton max-w-3xl bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-1">
+      {% include "components/bullet_edit_row_skeleton.html" %}
+      {% include "components/bullet_edit_row_skeleton.html" %}
+      {% include "components/bullet_edit_row_skeleton.html" %}
+    </div>
+  </section>
+</div>
+{% endblock %}

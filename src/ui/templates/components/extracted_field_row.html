@@ -1,0 +1,26 @@
+{#
+  extracted_field_row.html — one row of "Extracted so far · AI · 4 of 6 fields".
+
+  Args:
+    id          : DOM id (required, used as OOB swap target)
+    label       : field name (e.g. "NAME", "TITLE")
+    value       : extracted value (omitted while extracting)
+    confidence  : float 0–1 (omitted while extracting)
+    state       : "extracted" / "extracting" / "queued" (default "extracted")
+#}
+{% set state = state | default("extracted") %}
+<div id="{{ id }}" class="flex items-baseline gap-3 py-1.5 border-b border-slate-800/50 last:border-0">
+  <span class="font-mono text-[11px] uppercase tracking-wide text-slate-500 w-20 shrink-0">{{ label }}</span>
+  <span class="text-sm flex-1 min-w-0">
+    {% if state == "extracted" %}
+      <span class="text-slate-200">{{ value }}</span>
+    {% elif state == "extracting" %}
+      <span class="inline-block h-3.5 w-48 max-w-full rounded nk-shimmer" aria-label="Extracting"></span>
+    {% else %}
+      <span class="text-slate-600 italic">queued</span>
+    {% endif %}
+  </span>
+  {% if state == "extracted" and confidence is not none %}
+    <span class="font-mono text-xs text-emerald-400 ml-auto tabular-nums shrink-0">{{ "%.2f" | format(confidence) }}</span>
+  {% endif %}
+</div>

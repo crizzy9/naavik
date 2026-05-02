@@ -1,0 +1,34 @@
+{#
+  match_breakdown.html — per-dimension match bars.
+
+  Args:
+    breakdown : dict {tag: float} — values 0.0–1.0
+    overall   : float (optional) — overall score for header
+    title     : header label override (default uses overall)
+#}
+<div class="flex flex-col gap-2">
+  {% if overall is not none and overall is defined %}
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">
+      MATCH · <span class="font-mono text-slate-200 tabular-nums">{{ "%.2f" | format(overall | float) }}</span>
+    </div>
+  {% elif title %}
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">{{ title }}</div>
+  {% endif %}
+  {% for tag, val in breakdown.items() %}
+    {% set _v = val | float %}
+    {% if _v >= 0.8 %}{% set _color = "bg-emerald-400" %}
+    {% elif _v >= 0.6 %}{% set _color = "bg-indigo-400" %}
+    {% elif _v >= 0.4 %}{% set _color = "bg-amber-400" %}
+    {% else %}{% set _color = "bg-rose-400" %}
+    {% endif %}
+    <div class="flex items-center gap-2">
+      <span class="font-mono text-xs text-slate-300 w-20 truncate shrink-0">{{ tag }}</span>
+      <div class="flex-1">
+        {% with value=_v, fill_color=_color, height="thin", aria_label="match " ~ tag %}
+          {% include "components/progress_bar.html" %}
+        {% endwith %}
+      </div>
+      <span class="font-mono text-xs text-slate-300 tabular-nums shrink-0 w-10 text-right">{{ "%.2f" | format(_v) }}</span>
+    </div>
+  {% endfor %}
+</div>

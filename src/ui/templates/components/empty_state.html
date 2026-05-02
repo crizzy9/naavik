@@ -1,0 +1,25 @@
+{#
+  empty_state.html — empty-state placeholder per DESIGN.md § Voice & Tone.
+
+  Args:
+    icon        : Lucide icon name (required)
+    line        : one-line description (required)
+    cta_label   : optional CTA button label
+    cta_url     : optional CTA target
+    cta_method  : "get" / "post" (default: "get")
+#}
+{% set cta_method = cta_method | default("get") %}
+<div class="flex flex-col items-center text-center gap-3.5 px-6 py-12">
+  <div class="h-12 w-12 rounded-xl bg-slate-800 flex items-center justify-center">
+    <i data-lucide="{{ icon }}" class="h-6 w-6 text-slate-500" stroke-width="1.5"></i>
+  </div>
+  <p class="text-sm text-slate-300 max-w-md">{{ line }}</p>
+  {% if cta_label and cta_url %}
+    {% if cta_method == "post" %}
+      <button type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              hx-post="{{ cta_url }}" hx-target="closest [data-empty-state-target]">{{ cta_label }}</button>
+    {% else %}
+      <a href="{{ cta_url }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">{{ cta_label }}</a>
+    {% endif %}
+  {% endif %}
+</div>

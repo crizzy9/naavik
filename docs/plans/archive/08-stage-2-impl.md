@@ -1,9 +1,10 @@
 ---
-Status: APPROVED
+Status: EXECUTED
 Type: implementation
 Authored: 2026-04-30
 Last updated: 2026-05-01
 Approved: 2026-05-01
+Executed: 2026-05-01
 Depends on: 03-component-catalog (graduated → docs/design/COMPONENTS.md), 06-interactions-spec (graduated → docs/design/INTERACTIONS.md)
 Follow-up: switch CDN-pinned libraries (Lucide / HTMX / Sortable / Tailwind) to bundled deps once a real frontend build pipeline lands — recorded as a deferred concern, no active plan yet.
 ---

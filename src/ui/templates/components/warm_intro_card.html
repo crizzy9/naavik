@@ -1,0 +1,29 @@
+{#
+  warm_intro_card.html — warm-intro pill card on Discover · review left column.
+
+  Args:
+    contact              : dict — name, title, company, linkedin_degree
+    referrals_this_year  : int — "She's referred N hires this year"
+#}
+{% set c = contact %}
+<aside class="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+  <header class="flex items-baseline gap-1.5 text-[11px] uppercase tracking-wide text-emerald-300 font-medium">
+    <i data-lucide="users-round" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+    WARM INTRO AVAILABLE
+  </header>
+  <p class="mt-2 text-sm text-slate-200 leading-relaxed">
+    <span class="font-medium text-slate-100">{{ c.name }}</span>
+    ({{ c.title }} at {{ c.company }})
+    is a <span class="font-mono">{{ c.linkedin_degree | default("1st") }}</span> LinkedIn connection.
+    {% if referrals_this_year %}
+      They've referred <span class="font-mono tabular-nums">{{ referrals_this_year }}</span> hires this year.
+    {% endif %}
+  </p>
+  <div class="mt-3 flex items-center gap-2 flex-wrap">
+    <button type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+      <i data-lucide="sparkles" class="h-4 w-4 text-cyan-200" stroke-width="1.5"></i>
+      Draft intro
+    </button>
+    <a href="/outreach" class="text-xs text-emerald-200 hover:text-emerald-100">Open in outreach →</a>
+  </div>
+</aside>

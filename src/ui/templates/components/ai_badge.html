@@ -1,0 +1,21 @@
+{#
+  ai_badge.html — cyan-tinted badge labeling AI-generated CONTENT.
+  **Reserved for content; never on tag chips, status badges, or metadata.**
+
+  Args:
+    qualifier : optional tone qualifier appended after `·` (e.g. "enthusiastic",
+                "claude-3.5-sonnet")
+    variant   : "badge" (default inline chip) / "draft" (larger card-label form)
+#}
+{% set variant = variant | default("badge") %}
+{% if variant == "draft" %}
+  {% set _wrap = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono uppercase tracking-wide bg-cyan-400/10 text-cyan-200" %}
+  {% set _icon = "h-3.5 w-3.5" %}
+{% else %}
+  {% set _wrap = "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono uppercase tracking-wide bg-cyan-400/10 text-cyan-300" %}
+  {% set _icon = "h-3 w-3" %}
+{% endif %}
+<span class="{{ _wrap }}">
+  <i data-lucide="sparkles" class="{{ _icon }} text-cyan-400" stroke-width="1.5"></i>
+  <span>AI{% if qualifier %} · <span class="lowercase">{{ qualifier }}</span>{% endif %}</span>
+</span>

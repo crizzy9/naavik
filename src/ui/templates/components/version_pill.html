@@ -1,0 +1,12 @@
+{#
+  version_pill.html — top-left version + deployment-mode pill on auth shells.
+
+  Args:
+    version : "0.4.2"
+    mode    : "self-hosted" / "cloud"
+#}
+{% set version = version | default("0.4.2") %}
+{% set mode = mode | default("self-hosted") %}
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-900 border border-slate-800 font-mono text-[11px] text-slate-400">
+  v{{ version }} · {{ mode }}
+</span>

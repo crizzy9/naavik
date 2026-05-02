@@ -1,0 +1,45 @@
+{#
+  selection_override.html — two mutually-exclusive option cards (radios) for
+  bullet selection_override. Default: neither selected = AI auto-decides.
+
+  Args:
+    current : "always_include" / "never_include" / null (or none)
+    name    : form field name (default: "selection_override")
+#}
+{% set name = name | default("selection_override") %}
+<div class="flex flex-col gap-2">
+  <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition
+                {% if current == 'always_include' %}border-indigo-500/40 bg-indigo-500/5
+                {% else %}border-slate-700 hover:border-slate-600{% endif %}">
+    <input type="radio" name="{{ name }}" value="always_include"
+           {% if current == 'always_include' %}checked{% endif %}
+           class="mt-0.5 accent-indigo-500">
+    <div class="flex-1 min-w-0">
+      <div class="text-sm font-medium text-slate-100">Always include this bullet</div>
+      <div class="text-xs text-slate-400 mt-0.5 leading-relaxed">Pin it on every tailored resume regardless of JD match.</div>
+    </div>
+    <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono uppercase tracking-wide shrink-0">auto</span>
+  </label>
+
+  <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition
+                {% if current == 'never_include' %}border-indigo-500/40 bg-indigo-500/5
+                {% else %}border-slate-700 hover:border-slate-600{% endif %}">
+    <input type="radio" name="{{ name }}" value="never_include"
+           {% if current == 'never_include' %}checked{% endif %}
+           class="mt-0.5 accent-indigo-500">
+    <div class="flex-1 min-w-0">
+      <div class="text-sm font-medium text-slate-100">Never include this bullet</div>
+      <div class="text-xs text-slate-400 mt-0.5 leading-relaxed">Keep it for context but hide it from outgoing applications.</div>
+    </div>
+    <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono uppercase tracking-wide shrink-0">auto</span>
+  </label>
+
+  {# Implicit "neither selected = AI auto-decides per JD" — clearable via the cancel link below. #}
+  {% if current %}
+    <button type="button"
+            class="self-start text-xs text-slate-400 hover:text-slate-200 transition"
+            hx-on:click="this.closest('div').querySelectorAll('input[type=radio]').forEach(r => r.checked = false)">
+      Reset to auto
+    </button>
+  {% endif %}
+</div>

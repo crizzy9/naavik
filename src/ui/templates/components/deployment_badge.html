@@ -1,0 +1,14 @@
+{#
+  deployment_badge.html — sidebar-bottom + Settings-Deployment-tab badge.
+  Same output as the `deployment_badge(mode)` macro in `_macros.html`, kept as an
+  include too so partial-only callers work uniformly.
+
+  Args:
+    mode : "self-hosted" / "cloud"
+#}
+{% set mode = mode | default("self-hosted") %}
+<span class="inline-flex px-1.5 py-0.5 rounded font-mono text-[10px] uppercase tracking-wide
+            {% if mode == 'cloud' %}bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30
+            {% else %}bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30{% endif %}">
+  {{ mode }}
+</span>

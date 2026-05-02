@@ -1,0 +1,24 @@
+{#
+  avatar.html — user avatar (initials, gradient) or company-letter tile.
+
+  Args:
+    kind            : "user" / "company" (required) — drives default tone
+    text            : 1–2 chars (initials for user; first letter for company)
+    size            : "xs" / "sm" / "md" / "lg" / "xl"  →  24/28/36/48/64 px
+    color_override  : Tailwind color class (e.g. "bg-purple-600") to override default
+    shape           : "circle" / "square" (default: "square" → rounded-lg)
+#}
+{% set size = size | default("md") %}
+{% set shape = shape | default("square") %}
+{% set _wh = {"xs": "h-6 w-6 text-[10px]", "sm": "h-7 w-7 text-[11px]", "md": "h-9 w-9 text-sm", "lg": "h-12 w-12 text-base", "xl": "h-16 w-16 text-xl"} %}
+{% set _shape = "rounded-full" if shape == "circle" else "rounded-lg" %}
+{% if color_override %}
+  {% set _bg = color_override %}
+{% elif kind == "user" %}
+  {% set _bg = "bg-gradient-to-br from-purple-600 to-indigo-600" %}
+{% else %}
+  {% set _bg = "bg-slate-700" %}
+{% endif %}
+<span class="inline-flex items-center justify-center font-semibold text-white shrink-0 {{ _wh.get(size, _wh['md']) }} {{ _shape }} {{ _bg }}" aria-label="{{ kind }} avatar {{ text }}">
+  {{ text }}
+</span>

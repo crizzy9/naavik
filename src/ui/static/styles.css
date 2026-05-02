@@ -1,0 +1,176 @@
+/* Naavik supplementary stylesheet.
+ *
+ * Tailwind CDN (cdn.tailwindcss.com) handles utilities. This file is for the
+ * handful of things Tailwind can't cleanly express:
+ *   1. Animation keyframes (`nk-pulse`, `nk-shimmer`, `nk-blink`)
+ *   2. The tag-picker `:has(input:checked)` selected state
+ *   3. HTMX loading-state utilities (companion to `.htmx-indicator`)
+ *   4. Mobile sidebar drawer rules (DaisyUI removed in plan 08)
+ */
+
+/* ------------------------------------------------------------------ */
+/* 1. Keyframes                                                       */
+/* ------------------------------------------------------------------ */
+
+@keyframes nk-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes nk-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+@keyframes nk-blink {
+  0%, 60% { opacity: 1; }
+  61%, 100% { opacity: 0.25; }
+}
+
+.nk-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    rgba(30, 41, 59, 0) 0%,
+    rgba(51, 65, 85, 0.6) 50%,
+    rgba(30, 41, 59, 0) 100%
+  );
+  background-size: 800px 100%;
+  animation: nk-shimmer 1.5s linear infinite;
+}
+
+.nk-pulse {
+  animation: nk-pulse 2s ease-in-out infinite;
+}
+
+.nk-blink {
+  animation: nk-blink 1.2s linear infinite;
+}
+
+/* ------------------------------------------------------------------ */
+/* 2. Tag picker selected state via :has()                            */
+/* All evergreen browsers since Jan 2023. No IE / pre-2023-Safari.    */
+/* ------------------------------------------------------------------ */
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  background-color: rgb(30 41 59);   /* slate-800 */
+  color: rgb(203 213 225);           /* slate-300 */
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.tag-chip:hover {
+  background-color: rgb(51 65 85);   /* slate-700 */
+}
+
+.tag-chip:has(input:checked) {
+  background-color: rgba(99, 102, 241, 0.15);  /* indigo-500/15 */
+  color: rgb(196 181 253);                     /* indigo-200-ish */
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4);
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. HTMX loading utilities                                          */
+/* HTMX adds .htmx-request to the triggering element during requests. */
+/* ------------------------------------------------------------------ */
+
+.htmx-show-loading {
+  display: none;
+}
+
+.htmx-request .htmx-show-loading {
+  display: inline-flex;
+}
+
+.htmx-request .htmx-hide-loading {
+  display: none;
+}
+
+.htmx-progress {
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  border: none;
+  background-color: rgb(30 41 59);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.htmx-progress::-webkit-progress-bar {
+  background-color: rgb(30 41 59);
+}
+
+.htmx-progress::-webkit-progress-value {
+  background: linear-gradient(90deg, rgb(99 102 241), rgb(34 211 238));
+  transition: width 200ms ease;
+}
+
+.htmx-progress::-moz-progress-bar {
+  background: linear-gradient(90deg, rgb(99 102 241), rgb(34 211 238));
+}
+
+/* ------------------------------------------------------------------ */
+/* 4. Mobile sidebar drawer (DaisyUI replaced)                        */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 1023px) {
+  aside.sidebar {
+    transform: translateX(-100%);
+    transition: transform 250ms ease;
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.4);
+  }
+  body[data-sidebar-open="true"] aside.sidebar {
+    transform: translateX(0);
+  }
+  body[data-sidebar-open="true"] [data-sidebar-backdrop] {
+    display: block;
+  }
+}
+
+@media (min-width: 1024px) {
+  [data-sidebar-toggle], [data-sidebar-backdrop] { display: none !important; }
+}
+
+/* ------------------------------------------------------------------ */
+/* 5. Pointer-events helper for #toast-region                         */
+/* The region is `pointer-events-none` so it doesn't block clicks;    */
+/* individual toasts opt back in.                                     */
+/* ------------------------------------------------------------------ */
+
+#toast-region > * {
+  pointer-events: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* 6. Skeleton fixture override — only used by /_design/components.   */
+/* Forces .htmx-indicator to render unconditionally inside .demo-     */
+/* skeleton blocks for visual QA.                                     */
+/* ------------------------------------------------------------------ */
+
+.demo-skeleton .htmx-indicator {
+  display: block;
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* 7. <dialog> overrides — match DESIGN.md motion + tokens.           */
+/* ------------------------------------------------------------------ */
+
+dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+dialog[open] {
+  animation: nk-dialog-in 200ms ease-out;
+}
+
+@keyframes nk-dialog-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}

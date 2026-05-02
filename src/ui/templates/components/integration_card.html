@@ -1,0 +1,54 @@
+{#
+  integration_card.html — Settings/Tracking integration card.
+
+  Args:
+    name           : provider name (required)
+    icon           : Lucide icon (required)
+    state          : "connected" / "not_connected" / "expired" / "error"
+    account        : connected account label (optional)
+    connect_url    : OAuth start URL
+    disconnect_url : disconnect endpoint
+    description    : subtitle / sub-description
+#}
+{% set _icon_color = "text-rose-400" if name | lower == "gmail" else ("text-sky-400" if name | lower in ["outlook", "linkedin", "calendar"] else "text-slate-400") %}
+{% set _state_label_map = {"connected": "connected", "not_connected": "not connected", "expired": "expired", "error": "error"} %}
+{% set _state_class_map = {
+  "connected":     "text-emerald-300",
+  "not_connected": "text-slate-500",
+  "expired":       "text-amber-300",
+  "error":         "text-rose-300",
+} %}
+<div class="flex items-center gap-4 p-4 bg-slate-900 border border-slate-800 rounded-lg">
+  <div class="h-10 w-10 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
+    <i data-lucide="{{ icon }}" class="h-5 w-5 {{ _icon_color }}" stroke-width="1.5"></i>
+  </div>
+  <div class="flex-1 min-w-0">
+    <div class="text-sm font-medium text-slate-100">{{ name }}</div>
+    <div class="text-xs mt-0.5 truncate {{ _state_class_map.get(state, 'text-slate-500') }}">
+      {{ _state_label_map.get(state, state) }}
+      {% if account %} · <span class="font-mono text-slate-400">{{ account }}</span>{% endif %}
+      {% if description %} · <span class="text-slate-400">{{ description }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="shrink-0">
+    {% if state == "connected" %}
+      <button type="button" class="text-xs text-slate-400 hover:text-rose-300 px-3 py-1.5 rounded hover:bg-rose-500/10 transition"
+              {% if disconnect_url %}
+              hx-get="/_modal/confirm?title=Disconnect+{{ name }}%3F&message=Email+signal+ingestion+from+{{ name }}+will+stop.+You+can+reconnect+anytime.&action={{ disconnect_url }}&label=Disconnect&tone=danger&method=post"
+              hx-target="#modal-region" hx-swap="innerHTML"
+              {% endif %}>Disconnect</button>
+    {% elif state == "not_connected" %}
+      <a href="{{ connect_url | default('#') }}" hx-boost="false" class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-indigo-500 hover:bg-indigo-400 text-white font-medium transition">
+        <i data-lucide="plug" class="h-3.5 w-3.5" stroke-width="1.5"></i>Connect
+      </a>
+    {% elif state == "expired" %}
+      <a href="{{ connect_url | default('#') }}" hx-boost="false" class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-medium transition">
+        Reconnect
+      </a>
+    {% elif state == "error" %}
+      <a href="{{ connect_url | default('#') }}" hx-boost="false" class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-rose-500 hover:bg-rose-400 text-white font-medium transition">
+        Retry
+      </a>
+    {% endif %}
+  </div>
+</div>

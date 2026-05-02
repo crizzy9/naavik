@@ -1,0 +1,18 @@
+{#
+  on_disk_card.html — "On disk" path card group.
+
+  Args:
+    paths : list of {label, path, sub, icon}
+#}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+  {% for p in paths %}
+    <div class="p-4 bg-slate-900 border border-slate-800 rounded-lg">
+      <div class="flex items-center gap-2 text-slate-400">
+        <i data-lucide="{{ p.icon | default('folder') }}" class="h-4 w-4" stroke-width="1.5"></i>
+        <span class="text-xs uppercase tracking-wide font-medium">{{ p.label }}</span>
+      </div>
+      <div class="font-mono text-sm text-slate-200 mt-1.5 truncate">{{ p.path }}</div>
+      {% if p.sub %}<div class="text-xs text-slate-500 mt-1 truncate">{{ p.sub }}</div>{% endif %}
+    </div>
+  {% endfor %}
+</div>

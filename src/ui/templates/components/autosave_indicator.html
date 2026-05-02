@@ -1,0 +1,27 @@
+{#
+  autosave_indicator.html — "Auto-saved 12s ago" / "Saving..." / "Couldn't save"
+  pill, OOB-swapped from PUT /api/v1/profile/{field}.
+
+  Args:
+    state          : "saved" / "saving" / "error" (required)
+    relative_time  : e.g. "12s ago" — only for state="saved"
+    error_message  : only for state="error"
+#}
+<div id="autosave" class="inline-flex">
+{% if state == "saved" %}
+  <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[11px] text-emerald-400">
+    <i data-lucide="check" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+    Auto-saved{% if relative_time %} · {{ relative_time }}{% endif %}
+  </span>
+{% elif state == "saving" %}
+  <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[11px] text-slate-400">
+    <i data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin" stroke-width="1.5"></i>
+    Saving...
+  </span>
+{% elif state == "error" %}
+  <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[11px] text-rose-300 bg-rose-500/10">
+    <i data-lucide="alert-circle" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+    {{ error_message | default("Couldn't save — retry") }}
+  </span>
+{% endif %}
+</div>

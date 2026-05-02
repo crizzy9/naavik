@@ -1,0 +1,26 @@
+{#
+  kpi_card.html — funnel KPI tile.
+
+  Args:
+    label       : uppercase caption (required)
+    value       : big number / percentage (required)
+    delta       : "+2.1%" / "-0.4%" (optional)
+    delta_trend : "up" / "down" (auto-inferred from sign)
+    sub         : smaller subtitle line
+#}
+{% if delta_trend %}
+  {% set _trend = delta_trend %}
+{% elif delta and delta.startswith("-") %}
+  {% set _trend = "down" %}
+{% else %}
+  {% set _trend = "up" %}
+{% endif %}
+{% set _delta_color = "text-emerald-400" if _trend == "up" else "text-rose-400" %}
+<div class="bg-slate-900 border border-slate-800 rounded-lg p-5">
+  <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">{{ label }}</div>
+  <div class="mt-2 flex items-baseline gap-2 flex-wrap">
+    <span class="font-sans text-3xl font-semibold tabular-nums text-slate-50">{{ value }}</span>
+    {% if delta %}<span class="font-mono text-xs {{ _delta_color }}">{{ delta }}</span>{% endif %}
+  </div>
+  {% if sub %}<div class="mt-1 text-xs text-slate-400">{{ sub }}</div>{% endif %}
+</div>

@@ -1,0 +1,22 @@
+{% from "components/_macros.html" import kbd %}
+{#
+  keyboard_hints.html — subtitle hint strip showing keyboard shortcuts.
+
+  Args:
+    hints : list of {key, action} (default: Discover defaults)
+#}
+{% set hints = hints | default([
+  {"key": "←", "action": "skip"},
+  {"key": "→", "action": "auto-apply"},
+  {"key": "↑", "action": "save"},
+  {"key": "↵", "action": "review"},
+]) %}
+<div class="flex items-center justify-center gap-3 mt-3 text-xs text-slate-500 flex-wrap">
+  {% for h in hints %}
+    <span class="inline-flex items-center gap-1.5">
+      {{ kbd(h.key) }}
+      <span>{{ h.action }}</span>
+    </span>
+    {% if not loop.last %}<span aria-hidden="true">·</span>{% endif %}
+  {% endfor %}
+</div>

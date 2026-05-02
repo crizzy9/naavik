@@ -1,0 +1,31 @@
+{#
+  tracking_board.html — full board view composing stage columns + Closed toggle.
+
+  Args:
+    columns      : list of {status, cards} — 4 visible + optional 5th
+    show_closed  : bool — toggle for the rejected/withdrawn/ghosted bucket
+    closed_count : int — count for footer toggle label
+#}
+{% set show_closed = show_closed | default(false) %}
+<div class="flex flex-col gap-4">
+  <div class="flex gap-4 overflow-x-auto pb-4">
+    {% for col in columns %}
+      {% with status=col.status, cards=col.cards, column_id="col-" ~ (col.status | lower) %}
+        {% include "components/stage_column.html" %}
+      {% endwith %}
+    {% endfor %}
+  </div>
+  <footer class="flex items-center justify-between text-sm text-slate-400 px-1">
+    <span class="inline-flex items-center gap-2">
+      <i data-lucide="archive" class="h-4 w-4" stroke-width="1.5"></i>
+      <span class="font-mono tabular-nums">{{ closed_count | default(0) }}</span>
+      closed (rejected · withdrawn · ghosted)
+    </span>
+    <a href="/tracking?show_closed={{ '0' if show_closed else '1' }}"
+       hx-get="/tracking?show_closed={{ '0' if show_closed else '1' }}"
+       hx-target="#tracking-main" hx-swap="innerHTML"
+       class="text-xs hover:text-slate-100 transition">
+      {{ "Hide closed" if show_closed else "Show closed" }}
+    </a>
+  </footer>
+</div>

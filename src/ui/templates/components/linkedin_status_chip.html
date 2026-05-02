@@ -1,0 +1,34 @@
+{#
+  linkedin_status_chip.html — LinkedIn integration status chip with rate-limit warnings.
+
+  Args:
+    connected   : bool (required)
+    handle      : LinkedIn vanity handle
+    dms_today   : int — today's DM count toward 50/day limit
+    connections : int — total LinkedIn connections
+#}
+{% set dms_today = dms_today | default(none) %}
+{% set connections = connections | default(none) %}
+{% set handle = handle | default(none) %}
+{% set _at_limit = dms_today is not none and dms_today >= 50 %}
+{% set _sub = None %}
+{% if connected %}
+  {% if handle %}
+    {% set _sub = "@" ~ handle %}
+    {% if connections is not none %}{% set _sub = _sub ~ " · " ~ (connections | string) ~ " connections" %}{% endif %}
+  {% endif %}
+{% endif %}
+{% set _tooltip = "" %}
+{% if connected and dms_today is not none %}{% set _tooltip = (dms_today | string) ~ "/50 DMs today" %}{% endif %}
+
+<span title="{{ _tooltip }}" class="inline-flex">
+  {% with provider="linkedin", icon="linkedin", connected=connected, sub=_sub %}
+    {% include "components/provider_chip.html" %}
+  {% endwith %}
+  {% if _at_limit %}
+    <span class="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-200 text-[10px] font-mono uppercase tracking-wide ring-1 ring-rose-500/30">
+      <i data-lucide="alert-triangle" class="h-3 w-3" stroke-width="1.5"></i>
+      RATE LIMITED
+    </span>
+  {% endif %}
+</span>

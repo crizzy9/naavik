@@ -1,0 +1,13 @@
+{#
+  api_status_dot.html — top-right "API ONLINE" status pill on auth shells.
+
+  Args:
+    online : bool (default true)
+#}
+{% set online = online | default(true) %}
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">
+  <span class="h-1.5 w-1.5 rounded-full {% if online %}bg-emerald-500{% else %}bg-rose-500{% endif %}"></span>
+  <span class="font-mono text-[10px] uppercase tracking-wide text-slate-400">
+    {% if online %}API ONLINE{% else %}API OFFLINE{% endif %}
+  </span>
+</span>

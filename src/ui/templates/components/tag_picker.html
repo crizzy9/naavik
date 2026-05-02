@@ -1,0 +1,25 @@
+{#
+  tag_picker.html — fieldset of 9 tag chips (checkbox toggles).
+  Per INTERACTIONS.md § B.6.
+
+  Args:
+    selected : list of currently-selected tags
+    vocab    : override vocabulary (default: 9-tag TAG_VOCAB)
+    name     : form field name (default: "tags[]")
+
+  CSS `:has(input:checked)` drives selected state — see static/styles.css.
+  No HTMX round-trip per chip; selection is form-local.
+#}
+{% set selected = selected | default([]) %}
+{% set vocab = vocab | default(TAG_VOCAB) %}
+{% set name = name | default("tags[]") %}
+<fieldset class="flex flex-wrap gap-1.5" data-tag-picker>
+  <legend class="sr-only">Tags · {{ selected | length }} selected</legend>
+  {% for t in vocab %}
+    <label class="tag-chip">
+      <input type="checkbox" name="{{ name }}" value="{{ t }}" class="sr-only"
+             {% if t in selected %}checked{% endif %}>
+      <span class="tag-chip__label">{{ t }}</span>
+    </label>
+  {% endfor %}
+</fieldset>

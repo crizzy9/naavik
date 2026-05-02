@@ -1,0 +1,16 @@
+{#
+  tip_card.html — static educational tip card.
+
+  Args:
+    title : tip title (required)
+    body  : tip body (required)
+    icon  : Lucide icon name (default: "lightbulb")
+#}
+{% set icon = icon | default("lightbulb") %}
+<aside class="p-3.5 rounded-lg bg-slate-950 border border-slate-800">
+  <header class="flex items-center gap-1.5">
+    <i data-lucide="{{ icon }}" class="h-4 w-4 text-amber-400" stroke-width="1.5"></i>
+    <span class="text-xs uppercase tracking-wide text-slate-400 font-medium">{{ title }}</span>
+  </header>
+  <p class="text-xs text-slate-400 leading-relaxed mt-1.5">{{ body }}</p>
+</aside>

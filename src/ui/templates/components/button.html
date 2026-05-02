@@ -1,0 +1,49 @@
+{#
+  button.html — primary / secondary / ghost / danger / icon-only buttons.
+
+  Args:
+    variant      : "primary" / "secondary" / "ghost" / "danger" / "icon" (default: "primary")
+    label        : visible text (required unless variant="icon")
+    icon         : optional Lucide icon name
+    size         : "sm" / "md" / "lg" (default: "md"; ignored for icon variant)
+    disabled     : bool (default: false)
+    type         : HTML type — "button" / "submit" / "reset" (default: "button")
+    extra_attrs  : raw attribute string for HTMX (`hx-post=... hx-target=...`)
+    aria_label   : explicit aria-label (auto-falls-back to label / icon for icon variant)
+
+  No <script> tags. No inline style. Tailwind-only.
+#}
+{% set variant = variant | default("primary") %}
+{% set size = size | default("md") %}
+{% set type_ = type | default("button") %}
+{% set disabled = disabled | default(false) %}
+
+{% set _base = "inline-flex items-center justify-center gap-2 font-medium rounded-lg transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:opacity-50 disabled:cursor-not-allowed" %}
+{% set _variant_map = {
+  "primary":   "bg-indigo-500 hover:bg-indigo-400 text-white",
+  "secondary": "bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700",
+  "ghost":     "hover:bg-slate-800 text-slate-300 hover:text-slate-50",
+  "danger":    "bg-rose-500 hover:bg-rose-400 text-white",
+  "icon":      "hover:bg-slate-800 text-slate-300 hover:text-slate-50",
+} %}
+{% set _size_map = {
+  "sm": "px-3 py-1.5 text-sm",
+  "md": "px-4 py-2 text-sm",
+  "lg": "px-5 py-2.5 text-base",
+} %}
+{% set _classes = _base ~ " " ~ _variant_map.get(variant, _variant_map["primary"]) %}
+{% if variant == "icon" %}
+  {% set _classes = _classes ~ " p-2 rounded-lg" %}
+{% else %}
+  {% set _classes = _classes ~ " " ~ _size_map.get(size, _size_map["md"]) %}
+{% endif %}
+
+<button
+  type="{{ type_ }}"
+  class="{{ _classes }}"
+  {% if disabled %}disabled{% endif %}
+  {% if aria_label %}aria-label="{{ aria_label }}"{% elif variant == "icon" and icon %}aria-label="{{ icon }}"{% endif %}
+  {{ extra_attrs | default('') | safe }}>
+  {% if icon %}<i data-lucide="{{ icon }}" class="h-4 w-4 shrink-0" stroke-width="1.5"></i>{% endif %}
+  {% if label %}<span>{{ label }}</span>{% endif %}
+</button>

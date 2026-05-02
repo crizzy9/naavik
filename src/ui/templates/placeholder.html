@@ -1,37 +1,37 @@
 {% extends "base.html" %}
 {% block title %}{{ screen }} — Naavik{% endblock %}
 
-{% block content %}
-<div class="max-w-3xl mx-auto py-12">
-    <div class="inline-flex items-center gap-2 mb-5 px-3 py-1 rounded-full
-                bg-amber-500/10 border border-amber-500/30">
-        <span class="h-2 w-2 rounded-full bg-amber-400"></span>
-        <span class="text-xs font-mono uppercase tracking-wide text-amber-300">stub · awaiting handoff</span>
-    </div>
+{% block main %}
+<div class="max-w-3xl mx-auto p-6 lg:p-8 py-12">
+  <div class="inline-flex items-center gap-2 mb-5 px-3 py-1 rounded-full
+              bg-amber-500/10 border border-amber-500/30">
+    <span class="h-2 w-2 rounded-full bg-amber-400"></span>
+    <span class="text-xs font-mono uppercase tracking-wide text-amber-300">stub · awaiting handoff</span>
+  </div>
 
-    <h1 class="text-4xl font-semibold text-slate-50 mb-3 tracking-tight">{{ screen }}</h1>
-    <p class="text-slate-400 max-w-prose leading-relaxed">
-        Route
-        <code class="font-mono text-cyan-400 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">{{ route }}</code>
-        is reserved for this screen. The real page lands when the Claude Design handoff completes
-        Stage 2 (component library) and Stage 3 (page implementation).
-    </p>
+  <h1 class="text-4xl font-semibold text-slate-50 mb-3 tracking-tight">{{ screen }}</h1>
+  <p class="text-slate-400 max-w-prose leading-relaxed">
+    Route
+    <code class="font-mono text-cyan-400 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">{{ route }}</code>
+    is reserved for this screen. The real page lands when plan 09 (Stage 3) composes
+    the components from <code class="font-mono text-cyan-400">src/ui/templates/components/</code>.
+  </p>
 
-    <div class="mt-10 grid gap-3 sm:grid-cols-2">
-        <div class="bg-slate-900 border border-slate-800 rounded-lg p-5">
-            <div class="text-[10px] uppercase tracking-wide text-slate-400 mb-2 font-mono">canonical spec</div>
-            <div class="font-medium text-slate-100">docs/design/SCREENS.md</div>
-            <div class="text-sm text-slate-400 mt-1">§ Screen {{ section }}</div>
-        </div>
-        <div class="bg-slate-900 border border-slate-800 rounded-lg p-5">
-            <div class="text-[10px] uppercase tracking-wide text-slate-400 mb-2 font-mono">visual contract</div>
-            <div class="font-medium text-slate-100">DESIGN.md</div>
-            <div class="text-sm text-slate-400 mt-1">tokens, components, voice</div>
-        </div>
+  <div class="mt-10 grid gap-3 sm:grid-cols-2">
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-5">
+      <div class="text-[10px] uppercase tracking-wide text-slate-400 mb-2 font-mono">canonical spec</div>
+      <div class="font-medium text-slate-100">docs/design/SCREENS.md</div>
+      <div class="text-sm text-slate-400 mt-1">§ Screen {{ section }}</div>
     </div>
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-5">
+      <div class="text-[10px] uppercase tracking-wide text-slate-400 mb-2 font-mono">visual contract</div>
+      <div class="font-medium text-slate-100">DESIGN.md</div>
+      <div class="text-sm text-slate-400 mt-1">tokens, components, voice</div>
+    </div>
+  </div>
 
-    <div class="mt-8 text-xs font-mono text-slate-500">
-        workflow: <span class="text-slate-300">AGENTS.md § Workflow</span> · plans: <span class="text-slate-300">docs/plans/</span>
-    </div>
+  <div class="mt-8 text-xs font-mono text-slate-500">
+    workflow: <span class="text-slate-300">AGENTS.md § Workflow</span> · plans: <span class="text-slate-300">docs/plans/</span>
+  </div>
 </div>
 {% endblock %}
