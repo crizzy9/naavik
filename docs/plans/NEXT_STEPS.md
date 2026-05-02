@@ -130,6 +130,51 @@ If a fresh clone + .env edit doesn't bring up a working app in <2 minutes, the s
 
 ---
 
+## Immediate dev-orchestrator paper cuts (run before plan 11)
+
+Two small dev-experience items carried over from Wave 2. Ship as a single tiny plan (`docs/plans/10a-dev-orchestrator-paper-cuts.md`) or fold inline into the start of plan 11. Both are <1 day of work each.
+
+### 1. Process-compose: confirm app logs + cold-start reliability
+
+**Symptom observed during plan 08 testing:**
+- In non-TUI mode (`PC_DISABLE_TUI=true`, plan 08's default), the FastAPI banner + uvicorn-started lines didn't surface in stdout for several seconds — looked like the app never came up.
+- In TUI mode (`nix run .#dev -- --tui=true`), the app process status pane displayed `Error: readiness check fail … dial tcp 127.0.0.1:8000: connect: connection refused` on every cold start.
+
+**Already mitigated in plan 08's `flake.nix`:**
+- `PYTHONUNBUFFERED=1` exported in `devEnv` so Python stops block-buffering pipe stdout
+- App readiness probe removed (it was purely cosmetic — nothing depends on `app: process_healthy`, and the probe at `t=2s` always lost a race against fastapi's ~5s cold-start bind)
+- Stale `postmaster.pid` self-heal in `cli.preHook`
+- `shutdown.timeout_seconds=10` on every dev process so Ctrl-C never hangs
+- `--quiet` dropped from `uv sync` so first-run download progress is visible
+- TUI theme set via wrapper to `"Catppuccin Mocha"` (Title Case + space — the runtime YAML name, not the file-system kebab name)
+
+**What's still owed in this paper-cuts plan:**
+- Reproduce the issue across a few terminals (alacritty, kitty, gnome-terminal, st) and shells (zsh, bash) and confirm the above mitigations actually stick. The original symptom was inconsistent and may have been env-specific.
+- Add a `--log-file` to `cli.options` so `~/.naavik/logs/process-compose.log` captures per-process state transitions out-of-band — useful when the TUI is off and something goes wrong silently.
+- Consider `--no-progress` on the `uv run fastapi dev` invocation in case uv's progress drawing in non-TTY mode is a hidden source of buffered output.
+- If after all that the symptom still recurs, file a minimal repro upstream against `services-flake` / `process-compose-flake`.
+
+### 2. `uv run fastapi dev` (no path) should just work
+
+**Symptom.** Running bare `uv run fastapi dev` from the repo root fails — fastapi-cli looks for `main.py` / `app.py` / `api.py` in `cwd`, doesn't find one (ours lives at `src/main.py`). Right now you have to type the full path: `uv run fastapi dev src/main.py`.
+
+**Two fix options:**
+
+**Option A (recommended) — thin re-export at repo root.** Create `app.py` at project root:
+
+```python
+"""Re-export the FastAPI app for `uv run fastapi dev` (no-args)."""
+from src.main import app  # noqa: F401
+```
+
+Two lines, one file. `uv run fastapi dev` → finds `app.py` → imports `app` → identical to today's `uv run fastapi dev src/main.py`.
+
+**Option B — move `src/main.py` to repo root.** Bigger refactor: requires updating every `from src.X import Y` (we have many), adjusting `pyproject.toml`'s `[tool.setuptools.packages]` layout, and revisiting how `Jinja2Templates(directory="src/ui/templates")` resolves. Not recommended unless we're reorganizing the package layout anyway.
+
+**Pick A**, ship it as a single commit in this paper-cuts plan or at the start of plan 11. While we're there, also update README's "Manual local development setup" step 2 to drop `src/main.py`.
+
+---
+
 ## What to author next (priority order)
 
 Once Phase 1 ships clean, these are the **next plans to author**, in suggested order. Each is its own plan + kickoff prompt cycle (per `AGENTS.md` § Workflow). The numbering picks up where plan 10 left off.

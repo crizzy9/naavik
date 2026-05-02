@@ -136,7 +136,7 @@ The repo is **Nix-first**. One command boots Postgres (with pgvector), runs migr
 nix run .#dev
 ```
 
-That's it. Per-project Postgres data lives in `./.naavik/db/` (gitignored). Ctrl-C tears down cleanly. Open http://localhost:8000.
+That's it. Per-project Postgres data lives in `./.naavik/db/` (gitignored). Ctrl-C tears down cleanly. Open <http://localhost:8000>.
 
 For an interactive dev shell (uv, ruff, typst, postgresql-client on PATH):
 
@@ -145,6 +145,104 @@ nix develop          # or set up direnv to load automatically
 ```
 
 `direnv` users: an `.envrc` is included; `direnv allow` once and the shell loads on `cd`.
+
+### Manual local development setup
+
+The long-form path: Postgres + migrations + FastAPI dev with no Nix orchestrator and no Docker. Use this when you want fine-grained control over each step, or when `nix run .#dev` errors out and you need to bisect what failed.
+
+> **At the current state (plan 08 only)**, every route is a placeholder template render — the app needs no DB. Steps **1–3** are enough. Steps **4–6** unlock once plan 10 (Wave 4) lands DB-backed handlers.
+
+**Prerequisites:**
+
+- Python 3.12+
+- [`uv`](https://docs.astral.sh/uv/) — install via `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- (Optional, plan 10+) PostgreSQL 16+ with the [pgvector](https://github.com/pgvector/pgvector) extension
+- Run all commands from the repo root (`cd /path/to/naavik`). Jinja2 resolves `src/ui/templates` relative to the process cwd, so launching from elsewhere will 500.
+
+**1 · Install Python deps**
+
+```bash
+uv sync
+```
+
+This reads `uv.lock` and creates `.venv/` with Python 3.12 and every pinned dep.
+
+**2 · Run the dev server**
+
+```bash
+uv run fastapi dev src/main.py
+```
+
+Open <http://localhost:8000>. Auto-reload is on — edits to `src/ui/templates/**/*.html`, `src/ui/static/**`, and `src/**/*.py` reload automatically.
+
+To enable `/_design/components` (the component fixture page; plan 08 gates it on this env var):
+
+```bash
+NAAVIK_DEBUG=1 uv run fastapi dev src/main.py
+```
+
+**3 · (Optional) Lint, format, test**
+
+```bash
+uv run ruff check src/ tests/
+uv run ruff format src/ tests/
+uv run pytest tests/ -v
+```
+
+---
+
+Steps **4–6** are needed only once **plan 10 (Wave 4)** lands DB-backed handlers. Skip them on plan 08/09.
+
+**4 · Start a local Postgres with pgvector**
+
+Easiest: a one-shot Docker container (matches what `docker compose up` provisions):
+
+```bash
+docker run -d --name naavik-pg \
+  -e POSTGRES_USER=naavik \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_DB=naavik \
+  -p 5432:5432 \
+  pgvector/pgvector:pg17
+psql -U naavik -d naavik -h localhost -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+Or use a system Postgres — create the role, the database, and the extension:
+
+```bash
+sudo -u postgres createuser -s naavik
+sudo -u postgres psql -c "ALTER USER naavik WITH PASSWORD 'password';"
+sudo -u postgres createdb -O naavik naavik
+psql -U naavik -d naavik -h localhost -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+To wipe and start over: `docker rm -f naavik-pg` (Docker path), or `sudo -u postgres dropdb naavik && sudo -u postgres dropuser naavik` (system Postgres path).
+
+**5 · Set `DATABASE_URL`**
+
+```bash
+export DATABASE_URL="postgresql+asyncpg://naavik:password@localhost:5432/naavik"
+```
+
+`config.py`'s default already points here, so you only need to export when connecting somewhere else. Alternatively, copy `.env.example` → `.env` and edit — `pydantic-settings` picks it up automatically.
+
+**6 · Run migrations**
+
+```bash
+uv run alembic upgrade head
+```
+
+(Plan 08 has no migrations yet — `versions/` is empty, so this is a no-op until plan 10 ships.) After model changes, generate a new revision:
+
+```bash
+uv run alembic revision --autogenerate -m "describe the change"
+```
+
+Then re-launch step 2 with `DATABASE_URL` exported.
+
+---
+
+If this is too granular, prefer `nix run .#dev` (above) — it does steps 1, 4, and 6 for you in one command, and tears down cleanly on Ctrl-C.
 
 ## Configuration
 
