@@ -7,8 +7,10 @@
     closed_count : int — count for footer toggle label
 #}
 {% set show_closed = show_closed | default(false) %}
+{# Plan 09a · Issue 10.c — mobile: stack columns vertically (no horizontal scroll).
+   Desktop: horizontal Kanban with overflow scroll for narrow viewports. #}
 <div class="flex flex-col gap-4">
-  <div class="flex gap-4 overflow-x-auto pb-4">
+  <div class="flex flex-col lg:flex-row gap-4 lg:overflow-x-auto pb-4">
     {% for col in columns %}
       {% with status=col.status, cards=col.cards, column_id="col-" ~ (col.status | lower) %}
         {% include "components/stage_column.html" %}

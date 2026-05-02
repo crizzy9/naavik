@@ -1,0 +1,31 @@
+{#
+  _discover_review_inline.html — Issue 8D fragment served by
+  /_fragments/discover/expanded/{job_id}. Wraps the workspace partial with a
+  "← Back to queue" button so the user can collapse back to the swipe queue
+  without leaving the Discover page.
+
+  Args (forwarded from the parent route):
+    same as _discover_review_workspace.html
+#}
+<div class="flex flex-col gap-3">
+  <div class="flex items-center justify-between gap-3">
+    <button type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition"
+            hx-get="/_fragments/discover/queue"
+            hx-target="#discover-main"
+            hx-swap="innerHTML"
+            aria-label="Back to swipe queue">
+      <i data-lucide="arrow-left" class="h-4 w-4" stroke-width="1.5"></i>
+      Back to queue
+    </button>
+    <a href="/discover/{{ job.id }}"
+       class="text-xs text-slate-500 hover:text-slate-300 font-mono"
+       title="Open as full page (shareable link)">
+      open as full page →
+    </a>
+  </div>
+
+  <article class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-black/45 overflow-hidden">
+    {% include "pages/_discover_review_workspace.html" %}
+  </article>
+</div>

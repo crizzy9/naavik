@@ -38,7 +38,12 @@ _PAGES = [
         ["PRIORITY ACTIONS", "Pipeline · live", "RESPONSE RATE", "overview-pipeline"],
         [],
     ),
-    ("profile", "/profile", ["Shyam Padia", "WORK AUTHORIZATION", "Built and shipped Intuit"], []),
+    (
+        "profile",
+        "/profile",
+        ["Shyam Padia", "ARE YOU AUTHORIZED TO WORK IN THE US?", "Built and shipped Intuit"],
+        [],
+    ),
     (
         "profile_edit",
         "/profile/edit",
@@ -51,10 +56,10 @@ _PAGES = [
         [
             "Discover",
             "discover-card",
-            "skip-btn",
-            "save-btn",
-            "review-btn",
-            "auto-apply-btn",
+            "discover-skip-btn",
+            "discover-save-btn",
+            "discover-review-btn",
+            "discover-auto-apply-btn",
             "Up next",
             'data-template="/discover"',
         ],

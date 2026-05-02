@@ -27,12 +27,15 @@
     <i data-lucide="lock" class="h-3.5 w-3.5 mt-0.5 shrink-0" stroke-width="1.5"></i>
     <p>Most US-based job applications ask these. We answer them once and apply automatically. We never share these outside Naavik.</p>
   </div>
+  {# Plan 09a · Issue 4 — typed dropdowns. Question wording follows what real
+     job applications ask, not the abstract enum names. Options come from
+     APP_Q_OPTIONS (Jinja global, defined in src/ui/template_helpers.py). #}
   <div class="grid sm:grid-cols-2 gap-4">
-    {% with label="WORK AUTHORIZATION", name="work_authorization", value=p.work_authorization | default(""), placeholder="US citizen / Green card / H1B / ..." %}
+    {% with label="ARE YOU AUTHORIZED TO WORK IN THE US?", name="work_authorization", type="select", value=p.work_authorization | default(""), options=APP_Q_OPTIONS["work_authorization"] %}
       {% include "components/editor_field.html" %}{% endwith %}
-    {% with label="VISA SPONSORSHIP NEEDED", name="visa_sponsorship_needed", value=p.visa_sponsorship_needed | default(""), placeholder="Yes / No" %}
+    {% with label="WILL YOU REQUIRE VISA SPONSORSHIP?", name="visa_sponsorship_needed", type="select", value=p.visa_sponsorship_needed | default(""), options=APP_Q_OPTIONS["visa_sponsorship_needed"] %}
       {% include "components/editor_field.html" %}{% endwith %}
-    {% with label="WILLING TO RELOCATE", name="willing_to_relocate", value=p.willing_to_relocate | default(""), placeholder="Yes / No / Maybe" %}
+    {% with label="ARE YOU OPEN TO RELOCATING?", name="willing_to_relocate", type="select", value=p.willing_to_relocate | default(""), options=APP_Q_OPTIONS["willing_to_relocate"] %}
       {% include "components/editor_field.html" %}{% endwith %}
     {% with label="NOTICE PERIOD (DAYS)", name="notice_period_days", type="number", value=p.notice_period_days | default("") %}
       {% include "components/editor_field.html" %}{% endwith %}
@@ -40,13 +43,13 @@
       {% include "components/editor_field.html" %}{% endwith %}
     {% with label="EARLIEST START", name="earliest_start", type="date", value=p.earliest_start | default("") %}
       {% include "components/editor_field.html" %}{% endwith %}
-    {% with label="VETERAN STATUS", name="veteran_status", value=p.veteran_status | default(""), placeholder="Veteran / Not veteran / Prefer not to say" %}
+    {% with label="ARE YOU A VETERAN?", name="veteran_status", type="select", value=p.veteran_status | default(""), options=APP_Q_OPTIONS["veteran_status"] %}
       {% include "components/editor_field.html" %}{% endwith %}
-    {% with label="DISABILITY STATUS", name="disability_status", value=p.disability_status | default(""), placeholder="Yes / No / Prefer not to say" %}
+    {% with label="DO YOU HAVE A DISABILITY?", name="disability_status", type="select", value=p.disability_status | default(""), options=APP_Q_OPTIONS["disability_status"] %}
       {% include "components/editor_field.html" %}{% endwith %}
-    {% with label="RACE / ETHNICITY (EEO)", name="race_ethnicity", value=p.race_ethnicity | default("") %}
+    {% with label="RACE / ETHNICITY (FOR EEO REPORTING)", name="race_ethnicity", type="select", value=p.race_ethnicity | default(""), options=APP_Q_OPTIONS["race_ethnicity"] %}
       {% include "components/editor_field.html" %}{% endwith %}
-    {% with label="GENDER IDENTITY", name="gender_identity", value=p.gender_identity | default("") %}
+    {% with label="GENDER", name="gender_identity", type="select", value=p.gender_identity | default(""), options=APP_Q_OPTIONS["gender_identity"] %}
       {% include "components/editor_field.html" %}{% endwith %}
   </div>
 </section>

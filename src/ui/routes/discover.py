@@ -120,6 +120,50 @@ async def fragment_next_card(request: Request):
 
 
 @router.get(
+    "/_fragments/discover/expanded/{job_id}",
+    response_class=HTMLResponse,
+    name="discover_expanded_fragment",
+)
+async def fragment_expanded(request: Request, job_id: int):
+    """Plan 09a · Issue 8D — return the review workspace as an inline fragment.
+
+    HTMX swaps this into ``#discover-main`` so the active swipe card "expands"
+    in-place into the full review workspace without leaving the Discover page.
+    The "Back to queue" button inside the fragment hits ``/_fragments/discover/queue``
+    to swap back.
+
+    Direct nav to ``/discover/{id}`` continues to render the full page (the
+    link-shareable URL); both surfaces compose the same workspace partial
+    (`pages/_discover_review_workspace.html`).
+    """
+    job = await sd.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    settings = await sd.get_settings()
+    eager = settings.eager_review_generation
+    app = await sd.application_for_job(1, job_id)
+    if app is None and eager:
+        app = await sd._create_draft(1, job_id)
+    ctx = await drctx.build_review_ctx(job=job, application=app, eager=eager)
+    return templates.TemplateResponse(request, "pages/_discover_review_inline.html", ctx)
+
+
+@router.get(
+    "/_fragments/discover/queue",
+    response_class=HTMLResponse,
+    name="discover_queue_fragment",
+)
+async def fragment_queue(request: Request):
+    """Plan 09a · Issue 8D — return the swipe queue grid as an inline fragment.
+
+    Used by the "Back to queue" button inside the expanded review fragment to
+    restore the 2-column queue layout in ``#discover-main``.
+    """
+    ctx = await dctx.build_discover_ctx()
+    return templates.TemplateResponse(request, "pages/_discover_queue.html", ctx)
+
+
+@router.get(
     "/_fragments/discover/match-breakdown/{job_id}",
     response_class=HTMLResponse,
     name="discover_match_breakdown_fragment",

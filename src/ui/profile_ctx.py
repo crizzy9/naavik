@@ -132,21 +132,39 @@ def bullet_dict(b: Bullet) -> dict[str, object]:
 
 
 def app_questions_pairs(profile: Profile) -> list[tuple[str, str]]:
-    """Return list of (label, display_value) tuples for the application-details section."""
+    """Return list of (label, display_value) tuples for the application-details section.
 
-    def _val(v):
+    Plan 09a · Issue 4 — labels follow real job-application phrasing; values use
+    the human-readable map from `ui.template_helpers.app_q_label` instead of raw
+    enum strings (e.g., "h1b" → "H-1B Visa Holder").
+    """
+    from ui.template_helpers import app_q_label
+
+    def _enum_value(v) -> str | None:
+        if v is None:
+            return None
+        return v.value if hasattr(v, "value") else str(v)
+
+    def _date(v):
         if v is None:
             return "—"
-        if hasattr(v, "value"):
-            return v.value.replace("_", " ")
         if isinstance(v, datetime):
             return v.strftime("%Y-%m-%d")
-        return str(v).replace("_", " ")
+        return str(v)
 
     return [
-        ("WORK AUTHORIZATION", _val(profile.work_authorization)),
-        ("VISA SPONSORSHIP", _val(profile.visa_sponsorship_needed)),
-        ("WILLING TO RELOCATE", _val(profile.willing_to_relocate)),
+        (
+            "ARE YOU AUTHORIZED TO WORK IN THE US?",
+            app_q_label("work_authorization", _enum_value(profile.work_authorization)),
+        ),
+        (
+            "WILL YOU REQUIRE VISA SPONSORSHIP?",
+            app_q_label("visa_sponsorship_needed", _enum_value(profile.visa_sponsorship_needed)),
+        ),
+        (
+            "ARE YOU OPEN TO RELOCATING?",
+            app_q_label("willing_to_relocate", _enum_value(profile.willing_to_relocate)),
+        ),
         (
             "NOTICE PERIOD",
             f"{profile.notice_period_days} days" if profile.notice_period_days else "—",
@@ -155,11 +173,20 @@ def app_questions_pairs(profile: Profile) -> list[tuple[str, str]]:
             "SALARY EXPECTATION (USD)",
             f"${profile.salary_expectation_usd:,}" if profile.salary_expectation_usd else "—",
         ),
-        ("EARLIEST START", _val(profile.earliest_start)),
-        ("VETERAN STATUS", _val(profile.veteran_status)),
-        ("DISABILITY STATUS", _val(profile.disability_status)),
-        ("RACE / ETHNICITY", _val(profile.race_ethnicity)),
-        ("GENDER IDENTITY", _val(profile.gender_identity)),
+        ("EARLIEST START", _date(profile.earliest_start)),
+        (
+            "ARE YOU A VETERAN?",
+            app_q_label("veteran_status", _enum_value(profile.veteran_status)),
+        ),
+        (
+            "DO YOU HAVE A DISABILITY?",
+            app_q_label("disability_status", _enum_value(profile.disability_status)),
+        ),
+        (
+            "RACE / ETHNICITY (FOR EEO REPORTING)",
+            app_q_label("race_ethnicity", _enum_value(profile.race_ethnicity)),
+        ),
+        ("GENDER", app_q_label("gender_identity", _enum_value(profile.gender_identity))),
     ]
 
 

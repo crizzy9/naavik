@@ -293,7 +293,7 @@ When complete:
    - `mv docs/plans/10-backend-impl.md docs/plans/archive/10-backend-impl.md` (Status: WAVE 3 EXECUTED · Wave 6 awaiting → EXECUTED).
    - `mv docs/prompts/10-backend-impl.md docs/prompts/archive/10-backend-impl.md` (Status: WAVE 3 USED · Wave 6 awaiting → USED).
    - `ROADMAP.md` Wave 5 row + per-task checklist marked `[x]` with deliverable note. Phase 1 status header → `✅ Complete (YYYY-MM-DD)`.
-9. **Next** — Phase 1 is shipped. Read `docs/plans/NEXT_STEPS.md` for the post-MVP authoring sequence (plans 11-15+).
+9. **Next** — Phase 1 is shipped. Read `docs/plans/POST_PHASE_1.md` for the post-MVP authoring sequence (plans 11-15+).
 
 If you hit a blocker (a Greenhouse / Lever / Ashby API surface that BACKEND.md mis-described, an ATS field-mapping gap that requires schema work, a Typst template that doesn't fit the 1-page constraint), STOP and post a question. Phase 1 deliverable line is the contract — anything that endangers it gets escalated, not papered over.
 

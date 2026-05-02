@@ -21,7 +21,8 @@
     {% endwith %}
   </header>
 
-  <section id="onboarding-step-content" class="bg-slate-900 border border-slate-800 rounded-xl p-7 min-h-[520px]">
+  {# Plan 09a · Issue 10.b — min-h only on desktop; mobile sizes to content. #}
+  <section id="onboarding-step-content" class="bg-slate-900 border border-slate-800 rounded-xl p-5 lg:p-7 lg:min-h-[520px]">
     {% if current_step == 1 %}
       {% include "pages/_onboarding_step_upload.html" %}
     {% elif current_step == 2 %}

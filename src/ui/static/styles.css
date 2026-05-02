@@ -159,7 +159,31 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* 7. <dialog> overrides — match DESIGN.md motion + tokens.           */
+/* 8. Anchor scroll-spy active link styling (Issue 9)                 */
+/* base.js writes [data-active-anchor="{id}"] on the nav AND adds an  */
+/* .is-active class to the matching link as the user scrolls.         */
+/* ------------------------------------------------------------------ */
+
+[data-anchor-link].is-active {
+  background-color: rgba(99, 102, 241, 0.1);   /* indigo-500/10 */
+  color: rgb(165 180 252);                     /* indigo-300 */
+  border-left-color: rgb(99 102 241);          /* indigo-500 */
+}
+
+/* ------------------------------------------------------------------ */
+/* 9. Discover swipe stamps (Issue 3)                                 */
+/* keys.js toggles `.is-swipe-{left,right,up}` on `#discover-card`    */
+/* during a touch drag; reveal the matching stamp via opacity.        */
+/* ------------------------------------------------------------------ */
+
+#discover-card.is-swipe-left  [data-stamp="left"],
+#discover-card.is-swipe-right [data-stamp="right"],
+#discover-card.is-swipe-up    [data-stamp="up"] {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* 10. <dialog> overrides — match DESIGN.md motion + tokens.          */
 /* ------------------------------------------------------------------ */
 
 dialog::backdrop {

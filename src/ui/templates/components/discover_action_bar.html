@@ -1,17 +1,29 @@
 {#
-  discover_action_bar.html — 4-button bottom action bar on Discover.
+  discover_action_bar.html — 4-button action bar on Discover.
 
   Args:
     job_id : int (required) — for HTMX action URLs
+
+  Plan 09a follow-up — desktop only (`hidden lg:flex`). Mobile uses touch swipe
+  exclusively (no buttons cluttering the card). Tap-to-expand is wired on the
+  card itself for review. The duplicate keyboard-hints strip below was
+  removed — labels on the buttons + OS focus indicators are sufficient.
 #}
-<div class="flex items-stretch gap-3 mt-6">
-  {% with icon="x", label="Skip", tone="skip", key_hint="←", action_url="/api/v1/discover/" ~ job_id ~ "/skip", button_id="skip-btn" %}
+<div class="hidden lg:flex items-center justify-center gap-2 mt-4">
+  {% with icon="x", label="Skip", tone="skip", action_url="/api/v1/discover/" ~ job_id ~ "/skip", button_id="discover-skip-btn" %}
     {% include "components/swipe_action_btn.html" %}{% endwith %}
-  {% with icon="bookmark", label="Save", tone="save", key_hint="↑", action_url="/api/v1/discover/" ~ job_id ~ "/save", button_id="save-btn" %}
+  {% with icon="bookmark", label="Save", tone="save", action_url="/api/v1/discover/" ~ job_id ~ "/save", button_id="discover-save-btn" %}
     {% include "components/swipe_action_btn.html" %}{% endwith %}
-  {% with icon="sparkles", label="Review & apply", tone="review", key_hint="↵", action_method="get", action_url="/discover/" ~ job_id, button_id="review-btn" %}
+  {# Plan 09a · Issue 8D — Review & apply expands the card in-place by swapping
+     #discover-main with the workspace fragment. /discover/{id} stays as the
+     direct-link target for sharing. #}
+  {% with icon="sparkles", label="Review & apply", tone="review",
+          action_method="get",
+          action_url="/_fragments/discover/expanded/" ~ job_id,
+          hx_target="#discover-main",
+          hx_swap="innerHTML",
+          button_id="discover-review-btn" %}
     {% include "components/swipe_action_btn.html" %}{% endwith %}
-  {% with icon="zap", label="Auto-apply", tone="auto-apply", key_hint="→", action_url="/api/v1/applications/" ~ job_id ~ "/auto-submit", button_id="auto-apply-btn" %}
+  {% with icon="zap", label="Auto-apply", tone="auto-apply", action_url="/api/v1/applications/" ~ job_id ~ "/auto-submit", button_id="discover-auto-apply-btn" %}
     {% include "components/swipe_action_btn.html" %}{% endwith %}
 </div>
-{% include "components/keyboard_hints.html" %}

@@ -1,10 +1,14 @@
-# Naavik · Post-MVP next steps
+# Naavik · Post-Phase-1 plan + backlog
 
-> **Last updated:** 2026-05-02 (Wave 3 / plan 09 EXECUTED — added Playwright local-capture paper cut)
+> **Last updated:** 2026-05-02 (plan 09a follow-up — added 3 deferred items to § Tier 3: restore Lucide CDN, fix remaining sidebar-toggle wonkiness after navigation, ultra-wide Discover card cap)
 >
-> Forward-looking plan you read **after Phase 1 ships** (plan 08 + plan 09 + plan 10 Wave 3 + plan 10 Wave 6 all archived). Use this as the entry point to figure out what to author + ship next.
+> **Renamed 2026-05-02** from `NEXT_STEPS.md` → `POST_PHASE_1.md` so the title makes the intent obvious: this is what's authored + shipped *after* Phase 1 ships, plus the Phase 1.x deferred backlog.
+>
+> Forward-looking plan you read **after Phase 1 ships** (plan 08 + plan 09 + plan 09a + plan 10 Wave 3 + plan 10 Wave 6 all archived). Use this as the entry point to figure out what to author + ship next.
 >
 > If Phase 1 isn't done yet, this doc isn't actionable for you yet — go finish ROADMAP.md § Phase 1 first.
+>
+> **Cross-references:** ROADMAP.md § Phase 1 deferred items shows a short summary table; this doc (§ Tier 3) is the canonical, extended backlog with suggested plan numbers + effort.
 
 ---
 
@@ -311,6 +315,9 @@ These are smaller items that can ship between or alongside Tier 1/2 plans. Each 
 | Argon2id vault upgrade | small | Phase 6 if security review flags PBKDF2 |
 | JWT signing-key rotation (multi-tenant cloud) | medium | Phase 2+ if cloud tier ships multi-tenant |
 | LinkedIn proxy support | small | Phase 6+ |
+| Restore Lucide via CDN (currently self-hosted at `/static/lucide.min.js`) | tiny | Plan 09a follow-up self-hosted to fix the user's "no icons render" issue. Per user 2026-05-02: production must serve Lucide from a CDN (smaller deployment payload, edge cache). Investigate why unpkg `lucide@…` was failing in user's browser — content-blocker? CSP? rate-limit? — pick a stable CDN URL or fallback chain, drop `src/ui/static/lucide.min.js`, restore `<script src="https://…">` in `base.html`. |
+| Sidebar mobile-toggle reliability after navigation | tiny | Plan 09a follow-up added the idempotency guard in `base.js` (`window._naavikBaseLoaded`) which fixes listener stacking after hx-boost. Per user 2026-05-02: drawer toggle is "still kind of wonky" after navigating away — repro on real device, isolate the remaining failure mode (likely an interaction with Tailwind CDN's runtime JIT or HTMX swap timing — check `htmx:afterSwap` event order vs. body-data reset). Not a blocker; fix when other Phase 1.x cleanup work happens. |
+| Discover card stretches across full viewport width on ultra-wide screens | tiny | 09a follow-up dropped the `max-w-7xl` cap on Discover so the swipe card fills the available column. On 4K+ monitors the card can stretch >1500px, which may feel sparse. Add a `2xl:max-w-[1400px]` cap or similar if user feedback comes in; not blocking. |
 
 ---
 
@@ -346,7 +353,7 @@ Total post-Phase-1 estimate: 9-15 weeks of agent-driven implementation (each pla
    - List required reading (AGENTS.md, ROADMAP.md, BACKEND.md, DATA_MODEL.md, etc.)
    - State the plan being authored (e.g. "Author plan 11 — Phase 2 scrapers")
    - List what's out of scope
-   - Reference this NEXT_STEPS.md for the post-plan-10 forward arc
+   - Reference this POST_PHASE_1.md for the post-plan-10 forward arc
 4. The agent authors `docs/plans/11-phase-2-scrapers.md`.
 5. Review + approve.
 6. Agent authors `docs/prompts/11-phase-2-scrapers.md` once plan 11 is APPROVED.

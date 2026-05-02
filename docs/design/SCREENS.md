@@ -1,6 +1,6 @@
 # Naavik Screen Catalog
 
-> **Last updated:** 2026-05-02 (Wave 3 / plan 09 EXECUTED — all 11 Phase 1 screens implemented; per-screen `Impl` flipped to `[x]`)
+> **Last updated:** 2026-05-02 (plan 09a · Issue 5A — sidebar label "Jobs" renamed to "Discover" so sidebar / URL / page heading align)
 > **Source of truth:** This file. Where this disagrees with mockups, archived prompts (`docs/prompts/archive/`), or older drafts, this wins.
 > **Companion files:** `DESIGN.md` (visual contract) · `docs/design/WORKFLOW.md` (UI sub-process pipeline).
 >
@@ -60,7 +60,7 @@ Persistent left sidebar, 256px wide on desktop, drawer on mobile.
 |---|---|---|---|---|
 | 1 | Overview | `layout-dashboard` | `/` | — |
 | 2 | Profile | `user-round` | `/profile` | — |
-| 3 | Jobs | `briefcase` | `/discover` | live count of unswiped matches (e.g. `47`) |
+| 3 | Discover | `briefcase` | `/discover` | live count of unswiped matches (e.g. `47`) |
 | 4 | Tracking | `inbox` | `/tracking` | live count of items needing followup (e.g. `12`) |
 | 5 | Outreach | `send` | `/outreach` | — |
 | 6 | Settings | `settings` | `/settings` | — |
@@ -385,10 +385,11 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 - **Saved for later · {N} →** card: "You've stashed {N} jobs to revisit. They won't be auto-applied until you decide."
 - **Tip** card (lightbulb): "Tap to expand a job and refine the resume / cover letter before applying. Right-swipe lets Naavik tailor and submit on its own."
 
-- **Mobile:** card stack vertical, 4 circular action buttons pinned to bottom (✕ / 📑 / **Review & apply** primary / ⚡), no right rail.
+- **Mobile:** card stack vertical, 4 circular action buttons pinned to bottom (✕ / 📑 / **Review & apply** primary / ⚡), no right rail. Touch swipe (left/right/up) maps to skip/auto-apply/save with directional stamp feedback during drag — see `INTERACTIONS.md § F.4`.
 - **Interactions:**
   - Keyboard: `←` skip · `→` auto-apply · `↑` save · `⏎` or `tap` open Review & apply
-  - Touch: swipe gestures
+  - Touch: swipe gestures via pointer events (plan 09a · Issue 3) — left/right/up beyond 80px commits the matching action; below threshold snaps back. Stamp visual reveals at 30px.
+  - **Review & apply (plan 09a · Issue 8D · Option D)** → in-place expand the active card into the full review workspace via `GET /_fragments/discover/expanded/:job_id`, swapped into `#discover-main`. The "Back to queue" button inside swaps `#discover-main` back to the swipe grid via `GET /_fragments/discover/queue`. Direct nav to `/discover/:id` still renders the full page (link-shareable URL).
   - Auto-apply → `POST /api/v1/applications/:job_id/auto-submit` (background) → queue advances
   - Skip → `POST /api/v1/discover/:job_id/skip` → next card
   - Save → `POST /api/v1/discover/:job_id/save`
@@ -401,9 +402,13 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 ### 8. Discover · review & apply
 
 - **Mockup:** PDF § 8 · bundle `screens/DiscoverDetail.jsx`
-- **Route:** `/discover/:id`
-- **Sidebar label:** Jobs (active)
+- **Route:** `/discover/:id` (full page — link-shareable) **OR** `/_fragments/discover/expanded/:id` (inline-expand fragment, plan 09a · Issue 8D · Option D)
+- **Sidebar label:** Discover (active) — renamed from "Jobs" 2026-05-02 per plan 09a · Issue 5 Option A
 - **Purpose:** Full-fidelity application workspace. JD context + tailored resume + cover letter + screener questions, all editable before submission. **Subsumes both prior `/generate/resume` and `/generate/cover-letter` standalone screens — there is no separate `/generate/*` route in the MVP.** All resume tailoring and cover letter drafting happens here.
+- **Two-surface delivery (plan 09a · Issue 8D):** the same workspace partial (`pages/_discover_review_workspace.html`) serves both:
+  1. The full page at `/discover/:id` (extends `base.html` — sidebar visible, link-shareable).
+  2. An inline-expand fragment at `/_fragments/discover/expanded/:id` (no chrome, swapped into `#discover-main` on the Discover page so the active swipe card "expands" in-place without losing queue context). Includes a "← Back to queue" button that swaps `#discover-main` back via `/_fragments/discover/queue`.
+  - The default click path from the swipe action bar uses surface (2). Keyboard `↵` and the Review & apply button both go through it. The full page (1) is reachable via the "open as full page →" link inside the inline fragment, browser back, or direct URL.
 - **Layout:** Top context bar + 3-column workspace + sticky bottom action bar.
 
 #### Top context bar

@@ -8,10 +8,11 @@
 #}
 <div class="bullet-edit-row group flex items-start gap-2 px-3 py-2.5 rounded-lg hover:bg-slate-800/30 transition"
      data-bullet-id="{{ bullet.id }}">
+  {# Plan 09a · Issue 10.f — drag handle visible + larger tap target on touch devices. #}
   <button type="button"
-          class="drag-handle opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-300 cursor-grab transition shrink-0 mt-0.5"
+          class="drag-handle opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-slate-500 lg:text-slate-600 hover:text-slate-300 cursor-grab transition shrink-0 mt-0.5 p-1 -m-1"
           aria-label="Drag to reorder">
-    <i data-lucide="grip-vertical" class="h-4 w-4" stroke-width="1.5"></i>
+    <i data-lucide="grip-vertical" class="h-5 w-5 lg:h-4 lg:w-4" stroke-width="1.5"></i>
   </button>
   <div class="flex-1 min-w-0">
     <p class="text-sm text-slate-200 line-clamp-2 leading-relaxed">{{ bullet.text }}</p>
@@ -24,7 +25,8 @@
       {% endif %}
     </div>
   </div>
-  <div class="opacity-0 group-hover:opacity-100 flex items-center gap-1 shrink-0 transition">
+  {# Plan 09a · Issue 10.f — edit/delete buttons visible on touch (no hover available). #}
+  <div class="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 flex items-center gap-1 shrink-0 transition">
     <button type="button"
             class="p-1.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
             aria-label="Edit bullet"

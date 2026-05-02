@@ -23,6 +23,8 @@
   type="button"
   data-sidebar-toggle
   aria-label="Open sidebar"
+  aria-expanded="false"
+  aria-controls="sidebar-drawer"
   class="fixed top-3 left-3 z-30 lg:hidden h-9 w-9 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
   <i data-lucide="menu" class="h-5 w-5" stroke-width="1.5"></i>
 </button>
@@ -33,7 +35,17 @@
   class="fixed inset-0 z-30 bg-black/50 lg:hidden hidden"
   aria-hidden="true"></div>
 
-<aside class="sidebar fixed lg:sticky top-0 left-0 z-40 h-screen w-64 shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col p-4 gap-1">
+<aside id="sidebar-drawer" class="sidebar fixed lg:sticky top-0 left-0 z-40 h-screen w-64 shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col p-4 gap-1">
+  {# Close button — only visible on mobile while drawer is open. The hamburger
+     outside is covered by the open drawer (z-30 < z-40), so users need an
+     in-drawer affordance. #}
+  <button
+    type="button"
+    data-sidebar-toggle
+    aria-label="Close sidebar"
+    class="absolute top-3 right-3 lg:hidden h-8 w-8 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-100 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+    <i data-lucide="x" class="h-4 w-4" stroke-width="1.5"></i>
+  </button>
   {# Brand lockup #}
   <a href="/" hx-boost="false" class="flex items-center gap-2.5 px-2 py-2 group focus:outline-none focus:ring-2 focus:ring-indigo-500/40 rounded-lg">
     <div class="h-9 w-9 rounded-lg bg-indigo-500 flex items-center justify-center ring-1 ring-indigo-400/40 group-hover:ring-indigo-300/60 transition shrink-0">
@@ -58,10 +70,13 @@
       <span class="flex-1">Profile</span>
     </a>
 
-    {# Jobs (Discover) — count badge swap target. #}
+    {# Discover — count badge swap target. (Plan 09a · Issue 5 Option A: label
+       renamed from "Jobs" → "Discover" so sidebar / URL / page heading align.
+       The `active` key remains "jobs" for backwards-compat with route handlers;
+       the `id="sidebar-badge-jobs"` swap target stays for OOB updates.) #}
     <a href="/discover" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 {% if active == 'jobs' %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
       <i data-lucide="briefcase" class="h-5 w-5 shrink-0" stroke-width="1.5"></i>
-      <span class="flex-1">Jobs</span>
+      <span class="flex-1">Discover</span>
       <span id="sidebar-badge-jobs" class="font-mono text-[11px] px-1.5 py-0.5 rounded {% if active == 'jobs' %}bg-white/20 text-white{% else %}bg-slate-800 text-slate-400{% endif %} {% if not unswiped_count %}hidden{% endif %}">{{ unswiped_count }}</span>
     </a>
 

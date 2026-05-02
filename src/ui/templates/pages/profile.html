@@ -138,7 +138,8 @@
     {# Sticky right rail #}
     <aside class="hidden lg:block">
       <div class="flex flex-col gap-6 sticky top-6">
-        {% with anchors=anchors, active_id="experience" %}
+        {# Initial active anchor defaults to first; base.js scroll-spy (§ 7) updates live. #}
+        {% with anchors=anchors %}
           {% include "components/section_anchor_nav.html" %}
         {% endwith %}
         {% with missing_count=readiness.missing_count, fields=readiness.fields %}

@@ -8,6 +8,8 @@ Every UI router imports `templates` from here so:
 
 from fastapi.templating import Jinja2Templates
 
+from ui.template_helpers import APP_Q_LABEL_MAPS, APP_Q_OPTIONS, app_q_label
+
 templates = Jinja2Templates(directory="src/ui/templates")
 
 # Status pipeline color map per DESIGN.md § Status Pipeline.
@@ -41,3 +43,7 @@ TAG_VOCAB: list[str] = [
 
 templates.env.globals["STATUS_DOT_COLORS"] = STATUS_DOT_COLORS
 templates.env.globals["TAG_VOCAB"] = TAG_VOCAB
+# Plan 09a · Issue 4 — application-question dropdown options + value→label maps.
+templates.env.globals["APP_Q_OPTIONS"] = APP_Q_OPTIONS
+templates.env.globals["APP_Q_LABEL_MAPS"] = APP_Q_LABEL_MAPS
+templates.env.globals["app_q_label"] = app_q_label

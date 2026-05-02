@@ -2,7 +2,10 @@
 {% block title %}Discover — Naavik{% endblock %}
 
 {% block main %}
-<div class="px-6 lg:px-8 py-6 lg:py-8 max-w-7xl mx-auto flex flex-col gap-5">
+{# Plan 09a follow-up — Discover uses the full viewport width on lg+ (no
+   max-w-7xl cap) so the swipe card can stretch across all available real
+   estate. Other pages keep their max-w-7xl wrapper. #}
+<div class="px-6 lg:px-8 py-6 lg:py-8 flex flex-col gap-5">
   <header class="flex items-baseline justify-between gap-3 flex-wrap">
     <div class="min-w-0">
       <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Discover</h1>
@@ -36,90 +39,11 @@
     {% include "components/discover_stats_strip.html" %}
   {% endwith %}
 
-  <div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
-    {# Card stack center #}
-    <div class="flex flex-col items-center gap-4">
-      {% if current_card %}
-        {% with job=current_card %}
-          {% include "components/swipe_card.html" %}
-        {% endwith %}
-        {% with job_id=current_card.id %}
-          {% include "components/discover_action_bar.html" %}
-        {% endwith %}
-      {% else %}
-        {% with icon="check-circle-2",
-                line="No new matches today. Naavik scans hourly — check back soon.",
-                cta_label="Open tracking", cta_url="/tracking" %}
-          {% include "components/empty_state.html" %}
-        {% endwith %}
-      {% endif %}
-    </div>
-
-    {# Right rail #}
-    <aside class="flex flex-col gap-4 min-w-0">
-      <section>
-        <header class="flex items-baseline justify-between mb-2 px-1">
-          <span class="text-xs uppercase tracking-wide text-slate-500 font-medium">Up next</span>
-          <span class="text-xs text-slate-500 font-mono">{{ up_next | length }}</span>
-        </header>
-        <div class="flex flex-col gap-2">
-          {% for j in up_next %}
-            {% with job=j %}
-              {% include "components/up_next_card.html" %}
-            {% endwith %}
-          {% endfor %}
-        </div>
-      </section>
-
-      {% if stuck_drafts %}
-        <section>
-          <header class="flex items-baseline justify-between mb-2 px-1">
-            <span class="text-xs uppercase tracking-wide text-amber-300 font-medium">
-              Stuck in queue · <span class="font-mono">{{ stuck_drafts | length }}</span>
-            </span>
-          </header>
-          <div class="flex flex-col gap-2">
-            {% for j in stuck_drafts %}
-              {% with job=j, state="stuck", last_failure=j.last_failure %}
-                {% include "components/up_next_card.html" %}
-              {% endwith %}
-            {% endfor %}
-          </div>
-        </section>
-      {% endif %}
-
-      {% if auto_apply_drafts %}
-        <section>
-          <header class="flex items-baseline justify-between mb-2 px-1">
-            <span class="text-xs uppercase tracking-wide text-emerald-300 font-medium">
-              Auto-apply queued · <span class="font-mono">{{ auto_apply_drafts | length }}</span>
-            </span>
-          </header>
-          <div class="flex flex-col gap-2">
-            {% for j in auto_apply_drafts %}
-              {% with job=j %}
-                {% include "components/up_next_card.html" %}
-              {% endwith %}
-            {% endfor %}
-          </div>
-        </section>
-      {% endif %}
-
-      <section class="p-3.5 rounded-lg bg-slate-950 border border-slate-800">
-        <header class="flex items-baseline justify-between gap-2">
-          <span class="text-xs uppercase tracking-wide text-slate-400 font-medium">Saved for later · <span class="font-mono">{{ saved_count }}</span></span>
-          <a href="/discover?filter=saved" class="text-xs text-slate-400 hover:text-slate-100">→</a>
-        </header>
-        <p class="mt-1.5 text-xs text-slate-400 leading-relaxed">
-          You've stashed {{ saved_count }} jobs to revisit. They won't be auto-applied until you decide.
-        </p>
-      </section>
-
-      {% with title="Tip",
-              body="Tap to expand a job and refine the resume / cover letter before applying. Right-swipe lets Naavik tailor and submit on its own." %}
-        {% include "components/tip_card.html" %}
-      {% endwith %}
-    </aside>
+  {# Plan 09a · Issue 8D — #discover-main is the swap target that the Review &
+     apply button expands into the full workspace. The "Back to queue" button
+     inside the expanded fragment swaps it back via /_fragments/discover/queue. #}
+  <div id="discover-main">
+    {% include "pages/_discover_queue.html" %}
   </div>
 </div>
 
@@ -127,10 +51,10 @@
   // Per INTERACTIONS.md § F.1 — register Discover keyboard map.
   if (window.naavikKeys) {
     window.naavikKeys.register("/discover", {
-      "ArrowLeft":  function () { var b = document.getElementById("skip-btn"); if (b) b.click(); },
-      "ArrowRight": function () { var b = document.getElementById("auto-apply-btn"); if (b) b.click(); },
-      "ArrowUp":    function () { var b = document.getElementById("save-btn"); if (b) b.click(); },
-      "Enter":      function () { var b = document.getElementById("review-btn"); if (b) b.click(); },
+      "ArrowLeft":  function () { var b = document.getElementById("discover-skip-btn"); if (b) b.click(); },
+      "ArrowRight": function () { var b = document.getElementById("discover-auto-apply-btn"); if (b) b.click(); },
+      "ArrowUp":    function () { var b = document.getElementById("discover-save-btn"); if (b) b.click(); },
+      "Enter":      function () { var b = document.getElementById("discover-review-btn"); if (b) b.click(); },
     });
   }
 </script>

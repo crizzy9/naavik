@@ -49,7 +49,9 @@
   <div id="sidebar-badge-jobs" hx-swap-oob="true"></div>
   <div id="sidebar-badge-tracking" hx-swap-oob="true"></div>
 
-  <script src="https://unpkg.com/[email protected]/dist/umd/lucide.min.js"></script>
+  {# Self-hosted Lucide (was unpkg CDN). Self-hosted to avoid CDN flakiness +
+     content-blockers; `lucide.createIcons()` then runs from base.js. #}
+  <script src="/static/lucide.min.js"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/sse.js"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/response-targets.js"></script>

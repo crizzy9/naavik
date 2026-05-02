@@ -1,6 +1,8 @@
 # Naavik Development Roadmap
 
-> Last updated: 2026-05-02 (Wave 3 / plan 09 EXECUTED — 11 Phase 1 page templates, sample data + accessors, stub fragment + JSON endpoints, Discover keyboard map, 225 tests passing)
+> Last updated: 2026-05-02 (Wave 3 / plan 09 EXECUTED — 11 Phase 1 page templates, sample data + accessors, stub fragment + JSON endpoints, Discover keyboard map, 225 tests passing. **Plan 09a EXECUTED + 09a follow-up shipped 2026-05-02** — 12 original bugfix issues + Discover redesign + idempotent script guards + Lucide self-hosted (CDN restoration tracked in `docs/plans/POST_PHASE_1.md` § Tier 3). 269 tests passing.)
+>
+> **Companion doc:** `docs/plans/POST_PHASE_1.md` — canonical authoring sequence for Phases 2–6 + extended Phase 1.x deferred backlog (renamed from `NEXT_STEPS.md` 2026-05-02).
 >
 > **This is the single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. The master plan (formerly `docs/plans/02-mvp-master-plan.md`) is archived — its content lives here, in `AGENTS.md` § Workflow, and in the active session-continue prompt at `docs/prompts/00-session-continue.md`.
 
@@ -338,6 +340,7 @@ Phase 1 ships in **5 sequential waves** (Scenario A). Each wave passes acceptanc
 | 1 | Author 5 design docs (COMPONENTS / BACKEND / DATA_MODEL / INTERACTIONS / SAMPLE_DATA) | plans 03–07 (all GRADUATED + archived) | (no separate prompts — design plans graduate inline) | ✅ COMPLETE | 2026-04-30 |
 | 2 | Stage 2 component library impl (85 partials + base.html refinements + macros + base.js + fixture page) | `docs/plans/archive/08-stage-2-impl.md` | `docs/prompts/archive/08-stage-2-impl.md` | ✅ EXECUTED | 2026-05-01 |
 | 3 | Stage 3 page templates impl (11 screens, sample_data accessors, stub fragment + JSON endpoints, Discover keyboard map, Playwright snapshots) — folds in interactions per INTERACTIONS.md § J | `docs/plans/archive/09-stage-3-impl.md` | `docs/prompts/archive/09-stage-3-impl.md` | ✅ EXECUTED | 2026-05-02 |
+| 3a | Stage 3 bugfix + Discover-redesign triage (Lucide diagnostics, sidebar mobile drawer, typed application questions, scroll-spy, native dialog backdrop, mobile pages, touch swipe, button rename, sidebar relabel "Jobs"→"Discover", in-place card expansion) | `docs/plans/archive/09a-stage-3-bugfix.md` | (executed inline; no kickoff prompt — direct user approval) | ✅ EXECUTED | 2026-05-02 |
 | 4 | Backend Wave 3 — models + auth + LLM abstraction + vault + initial services + db/seed; **swaps plan 09 stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged) | `docs/plans/10-backend-impl.md` § B | `docs/prompts/10-backend-impl.md` (Wave 3 part) | ⏳ pending | — |
 | 5 | Backend Wave 6 — all 14 services + Typst document generator + DRAFT lifecycle + Greenhouse / Lever / Ashby ATS adapters + portfolio_sync + auto-apply cron + notifications | `docs/plans/10-backend-impl.md` § C | `docs/prompts/10-backend-impl.md` (Wave 6 part) | ⏳ pending | — |
 
@@ -444,7 +447,7 @@ Build order: simplest first.
 
 #### Phase 1 deferred items (Phase 1.x)
 
-Items called out in design docs as "Phase 1.x optional / Phase 2+":
+Items called out in design docs as "Phase 1.x optional / Phase 2+". This is a quick reference; **the canonical extended backlog lives at `docs/plans/POST_PHASE_1.md` § Tier 3** (suggested plan numbers, effort sizing, slot-in suggestions).
 
 | Item | Source | Notes |
 |---|---|---|
@@ -466,6 +469,9 @@ Items called out in design docs as "Phase 1.x optional / Phase 2+":
 | Submission-result observability dashboard (failure-kind aggregates) | this triage 2026-05-01 | Phase 6 — helps user spot recurring board-side failures |
 | Argon2id vault upgrade (vs PBKDF2) | plan 10 Q6 | Phase 6 polish if security review flags |
 | Light mode | DESIGN.md | Phase 6 |
+| **Restore Lucide via CDN** | plan 09a follow-up 2026-05-02 | Self-hosted at `/static/lucide.min.js` for now to fix "no icons render" issue. Production should serve from a CDN — investigate why unpkg failed (content-blocker / CSP / rate-limit), pick a stable URL or fallback chain, drop the local file. |
+| **Sidebar mobile-toggle reliability after navigation** | plan 09a follow-up 2026-05-02 | Idempotent script guards fixed the most common failure mode; user reports it's "still kind of wonky" after navigating away. Repro on real device, isolate the remaining timing issue (likely Tailwind JIT vs HTMX swap order). Not a blocker. |
+| **Discover card max-w cap on ultra-wide screens** | plan 09a follow-up 2026-05-02 | 09a-follow-up dropped the `max-w-7xl` page cap on Discover so the card fills available space. On 4K+ monitors the card may stretch >1500px and feel sparse — add a `2xl:max-w-[1400px]` cap if user feedback comes in. |
 
 **Deliverable (end of Phase 1):** User uploads resume → AI extracts profile → user edits in UI → Discover queue scored + filtered → tailored resume + cover letter generated for any job → submit application via supported ATS → email-signal-driven Tracking → outreach drafts go to LinkedIn / email → portfolio API serves profile + downloadable resume.
 

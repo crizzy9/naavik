@@ -1,9 +1,9 @@
 {#
-  input.html — text / email / password / number / textarea form input.
+  input.html — text / email / password / number / textarea / select form input.
 
   Args:
     name         : HTML name attr (required)
-    type         : "text" / "email" / "password" / "number" / "textarea" (default: "text")
+    type         : "text" / "email" / "password" / "number" / "textarea" / "date" / "select" (default: "text")
     value        : initial value (default: "")
     placeholder  : placeholder text
     required     : bool
@@ -14,6 +14,7 @@
     mono         : use JetBrains Mono (for IDs / API keys)
     id           : explicit DOM id (defaults to name)
     disabled     : bool
+    options      : list[(value, label)] — only used when type="select" (Issue 4)
 #}
 {% set type_ = type | default("text") %}
 {% set value = value | default("") %}
@@ -43,6 +44,22 @@
       aria-label="{{ _aria }}"
       class="{{ _base }} {{ _border_focus }} {{ _font }} min-h-[100px] resize-y leading-relaxed"
       {{ extra_attrs | default('') | safe }}>{{ value }}</textarea>
+  {% elif type_ == "select" %}
+    {# Plan 09a · Issue 4 — typed dropdown for enum-backed fields. Autosave wiring
+       reuses the same `extra_attrs` HTMX payload so PUT-on-change-and-blur Just Works. #}
+    <select
+      id="{{ _id }}"
+      name="{{ name }}"
+      {% if required %}required{% endif %}
+      {% if disabled %}disabled{% endif %}
+      aria-label="{{ _aria }}"
+      class="{{ _base }} {{ _border_focus }} {{ _font }} appearance-none bg-[length:1em] bg-[right_0.75rem_center] bg-no-repeat pr-8 cursor-pointer
+             bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><polyline points=%226 9 12 15 18 9%22/></svg>')]"
+      {{ extra_attrs | default('') | safe }}>
+      {% for opt_value, opt_label in (options | default([])) %}
+        <option value="{{ opt_value }}" {% if (value | string) == (opt_value | string) %}selected{% endif %}>{{ opt_label }}</option>
+      {% endfor %}
+    </select>
   {% else %}
     <input
       id="{{ _id }}"

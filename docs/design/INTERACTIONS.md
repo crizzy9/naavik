@@ -358,7 +358,16 @@ Server returns:
 ### E.2 Modal close
 
 - **Escape key** — native to `<dialog>`.
-- **Backdrop click** — handled via the `.modal-backdrop` element's `hx-on:click`.
+- **Backdrop click — native** (plan 09a · Issue 14). The dialog's backdrop is the dialog element itself; clicks that land on the dialog (rather than its inner content) close it via a global handler in `base.js`. The legacy `.modal-backdrop` div pattern (a `<div>` inside the dialog wired to `hx-on:click`) is **deprecated** — `<dialog>` is its own stacking context, so the inner div doesn't reliably receive backdrop clicks. New modals omit the inner backdrop div entirely.
+
+```javascript
+// base.js — global native-dialog backdrop click handler
+document.body.addEventListener('click', (e) => {
+  if (e.target.tagName === 'DIALOG' && e.target.hasAttribute('open')) {
+    e.target.close();
+  }
+});
+```
 - **Cancel button** — `hx-on:click="document.getElementById('bullet-editor-modal').close()"`.
 - **After save** — server returns the standard fragment swap (e.g. updated bullet row in the parent page) **plus** an `HX-Trigger: closeModal` response header. A global listener on `base.html` closes any open `<dialog>` when the event fires.
 
@@ -494,6 +503,39 @@ While a modal is open, page shortcuts are suspended (the modal's focus trap prev
 | Modal (any) | `Esc` | Close |
 | Modal (forms) | `⌘↵` | Save |
 | Modal (forms) | `Esc` | Cancel + close |
+
+### F.4 Touch swipe conventions (Discover)
+
+Plan 09a · Issue 3. The Discover swipe queue accepts pointer-event-based swipes on `#discover-card` (touch + pen; mouse stays on keyboard + buttons). No external library — native [Pointer Events](https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events) suffice for our single-element directional gestures.
+
+| Direction | Threshold | Action | Stamp visual |
+|---|---|---|---|
+| `dx ≤ -80px` (left) | dominant-axis | click `#discover-skip-btn` | red `SKIP` stamp |
+| `dx ≥ +80px` (right) | dominant-axis | click `#discover-auto-apply-btn` | emerald `APPLY` stamp |
+| `dy ≤ -80px` (up) | dominant-axis | click `#discover-save-btn` | indigo `SAVE` stamp |
+| Below threshold | — | snap card back, no action | — |
+
+Stamp visuals reveal at a smaller threshold (30px) so the user gets feedback while still mid-drag. They're rendered server-side on `swipe_card.html` (3 spans, `data-stamp="left|right|up"`, opacity-0 by default) and shown via CSS scoped to `.is-swipe-{dir}` classes that `keys.js` toggles during pointermove.
+
+Re-attached on `htmx:afterSwap` so each new card (after skip / save / auto-apply) gets the listener.
+
+```javascript
+// keys.js (excerpt) — see attachDiscoverSwipe()
+card.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') return;
+  // …
+});
+card.addEventListener('pointermove', (e) => {
+  // update transform + toggle .is-swipe-{left,right,up}
+});
+card.addEventListener('pointerup', () => {
+  // commit if abs delta ≥ 80px on dominant axis; else snap back
+});
+```
+
+**Why no Hammer.js:** single-element directional gestures don't need momentum / velocity physics. Pointer events are native, no CDN, no 35KB bundle. Sortable.js (already loaded) is for list reorder — wrong primitive.
+
+**Why pointer events not touch events:** pointer events deliver touch + pen + (optionally) mouse through one API. Touch-only events miss pen input on hybrid devices.
 
 ---
 

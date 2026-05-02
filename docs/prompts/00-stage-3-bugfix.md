@@ -22,7 +22,7 @@ implement after re-approval.
 1. `AGENTS.md` § Workflow + § Tech Stack
 2. `CLAUDE.md`
 3. `ROADMAP.md` § Phase 1 (Wave 3 shipped 2026-05-02; Wave 4 unblocked but not started)
-4. `docs/plans/NEXT_STEPS.md` § Immediate paper cuts (do NOT touch paper cut #3 — Playwright capture; that's its own track)
+4. `docs/plans/POST_PHASE_1.md` § Immediate paper cuts (do NOT touch paper cut #3 — Playwright capture; that's its own track)  ← *renamed from `NEXT_STEPS.md` 2026-05-02*
 5. `docs/plans/archive/09-stage-3-impl.md` (the plan that just shipped — ground truth on what exists)
 6. `docs/design/SCREENS.md` (visual + functional contract — items 5, 7, 8 may require edits here)
 7. `docs/design/DESIGN.md` (visual contract — colors, components)

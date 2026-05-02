@@ -13,8 +13,15 @@
 {% set dimmed = dimmed | default(false) %}
 {% set swiping_dir = swiping_dir | default(none) %}
 {% set j = job %}
+{# Plan 09a follow-up — desktop card fills the available column width (no max-w
+   cap on lg+) so the JD body has all the screen real estate it can use. Mobile
+   keeps the 460px ceiling so the card fits comfortably in a 375px viewport.
+   Tap on the card body (not on the action bar / buttons) triggers the same
+   Review & apply expansion as the button — wired in keys.js. #}
 <article id="discover-card"
-         class="relative w-full max-w-[460px] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-black/45 overflow-hidden transition
+         data-discover-card
+         data-tap-job-id="{{ j.id }}"
+         class="relative w-full max-w-[460px] lg:max-w-none bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-black/45 overflow-hidden transition cursor-pointer
                 {% if dimmed %}opacity-60 scale-95{% endif %}">
   {# Top band — gradient + brand color. #}
   <header class="h-20 px-5 py-4 flex items-center gap-3 bg-gradient-to-br {{ j.gradient_from | default('from-indigo-600') }} {{ j.gradient_to | default('to-purple-600') }}">
@@ -70,12 +77,18 @@
     </div>
   </div>
 
-  {# Stamp overlay — directional swipe feedback. #}
-  {% if swiping_dir %}
-    {% set _stamp_text = {"left": "SKIP", "right": "APPLY", "up": "SAVE"}[swiping_dir] %}
-    {% set _stamp_color = {"left": "text-rose-400 border-rose-400", "right": "text-emerald-400 border-emerald-400", "up": "text-indigo-400 border-indigo-400"}[swiping_dir] %}
-    <div class="absolute top-6 right-6 px-4 py-2 rounded-lg border-4 font-semibold text-2xl tracking-widest -rotate-12 {{ _stamp_color }}" aria-hidden="true">
-      {{ _stamp_text }}
-    </div>
-  {% endif %}
+  {# Stamp overlay — directional swipe feedback.
+     Plan 09a · Issue 3 — render all 3 stamps; CSS in styles.css reveals the
+     matching one based on the JS-applied .is-swipe-{left,right,up} class
+     during touch drag. The legacy `swiping_dir` Jinja arg still works for
+     server-rendered preview (e.g. `/_design/components` fixture). #}
+  <span data-stamp="left"
+        class="swipe-stamp absolute top-6 right-6 px-4 py-2 rounded-lg border-4 font-semibold text-2xl tracking-widest -rotate-12 text-rose-400 border-rose-400 opacity-0 transition pointer-events-none {% if swiping_dir == 'left' %}opacity-100{% endif %}"
+        aria-hidden="true">SKIP</span>
+  <span data-stamp="right"
+        class="swipe-stamp absolute top-6 right-6 px-4 py-2 rounded-lg border-4 font-semibold text-2xl tracking-widest -rotate-12 text-emerald-400 border-emerald-400 opacity-0 transition pointer-events-none {% if swiping_dir == 'right' %}opacity-100{% endif %}"
+        aria-hidden="true">APPLY</span>
+  <span data-stamp="up"
+        class="swipe-stamp absolute top-6 right-6 px-4 py-2 rounded-lg border-4 font-semibold text-2xl tracking-widest -rotate-12 text-indigo-400 border-indigo-400 opacity-0 transition pointer-events-none {% if swiping_dir == 'up' %}opacity-100{% endif %}"
+        aria-hidden="true">SAVE</span>
 </article>

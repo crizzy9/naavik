@@ -39,7 +39,9 @@
         </button>
       </header>
 
-      <div id="overview-priority-actions" class="flex flex-col gap-1">
+      {# Plan 09a · Issue 10.e — bound height on desktop so the column doesn't grow unbounded.
+         Mobile keeps natural flow (the column already stacks below KPIs). #}
+      <div id="overview-priority-actions" class="flex flex-col gap-1 lg:max-h-[28rem] lg:overflow-y-auto">
         {% for a in priority_actions %}
           {% with index=loop.index, kind=a.kind, title=a.title, subtitle=a.subtitle,
                   urgency=a.urgency, urgency_label=a.urgency_label,
@@ -75,7 +77,7 @@
            hx-ext="sse"
            sse-connect="/api/v1/tracking/email-signals"
            sse-swap="signal"
-           class="flex flex-col">
+           class="flex flex-col lg:max-h-[28rem] lg:overflow-y-auto">
         {% for s in email_signals %}
           {% with signal=s %}
             {% include "components/email_signal_row.html" %}
