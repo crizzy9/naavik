@@ -1,6 +1,8 @@
 # Naavik Development Roadmap
 
-> Last updated: 2026-05-02 (single-tracking consolidation — all task / backlog / plan-mapping moved here per `AGENTS.md` § Single-doc-tracking principle. Plans 11–15 mapped to Phase 2–6 headers. Pre-Phase-2 paper cuts inlined. Phase 1.x deferred items table is now the canonical extended backlog. Earlier line: Wave 3 / plan 09 EXECUTED + plan 09a EXECUTED + 09a follow-up shipped — 269 tests passing.)
+> Last updated: 2026-05-02 (Wave 4 / Backend Wave 3 / plan 10 § B EXECUTED — backend substrate live: 20 SQLModel entities + Alembic + bcrypt+JWT+CSRF auth + AES-256-GCM vault + LLM provider abstraction + 10 prompt skeletons + cost-tracking via ApiUsage + profile/settings/ats_credentials services + per-field profile autosave + DB-backed Settings + `NAAVIK_PERSISTENCE=db` env var for accessor swap + sequence-bumping seed + rotate-key CLI; 348 memory-mode tests + 6 live-DB seed tests pass; ruff clean; security-review checkpoints 1+2+4 written. Plan 10 § B status → WAVE 3 EXECUTED · Wave 6 awaiting.)
+>
+> Earlier line: single-tracking consolidation — all task / backlog / plan-mapping moved here per `AGENTS.md` § Single-doc-tracking principle. Plans 11–15 mapped to Phase 2–6 headers. Pre-Phase-2 paper cuts inlined. Phase 1.x deferred items table is now the canonical extended backlog. Wave 3 / plan 09 EXECUTED + plan 09a EXECUTED + 09a follow-up shipped — 269 tests passing.
 >
 > **Companion doc:** `docs/plans/POST_PHASE_1.md` — operational guide only (testing playbook, authoring workflow, monitoring, success criteria). All task tracking lives here in ROADMAP.
 >
@@ -341,7 +343,7 @@ Phase 1 ships in **5 sequential waves** (Scenario A). Each wave passes acceptanc
 | 2 | Stage 2 component library impl (85 partials + base.html refinements + macros + base.js + fixture page) | `docs/plans/archive/08-stage-2-impl.md` | `docs/prompts/archive/08-stage-2-impl.md` | ✅ EXECUTED | 2026-05-01 |
 | 3 | Stage 3 page templates impl (11 screens, sample_data accessors, stub fragment + JSON endpoints, Discover keyboard map, Playwright snapshots) — folds in interactions per INTERACTIONS.md § J | `docs/plans/archive/09-stage-3-impl.md` | `docs/prompts/archive/09-stage-3-impl.md` | ✅ EXECUTED | 2026-05-02 |
 | 3a | Stage 3 bugfix + Discover-redesign triage (Lucide diagnostics, sidebar mobile drawer, typed application questions, scroll-spy, native dialog backdrop, mobile pages, touch swipe, button rename, sidebar relabel "Jobs"→"Discover", in-place card expansion) | `docs/plans/archive/09a-stage-3-bugfix.md` | (executed inline; no kickoff prompt — direct user approval) | ✅ EXECUTED | 2026-05-02 |
-| 4 | Backend Wave 3 — models + auth + LLM abstraction + vault + initial services + db/seed; **swaps plan 09 stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged) | `docs/plans/10-backend-impl.md` § B | `docs/prompts/10-backend-impl.md` (Wave 3 part) | ⏳ pending | — |
+| 4 | Backend Wave 3 — models + auth + LLM abstraction + vault + initial services + db/seed; **swaps plan 09 stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged) | `docs/plans/10-backend-impl.md` § B | `docs/prompts/10-backend-impl.md` (Wave 3 part) | ✅ EXECUTED | 2026-05-02 |
 | 5 | Backend Wave 6 — all 14 services + Typst document generator + DRAFT lifecycle + Greenhouse / Lever / Ashby ATS adapters + portfolio_sync + auto-apply cron + notifications | `docs/plans/10-backend-impl.md` § C | `docs/prompts/10-backend-impl.md` (Wave 6 part) | ⏳ pending | — |
 
 After Wave 5 ships, **Phase 2–6 work** (scrapers, scoring, email + auto-classification, LinkedIn DMs + outreach, observability + light mode + LaTeX) graduates to plans 11+ as outlined in plan 10 § D.
@@ -401,27 +403,27 @@ Build order: simplest first.
 | 3.12 | Per-screen interactions per INTERACTIONS.md § J (autosave, drag-drop, modal, SSE, optimistic rollback, keyboard shortcuts) | INTERACTIONS.md § B–H | — | [x] all patterns landed inline with each screen |
 | 3.13 | Per-screen Playwright snapshot baseline at desktop + mobile | — | `tests/visual/capture.py` | [~] capture script ships; PNG generation pending nix-devshell run (NixOS Chromium needs playwright-driver browsers) |
 
-#### Wave 4 — Backend Wave 3 (plan 10 § B)
+#### Wave 4 — Backend Wave 3 (plan 10 § B) — ✅ EXECUTED 2026-05-02
 
-> Initial backend lands the data substrate; **swaps plan 09's stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged). Acceptance: `uv run alembic upgrade head` succeeds, `db/seed.py` populates from sample data, `tests/test_sample_data.py` round-trip via SQLModel passes, auth path passes `security-review`, vault boundary verified.
+> Initial backend lands the data substrate; **swaps plan 09's stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged). Acceptance: `uv run alembic upgrade head` succeeds, `db/seed.py` populates from sample data, `tests/test_sample_data.py` round-trip via SQLModel passes, auth path passes `security-review`, vault boundary verified. **All 348 memory-mode tests + live-DB seed/persistence-swap tests pass.**
 
 | # | Task | Source contract | Status |
 |---|---|---|---|
-| 4.1 | SQLModel models for all 19 entities + Settings (incl. `ApiUsage`) | DATA_MODEL.md § C | [ ] |
-| 4.2 | Alembic initial migration (every table + enum + index + CHECK; pgvector extension enabled) | DATA_MODEL.md § H | [ ] |
-| 4.3 | Auth — JWT cookie + bcrypt; `/api/v1/auth/login`, `/logout`, `/me`, `/csrf`; brute-force rate limit | BACKEND.md § D.1 | [ ] |
-| 4.4 | LLM provider abstraction — `llm/base.py` + anthropic + openai + ollama; structured-output retry policy | BACKEND.md § M.1, M.2 | [ ] |
-| 4.5 | LLM cost tracking — `llm_tracker` service + `ApiUsage` table (powers Settings cost cards from day one) | BACKEND.md § M.4 + DATA_MODEL.md § C `ApiUsage` | [ ] |
-| 4.6 | Vault service — `services/vault.py` (`~/.naavik/secrets.enc`, AES-256-GCM, PBKDF2 from `SECRET_KEY`) + audit log | BACKEND.md § H.1, § L.1 | [ ] |
-| 4.7 | Vault key rotation CLI — `naavik vault rotate-key --old=... --new=...` re-decrypts + re-encrypts | plan 10 § B.5 | [ ] |
-| 4.8 | Settings · Deployment UI: warning when `SECRET_KEY` env mismatches the vault's encryption key fingerprint | plan 10 § B.5 | [ ] |
-| 4.9 | `ats_credentials` service — DB row metadata + vault-backed credential resolution | BACKEND.md § H.1, § K.5 | [ ] |
-| 4.10 | Profile service partial (CRUD + per-field PUT) | BACKEND.md § H.1 | [ ] |
-| 4.11 | Settings persistence (incl. `eager_review_generation` flag for cost-aware DRAFT generation) | BACKEND.md § D.7 + DATA_MODEL.md § L | [ ] |
-| 4.12 | `db/seed.py` consuming `db/sample_data.py` (idempotent ON CONFLICT DO NOTHING) | SAMPLE_DATA.md § A | [ ] |
-| 4.13 | `/_design/components` swap from `NAAVIK_DEBUG` env var → persisted `Settings.debug` | plan 08 § H + plan 10 § B.8 | [ ] |
-| 4.14 | Page-handler accessor body swap — sample-data lists → DB queries (signatures already async from Wave 3) | plan 10 § B.10 | [ ] |
-| 4.15 | Tests — `test_models`, `test_seed`, `test_auth`, `test_llm_provider`, `test_vault` | — | [ ] |
+| 4.1 | SQLModel models for all 19 entities + Settings (incl. `ApiUsage`) | DATA_MODEL.md § C | [x] 20 tables + Pydantic shadows; relationships stripped (services use FK joins); 25 model tests |
+| 4.2 | Alembic initial migration (every table + enum + index + CHECK; pgvector extension enabled) | DATA_MODEL.md § H | [x] `0001_initial.py` drives DDL from `SQLModel.metadata`; `alembic upgrade head` clean against dev DB |
+| 4.3 | Auth — JWT cookie + bcrypt; `/api/v1/auth/login`, `/logout`, `/me`, `/csrf`; brute-force rate limit | BACKEND.md § D.1 | [x] cost=12 prod / cost=4 tests; HS256 JWT; cookie HttpOnly+Secure+SameSite=Strict; CSRF double-submit; 5/15min rate limit; 18 auth tests |
+| 4.4 | LLM provider abstraction — `llm/base.py` + anthropic + openai + ollama; structured-output retry policy | BACKEND.md § M.1, M.2 | [x] Anthropic tool-use / OpenAI json_schema / Ollama JSON mode; 10 prompt skeletons (score_job real); 15 tests |
+| 4.5 | LLM cost tracking — `llm_tracker` service + `ApiUsage` table (powers Settings cost cards from day one) | BACKEND.md § M.4 + DATA_MODEL.md § C `ApiUsage` | [x] `tracked_call` wraps every provider call; persists ApiUsage row on success+failure; retries per BACKEND § M.5 |
+| 4.6 | Vault service — `services/vault.py` (`~/.naavik/secrets.enc`, AES-256-GCM, PBKDF2 from `SECRET_KEY`) + audit log | BACKEND.md § H.1, § L.1 | [x] AES-256-GCM + PBKDF2 100k + key_fingerprint header for mismatch detection; sibling lockfile for concurrent writes; audit log never carries values; 22 tests |
+| 4.7 | Vault key rotation CLI — `naavik vault rotate-key --old=... --new=...` re-decrypts + re-encrypts | plan 10 § B.5 | [x] `cli/vault.py` rotate-key with `.bak` backup + `--no-backup` flag; round-trip verified end-to-end |
+| 4.8 | Settings · Deployment UI: warning when `SECRET_KEY` env mismatches the vault's encryption key fingerprint | plan 10 § B.5 | [x] `vault.is_locked()` + `services/settings_service.get_deployment_info()` expose mismatch state; UI banner wiring lands when settings tab consumes the new endpoint |
+| 4.9 | `ats_credentials` service — DB row metadata + vault-backed credential resolution | BACKEND.md § H.1, § K.5 | [x] DB metadata + vault.get(scope=ats, key=board) resolution |
+| 4.10 | Profile service partial (CRUD + per-field PUT) | BACKEND.md § H.1 | [x] get/update_field/update_application_questions/add/update/delete/reorder bullets; emits profile_updated AppEvent |
+| 4.11 | Settings persistence (incl. `eager_review_generation` flag for cost-aware DRAFT generation) | BACKEND.md § D.7 + DATA_MODEL.md § L | [x] DB-backed CRUD per tab; PUT /api/v1/settings/llm flows API key through vault; settings_service.get_deployment_info exposes vault status |
+| 4.12 | `db/seed.py` consuming `db/sample_data.py` (idempotent ON CONFLICT DO NOTHING) | SAMPLE_DATA.md § A | [x] 372 rows seeded across 20 entities; ON CONFLICT DO NOTHING; bumps every PK sequence after seed; CLI `uv run python -m db.seed` |
+| 4.13 | `/_design/components` swap from `NAAVIK_DEBUG` env var → persisted `Settings.debug` | plan 08 § H + plan 10 § B.8 | [x] route consults DB-backed Settings.debug; legacy env var still works as test fallback |
+| 4.14 | Page-handler accessor body swap — sample-data lists → DB queries (signatures already async from Wave 3) | plan 10 § B.10 | [x] partial: 12 high-traffic accessors (Profile/User/Settings/Experience/Bullet/Skill/Education/Project/Cert/Job/Application/discover_queue/applications_visible_in_tracking) gated on `NAAVIK_PERSISTENCE=db`; remaining accessors fall back to memory in DB env (Wave 6 closes the gap) |
+| 4.15 | Tests — `test_models`, `test_seed`, `test_auth`, `test_llm_provider`, `test_vault` | — | [x] 348 memory-mode tests + 6 live-DB seed tests + persistence-swap test pass; 14 skipped (live-DB gated via `NAAVIK_LIVE_DB=1`) |
 
 #### Wave 5 — Backend Wave 6 (plan 10 § C)
 

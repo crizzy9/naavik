@@ -1,9 +1,10 @@
 ---
-Status: APPROVED
+Status: WAVE 3 EXECUTED · Wave 6 awaiting
 Type: implementation
 Authored: 2026-05-01
-Last updated: 2026-05-02 (added § Tracking callout + Wave-name cross-walk after consolidation of all task tracking into ROADMAP per AGENTS.md § Single-doc-tracking principle; no scope change)
+Last updated: 2026-05-02 (Wave 3 / § B EXECUTED — see ROADMAP § Phase 1 § Wave 4)
 Approved: 2026-05-01
+Executed: 2026-05-02 (Wave 3 / § B only; Wave 6 / § C awaiting fresh session)
 Depends on: 04-backend-architecture (graduated → docs/design/BACKEND.md), 05-data-model (graduated → docs/design/DATA_MODEL.md), 07-sample-data (graduated → docs/design/SAMPLE_DATA.md), 09-stage-3-impl (page templates + stub handlers — EXECUTED 2026-05-02; this plan's Wave 4 part swaps plan 09's accessor bodies for DB queries, signatures preserved), 09a-stage-3-bugfix (EXECUTED 2026-05-02; plan-09 surface bugfixes — does not affect plan 10's scope)
 ---
 
@@ -568,6 +569,66 @@ Phase 2-6 ship across the following weeks per their own plans.
 - ❌ Logging secret values in any audit / request / error path
 - ❌ DaisyUI / light-mode in this plan (already removed in plan 08; doesn't get reintroduced)
 - ❌ Bypassing bcrypt for "fast tests" — tests use bcrypt cost=4 via env override, not plain hashing
+
+## Deviations from plan (Wave 3 / § B EXECUTED 2026-05-02)
+
+Per `AGENTS.md` § Workflow step 7. Captures every place the shipped code diverged from this plan's spec. Wave 6 / § C will append to this section when it ships.
+
+### Architecture / library
+
+- **SQLModel `Relationship()` declarations stripped from every entity.**
+  - **Why:** SQLModel 0.0.22's forward-ref string resolution failed on the circular Job ↔ Application ↔ Contact graph. `configure_mappers()` raised `expression "'Job'" failed to locate a name` even with all classes registered in `SQLModel.metadata.classes`. Tested both `Optional["X"]` and `"X"` annotations; both failed in the same way.
+  - **Impact:** Services use explicit `select(...).where(FK)` joins instead of relationship attribute access. No lazy-loading via `application.job.company` etc.
+  - **Follow-up:** Wave 6 should re-evaluate when SQLModel cuts a release with sqlalchemy 2.0 `Mapped[]` annotations natively, or migrate the affected entities to declarative-style explicit `relationship()` calls.
+
+- **`db/session.py` engine uses `NullPool`.**
+  - **Why:** pytest-asyncio creates a new event loop per test; the default connection pool returns asyncpg connections bound to a stale loop (`Event loop is closed`) on the second test that touches the same engine. NullPool sidesteps this.
+  - **Impact:** Production performance: every request opens a fresh connection to Postgres. For the single-user MVP this is invisible; benchmark in Phase 2+ if scraping or batch endpoints feel slow.
+  - **Follow-up:** Phase 6 observability work should add a Prometheus gauge on connection-pool stats so we know when this becomes a real issue.
+
+### Schema
+
+- **`Contact.email` partial-unique index dropped.**
+  - **Why:** The Phase 1 fixture pool uses placeholder/redacted emails (`[email protected]`) for 8 LinkedIn-only contacts. `DATA_MODEL.md` § C calls for `email (partial unique per user)`; the fixtures violate it.
+  - **Impact:** Two contacts at the same company can share an email.
+  - **Follow-up:** Phase 2+ reintroduce the constraint after the service layer validates inbound contact emails against the placeholder pattern. Tracked as an inline comment in `src/models/contact.py`.
+
+- **Seed sequence-bumping added to `db/seed.py`.**
+  - **Why:** `INSERT ... ON CONFLICT (id) DO NOTHING` with explicit IDs doesn't advance the Postgres autoincrement sequence. Subsequent inserts that rely on SERIAL collide with seeded IDs.
+  - **Impact:** None at runtime; required for test correctness. Documented inline in `_bump_sequence()`.
+
+### Feature scope reductions (Wave 6 closes the gap)
+
+- **`db/sample_data.py` accessor body swap is partial.** 12 high-traffic read accessors honor `NAAVIK_PERSISTENCE=db` (Profile/User/Settings/Experience/Bullet/Skill/Education/Project/Cert/Job/Application/discover_queue/applications_visible_in_tracking). Lower-traffic accessors (KPIs, priority_actions, mutation shims, outreach helpers) fall back to memory in DB env. Annotated with `# Wave 4 partial swap` comments. **Follow-up:** Wave 6 closes the gap and removes the env var.
+- **Settings · Deployment UI banner** (vault-locked / SECRET_KEY mismatch) — server-side support is live (`vault.is_locked()` + `services/settings_service.get_deployment_info()` exposes the boolean + fingerprints). UI banner template wiring lands when the Settings · Deployment tab consumes the new endpoint. **Follow-up:** Wave 6 or PC.x.
+- **`prompts/score_job` is real-but-naive** per Q8. Calls the LLM with a profile/JD prompt and returns the raw structured response. Phase 3 (plan 12) layers in deterministic tag matching + visa filter pre-checks.
+- **9 prompt modules ship as skeletons** (`extract_resume`, `extract_job`, `select_bullets`, `trim_bullet`, `draft_cover_letter`, `answer_screener`, `classify_email`, `draft_outreach`, `auto_tag_bullets`) — each has a working schema + callable; call sites that exercise them ship in Wave 6 / Phase 2-5.
+
+### Operational artifacts introduced (propagated to README + CLAUDE.md)
+
+| Surface | What it is | Where it's documented |
+|---|---|---|
+| `naavik vault rotate-key --old= --new= [--no-backup]` CLI | Re-encrypts the on-disk vault when `SECRET_KEY` rotates. Writes `.bak.YYYY-MM-DD-HH-MM` for safety. | README § Operations |
+| `~/.naavik/secrets.enc` file format | AES-256-GCM ciphertext + 32-byte plaintext `key_fingerprint` header for mismatch detection + 32-byte salt + 12-byte nonce | README § Operations · Vault |
+| `~/.naavik/secrets.enc.lock` sibling lockfile | Coordinates concurrent vault writes via `fcntl.LOCK_EX` so atomic-rename inode swaps don't corrupt readers | inline in `services/vault.py` |
+| `~/.naavik/logs/vault-audit.log` | JSON-line audit log of every vault operation. Secret values never appear. | README § Operations · Audit log |
+| `SECRET_KEY` ≥ 32 bytes requirement | PyJWT warns on shorter keys; vault PBKDF2 derivation is also weakened. | README § Configuration |
+| `NAAVIK_BCRYPT_COST` env var | Cost=4 for tests, cost=12 for production. | README § Dev / test env vars |
+| `NAAVIK_PERSISTENCE` env var | `memory` / `db` toggle for the partial accessor swap. Removed once Wave 6 closes the gap. | README § Dev / test env vars |
+| `NAAVIK_LIVE_DB` env var | Opt-in for live-DB pytest tests. | README § Dev / test env vars |
+| `Settings.debug` field | Persistent gate for `/_design/components`. Replaces the legacy `NAAVIK_DEBUG=1` env var (kept as fallback). | README § Manual local development setup |
+| `uv run python -m db.seed` CLI | Seeds the 372-row fixture set into Postgres + bumps every PK sequence. Idempotent. | README § Manual local development setup |
+
+### Test coverage adjustments
+
+- **Live-DB pytest tests are opt-in via `NAAVIK_LIVE_DB=1`** (not always-on, not skipped silently). 14 tests gated: 6 in `test_seed.py`, 5 in `test_persistence_swap.py`, 3 in `test_stub_endpoints.py`. Plain `uv run pytest` runs 348 memory-mode tests + 14 skips.
+- **Side-by-side Playwright snapshot diff (memory vs db) not run end-to-end.** The persistence-swap test verifies env-var dispatch + DB-mode parity for representative read accessors. Full 11-screen pixel diff requires both dev servers up + a populated DB; pieces are in place for Wave 6 / PC.3 to capture.
+- **Plan-09 stub-endpoint auth tests removed/gated.** `test_auth_login_ok`, `test_auth_login_fail`, `test_auth_login_onboarding_sentinel`, `test_auth_me_authenticated` were dropped — auth is real now and these would have needed live DB + seeded user. Replaced by 18 unit tests in `test_auth.py` plus the live-DB integration path.
+
+### Process learnings
+
+- The orchestrator's `[app]` step never bound `:8000` for the user in interactive shell mode (TTY stdout, `PYTHONPATH` from `nix develop`). Same code, same machine, same `nix run .#dev` command — just different shell context. Surfaced as paper cut PC.1 in `docs/prompts/10a-dev-orchestrator-paper-cuts.md` with full reproduction + four hypothesis tests.
+- `PYTHONPATH` from `nix develop` caused `uv run pytest` to load python3.13's pytest 9.0.2 from nix store instead of the project's py3.12 venv. Mitigated by `env -u PYTHONPATH uv run ...` during § B's verification.
 
 ## Open questions
 

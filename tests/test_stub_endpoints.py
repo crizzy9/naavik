@@ -1,9 +1,28 @@
-"""Per-stub-endpoint shape + ?fail=1 failure-mode coverage (plan 09 § I)."""
+"""Per-stub-endpoint shape + ?fail=1 failure-mode coverage (plan 09 § I).
+
+Wave 4 swap: profile/bullet endpoints are now DB-backed real handlers.
+Tests that hit them are gated on a reachable Postgres at `DATABASE_URL` —
+they're effectively integration tests now. The pure-shape tests for
+endpoints that don't touch the DB (logout, csrf, error responses, reorder)
+keep running unconditionally.
+"""
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
+
+# DB-backed handlers run only when NAAVIK_LIVE_DB=1 is set. Plain pytest runs
+# skip them — the unit tests for auth/vault/llm cover the same code paths
+# without needing live DB.
+_LIVE_DB = os.environ.get("NAAVIK_LIVE_DB", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _skip_if_no_db() -> None:
+    if not _LIVE_DB:
+        pytest.skip("set NAAVIK_LIVE_DB=1 to run DB-backed integration tests")
 
 
 @pytest.fixture(scope="module")
@@ -34,24 +53,14 @@ def _restore_state():
 
 
 # ── Auth ────────────────────────────────────────────────────────────────
-
-
-def test_auth_login_ok(client):
-    r = client.post("/api/v1/auth/login", data={"email": "[email protected]", "password": "x"})
-    assert r.status_code == 204
-    assert r.headers.get("hx-redirect") == "/"
-    assert "naavik_session" in r.headers.get("set-cookie", "")
-
-
-def test_auth_login_onboarding_sentinel(client):
-    r = client.post("/api/v1/auth/login", data={"email": "onboarding@test", "password": "x"})
-    assert r.headers.get("hx-redirect") == "/onboarding"
-
-
-def test_auth_login_fail(client):
-    r = client.post("/api/v1/auth/login?fail=1", data={"email": "x@y", "password": "z"})
-    assert r.status_code == 401
-    assert "Invalid credentials" in r.text
+#
+# Plan 10 Wave 4 swapped these stubs for real bcrypt + JWT + CSRF handlers
+# in `src/api/auth.py`. End-to-end auth coverage now lives in:
+# - `tests/test_auth.py` (unit tests on bcrypt / JWT / CSRF / rate limit)
+# - integration tests run against the live dev DB during smoke
+# (see `tests/test_seed.py` pattern). The stub-shape tests below are
+# preserved for the endpoints that survive plan-09 (logout + csrf — these
+# don't need DB).
 
 
 def test_auth_logout(client):
@@ -71,13 +80,6 @@ def test_auth_me_unauthenticated(client):
     assert r.status_code == 401
 
 
-def test_auth_me_authenticated(client):
-    r = client.get("/api/v1/auth/me", cookies={"naavik_session": "fake-1"})
-    assert r.status_code == 200
-    body = r.json()
-    assert body["email"] == "shyam.padia930@gmail.com"
-
-
 def test_auth_csrf(client):
     r = client.get("/api/v1/auth/csrf")
     assert r.status_code == 200
@@ -88,6 +90,7 @@ def test_auth_csrf(client):
 
 
 def test_profile_field_put_returns_oob_indicator(client):
+    _skip_if_no_db()
     r = client.put("/api/v1/profile/full_name", data={"value": "Shyam P."})
     assert r.status_code == 200
     assert 'id="autosave"' in r.text
@@ -106,6 +109,7 @@ def test_profile_field_put_unknown_field_returns_404(client):
 
 
 def test_bullets_post_get_put_delete_roundtrip(client):
+    _skip_if_no_db()
     # POST
     r = client.post("/api/v1/bullets", data={"text": "Test bullet", "experience_id": 1})
     assert r.status_code == 200
@@ -126,6 +130,7 @@ def test_bullets_post_get_put_delete_roundtrip(client):
 
 
 def test_bullets_rewrite(client):
+    _skip_if_no_db()
     r = client.post("/api/v1/bullets/1/rewrite")
     assert r.status_code == 200
     assert r.json().get("edited") is True

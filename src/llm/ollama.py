@@ -1,0 +1,147 @@
+"""Ollama provider — local model via Ollama HTTP API.
+
+Per BACKEND.md § M.2. Cost = $0 (local). Structured output via JSON mode
+(`format: "json"`).
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import AsyncIterator
+from typing import TypeVar
+
+import httpx
+from pydantic import BaseModel
+
+from .base import (
+    CompletionResult,
+    LLMProvider,
+    LLMProviderError,
+    StructuredResult,
+)
+
+T = TypeVar("T", bound=BaseModel)
+
+
+class OllamaProvider(LLMProvider):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:11434",
+        model: str = "llama3.1:70b",
+    ) -> None:
+        self._model = model
+        self._base = base_url.rstrip("/")
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(120.0))
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    @property
+    def provider_id(self) -> str:
+        return "ollama"
+
+    async def complete(self, prompt: str, *, max_tokens: int = 1024) -> CompletionResult:
+        try:
+            r = await self._client.post(
+                f"{self._base}/api/generate",
+                json={
+                    "model": self._model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"num_predict": max_tokens},
+                },
+            )
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise LLMProviderError(f"ollama complete failed: {exc}") from exc
+
+        data = r.json()
+        return CompletionResult(
+            text=data.get("response", ""),
+            input_tokens=data.get("prompt_eval_count", 0),
+            output_tokens=data.get("eval_count", 0),
+            model=self._model,
+        )
+
+    async def structured(
+        self,
+        prompt: str,
+        schema: type[T],
+        *,
+        max_tokens: int = 1024,
+    ) -> StructuredResult:
+        # Ollama "format: json" forces JSON output. We rely on the prompt to
+        # describe the schema since Ollama doesn't natively bind to a JSON
+        # schema. We append the schema to the prompt to bias the model.
+        full_prompt = (
+            f"{prompt}\n\n"
+            f"Respond with a JSON object matching this schema exactly:\n"
+            f"{json.dumps(schema.model_json_schema(), indent=2)}\n"
+            f"Return ONLY the JSON object, no prose."
+        )
+        try:
+            r = await self._client.post(
+                f"{self._base}/api/generate",
+                json={
+                    "model": self._model,
+                    "prompt": full_prompt,
+                    "stream": False,
+                    "format": "json",
+                    "options": {"num_predict": max_tokens},
+                },
+            )
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise LLMProviderError(f"ollama structured failed: {exc}") from exc
+
+        data = r.json()
+        raw_text = data.get("response", "{}")
+        try:
+            value = json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            raise LLMProviderError(
+                f"ollama structured response not valid JSON: {raw_text!r}",
+                kind="schema_validation",
+            ) from exc
+
+        return StructuredResult(
+            text=raw_text,
+            value=value,
+            input_tokens=data.get("prompt_eval_count", 0),
+            output_tokens=data.get("eval_count", 0),
+            model=self._model,
+        )
+
+    async def stream(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int = 1024,
+    ) -> AsyncIterator[str]:
+        try:
+            async with self._client.stream(
+                "POST",
+                f"{self._base}/api/generate",
+                json={
+                    "model": self._model,
+                    "prompt": prompt,
+                    "stream": True,
+                    "options": {"num_predict": max_tokens},
+                },
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    payload = json.loads(line)
+                    if payload.get("done"):
+                        return
+                    text = payload.get("response", "")
+                    if text:
+                        yield text
+        except httpx.HTTPError as exc:
+            raise LLMProviderError(f"ollama stream failed: {exc}") from exc
+
+    def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
+        return 0.0  # local = free

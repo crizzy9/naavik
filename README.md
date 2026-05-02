@@ -150,7 +150,7 @@ nix develop          # or set up direnv to load automatically
 
 The long-form path: Postgres + migrations + FastAPI dev with no Nix orchestrator and no Docker. Use this when you want fine-grained control over each step, or when `nix run .#dev` errors out and you need to bisect what failed.
 
-> **At the current state (plan 08 only)**, every route is a placeholder template render — the app needs no DB. Steps **1–3** are enough. Steps **4–6** unlock once plan 10 (Wave 4) lands DB-backed handlers.
+> **As of plan 10 § B (Wave 4, 2026-05-02)**, the backend substrate is live: 20 SQLModel entities, single Alembic migration, bcrypt+JWT auth, AES-256-GCM vault, LLM provider abstraction. Steps **4–6** below are required for any DB-backed route. Steps **1–3** still work for the static / template-only routes.
 
 **Prerequisites:**
 
@@ -175,11 +175,15 @@ uv run fastapi dev src/main.py
 
 Open <http://localhost:8000>. Auto-reload is on — edits to `src/ui/templates/**/*.html`, `src/ui/static/**`, and `src/**/*.py` reload automatically.
 
-To enable `/_design/components` (the component fixture page; plan 08 gates it on this env var):
+To enable `/_design/components` (the component fixture page):
 
 ```bash
+# Plan 10 § B Wave 4: gate is now persisted Settings.debug. The legacy env-var
+# fallback below still works for the no-DB / static path.
 NAAVIK_DEBUG=1 uv run fastapi dev src/main.py
 ```
+
+With the DB live, set `Settings.debug = True` for `user_id=1` instead — the env var is the legacy path.
 
 **3 · (Optional) Lint, format, test**
 
@@ -226,13 +230,16 @@ export DATABASE_URL="postgresql+asyncpg://naavik:password@localhost:5432/naavik"
 
 `config.py`'s default already points here, so you only need to export when connecting somewhere else. Alternatively, copy `.env.example` → `.env` and edit — `pydantic-settings` picks it up automatically.
 
-**6 · Run migrations**
+**6 · Run migrations + seed**
 
 ```bash
-uv run alembic upgrade head
+uv run alembic upgrade head     # creates 20 tables + pgvector extension
+uv run python -m db.seed         # populates the seeded fixture set (372 rows; idempotent)
 ```
 
-(Plan 08 has no migrations yet — `versions/` is empty, so this is a no-op until plan 10 ships.) After model changes, generate a new revision:
+`db.seed` reads `src/db/sample_data.py` and INSERTs with `ON CONFLICT (id) DO NOTHING`, then bumps each table's autoincrement sequence past the seeded max so subsequent inserts don't collide. Safe to re-run.
+
+After model changes, generate a new revision:
 
 ```bash
 uv run alembic revision --autogenerate -m "describe the change"
@@ -252,24 +259,92 @@ All env vars are **optional**. `src/config.py` provides working defaults; overri
 # Database (Compose / NixOS provision their own; only override if connecting elsewhere)
 DATABASE_URL=postgresql+asyncpg://naavik:password@localhost:5432/naavik
 
-# Override in production!
-SECRET_KEY=<long-random-string>
+# Override in production! Must be ≥ 32 bytes — JWT (HS256) and the vault
+# (PBKDF2 → AES-256-GCM) both derive from this. PyJWT warns on shorter keys;
+# rotating it after the vault is initialized requires `naavik vault rotate-key`
+# (see § Operations).
+SECRET_KEY=<long-random-string-32-bytes-or-more>
 
 # LLM providers (at least one for AI features)
+# In production, prefer storing keys in the vault via Settings · LLM Provider
+# rather than env. Env-var keys are read as a one-time fallback when the vault
+# entry is missing.
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 OLLAMA_BASE_URL=http://localhost:11434
 
-# Optional integrations
+# Optional integrations (preferred path: Settings · Notifications + vault)
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 TELEGRAM_BOT_TOKEN=...
 PORTFOLIO_WEBHOOK_URL=...    # Netlify/Vercel rebuild trigger
 
 # Data dir (mirrors production /app/.naavik in Docker, ~/.naavik on NixOS)
+# Holds: secrets.enc (encrypted vault), secrets.enc.lock (concurrency lockfile),
+# secrets.enc.bak.YYYY-MM-DD-HH-MM (rotate-key backups), logs/vault-audit.log,
+# data/documents/<app_id>/{resume,cover-letter}.pdf
 DATA_DIR=.naavik
 ```
 
+### Dev / test env vars (not user-facing)
+
+These exist for development and CI; production should leave them unset.
+
+| Var | Purpose | Default |
+|---|---|---|
+| `NAAVIK_BCRYPT_COST` | bcrypt rounds for password hashing. Set to `4` in tests for ~10× speedup; production uses `12`. Out-of-range values fall back to `12`. | `12` |
+| `NAAVIK_PERSISTENCE` | Sample-data accessor mode. `memory` (default) reads in-memory fixture lists; `db` reads from Postgres via SQLModel. **Wave 4 partial swap** — only the high-traffic read accessors honor `db`; the rest fall back to memory in DB env. Removed in a follow-up cleanup once full DB-mode coverage lands. | `memory` |
+| `NAAVIK_LIVE_DB` | Opt-in to the live-DB-gated test suite (`tests/test_seed.py`, the DB-mode tests in `tests/test_persistence_swap.py`, the integration tests in `tests/test_stub_endpoints.py`). Set to `1` together with `DATABASE_URL` to run them. | unset |
+| `NAAVIK_DEBUG` | Legacy gate for `/_design/components`. Wave 4 swapped this to the persisted `Settings.debug` flag; the env var still works as a no-DB fallback so plan-08-era component tests stay green. | unset |
+
 Auth is form-based (email + password) in v1. OIDC support for self-hosted (Authentik / Keycloak / Okta) is on the Phase 2+ roadmap.
+
+## Operations
+
+Self-hoster checklist for the things plan 10 § B introduced.
+
+### Vault — encrypted secrets at `~/.naavik/secrets.enc`
+
+The DB stores no secret material. Every API key, OAuth refresh token, IMAP password, ATS cookie, Discord webhook URL, Telegram bot token, and Netlify rebuild hook lives in `~/.naavik/secrets.enc` — AES-256-GCM, master key derived from `SECRET_KEY` via PBKDF2-HMAC-SHA256 (100k iterations). DB rows store fingerprints + `*_configured` booleans only.
+
+The file's plaintext header carries a 32-byte `key_fingerprint = sha256(master_key)[:32]` so the server can detect a `SECRET_KEY` mismatch at startup and refuse to boot in vault-locked mode (writes rejected, secret-dependent reads return 503) instead of silently corrupting the file.
+
+**Backup discipline:** restore both `~/.naavik/secrets.enc` AND the `SECRET_KEY` env var that encrypted it together. The `key_fingerprint` header makes mismatched restores fail fast with a clear error.
+
+### Rotating `SECRET_KEY`
+
+Rotating `SECRET_KEY` without re-encrypting the vault bricks it. Use the CLI:
+
+```bash
+naavik vault rotate-key --old="$OLD_SECRET_KEY" --new="$NEW_SECRET_KEY"
+# [vault] reading ~/.naavik/secrets.enc (current fingerprint: 5ecfe49bab37c143...)
+# [vault] decrypting 12 entries across 5 scopes (ats, integrations, llm, misc, notifications)
+# [vault] re-encrypting with new key (new fingerprint: 3ced9ad7...)
+# [vault] writing ~/.naavik/secrets.enc (atomic rename complete)
+# [vault] backup at ~/.naavik/secrets.enc.bak.2026-05-02-12-06
+# [vault] done. update SECRET_KEY env to the new value before next start.
+```
+
+The rotation reads with the old key, re-derives the master key from the new key against a **fresh salt**, re-encrypts atomically, and writes a `.bak.YYYY-MM-DD-HH-MM` for safety. Pass `--no-backup` for CI runs that don't need the backup file.
+
+After running, update `SECRET_KEY` in your environment (`.env`, NixOS `sops.secrets`, Docker secrets, etc.) before the next `nix run .#dev` / `docker compose up`. Settings · Deployment shows a banner if it detects a fingerprint mismatch.
+
+### Vault audit log
+
+Every `get` / `set` / `delete` / `list` / `rotate-key` writes a JSON line to `~/.naavik/logs/vault-audit.log`:
+
+```json
+{"caller":"settings_service","key":"anthropic","op":"set","scope":"llm","ts":"2026-05-02T12:06:34.281+00:00"}
+```
+
+Secret values **never** appear in the audit log — only operation, scope, key name, and caller. Tail it during incident response.
+
+### Reset the dev DB
+
+```bash
+rm -rf .naavik/db                 # nuke postgres data dir; nix run .#dev re-initializes
+# or, with the orchestrator running:
+uv run alembic downgrade base && uv run alembic upgrade head && uv run python -m db.seed
+```
 
 ## Project Structure
 

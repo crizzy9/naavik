@@ -1,0 +1,255 @@
+"""Profile service partial — Wave 4 of plan 10 § B.7.
+
+Wave 4 ships: get_profile, update_field (per-field PUT), update_application_questions,
+add_bullet, update_bullet, delete_bullet (soft), reorder_bullets. Wave 6 adds
+extract_resume_to_profile + AI tag inference + AppEvent emission for `profile_updated`.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from models import (
+    AppEvent,
+    AppEventKind,
+    Bullet,
+    Experience,
+    Profile,
+)
+
+# Whitelist of profile fields that the per-field PUT endpoint may touch.
+# (Same set as the route handler's `_ALLOWED_FIELDS`; service-side gate is
+# the source of truth.)
+ALLOWED_PROFILE_FIELDS = frozenset(
+    {
+        "full_name",
+        "headline",
+        "current_company",
+        "location",
+        "email",
+        "phone",
+        "portfolio_url",
+        "github_handle",
+        "linkedin_handle",
+        "summary_full",
+        "summary_short",
+        "open_to_opportunities",
+        "work_authorization",
+        "visa_sponsorship_needed",
+        "willing_to_relocate",
+        "notice_period_days",
+        "salary_expectation_usd",
+        "earliest_start",
+        "veteran_status",
+        "disability_status",
+        "race_ethnicity",
+        "gender_identity",
+    }
+)
+
+
+# ── Read ─────────────────────────────────────────────────────────────────
+
+
+async def get_profile(session: AsyncSession, user_id: int) -> Profile | None:
+    stmt = select(Profile).where(
+        Profile.user_id == user_id,
+        Profile.deleted_at.is_(None),
+    )
+    return (await session.exec(stmt)).one_or_none()
+
+
+async def get_experience(session: AsyncSession, experience_id: int) -> Experience | None:
+    stmt = select(Experience).where(
+        Experience.id == experience_id,
+        Experience.deleted_at.is_(None),
+    )
+    return (await session.exec(stmt)).one_or_none()
+
+
+async def get_bullets_for_experience(
+    session: AsyncSession, experience_id: int
+) -> list[Bullet]:
+    stmt = (
+        select(Bullet)
+        .where(Bullet.experience_id == experience_id, Bullet.deleted_at.is_(None))
+        .order_by(Bullet.order_index)
+    )
+    return (await session.exec(stmt)).all()
+
+
+async def get_bullet(session: AsyncSession, bullet_id: int) -> Bullet | None:
+    stmt = select(Bullet).where(
+        Bullet.id == bullet_id,
+        Bullet.deleted_at.is_(None),
+    )
+    return (await session.exec(stmt)).one_or_none()
+
+
+# ── Profile mutations ────────────────────────────────────────────────────
+
+
+async def update_field(
+    session: AsyncSession,
+    user_id: int,
+    field: str,
+    value: Any,
+) -> Profile:
+    """Per-field PUT for the autosave indicator."""
+    if field not in ALLOWED_PROFILE_FIELDS:
+        raise ValueError(f"field {field!r} not allowed via per-field PUT")
+    profile = await get_profile(session, user_id)
+    if profile is None:
+        raise LookupError(f"no profile for user_id={user_id}")
+    setattr(profile, field, value)
+    profile.updated_at = datetime.now(UTC)
+    session.add(profile)
+    await _emit_profile_updated(session, user_id, [field])
+    await session.flush()
+    return profile
+
+
+async def update_application_questions(
+    session: AsyncSession,
+    user_id: int,
+    payload: dict[str, Any],
+) -> Profile:
+    """Bulk update for the 10 EEO/visa fields per DATA_MODEL.md § A note."""
+    profile = await get_profile(session, user_id)
+    if profile is None:
+        raise LookupError(f"no profile for user_id={user_id}")
+
+    eeo_fields = {
+        "work_authorization",
+        "visa_sponsorship_needed",
+        "willing_to_relocate",
+        "notice_period_days",
+        "salary_expectation_usd",
+        "earliest_start",
+        "veteran_status",
+        "disability_status",
+        "race_ethnicity",
+        "gender_identity",
+    }
+    touched: list[str] = []
+    for k, v in payload.items():
+        if k in eeo_fields:
+            setattr(profile, k, v)
+            touched.append(k)
+    if touched:
+        profile.updated_at = datetime.now(UTC)
+        session.add(profile)
+        await _emit_profile_updated(session, user_id, touched)
+        await session.flush()
+    return profile
+
+
+# ── Bullet ops ───────────────────────────────────────────────────────────
+
+
+async def add_bullet(
+    session: AsyncSession,
+    *,
+    experience_id: int,
+    text: str,
+    tags: list[str] | None = None,
+) -> Bullet:
+    now = datetime.now(UTC)
+    b = Bullet(
+        experience_id=experience_id,
+        text=text or "New bullet — edit to write the long version.",
+        tags=list(tags or []),
+        edited_at=now,
+        order_index=999,  # tail of list; reorder normalizes
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(b)
+    await session.flush()
+    return b
+
+
+async def update_bullet(
+    session: AsyncSession,
+    bullet_id: int,
+    *,
+    text: str | None = None,
+    tags: list[str] | None = None,
+    selection_override: Any | None = None,
+) -> Bullet:
+    b = await get_bullet(session, bullet_id)
+    if b is None:
+        raise LookupError(f"bullet {bullet_id} not found")
+    if text is not None:
+        b.text = text
+    if tags is not None:
+        b.tags = list(tags)
+    if selection_override is not None:
+        b.selection_override = selection_override
+    now = datetime.now(UTC)
+    b.edited_at = now
+    b.updated_at = now
+    session.add(b)
+    await session.flush()
+    return b
+
+
+async def delete_bullet(session: AsyncSession, bullet_id: int) -> bool:
+    b = await get_bullet(session, bullet_id)
+    if b is None:
+        return False
+    now = datetime.now(UTC)
+    b.deleted_at = now
+    b.updated_at = now
+    session.add(b)
+    await session.flush()
+    return True
+
+
+async def reorder_bullets(
+    session: AsyncSession,
+    *,
+    experience_id: int,
+    bullet_ids: list[int],
+) -> list[Bullet]:
+    """Apply order_index from the provided list."""
+    bullets = await get_bullets_for_experience(session, experience_id)
+    by_id = {b.id: b for b in bullets}
+    now = datetime.now(UTC)
+    for idx, bid in enumerate(bullet_ids):
+        b = by_id.get(bid)
+        if b is None:
+            continue
+        b.order_index = idx
+        b.updated_at = now
+        session.add(b)
+    await session.flush()
+    return await get_bullets_for_experience(session, experience_id)
+
+
+# ── Internal: AppEvent emission ──────────────────────────────────────────
+
+
+async def _emit_profile_updated(
+    session: AsyncSession,
+    user_id: int,
+    fields_changed: list[str],
+) -> None:
+    """Fire `profile_updated` event for the portfolio_sync debouncer (Wave 6).
+
+    Wave 4 records the event row; Wave 6 wires the debounced listener that
+    regenerates the generic resume + Netlify rebuild.
+    """
+    ev = AppEvent(
+        user_id=user_id,
+        application_id=None,
+        kind=AppEventKind.NOTE_ADDED,  # closest existing kind; Wave 6 may add a dedicated PROFILE_UPDATED kind
+        occurred_at=datetime.now(UTC),
+        payload={"fields_changed": fields_changed, "synthetic_kind": "profile_updated"},
+        actor="profile_service",
+    )
+    session.add(ev)

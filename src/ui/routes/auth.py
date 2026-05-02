@@ -1,8 +1,13 @@
-"""Auth-shell routes (Login, Onboarding) + auth JSON stubs for plan 09.
+"""Auth-shell HTML pages: `/login`, `/onboarding`.
 
-Plan 10 Wave 4 swaps the JSON stubs (`/api/v1/auth/*`, `/api/v1/extraction/*`,
-`/api/v1/profile/from-extraction`) for real bcrypt + JWT + extraction-service
-implementations. Page-handler signatures stay the same.
+Wave 4 of plan 10 § B.3 moves the JSON `/api/v1/auth/*` handlers to
+`src/api/auth.py` (real bcrypt + JWT + CSRF). The plan-09 stubs that lived
+here for `/api/v1/auth/login`, `/api/v1/auth/logout`, `/api/v1/auth/me`,
+`/api/v1/auth/csrf` are deleted; the page handlers below stay.
+
+`/api/v1/extraction/*` and `/api/v1/profile/from-extraction` remain stubs
+until Wave 6 — they need the extraction service which is Phase 1 work but
+not on Wave 4's critical path.
 """
 
 from __future__ import annotations
@@ -10,11 +15,10 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, Form, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 
-from db import sample_data as sd
-from ui.auth_stub import FAKE_SESSION_VALUE, SESSION_COOKIE, is_authenticated
+from ui.auth_stub import FAKE_SESSION_VALUE, SESSION_COOKIE
 from ui.templates_setup import templates
 
 router = APIRouter()
@@ -51,71 +55,7 @@ async def get_onboarding(request: Request, step: Annotated[int, Query(ge=1, le=3
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# /api/v1/auth — JSON stubs (BACKEND.md § D.1)
-# ─────────────────────────────────────────────────────────────────────────
-
-
-@router.post("/api/v1/auth/login", name="auth_login")
-async def post_login(
-    request: Request,
-    email: Annotated[str, Form()],
-    password: Annotated[str, Form()],
-    keep_signed_in: Annotated[str | None, Form()] = None,
-    fail: Annotated[str | None, Query()] = None,
-):
-    """Stub login — sets `naavik_session=fake-1` cookie + redirects.
-
-    `?fail=1` returns 401 with an inline error fragment (HTMX swaps into
-    `#login-card`). Sentinel email `onboarding@test` redirects to `/onboarding`.
-    """
-    if fail:
-        return HTMLResponse(
-            content=_login_error_card("Invalid credentials. Try again."),
-            status_code=401,
-        )
-    if not email or not password:
-        return HTMLResponse(
-            content=_login_error_card("Email and password are required."),
-            status_code=422,
-        )
-    redirect_to = "/onboarding" if email.strip().lower() == "onboarding@test" else "/"
-    response = Response(status_code=204)
-    response.headers["HX-Redirect"] = redirect_to
-    response.set_cookie(
-        SESSION_COOKIE,
-        FAKE_SESSION_VALUE,
-        httponly=True,
-        samesite="lax",
-        max_age=(60 * 60 * 24 * 30) if keep_signed_in else None,
-        path="/",
-    )
-    return response
-
-
-@router.post("/api/v1/auth/logout", name="auth_logout")
-async def post_logout(request: Request):
-    response = Response(status_code=204)
-    response.headers["HX-Redirect"] = "/login"
-    response.delete_cookie(SESSION_COOKIE, path="/")
-    return response
-
-
-@router.get("/api/v1/auth/me", name="auth_me")
-async def get_me(request: Request):
-    if not is_authenticated(request):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    user = await sd.get_user()
-    return user.model_dump(mode="json")
-
-
-@router.get("/api/v1/auth/csrf", name="auth_csrf")
-async def get_csrf(request: Request):
-    """Stub CSRF token. Plan 10 Wave 4 rotates on auth events."""
-    return {"csrf_token": "fake-csrf-token-1"}
-
-
-# ─────────────────────────────────────────────────────────────────────────
-# /api/v1/extraction — Onboarding step-2 stubs
+# /api/v1/extraction — Onboarding step-2 stubs (Wave 6 makes these real)
 # ─────────────────────────────────────────────────────────────────────────
 
 
@@ -199,7 +139,10 @@ async def get_extraction_stream(extraction_id: str):
 
 @router.post("/api/v1/profile/from-extraction", name="profile_from_extraction")
 async def post_profile_from_extraction(request: Request):
-    """Stub — flag the profile committed and redirect / via HX-Redirect."""
+    """Stub — flag the profile committed and redirect / via HX-Redirect.
+
+    Wave 6 wires this to `services/profile_service.commit_extraction`.
+    """
     response = Response(status_code=204)
     response.headers["HX-Redirect"] = "/"
     response.set_cookie(
@@ -210,22 +153,3 @@ async def post_profile_from_extraction(request: Request):
         path="/",
     )
     return response
-
-
-# ─────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────
-
-
-def _login_error_card(message: str) -> str:
-    safe = message.replace("<", "&lt;").replace(">", "&gt;")
-    return (
-        '<div id="login-card" class="w-full max-w-[440px] bg-slate-900 border '
-        'border-slate-800 rounded-xl p-7 shadow-2xl shadow-black/45">'
-        '<div class="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 '
-        'text-rose-200 text-sm" role="alert">' + safe + "</div>"
-        '<p class="mt-4 text-xs text-slate-500">'
-        '<a href="/login" class="text-indigo-400 hover:text-indigo-300">'
-        "← Back to sign in</a></p>"
-        "</div>"
-    )

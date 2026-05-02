@@ -12,10 +12,32 @@ across requests for the lifetime of the server process. Restart resets state.
 
 All accessors are `async def` even though they read in-memory lists, so plan 10
 Wave 4 can swap function bodies for DB queries without touching call sites.
+
+═══════════════════════════════════════════════════════════════════════════
+Wave 4 of plan 10 § B.10 introduces a `NAAVIK_PERSISTENCE` env var:
+
+    NAAVIK_PERSISTENCE=memory  (default)  → read from in-memory lists below
+    NAAVIK_PERSISTENCE=db                  → read from Postgres via SQLModel
+
+In `db` mode, accessors create their own session via `db/session.py` and
+return Pydantic *shadow* instances (`db.sample_data_models.*`). Page-handler
+call sites stay unchanged — both modes return identical shape.
+
+Wave 4 ships DB-mode bodies for the high-traffic read accessors: get_profile,
+get_user, get_settings, get_experiences, get_bullets_for_experience, get_jobs,
+get_job, discover_queue, get_applications, get_application,
+applications_visible_in_tracking, etc.
+
+Lower-traffic accessors (KPI computations, priority_actions, mutation shims)
+keep memory-mode bodies even in `db` env until Wave 6 — they're annotated with
+`# Wave 4 partial swap` comments. The `NAAVIK_PERSISTENCE` env var is removed
+in a follow-up cleanup once full DB-mode coverage lands.
+═══════════════════════════════════════════════════════════════════════════
 """
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 
 from db.sample_data_models import (
@@ -69,6 +91,35 @@ from models.enums import (
     VisaSponsorship,
     WorkAuthorization,
 )
+
+# ─────────────────────────────────────────────────────────────────────────
+# Persistence mode (Wave 4)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _persistence_mode() -> str:
+    """`memory` (default) or `db`. Set via NAAVIK_PERSISTENCE env."""
+    return os.environ.get("NAAVIK_PERSISTENCE", "memory").strip().lower()
+
+
+def _is_db_mode() -> bool:
+    return _persistence_mode() == "db"
+
+
+async def _shadow_from_sql(sql_obj, shadow_cls):
+    """Convert a SQLModel instance to its Pydantic shadow.
+
+    SQLModel rows have the same field names as the shadows; `model_dump`
+    surfaces the data, `model_validate` revalidates against the shadow class.
+    """
+    if sql_obj is None:
+        return None
+    return shadow_cls.model_validate(sql_obj.model_dump(mode="python"))
+
+
+async def _shadow_list_from_sql(sql_objs, shadow_cls) -> list:
+    return [shadow_cls.model_validate(o.model_dump(mode="python")) for o in sql_objs]
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # Anchor date — every relative timestamp computes from this so the UI's
@@ -6269,30 +6320,127 @@ async def by_id(items: list, item_id: int):
 
 
 async def get_profile() -> Profile:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Profile as SQLProfile
+
+        async with async_session() as session:
+            stmt = select(SQLProfile).where(
+                SQLProfile.user_id == 1,
+                SQLProfile.deleted_at.is_(None),
+            )
+            row = (await session.exec(stmt)).one_or_none()
+            if row is not None:
+                return await _shadow_from_sql(row, Profile)
     return PROFILE
 
 
 async def get_user() -> User:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import User as SQLUser
+
+        async with async_session() as session:
+            stmt = select(SQLUser).where(SQLUser.id == 1, SQLUser.deleted_at.is_(None))
+            row = (await session.exec(stmt)).one_or_none()
+            if row is not None:
+                return await _shadow_from_sql(row, User)
     return USER
 
 
 async def get_experiences() -> list[Experience]:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Experience as SQLExperience
+
+        async with async_session() as session:
+            stmt = (
+                select(SQLExperience)
+                .where(SQLExperience.deleted_at.is_(None))
+                .order_by(SQLExperience.order_index)
+            )
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Experience)
     return list(EXPERIENCES)
 
 
 async def get_experience(experience_id: int) -> Experience | None:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Experience as SQLExperience
+
+        async with async_session() as session:
+            stmt = select(SQLExperience).where(
+                SQLExperience.id == experience_id,
+                SQLExperience.deleted_at.is_(None),
+            )
+            row = (await session.exec(stmt)).one_or_none()
+            if row is not None:
+                return await _shadow_from_sql(row, Experience)
     return next((e for e in EXPERIENCES if e.id == experience_id), None)
 
 
 async def get_bullets() -> list[Bullet]:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Bullet as SQLBullet
+
+        async with async_session() as session:
+            stmt = select(SQLBullet).where(SQLBullet.deleted_at.is_(None))
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Bullet)
     return list(BULLETS)
 
 
 async def get_bullet(bullet_id: int) -> Bullet | None:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Bullet as SQLBullet
+
+        async with async_session() as session:
+            stmt = select(SQLBullet).where(
+                SQLBullet.id == bullet_id,
+                SQLBullet.deleted_at.is_(None),
+            )
+            row = (await session.exec(stmt)).one_or_none()
+            if row is not None:
+                return await _shadow_from_sql(row, Bullet)
     return next((b for b in BULLETS if b.id == bullet_id), None)
 
 
 async def get_bullets_for_experience(experience_id: int) -> list[Bullet]:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Bullet as SQLBullet
+
+        async with async_session() as session:
+            stmt = (
+                select(SQLBullet)
+                .where(
+                    SQLBullet.experience_id == experience_id,
+                    SQLBullet.deleted_at.is_(None),
+                )
+                .order_by(SQLBullet.order_index)
+            )
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Bullet)
     return sorted(
         [b for b in BULLETS if b.experience_id == experience_id],
         key=lambda b: b.order_index,
@@ -6300,18 +6448,66 @@ async def get_bullets_for_experience(experience_id: int) -> list[Bullet]:
 
 
 async def get_skills() -> list[Skill]:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Skill as SQLSkill
+
+        async with async_session() as session:
+            stmt = select(SQLSkill).order_by(SQLSkill.order_index)
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Skill)
     return sorted(SKILLS, key=lambda s: s.order_index)
 
 
 async def get_educations() -> list[Education]:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Education as SQLEducation
+
+        async with async_session() as session:
+            stmt = select(SQLEducation).order_by(SQLEducation.order_index)
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Education)
     return sorted(EDUCATIONS, key=lambda e: e.order_index)
 
 
 async def get_projects() -> list[Project]:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Project as SQLProject
+
+        async with async_session() as session:
+            stmt = (
+                select(SQLProject)
+                .where(SQLProject.deleted_at.is_(None))
+                .order_by(SQLProject.order_index)
+            )
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Project)
     return sorted(PROJECTS, key=lambda p: p.order_index)
 
 
 async def get_certifications() -> list[Certification]:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Certification as SQLCert
+
+        async with async_session() as session:
+            stmt = select(SQLCert).order_by(SQLCert.order_index)
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Certification)
     return sorted(CERTIFICATIONS, key=lambda c: c.order_index)
 
 
@@ -6319,15 +6515,58 @@ async def get_certifications() -> list[Certification]:
 
 
 async def get_jobs() -> list[Job]:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Job as SQLJob
+
+        async with async_session() as session:
+            stmt = select(SQLJob).where(SQLJob.deleted_at.is_(None))
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Job)
     return list(JOBS)
 
 
 async def get_job(job_id: int) -> Job | None:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Job as SQLJob
+
+        async with async_session() as session:
+            stmt = select(SQLJob).where(
+                SQLJob.id == job_id,
+                SQLJob.deleted_at.is_(None),
+            )
+            row = (await session.exec(stmt)).one_or_none()
+            if row is not None:
+                return await _shadow_from_sql(row, Job)
     return next((j for j in JOBS if j.id == job_id), None)
 
 
 async def discover_queue() -> list[Job]:
     """Unswiped jobs in score-desc order — the Discover page's main feed."""
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Job as SQLJob
+
+        async with async_session() as session:
+            stmt = (
+                select(SQLJob)
+                .where(
+                    SQLJob.queue_state == JobQueueState.UNSWIPED,
+                    SQLJob.deleted_at.is_(None),
+                )
+                .order_by(SQLJob.score.desc())
+            )
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Job)
     return sorted(
         [j for j in JOBS if j.queue_state == JobQueueState.UNSWIPED],
         key=lambda j: j.score,
@@ -6368,10 +6607,32 @@ async def stuck_drafts() -> list[Application]:
 
 
 async def get_applications() -> list[Application]:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Application as SQLApp
+
+        async with async_session() as session:
+            stmt = select(SQLApp).where(SQLApp.deleted_at.is_(None))
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Application)
     return [a for a in APPLICATIONS if a.deleted_at is None]
 
 
 async def get_application(application_id: int) -> Application | None:
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Application as SQLApp
+
+        async with async_session() as session:
+            stmt = select(SQLApp).where(SQLApp.id == application_id)
+            row = (await session.exec(stmt)).one_or_none()
+            if row is not None:
+                return await _shadow_from_sql(row, Application)
     return next((a for a in APPLICATIONS if a.id == application_id), None)
 
 
@@ -6383,6 +6644,20 @@ async def applications_visible_in_tracking() -> list[Application]:
         ApplicationStatus.ONSITE_LOOP,
         ApplicationStatus.OFFER,
     }
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Application as SQLApp
+
+        async with async_session() as session:
+            stmt = select(SQLApp).where(
+                SQLApp.status.in_(visible),
+                SQLApp.deleted_at.is_(None),
+            )
+            rows = (await session.exec(stmt)).all()
+            if rows:
+                return await _shadow_list_from_sql(rows, Application)
     return [a for a in APPLICATIONS if a.status in visible and a.deleted_at is None]
 
 

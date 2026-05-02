@@ -211,11 +211,12 @@ DATA_DIR=.naavik
 Every meaningful change — features, models, screens, refactors, doc surgery — follows the same lifecycle. The agent (Claude) authors the artifacts; the user (you) reviews, approves, and drives implementation by using the prompts.
 
 ```
-ROADMAP.md       →  Plan         →  user review  →  Design doc       →  Prompt           →  Implementation  →  Archive + roadmap mark
-(scope source)      docs/plans/      (approval)      docs/design/        docs/prompts/        (user runs it)      (agent files away)
+ROADMAP.md       →  Plan         →  user review  →  Design doc       →  Prompt           →  Implementation  →  Document deviations  →  Archive + roadmap mark
+(scope source)      docs/plans/      (approval)      docs/design/        docs/prompts/        (user runs it)      (in the plan, pre-      (agent files away)
+                                                                                                                   archive)
 ```
 
-### The eight steps
+### The nine steps
 
 1. **Scope** — read `ROADMAP.md`, pick a coherent unit of work (one phase task, one feature, one refactor). Larger items get split.
 
@@ -229,12 +230,20 @@ ROADMAP.md       →  Plan         →  user review  →  Design doc       →  
 
 6. **Implement** *(user drives, agent or fresh agent executes)* — user uses the prompt to start implementation. Code, tests, migrations, templates, etc. land. Implementation can iterate; the design doc is the contract that survives.
 
-7. **Archive** *(agent)* — once implementation is verified:
+7. **Document deviations** *(agent → in the plan, before archive)* — implementation never lands exactly as the plan describes. Before archiving the plan, the agent **MUST** add a `## Deviations from plan` section to `docs/plans/NN-name.md` capturing every place the shipped code diverged from the plan's spec. One bullet per deviation:
+   - **What** changed (one-line)
+   - **Why** (root cause / constraint that forced the change — e.g. "SQLModel 0.0.22 forward-ref resolution failed under circular FK graph")
+   - **Impact** on dependent plans / phases (does this need to be backported into a future plan? Is a follow-up issue needed?)
+   - **Surface** any new env var, CLI command, on-disk artifact, or operational requirement that the plan didn't anticipate but the implementation introduced. **Each of those MUST also propagate to user-facing docs** (`README.md`, `CLAUDE.md`, `docs/plans/POST_PHASE_1.md`) before archive — not "we'll do it later". Drift on operational surfaces is the source of self-hoster bugs we don't get to debug.
+
+   This section is the contract for future-you (or future-them) — without it, plan archives become "what we hoped to ship" not "what we actually shipped", and reviewers chasing a regression have to read every commit instead of one section. Keep it terse and honest. **Plans without a Deviations section may not be archived** (use "no material deviations" if the plan really shipped exactly as spec'd, but that's rare).
+
+8. **Archive** *(agent)* — once implementation is verified AND deviations are documented:
    - Plan → `docs/plans/archive/NN-name.md`, `Status: EXECUTED` (or `Status: GRADUATED → docs/design/NAME.md` if it produced a design doc)
    - Prompt → `docs/prompts/archive/NN-name.md`, `Status: USED`
    - Design doc stays at `docs/design/NAME.md` (canonical, permanent)
 
-8. **Roadmap update** *(agent)* — mark the corresponding `ROADMAP.md` task(s) `[x]` with a one-line deliverable note. Bump "Last updated" if the change is meaningful. See § Roadmap Maintenance Rules below.
+9. **Roadmap update** *(agent)* — mark the corresponding `ROADMAP.md` task(s) `[x]` with a one-line deliverable note. Bump "Last updated" if the change is meaningful. See § Roadmap Maintenance Rules below.
 
 ### Naming convention
 
@@ -264,7 +273,33 @@ A kickoff prompt is self-contained for a fresh agent session. Required sections:
 3. **Deliverables** — concrete files to write/modify with one-line descriptions
 4. **Quality bar** — `uv run ruff check`, `uv run pytest`, Playwright screenshots, etc.
 5. **Forbidden patterns** — copy from HANDOFF_PROMPT-style § 7 (no React/Vue, no inline styles, no non-Lucide icons, no `console.log`, etc.)
-6. **Hand-back format** — what to report when done (file list, screenshot paths, follow-up notes)
+6. **Hand-back format** — what to report when done (file list, screenshot paths, follow-up notes, **deviations summary**)
+
+The hand-back **MUST** include a deviations summary that the agent will then promote into the plan's `## Deviations from plan` section (see § Workflow step 7). Do not let the kickoff prompt's hand-back section omit deviations — that's how plans get archived as "this is what we shipped" when really it's "this is what we wished we shipped".
+
+### Documenting deviations — what counts, what doesn't
+
+Step 7 forces the implementer to land a `## Deviations from plan` section in `docs/plans/NN-name.md` before archive. Use this filter:
+
+**Deviation (record it):**
+- A spec field, file, or behavior the plan called for that didn't ship as written.
+- An on-disk artifact, env var, CLI command, or operational invariant that exists now but wasn't in the plan.
+- A test the plan promised that's now skipped, gated, or restructured.
+- A library version, dependency, or runtime constraint discovered during implementation.
+- A scope reduction (e.g. "Wave 4 implements 12 of 50 accessors; rest fall back to memory").
+- An infrastructure decision (e.g. NullPool engine, sequence-bumping after seed) that future plans will care about.
+
+**Not a deviation (don't clutter the section):**
+- Routine commit-level cleanups (variable rename, comment fixes).
+- Test fixtures added beyond the plan's count, when the plan said "≥ N".
+- Lint fixes that don't change behavior.
+
+**Anything that lands as a new operational surface (env var, CLI, on-disk path, secret-handling rule, port, schedule)** must ALSO be added to:
+- `README.md` § Configuration (if user-facing) or § Development (if dev-facing)
+- `CLAUDE.md` and/or `docs/plans/POST_PHASE_1.md` (whichever is the right home for the operational guidance)
+- `ROADMAP.md` "Last updated" line if the deviation changes a phase deliverable
+
+Operational drift is the leading source of self-hoster pain. The deviations section is your one-time chance to catch it before the plan archives.
 
 ---
 

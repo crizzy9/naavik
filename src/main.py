@@ -10,6 +10,9 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from api import auth as api_auth
+from api import profile as api_profile
+from api import settings as api_settings
 from config import settings
 from ui.routes import (
     auth,
@@ -41,6 +44,9 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory="src/ui/static"), name="static")
 
 app.include_router(auth.router)
+app.include_router(api_auth.router)
+app.include_router(api_profile.router)
+app.include_router(api_settings.router)
 app.include_router(overview.router)
 app.include_router(profile.router)
 app.include_router(discover.router)

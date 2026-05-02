@@ -2,7 +2,7 @@
 
 > **For Claude Code sessions.**
 > **Canonical guide:** `AGENTS.md` — always read that first.
-> **Last updated:** 2026-04-30
+> **Last updated:** 2026-05-02 (added § Deviations from plan workflow rule + § Operational artifacts from plan 10 § B)
 
 This file provides Claude Code-specific guidance. For general project conventions, architecture, and the design workflow, see `AGENTS.md`.
 
@@ -13,7 +13,23 @@ This file provides Claude Code-specific guidance. For general project convention
 2. Read ROADMAP.md
 3. If doing UI work: read docs/design/WORKFLOW.md + DESIGN.md
 4. Start work. Update ROADMAP.md as you go.
+5. Before archiving any plan, write its `## Deviations from plan` section. (AGENTS.md § Workflow step 7.)
 ```
+
+## Deviations workflow — non-negotiable before archive
+
+Per `AGENTS.md` § Workflow step 7, every plan in `docs/plans/` MUST have a `## Deviations from plan` section before it moves to `archive/`. The implementing agent (you) writes this section based on what actually shipped vs what the plan promised. Bullets carry: **what** changed, **why**, **impact** on follow-up plans, and any **new operational surface** introduced (env var, CLI, on-disk path, etc.).
+
+Anything new and operational ALSO propagates to user-facing docs in the same change:
+
+- New env var → README § Configuration
+- New CLI command → README § Operations or wherever the equivalent lives
+- New on-disk path or secret-handling rule → CLAUDE.md + `docs/plans/POST_PHASE_1.md`
+- New port, schedule, or runtime invariant → both, plus ROADMAP "Last updated"
+
+If the deviation only matters to maintainers, document it in the plan's `## Deviations from plan` section and stop — no doc propagation needed.
+
+**Plans without a Deviations section may not be archived.** Use "no material deviations" if the plan really shipped exactly as spec'd, but that's rare; reviewers should be skeptical when they see it.
 
 ## Claude Code Specific Notes
 

@@ -1,3 +1,10 @@
+"""Alembic environment.
+
+Wave 4 (plan 10 § B) wires `target_metadata = SQLModel.metadata` so the
+single `0001_initial.py` migration can capture every entity defined in
+`src/models/*.py`. Subsequent migrations are additive.
+"""
+
 import asyncio
 from logging.config import fileConfig
 
@@ -5,15 +12,20 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlmodel import SQLModel
 
 from config import settings
+
+# Import every model so `SQLModel.metadata` knows about every table when
+# Alembic compares against the DB.
+import models  # noqa: F401
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = None
+target_metadata = SQLModel.metadata
 
 config.set_main_option("sqlalchemy.url", settings.database_url)
 

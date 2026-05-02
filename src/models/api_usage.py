@@ -1,0 +1,67 @@
+"""ApiUsage — per-LLM-call cost + token + latency log.
+
+Per DATA_MODEL.md § C `ApiUsage` (entity #19, promoted to Phase 1 on 2026-05-01
+because Settings · LLM Provider cost cards need it from day one).
+
+Wrapped around every `LLMProvider.complete / structured / stream` call by
+`services/llm_tracker.py` (BACKEND.md § M.4). Aggregated daily by the
+`admin.aggregate_costs` cron.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Index
+from sqlmodel import Field, SQLModel
+
+from ._common import utcnow
+from .enums import LLMProvider
+
+
+class ApiUsage(SQLModel, table=True):
+    __tablename__ = "api_usage"
+    __table_args__ = (
+        Index("ix_api_usage_user_occurred", "user_id", "occurred_at"),
+        Index(
+            "ix_api_usage_user_provider_occurred",
+            "user_id",
+            "provider",
+            "occurred_at",
+        ),
+        Index(
+            "ix_api_usage_application",
+            "application_id",
+            postgresql_where="application_id IS NOT NULL",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    application_id: int | None = Field(
+        default=None,
+        foreign_key="application.id",
+        index=True,
+    )
+
+    provider: LLMProvider
+    model: str
+    method: str  # "complete" | "structured" | "stream"
+    prompt_name: str | None = None
+
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    latency_ms: int
+
+    succeeded: bool = Field(default=True)
+    error_kind: str | None = None
+
+    occurred_at: datetime = Field(
+        default_factory=utcnow,
+        sa_column=Column(DateTime(timezone=True), nullable=False, index=True),
+    )
+    created_at: datetime = Field(
+        default_factory=utcnow,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
