@@ -1,8 +1,8 @@
 # Naavik Development Roadmap
 
-> Last updated: 2026-05-02 (Wave 3 / plan 09 EXECUTED — 11 Phase 1 page templates, sample data + accessors, stub fragment + JSON endpoints, Discover keyboard map, 225 tests passing. **Plan 09a EXECUTED + 09a follow-up shipped 2026-05-02** — 12 original bugfix issues + Discover redesign + idempotent script guards + Lucide self-hosted (CDN restoration tracked in `docs/plans/POST_PHASE_1.md` § Tier 3). 269 tests passing.)
+> Last updated: 2026-05-02 (single-tracking consolidation — all task / backlog / plan-mapping moved here per `AGENTS.md` § Single-doc-tracking principle. Plans 11–15 mapped to Phase 2–6 headers. Pre-Phase-2 paper cuts inlined. Phase 1.x deferred items table is now the canonical extended backlog. Earlier line: Wave 3 / plan 09 EXECUTED + plan 09a EXECUTED + 09a follow-up shipped — 269 tests passing.)
 >
-> **Companion doc:** `docs/plans/POST_PHASE_1.md` — canonical authoring sequence for Phases 2–6 + extended Phase 1.x deferred backlog (renamed from `NEXT_STEPS.md` 2026-05-02).
+> **Companion doc:** `docs/plans/POST_PHASE_1.md` — operational guide only (testing playbook, authoring workflow, monitoring, success criteria). All task tracking lives here in ROADMAP.
 >
 > **This is the single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. The master plan (formerly `docs/plans/02-mvp-master-plan.md`) is archived — its content lives here, in `AGENTS.md` § Workflow, and in the active session-continue prompt at `docs/prompts/00-session-continue.md`.
 
@@ -472,6 +472,17 @@ Items called out in design docs as "Phase 1.x optional / Phase 2+". This is a qu
 | **Restore Lucide via CDN** | plan 09a follow-up 2026-05-02 | Self-hosted at `/static/lucide.min.js` for now to fix "no icons render" issue. Production should serve from a CDN — investigate why unpkg failed (content-blocker / CSP / rate-limit), pick a stable URL or fallback chain, drop the local file. |
 | **Sidebar mobile-toggle reliability after navigation** | plan 09a follow-up 2026-05-02 | Idempotent script guards fixed the most common failure mode; user reports it's "still kind of wonky" after navigating away. Repro on real device, isolate the remaining timing issue (likely Tailwind JIT vs HTMX swap order). Not a blocker. |
 | **Discover card max-w cap on ultra-wide screens** | plan 09a follow-up 2026-05-02 | 09a-follow-up dropped the `max-w-7xl` page cap on Discover so the card fills available space. On 4K+ monitors the card may stretch >1500px and feel sparse — add a `2xl:max-w-[1400px]` cap if user feedback comes in. |
+| `Settings.daily_llm_cost_cap_usd` dashboard widget | POST_PHASE_1 § Tier 3 (consolidated 2026-05-02) | Wave 6 ships the enforcement; visible cap-progress UI is a Settings polish item. |
+
+#### Pre-Phase-2 paper cuts (immediate; ship before plan 11)
+
+These are dev-experience fixes carried over from Wave 2/3. Ship as a single tiny plan (`docs/plans/10a-dev-orchestrator-paper-cuts.md`) or fold inline into the start of plan 11. Each is < 1 day of work.
+
+| # | Item | Status | Notes |
+|---|---|---|---|
+| PC.1 | Process-compose: confirm app logs + cold-start reliability | [ ] | Most mitigations landed in plan 08 (`PYTHONUNBUFFERED=1`, removed cosmetic readiness probe, stale `postmaster.pid` self-heal, `shutdown.timeout_seconds=10`, dropped `--quiet`). Still owed: cross-terminal repro, `--log-file` to `cli.options`, optionally `--no-progress` on `uv run fastapi dev`. If symptom persists, file upstream against `services-flake` / `process-compose-flake`. |
+| PC.2 | `uv run fastapi dev` (no path) should just work | [ ] | Recommended fix: thin `app.py` re-export at repo root (`from src.main import app`). Two lines, one file. While there, drop `src/main.py` from README's "Manual local development setup". |
+| PC.3 | Playwright local capture on NixOS | [ ] | Replace pip-installed `playwright` with `pkgs.python312Packages.playwright` (NixOS-patched driver) in dev shell. Or ship a `nix run .#snapshots` flake app via `steam-run` / `buildFHSEnv`. **Prereq for the CI-side per-PR visual-diff gate** (no local capture = no diff gate). Capture the first 20-snapshot baseline alongside the dev-shell fix. |
 
 **Deliverable (end of Phase 1):** User uploads resume → AI extracts profile → user edits in UI → Discover queue scored + filtered → tailored resume + cover letter generated for any job → submit application via supported ATS → email-signal-driven Tracking → outreach drafts go to LinkedIn / email → portfolio API serves profile + downloadable resume.
 
@@ -479,7 +490,9 @@ Items called out in design docs as "Phase 1.x optional / Phase 2+". This is a qu
 
 ### Phase 2: Job Scraping & Discovery
 > **Goal:** Automated multi-source job discovery with AI extraction.
+> **Plan:** `docs/plans/11-phase-2-scrapers.md` (to be authored after Phase 1 ships). Splits cleanly into 11a (LinkedIn + Greenhouse + Lever + Ashby) and 11b (Workday + Indeed + Generic + n8n migration).
 > **Implementation contract:** `docs/design/BACKEND.md` § J (scraping architecture), § I (cron catalog), § K (auto-apply pipeline). Wave 6 services + Phase 2 sub-prompts of plan 10.
+> **Estimated effort:** 2–3 weeks.
 
 | # | Task | Priority | Notes |
 |---|---|---|---|
@@ -500,7 +513,9 @@ Items called out in design docs as "Phase 1.x optional / Phase 2+". This is a qu
 
 ### Phase 3: Intelligent Scoring & Matching
 > **Goal:** AI compatibility scoring with tag-based profile matching and explainable results.
+> **Plan:** `docs/plans/12-phase-3-scoring.md` (to be authored after plan 11 ships).
 > **Implementation contract:** `docs/design/BACKEND.md` § H.1 (`scorer` service), § M.3 (`score_job` prompt). DATA_MODEL.md § C (`Job.score`, `Job.score_explanation`, `Job.match_breakdown`).
+> **Estimated effort:** 1–2 weeks.
 
 | # | Task | Priority | Notes |
 |---|---|---|---|
@@ -518,6 +533,7 @@ Items called out in design docs as "Phase 1.x optional / Phase 2+". This is a qu
 
 ### Phase 4: Application Tracking & Auto-Apply
 > **Goal:** Full application lifecycle with configurable automation level.
+> **Plan:** Most of Phase 4 ships inside plan 10 Wave 6 (DRAFT lifecycle, ATS submit, semi-auto + auto-apply paths). UI polish + analytics dashboard ship as a small follow-up `13a-tracking-polish.md` post-Phase-1.
 > **Implementation contract:** `docs/design/BACKEND.md` § K (auto-apply + manual paths), § K.5 (ATS adapters per board), § L.1 (Gmail/Outlook OAuth). `docs/design/DATA_MODEL.md` § A multi-axis state, § E state transitions.
 
 | # | Task | Priority | Notes |
@@ -536,7 +552,9 @@ Items called out in design docs as "Phase 1.x optional / Phase 2+". This is a qu
 
 ### Phase 5: Email Monitoring & Outreach
 > **Goal:** Monitor emails, classify responses, manage interview prep, and track recruiter/employee outreach. (Email auto-classification feeds the multi-axis Application sub-states defined in Phase 4 — `recruiter_state`, `outreach_engagement` — via Tracking; this phase adds the email + outreach mechanics behind that.)
+> **Plans:** `docs/plans/13-phase-5-email.md` (Gmail/Outlook OAuth + classifier) → then `docs/plans/14-phase-5-outreach.md` (LinkedIn DM + Calendar + Discord/Telegram inbound). Both authored after plan 12 ships.
 > **Implementation contract:** `docs/design/BACKEND.md` § L.1 (Gmail/Outlook), § L.2 (LinkedIn browser, account-ban risk), § L.3–L.5 (Discord/Telegram/Calendar), § H.1 (`email_classifier`, `outreach_generator`, `contact_tracker`).
+> **Estimated effort:** Plan 13 1–2 weeks; plan 14 2–3 weeks (LinkedIn is the most fragile dep).
 
 | # | Task | Priority | Notes |
 |---|---|---|---|
@@ -565,7 +583,9 @@ Items called out in design docs as "Phase 1.x optional / Phase 2+". This is a qu
 
 ### Phase 6: Optimization & Polish
 > **Goal:** Performance, analytics, and advanced features.
+> **Plan:** `docs/plans/15-phase-6-polish.md` — splits cleanly into 15a (observability — Prometheus + Sentry + OTel), 15b (light mode), 15c (LaTeX template + ML scoring calibration). Author after plan 14 ships.
 > **Implementation contract:** `docs/design/BACKEND.md` § N (observability — Prometheus, Sentry, OTel), `docs/design/DATA_MODEL.md` § H (`JobEmbedding` pgvector for semantic match), `DESIGN.md` (light mode tokens — Phase 6).
+> **Estimated effort:** 3–4 weeks total (split across 15a/b/c).
 
 | # | Task | Priority | Notes |
 |---|---|---|---|

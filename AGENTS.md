@@ -282,6 +282,27 @@ A kickoff prompt is self-contained for a fresh agent session. Required sections:
 
 Never let the roadmap drift from the actual state of the codebase. If you discover a discrepancy, fix the roadmap first, then continue work.
 
+### Single-doc-tracking principle (codified 2026-05-02)
+
+**All task / backlog / phase tracking lives in `ROADMAP.md` — full stop.** Plans, prompts, design docs, and operational guides may *reference* it but must not duplicate the same task tables. Drift between two tracking surfaces is the most common source of plan/reality mismatch in this repo.
+
+Concretely:
+
+- **Phase task tables** (Phase 0–6, including all wave + sub-task lists) → ROADMAP only.
+- **Phase 1.x deferred items** (the post-Phase-1 backlog) → ROADMAP only.
+- **Pre-phase-2 paper cuts** → ROADMAP only.
+- **Plan-to-phase mapping** (e.g. "plan 11 implements Phase 2") → ROADMAP only.
+- **Cross-cutting concerns / monitoring / risk register** → may live in supporting docs (e.g. `POST_PHASE_1.md`) since these are operational guidance, not discrete tasks.
+
+When you author a new plan (`docs/plans/NN-name.md`):
+
+- The plan describes **how** to implement.
+- ROADMAP tracks **what / when / status** — the plan adds rows to ROADMAP's phase table on approval, not into the plan file.
+- If a plan introduces a new sub-task list, that list lives in ROADMAP under the relevant phase, with the plan referenced from the table header.
+- Operational guidance (testing playbook, authoring workflow, "when things go wrong") goes in `POST_PHASE_1.md` or a new `docs/plans/<topic>_GUIDE.md` — not duplicated as task rows.
+
+If a supporting doc has a checklist or backlog table, it's drift. Move it to ROADMAP and replace it with a one-line pointer.
+
 ---
 
 ## Design pipeline (sub-process within step 6 of the workflow)
