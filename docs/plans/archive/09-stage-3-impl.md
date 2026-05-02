@@ -1,11 +1,12 @@
 ---
-Status: APPROVED
+Status: EXECUTED
 Type: implementation
 Authored: 2026-05-01
-Last updated: 2026-05-01
+Last updated: 2026-05-02 (executed)
 Approved: 2026-05-01
-Depends on: 08-stage-2-impl (component library — APPROVED, awaiting impl), 04-backend-architecture (graduated → docs/design/BACKEND.md), 05-data-model (graduated → docs/design/DATA_MODEL.md), 06-interactions-spec (graduated → docs/design/INTERACTIONS.md), 07-sample-data (graduated → docs/design/SAMPLE_DATA.md)
-Wave order: this plan is **Wave 3** in ROADMAP.md § Phase 1 (Scenario A — linear: 08 → 09 → 10 W3 → 10 W6). Plan 09 ships first; plan 10 W3 swaps stub bodies for DB-backed handlers without changing pages.
+Executed: 2026-05-02
+Depends on: 08-stage-2-impl (executed), 04-backend-architecture (graduated → docs/design/BACKEND.md), 05-data-model (graduated → docs/design/DATA_MODEL.md), 06-interactions-spec (graduated → docs/design/INTERACTIONS.md), 07-sample-data (graduated → docs/design/SAMPLE_DATA.md)
+Wave order: this plan is **Wave 3** in ROADMAP.md § Phase 1 (Scenario A — linear: 08 → 09 → 10 W3 → 10 W6). Plan 09 shipped 2026-05-02; plan 10 W3 swaps stub bodies for DB-backed handlers without changing pages.
 ---
 
 # 09 · Stage 3 page implementation

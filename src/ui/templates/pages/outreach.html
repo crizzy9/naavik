@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Outreach — Naavik{% endblock %}
+
+{% block main %}
+<div class="px-6 lg:px-8 py-6 lg:py-8 max-w-7xl mx-auto flex flex-col gap-6">
+  <header class="flex items-baseline justify-between gap-3 flex-wrap">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Outreach</h1>
+      <p class="mt-1 text-sm text-slate-400">
+        Tied to your {{ active_count }} active applications · {{ followup_count }} need a nudge today · {{ referrals_count }} referrals secured
+      </p>
+    </div>
+    <div class="flex items-center gap-2 shrink-0 flex-wrap">
+      {% with connected=true, handle="shyampadia", connections=487, dms_today=14 %}
+        {% include "components/linkedin_status_chip.html" %}
+      {% endwith %}
+      {% with provider="gmail", icon="mail", connected=true, sub="synced 2m" %}
+        {% include "components/provider_chip.html" %}
+      {% endwith %}
+    </div>
+  </header>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    {# LEFT pane — applications list #}
+    <aside class="bg-slate-900 border border-slate-800 rounded-lg p-4 lg:col-span-1 flex flex-col min-h-[520px]">
+      <div class="px-1 mb-3">
+        <input type="search" placeholder="Search applications…"
+               class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20">
+      </div>
+      <div class="px-1 mb-3 flex items-center gap-2 flex-wrap text-xs">
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">All stages</span>
+      </div>
+
+      {% if followup_apps %}
+        <div class="px-1 mt-2">
+          <div class="text-xs uppercase tracking-wide text-amber-300 font-medium mb-2">
+            Needs followup · <span class="font-mono">{{ followup_apps | length }}</span>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            {% for a in followup_apps %}
+              {% with application=a, selected=(a.id == selected_id) %}
+                {% include "components/outreach_app_row.html" %}
+              {% endwith %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      <div class="px-1 mt-4">
+        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">
+          Active · <span class="font-mono">{{ active_apps | length }}</span>
+        </div>
+        <div class="flex flex-col gap-0.5">
+          {% for a in active_apps %}
+            {% with application=a, selected=(a.id == selected_id) %}
+              {% include "components/outreach_app_row.html" %}
+            {% endwith %}
+          {% endfor %}
+        </div>
+      </div>
+    </aside>
+
+    {# RIGHT pane — selected detail #}
+    <section id="outreach-detail" class="lg:col-span-2 min-w-0">
+      {% if detail %}
+        {% include "pages/_outreach_detail.html" %}
+      {% else %}
+        {% with icon="users-round", line="Pick an application from the left to see contacts and recommended next moves." %}
+          {% include "components/empty_state.html" %}
+        {% endwith %}
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

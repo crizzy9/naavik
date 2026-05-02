@@ -1,0 +1,85 @@
+{#
+  Settings · Account tab body.
+  Args:
+    profile : Profile (read display name + email)
+#}
+<div class="flex flex-col gap-6 max-w-3xl">
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <h2 class="text-base font-medium text-slate-50">Identity</h2>
+    <p class="text-xs text-slate-400 mt-0.5">Used for the sidebar avatar + portfolio API.</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+      {% with label="DISPLAY NAME", name="full_name", value=profile.full_name,
+              autosave_url="/api/v1/settings/account" %}
+        {% include "components/editor_field.html" %}
+      {% endwith %}
+      {% with label="EMAIL", name="email", type="email", value=profile.email,
+              autosave_url="/api/v1/settings/account" %}
+        {% include "components/editor_field.html" %}
+      {% endwith %}
+    </div>
+  </section>
+
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <h2 class="text-base font-medium text-slate-50">Password</h2>
+    <p class="text-xs text-slate-400 mt-0.5">Bcrypt-hashed; rotates session cookie on save.</p>
+    <form class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5"
+          hx-put="/api/v1/settings/account/password"
+          hx-target="#account-password-result"
+          hx-swap="innerHTML">
+      <div class="sm:col-span-1">
+        {% with label="CURRENT PASSWORD", for_id="acct-pw-current" %}
+          {% include "components/field_label.html" %}
+        {% endwith %}
+        {% with name="current", type="password", id="acct-pw-current", required=true %}
+          {% include "components/input.html" %}
+        {% endwith %}
+      </div>
+      <div class="sm:col-span-1">
+        {% with label="NEW PASSWORD", for_id="acct-pw-new" %}
+          {% include "components/field_label.html" %}
+        {% endwith %}
+        {% with name="new", type="password", id="acct-pw-new", required=true %}
+          {% include "components/input.html" %}
+        {% endwith %}
+      </div>
+      <div class="sm:col-span-2 flex items-center justify-between gap-3">
+        <div id="account-password-result" class="text-sm text-slate-400"></div>
+        <button type="submit"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+          <i data-lucide="check" class="h-4 w-4" stroke-width="1.5"></i>
+          Update password
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <h2 class="text-base font-medium text-slate-50">Session</h2>
+    <p class="text-xs text-slate-400 mt-0.5">Sign out of this device or end every session.</p>
+    <div class="mt-5 flex items-center gap-2 flex-wrap">
+      <button type="button"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm transition"
+              hx-post="/api/v1/auth/logout"
+              hx-swap="none">
+        <i data-lucide="log-out" class="h-4 w-4" stroke-width="1.5"></i>
+        Sign out
+      </button>
+    </div>
+  </section>
+
+  <section class="bg-slate-900 border border-rose-500/30 rounded-lg p-6">
+    <h2 class="text-base font-medium text-rose-200">Delete account</h2>
+    <p class="text-xs text-slate-400 mt-0.5 leading-relaxed">
+      Removes your profile, applications, contacts, outreach history, and generated documents.
+      Self-hosted: data on disk also deleted. Cannot be undone.
+    </p>
+    <button type="button"
+            class="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-500 hover:bg-rose-400 text-white text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+            hx-get="/_modal/confirm?title=Delete+account%3F&message=Profile%2C+applications%2C+contacts%2C+outreach+history%2C+and+generated+documents+are+removed.+Cannot+be+undone.&action=/api/v1/settings/account/delete&label=Delete+account&tone=danger&method=post"
+            hx-target="#modal-region"
+            hx-swap="innerHTML">
+      <i data-lucide="trash-2" class="h-4 w-4" stroke-width="1.5"></i>
+      Delete my account
+    </button>
+  </section>
+</div>

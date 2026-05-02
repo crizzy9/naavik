@@ -1,0 +1,89 @@
+{#
+  Settings · Auto-Apply tab body.
+  Args:
+    settings : Settings singleton
+#}
+<div class="flex flex-col gap-6 max-w-3xl">
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <header class="flex items-baseline justify-between gap-3 mb-4">
+      <div>
+        <h2 class="text-base font-medium text-slate-50">Auto-apply</h2>
+        <p class="text-xs text-slate-400 mt-0.5">When ON, jobs scoring above the threshold get bundled and submitted automatically by the cron.</p>
+      </div>
+      <label class="relative inline-flex items-center cursor-pointer shrink-0">
+        <input type="checkbox" name="auto_apply_enabled"
+               {% if settings.auto_apply_enabled %}checked{% endif %}
+               hx-put="/api/v1/settings/auto-apply"
+               hx-trigger="change"
+               hx-swap="none"
+               class="sr-only peer">
+        <span class="w-11 h-6 bg-slate-700 rounded-full peer-checked:bg-indigo-500 transition relative
+                     after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5
+                     after:bg-white after:rounded-full after:transition peer-checked:after:translate-x-5"></span>
+      </label>
+    </header>
+
+    {% with tone="warning", icon="alert-triangle", title="Default OFF.",
+            body="Naavik never submits an application without your review unless you flip this. Right-swipe on Discover always queues; only this toggle promotes the queue to actual submissions." %}
+      {% include "components/info_card.html" %}
+    {% endwith %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+      <div>
+        {% with label="SCORE THRESHOLD", for_id="aa-threshold",
+                hint="0.00–1.00 · default 0.85" %}
+          {% include "components/field_label.html" %}
+        {% endwith %}
+        {% with name="auto_apply_score_threshold", id="aa-threshold", type="number",
+                value=settings.auto_apply_score_threshold, mono=true %}
+          {% include "components/input.html" %}
+        {% endwith %}
+      </div>
+      <div>
+        {% with label="DAILY CAP",
+                for_id="aa-cap",
+                hint="blank = unlimited" %}
+          {% include "components/field_label.html" %}
+        {% endwith %}
+        {% with name="auto_apply_daily_cap", id="aa-cap", type="number",
+                value=(settings.auto_apply_daily_cap or ""), mono=true %}
+          {% include "components/input.html" %}
+        {% endwith %}
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <h2 class="text-base font-medium text-slate-50">Cost-aware DRAFT generation</h2>
+    <p class="text-xs text-slate-400 mt-0.5">When OFF, Discover · review opens with a "Tailor for this job" CTA instead of pre-generating the bundle.</p>
+
+    <div class="mt-5 flex items-center justify-between gap-3">
+      <div>
+        <div class="text-sm text-slate-100">Eager review generation</div>
+        <div class="text-xs text-slate-500">Default ON — matches the SCREENS.md "generating skeletons" UX.</div>
+      </div>
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" name="eager_review_generation"
+               {% if settings.eager_review_generation %}checked{% endif %}
+               hx-put="/api/v1/settings/auto-apply"
+               hx-trigger="change"
+               hx-swap="none"
+               class="sr-only peer">
+        <span class="w-11 h-6 bg-slate-700 rounded-full peer-checked:bg-indigo-500 transition relative
+                     after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5
+                     after:bg-white after:rounded-full after:transition peer-checked:after:translate-x-5"></span>
+      </label>
+    </div>
+
+    <div class="mt-5">
+      {% with label="DAILY LLM COST CAP (USD)", for_id="aa-cost-cap",
+              hint="hits cap → eager flips off for the day · resets midnight UTC" %}
+        {% include "components/field_label.html" %}
+      {% endwith %}
+      {% with name="daily_llm_cost_cap_usd", id="aa-cost-cap", type="number",
+              value=(settings.daily_llm_cost_cap_usd or ""), mono=true %}
+        {% include "components/input.html" %}
+      {% endwith %}
+    </div>
+  </section>
+</div>

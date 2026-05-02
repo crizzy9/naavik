@@ -1,6 +1,6 @@
 # Naavik Development Roadmap
 
-> Last updated: 2026-05-01 (Wave 2 / plan 08 EXECUTED — 85-component library, base.html rewrite, route reorganization, fixture page, 100 tests passing)
+> Last updated: 2026-05-02 (Wave 3 / plan 09 EXECUTED — 11 Phase 1 page templates, sample data + accessors, stub fragment + JSON endpoints, Discover keyboard map, 225 tests passing)
 >
 > **This is the single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. The master plan (formerly `docs/plans/02-mvp-master-plan.md`) is archived — its content lives here, in `AGENTS.md` § Workflow, and in the active session-continue prompt at `docs/prompts/00-session-continue.md`.
 
@@ -337,7 +337,7 @@ Phase 1 ships in **5 sequential waves** (Scenario A). Each wave passes acceptanc
 | 0 | Doc realignment | `docs/plans/archive/01-docs-realignment.md` | (executed inline) | ✅ EXECUTED | 2026-04-30 |
 | 1 | Author 5 design docs (COMPONENTS / BACKEND / DATA_MODEL / INTERACTIONS / SAMPLE_DATA) | plans 03–07 (all GRADUATED + archived) | (no separate prompts — design plans graduate inline) | ✅ COMPLETE | 2026-04-30 |
 | 2 | Stage 2 component library impl (85 partials + base.html refinements + macros + base.js + fixture page) | `docs/plans/archive/08-stage-2-impl.md` | `docs/prompts/archive/08-stage-2-impl.md` | ✅ EXECUTED | 2026-05-01 |
-| 3 | Stage 3 page templates impl (11 screens, sample_data accessors, stub fragment + JSON endpoints, Discover keyboard map, Playwright snapshots) — folds in interactions per INTERACTIONS.md § J | `docs/plans/09-stage-3-impl.md` | `docs/prompts/09-stage-3-impl.md` | ⏳ pending | — |
+| 3 | Stage 3 page templates impl (11 screens, sample_data accessors, stub fragment + JSON endpoints, Discover keyboard map, Playwright snapshots) — folds in interactions per INTERACTIONS.md § J | `docs/plans/archive/09-stage-3-impl.md` | `docs/prompts/archive/09-stage-3-impl.md` | ✅ EXECUTED | 2026-05-02 |
 | 4 | Backend Wave 3 — models + auth + LLM abstraction + vault + initial services + db/seed; **swaps plan 09 stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged) | `docs/plans/10-backend-impl.md` § B | `docs/prompts/10-backend-impl.md` (Wave 3 part) | ⏳ pending | — |
 | 5 | Backend Wave 6 — all 14 services + Typst document generator + DRAFT lifecycle + Greenhouse / Lever / Ashby ATS adapters + portfolio_sync + auto-apply cron + notifications | `docs/plans/10-backend-impl.md` § C | `docs/prompts/10-backend-impl.md` (Wave 6 part) | ⏳ pending | — |
 
@@ -383,20 +383,20 @@ Build order: simplest first.
 
 | # | Screen / artifact | Mockup ref | Page handler | Status |
 |---|---|---|---|---|
-| 3.0 | `src/db/sample_data.py` + `sample_data_models.py` (frozen Pydantic per SAMPLE_DATA.md) | — | — | [ ] |
-| 3.1 | Login | `screens/Login.jsx` | `src/ui/routes/auth.py:get_login` | [ ] |
-| 3.2 | Settings (all 6 tabs — full UI scaffolding; Wave 4 wires real persistence) | `screens/Settings.jsx` | `src/ui/routes/settings.py:get_settings` | [ ] |
-| 3.3 | Profile (read-only) | `screens/Profile.jsx` | `src/ui/routes/profile.py:get_profile` | [ ] |
-| 3.4 | Profile editor | `screens/ProfileEdit.jsx` | `src/ui/routes/profile.py:get_edit` | [ ] |
-| 3.5 | Bullet editor (modal) | `screens/BulletModal.jsx` | `src/ui/routes/fragments.py:bullet_editor_modal` | [ ] |
-| 3.6 | Onboarding (3-step; SSE done auto-progresses to step 3 via `HX-Trigger`) | `screens/Onboarding.jsx` | `src/ui/routes/auth.py:get_onboarding` | [ ] |
-| 3.7 | Overview | `screens/Overview.jsx` | `src/ui/routes/overview.py:get_overview` | [ ] |
-| 3.8 | Tracking (board + list) | `screens/Tracking.jsx` | `src/ui/routes/tracking.py:get_tracking` | [ ] |
-| 3.9 | Outreach | `screens/Outreach.jsx` | `src/ui/routes/outreach.py:get_outreach` | [ ] |
-| 3.10 | Discover (incl. `Stuck in queue · {N}` right-rail card via `up_next_card` `state="stuck"`) | `screens/Discover.jsx` | `src/ui/routes/discover.py:get_discover` | [ ] |
-| 3.11 | Discover · review & apply | `screens/DiscoverDetail.jsx` | `src/ui/routes/discover.py:get_review` | [ ] |
-| 3.12 | Per-screen interactions per INTERACTIONS.md § J (autosave, drag-drop, modal, SSE, optimistic rollback, keyboard shortcuts) | INTERACTIONS.md § B–H | — | [ ] |
-| 3.13 | Per-screen Playwright snapshot baseline at desktop + mobile | — | `tests/visual/capture.py` | [ ] |
+| 3.0 | `src/db/sample_data.py` + `sample_data_models.py` (frozen Pydantic per SAMPLE_DATA.md) | — | — | [x] 19 entities + Settings + 30 ApiUsage; 44 round-trip + realism tests |
+| 3.1 | Login | `screens/Login.jsx` | `src/ui/routes/auth.py:get_login` | [x] auth_shell + form, fake-session-cookie POST /api/v1/auth/login |
+| 3.2 | Settings (all 6 tabs — full UI scaffolding; Wave 4 wires real persistence) | `screens/Settings.jsx` | `src/ui/routes/settings.py:get_settings` | [x] all 6 tabs (LLM/Deployment/Account/Notif/Auto-Apply/Sources); SSE log tail; cost cards from ApiUsage |
+| 3.3 | Profile (read-only) | `screens/Profile.jsx` | `src/ui/routes/profile.py:get_profile` | [x] hero + experience + summary + skills + projects + edu + cert + sticky right-rail anchor + readiness card |
+| 3.4 | Profile editor | `screens/ProfileEdit.jsx` | `src/ui/routes/profile.py:get_edit` | [x] per-field autosave (PUT /profile/{field}); Sortable bullet drag-drop; confirm-modal hooks |
+| 3.5 | Bullet editor (modal) | `screens/BulletModal.jsx` | `src/ui/routes/fragments.py:bullet_editor_modal` | [x] tag picker + selection_override + Rewrite/Delete; HX-Trigger: closeModal on save |
+| 3.6 | Onboarding (3-step; SSE done auto-progresses to step 3 via `HX-Trigger`) | `screens/Onboarding.jsx` | `src/ui/routes/auth.py:get_onboarding` | [x] step indicator + dropzone + SSE extraction (5 progress + 6 field + done + stepReady) |
+| 3.7 | Overview | `screens/Overview.jsx` | `src/ui/routes/overview.py:get_overview` | [x] greeting + KPI×4 + priority actions + email signal + pipeline strip + SSE email-signal stream |
+| 3.8 | Tracking (board + list) | `src/ui/routes/tracking.py:get_tracking` | [x] board+list views; integrations row; needs-followup banner; Sortable Kanban; DRAFT+CLOSED hidden |
+| 3.9 | Outreach | `screens/Outreach.jsx` | `src/ui/routes/outreach.py:get_outreach` | [x] 2-pane apps + detail; recommended_move_card; contacts; outreach_timeline |
+| 3.10 | Discover (incl. `Stuck in queue · {N}` right-rail card via `up_next_card` `state="stuck"`) | `screens/Discover.jsx` | `src/ui/routes/discover.py:get_discover` | [x] swipe queue + 4-button bar + keyboard hints; Up next + Stuck-in-queue + Saved + Tip; +Add by URL modal; keys.js wired |
+| 3.11 | Discover · review & apply | `screens/DiscoverDetail.jsx` | `src/ui/routes/discover.py:get_review` | [x] 3-column workspace; eager DRAFT auto-create gated on Settings.eager_review_generation; lazy CTA path; failure banner; SSE cover letter; submit/discard with screener gate |
+| 3.12 | Per-screen interactions per INTERACTIONS.md § J (autosave, drag-drop, modal, SSE, optimistic rollback, keyboard shortcuts) | INTERACTIONS.md § B–H | — | [x] all patterns landed inline with each screen |
+| 3.13 | Per-screen Playwright snapshot baseline at desktop + mobile | — | `tests/visual/capture.py` | [~] capture script ships; PNG generation pending nix-devshell run (NixOS Chromium needs playwright-driver browsers) |
 
 #### Wave 4 — Backend Wave 3 (plan 10 § B)
 

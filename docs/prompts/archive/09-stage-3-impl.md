@@ -1,8 +1,9 @@
 ---
-Status: ACTIVE
+Status: USED
 Type: implementation kickoff
-Plan: docs/plans/09-stage-3-impl.md
+Plan: docs/plans/archive/09-stage-3-impl.md
 Authored: 2026-05-01
+Used: 2026-05-02
 Prerequisite: Wave 2 (plan 08) shipped clean — `/_design/components` renders all 85 components, all placeholder routes 200, mobile drawer works, confirm modal works.
 ---
 

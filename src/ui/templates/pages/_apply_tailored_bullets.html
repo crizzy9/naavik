@@ -1,0 +1,18 @@
+{# Discover · review middle column — tailored resume bullets. Args: groups #}
+<div class="flex flex-col gap-4">
+  {% for g in groups %}
+    <section>
+      <header class="px-3 py-2 text-xs uppercase tracking-wide text-slate-400 font-medium border-b border-slate-800/50">
+        {{ g.header }}
+      </header>
+      <div class="flex flex-col">
+        {% for r in g.rows %}
+          {% with bullet={"id": r.id, "text": r.trimmed_line, "tags": r.tags},
+                  selected=r.selected, trimmed_line=r.trimmed_line, chips=r.chips %}
+            {% include "components/tailored_bullet_row.html" %}
+          {% endwith %}
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+</div>

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Settings — Naavik{% endblock %}
+
+{% block main %}
+<div class="flex flex-col min-h-screen">
+  <header class="px-6 lg:px-8 pt-8 pb-4">
+    <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Settings</h1>
+    <p class="mt-1 text-sm text-slate-400">Configure how Naavik runs.</p>
+  </header>
+
+  {% with current_tab=current_tab %}
+    {% include "components/settings_tabs.html" %}
+  {% endwith %}
+
+  <section id="settings-tab-content" class="px-6 lg:px-8 py-6 lg:py-8 flex-1">
+    {% include tab_template %}
+  </section>
+</div>
+{% endblock %}

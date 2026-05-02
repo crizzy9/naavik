@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Tracking — Naavik{% endblock %}
+
+{% block main %}
+<div class="px-6 lg:px-8 py-6 lg:py-8 max-w-7xl mx-auto flex flex-col gap-6">
+  <header class="flex items-baseline justify-between gap-3 flex-wrap">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Tracking</h1>
+      <p class="mt-1 text-sm text-slate-400">
+        {{ active_count }} active · {{ closed_count }} closed · pulled from gmail every 10 min
+      </p>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap shrink-0">
+      <span class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+        <i data-lucide="mail" class="h-3.5 w-3.5 text-rose-400" stroke-width="1.5"></i>
+        gmail
+        <span class="text-slate-500">· synced 2m ago</span>
+      </span>
+      {% with current_view=current_view %}
+        {% include "components/view_toggle.html" %}
+      {% endwith %}
+      <button type="button"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+        <i data-lucide="plus" class="h-4 w-4" stroke-width="1.5"></i>
+        Add manually
+      </button>
+    </div>
+  </header>
+
+  {# Integrations row — 3 cards #}
+  <section class="grid grid-cols-1 md:grid-cols-3 gap-3">
+    {% for ic in integrations %}
+      {% with name=ic.name, icon=ic.icon, state=ic.state, account=ic.account,
+              connect_url=ic.connect_url, disconnect_url=ic.disconnect_url,
+              description=ic.description %}
+        {% include "components/integration_card.html" %}
+      {% endwith %}
+    {% endfor %}
+  </section>
+
+  {# Needs followup banner #}
+  {% if followup_count > 0 %}
+    {% with count=followup_count, items=followup_items %}
+      {% include "components/followup_banner.html" %}
+    {% endwith %}
+  {% endif %}
+
+  {# Main board / list area #}
+  <div id="tracking-main">
+    {% if current_view == "list" %}
+      {% include "pages/_tracking_list.html" %}
+    {% else %}
+      {% include "pages/_tracking_board.html" %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

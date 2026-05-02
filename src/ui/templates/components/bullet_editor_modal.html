@@ -1,0 +1,79 @@
+{#
+  bullet_editor_modal.html — full bullet editor modal returned from
+  GET /_modal/bullet-editor/{bullet_id}.
+
+  Args:
+    bullet      : dict {id, text, tags, selection_override}
+    role_label  : "Intuit · Senior SWE" — for the modal subtitle
+#}
+{% set _bullet_body %}
+  <form
+    id="bullet-editor-form"
+    hx-put="/api/v1/bullets/{{ bullet.id }}"
+    hx-target="#bullet-list-area"
+    hx-swap="none">
+
+    {% with value=bullet.text %}
+      {% include "components/bullet_textarea.html" %}
+    {% endwith %}
+
+    <div class="mt-5">
+      {% with label="TAGS · " ~ (bullet.tags | length) ~ " SELECTED",
+              for_id=None,
+              hint="used to match jobs · click to toggle" %}
+        {% include "components/field_label.html" %}
+      {% endwith %}
+      {% with selected=bullet.tags %}
+        {% include "components/tag_picker.html" %}
+      {% endwith %}
+    </div>
+
+    <div class="mt-5">
+      {% with label="SELECTION OVERRIDE", for_id=None %}
+        {% include "components/field_label.html" %}
+      {% endwith %}
+      {% with current=bullet.selection_override %}
+        {% include "components/selection_override.html" %}
+      {% endwith %}
+    </div>
+  </form>
+{% endset %}
+
+{% set _bullet_footer %}
+  <div class="flex items-center gap-2">
+    <button type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm text-cyan-300 hover:text-cyan-200 hover:bg-cyan-400/10"
+            hx-post="/api/v1/bullets/{{ bullet.id }}/rewrite"
+            hx-target="#bullet-text"
+            hx-swap="none">
+      <i data-lucide="sparkles" class="h-4 w-4" stroke-width="1.5"></i>
+      Rewrite with AI
+    </button>
+    <button type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
+            hx-get="/_modal/confirm?title=Delete+bullet%3F&message=This+can%27t+be+undone.+The+bullet%27s+history+remains+in+audit+logs.&action=/api/v1/bullets/{{ bullet.id }}&label=Delete&tone=danger&method=delete"
+            hx-target="#modal-region"
+            hx-swap="innerHTML">
+      <i data-lucide="trash-2" class="h-4 w-4" stroke-width="1.5"></i>
+      Delete
+    </button>
+  </div>
+  <div class="flex items-center gap-2">
+    <button type="button"
+            class="inline-flex items-center gap-2 px-3 py-1.5 rounded text-sm text-slate-300 hover:text-slate-50 hover:bg-slate-800"
+            hx-on:click="document.getElementById('bullet-editor-modal').close()">
+      Cancel
+    </button>
+    <button type="submit"
+            form="bullet-editor-form"
+            class="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium">
+      <i data-lucide="check" class="h-4 w-4" stroke-width="1.5"></i>
+      Save bullet
+    </button>
+  </div>
+{% endset %}
+
+{% with id="bullet-editor-modal", title="Edit bullet", subtitle="· " ~ role_label,
+        body=_bullet_body, footer=_bullet_footer, size="lg" %}
+  {% include "components/modal.html" %}
+{% endwith %}

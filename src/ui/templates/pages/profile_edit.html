@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Edit profile — Naavik{% endblock %}
+
+{% block main %}
+<div class="px-6 lg:px-8 py-6 lg:py-8 max-w-7xl mx-auto">
+  <header class="flex items-baseline justify-between gap-3 mb-6 flex-wrap">
+    <div class="min-w-0">
+      <nav class="text-xs text-slate-500 mb-1 truncate">
+        <a href="/profile" class="hover:text-slate-300">Profile</a>
+        <span aria-hidden="true">›</span>
+        Edit
+      </nav>
+      <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Edit profile</h1>
+    </div>
+    <div class="flex items-center gap-2 shrink-0 flex-wrap">
+      {% with state="saved", relative_time="just now" %}
+        {% include "components/autosave_indicator.html" %}
+      {% endwith %}
+      <a href="/profile" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm transition">
+        <i data-lucide="eye" class="h-4 w-4" stroke-width="1.5"></i>
+        Preview
+      </a>
+      <button type="button"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 text-sm transition"
+              hx-get="/_modal/confirm?title=Discard+unsaved+edits%3F&message=Per-field+autosave+keeps+your+work+up-to-date.+Discard+returns+to+the+last+manual+save+point.&action=/profile&label=Discard&tone=warning&method=get"
+              hx-target="#modal-region"
+              hx-swap="innerHTML">
+        <i data-lucide="undo" class="h-4 w-4" stroke-width="1.5"></i>
+        Discard
+      </button>
+    </div>
+  </header>
+
+  <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-6 lg:gap-8">
+    <div class="flex flex-col gap-6 min-w-0">
+      {# Identity card #}
+      {% set _identity_body %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {% with label="FULL NAME", name="full_name", value=profile.full_name %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="HEADLINE", name="headline", value=profile.headline %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="CURRENT COMPANY", name="current_company", value=profile.current_company %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="LOCATION", name="location", value=profile.location %}{% include "components/editor_field.html" %}{% endwith %}
+        </div>
+      {% endset %}
+      {% with title="Identity", body=_identity_body %}
+        {% include "components/editor_card.html" %}
+      {% endwith %}
+
+      {# Summary #}
+      {% set _summary_body %}
+        {% with label="SUMMARY", name="summary_full", type="textarea", value=profile.summary_full %}
+          {% include "components/editor_field.html" %}
+        {% endwith %}
+      {% endset %}
+      {% with title="Summary", anchor_id="summary", body=_summary_body %}
+        {% include "components/editor_card.html" %}
+      {% endwith %}
+
+      {# Per-experience cards #}
+      {% for exp in experiences %}
+        {% set _actions %}
+          <button type="button" class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800">
+            <i data-lucide="copy-plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>Duplicate
+          </button>
+          <button type="button"
+                  class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
+                  hx-get="/_modal/confirm?title=Remove+role%3F&message=Removes+%22{{ exp.display.title }}%22+at+{{ exp.display.company }}+and+all+its+bullets+from+your+profile.&action=/api/v1/experiences/{{ exp.model.id }}&label=Remove&tone=danger&method=delete"
+                  hx-target="#modal-region"
+                  hx-swap="innerHTML">
+            <i data-lucide="trash-2" class="h-3.5 w-3.5" stroke-width="1.5"></i>Remove
+          </button>
+        {% endset %}
+        {% set _exp_body %}
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {% with label="TITLE", name="title_" ~ exp.model.id, value=exp.display.title %}{% include "components/editor_field.html" %}{% endwith %}
+            {% with label="START", name="start_" ~ exp.model.id, value=exp.model.start_date.strftime("%Y-%m-%d"), type="date" %}{% include "components/editor_field.html" %}{% endwith %}
+            {% with label="END", name="end_" ~ exp.model.id, value=(exp.model.end_date.strftime("%Y-%m-%d") if exp.model.end_date else ""), placeholder="Present", type="date" %}{% include "components/editor_field.html" %}{% endwith %}
+          </div>
+          <div class="mt-5">
+            <div class="flex items-baseline justify-between mb-2 gap-3">
+              <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Bullets · <span class="font-mono">{{ exp.bullets | length }}</span></div>
+              <button type="button"
+                      class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+                      hx-post="/api/v1/bullets"
+                      hx-vals='{"experience_id": {{ exp.model.id }}}'
+                      hx-target="#bullet-list-{{ exp.model.id }}"
+                      hx-swap="beforeend">
+                <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+                Add bullet
+              </button>
+            </div>
+            <div id="bullet-list-{{ exp.model.id }}"
+                 data-sortable="true"
+                 hx-post="/api/v1/bullets/reorder"
+                 hx-trigger="end"
+                 hx-vals='js:{"bullet_ids": [...this.querySelectorAll("[data-bullet-id]")].map(e => e.dataset.bulletId)}'
+                 class="flex flex-col gap-1">
+              {% for b in exp.bullets %}
+                {% with bullet=b %}{% include "components/bullet_edit_row.html" %}{% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+        {% endset %}
+        {% with title="Experience · " ~ exp.display.company, anchor_id="experience-" ~ exp.model.id,
+                actions=_actions, body=_exp_body %}
+          {% include "components/editor_card.html" %}
+        {% endwith %}
+      {% endfor %}
+
+      {# Application questions #}
+      {% with profile=profile %}
+        {% include "components/application_qs_form.html" %}
+      {% endwith %}
+    </div>
+
+    {# Sticky right rail #}
+    <aside class="hidden lg:block">
+      <div class="flex flex-col gap-6 sticky top-6">
+        {% set _edit_anchors = [
+          {"id": "summary", "label": "Summary"},
+        ] %}
+        {% with anchors=anchors, active_id="experience" %}
+          {% include "components/section_anchor_nav.html" %}
+        {% endwith %}
+        {% with missing_count=readiness.missing_count, fields=readiness.fields %}
+          {% include "components/application_readiness_card.html" %}
+        {% endwith %}
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

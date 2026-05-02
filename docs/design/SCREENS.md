@@ -1,6 +1,6 @@
 # Naavik Screen Catalog
 
-> **Last updated:** 2026-05-01 (Discover § 7 right rail gains "Stuck in queue · {N}" card per cross-plan triage)
+> **Last updated:** 2026-05-02 (Wave 3 / plan 09 EXECUTED — all 11 Phase 1 screens implemented; per-screen `Impl` flipped to `[x]`)
 > **Source of truth:** This file. Where this disagrees with mockups, archived prompts (`docs/prompts/archive/`), or older drafts, this wins.
 > **Companion files:** `DESIGN.md` (visual contract) · `docs/design/WORKFLOW.md` (UI sub-process pipeline).
 >
@@ -85,17 +85,17 @@ Tags render as chips: `bg-slate-800 text-slate-300 text-xs font-mono px-2 py-0.5
 
 | # | Title | Route | Sidebar | Phase | Mockup | Impl |
 |---|---|---|---|---|---|---|
-| 1 | Login | `/login` | (auth shell, no sidebar) | 1 | [x] | [ ] |
-| 2 | Onboarding · resume upload | `/onboarding` | (no sidebar) | 1 | [x] | [ ] |
-| 3 | Overview | `/` | Overview | 1 | [x] | [~] (placeholder) |
-| 4 | Profile | `/profile` | Profile | 1 | [x] | [ ] |
-| 5 | Profile editor | `/profile/edit` | Profile | 1 | [x] | [ ] |
-| 6 | Bullet editor modal | (component, opens from #5 + #8) | — | 1 | [x] | [ ] |
-| 7 | Discover | `/discover` | Jobs | 1 | [x] | [ ] |
-| 8 | Discover · review & apply | `/discover/:id` | Jobs | 1 | [x] | [ ] |
-| 9 | Tracking | `/tracking` | Tracking | 1 | [x] | [ ] |
-| 10 | Outreach | `/outreach` | Outreach | 1 | [x] | [ ] |
-| 11 | Settings | `/settings` (+ tab sub-routes) | Settings | 1 | [x] | [ ] |
+| 1 | Login | `/login` | (auth shell, no sidebar) | 1 | [x] | [x] |
+| 2 | Onboarding · resume upload | `/onboarding` | (no sidebar) | 1 | [x] | [x] |
+| 3 | Overview | `/` | Overview | 1 | [x] | [x] |
+| 4 | Profile | `/profile` | Profile | 1 | [x] | [x] |
+| 5 | Profile editor | `/profile/edit` | Profile | 1 | [x] | [x] |
+| 6 | Bullet editor modal | (component, opens from #5 + #8) | — | 1 | [x] | [x] |
+| 7 | Discover | `/discover` | Jobs | 1 | [x] | [x] |
+| 8 | Discover · review & apply | `/discover/:id` | Jobs | 1 | [x] | [x] |
+| 9 | Tracking | `/tracking` | Tracking | 1 | [x] | [x] |
+| 10 | Outreach | `/outreach` | Outreach | 1 | [x] | [x] |
+| 11 | Settings | `/settings` (+ tab sub-routes) | Settings | 1 | [x] | [x] |
 
 The MVP set is **11 screens**. The historical mockup PDF (committed at `docs/design/mockups/Naavik — MVP screens (print).pdf`) was generated when there were 12 sections; the prior standalone Cover-letter screen has been folded into Section 8 (Discover · review & apply). Once the next Claude Design handoff produces standalone exports, individual PNGs commit alongside the PDF using the naming `{nn}-{slug}-{desktop|mobile}.png`.
 

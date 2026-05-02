@@ -1,0 +1,89 @@
+{#
+  Settings · Notifications tab body.
+  Args:
+    settings : Settings singleton (notify_threshold + notifications_enabled dict)
+#}
+<div class="flex flex-col gap-6 max-w-3xl">
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <h2 class="text-base font-medium text-slate-50">Channels</h2>
+    <p class="text-xs text-slate-400 mt-0.5">Webhook URLs + bot tokens stored encrypted at <code class="font-mono text-slate-300">~/.naavik/secrets.enc</code>.</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+      <div>
+        {% with label="DISCORD WEBHOOK URL", for_id="notif-discord" %}
+          {% include "components/field_label.html" %}
+        {% endwith %}
+        <div class="flex items-stretch gap-2">
+          {% with name="discord_webhook_url", id="notif-discord", mono=true,
+                  placeholder="https://discord.com/api/webhooks/...",
+                  value=("(configured)" if settings.discord_webhook_configured else "") %}
+            {% include "components/input.html" %}
+          {% endwith %}
+          <button type="button"
+                  class="inline-flex items-center gap-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm shrink-0"
+                  hx-post="/api/v1/settings/notifications/test?channel=discord"
+                  hx-target="#notif-discord-result"
+                  hx-swap="innerHTML">Test</button>
+        </div>
+        <div id="notif-discord-result" class="mt-2 text-xs text-slate-400"></div>
+      </div>
+
+      <div>
+        {% with label="TELEGRAM BOT TOKEN", for_id="notif-telegram" %}
+          {% include "components/field_label.html" %}
+        {% endwith %}
+        <div class="flex items-stretch gap-2">
+          {% with name="telegram_bot_token", id="notif-telegram", type="password", mono=true,
+                  placeholder="123456:ABC-DEF…",
+                  value=("(configured)" if settings.telegram_bot_configured else "") %}
+            {% include "components/input.html" %}
+          {% endwith %}
+          <button type="button"
+                  class="inline-flex items-center gap-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm shrink-0"
+                  hx-post="/api/v1/settings/notifications/test?channel=telegram"
+                  hx-target="#notif-telegram-result"
+                  hx-swap="innerHTML">Test</button>
+        </div>
+        <div id="notif-telegram-result" class="mt-2 text-xs text-slate-400"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <h2 class="text-base font-medium text-slate-50">Per-event toggles</h2>
+    <p class="text-xs text-slate-400 mt-0.5">Which job-search signals fire push notifications.</p>
+    <ul class="mt-5 flex flex-col divide-y divide-slate-800/50">
+      {% for key, enabled in settings.notifications_enabled.items() %}
+        {% set _label = key | replace('_', ' ') | title %}
+        <li class="flex items-center justify-between py-3 gap-3">
+          <div>
+            <div class="text-sm text-slate-100">{{ _label }}</div>
+            <div class="text-xs text-slate-500">Sent on every {{ key | replace('_', ' ') }} event.</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" name="{{ key }}" {% if enabled %}checked{% endif %}
+                   hx-put="/api/v1/settings/notifications"
+                   hx-trigger="change"
+                   hx-vals='{"event": "{{ key }}"}'
+                   hx-swap="none"
+                   class="sr-only peer">
+            <span class="w-9 h-5 bg-slate-700 rounded-full peer-checked:bg-indigo-500 transition relative
+                         after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-4 after:w-4
+                         after:bg-white after:rounded-full after:transition peer-checked:after:translate-x-4"></span>
+          </label>
+        </li>
+      {% endfor %}
+    </ul>
+
+    <div class="mt-6">
+      {% with label="HIGH-SCORE THRESHOLD", for_id="notif-threshold",
+              hint="0.00–1.00 · gates new-job alerts" %}
+        {% include "components/field_label.html" %}
+      {% endwith %}
+      {% with name="notify_threshold", id="notif-threshold", type="number",
+              value=settings.notify_threshold, mono=true %}
+        {% include "components/input.html" %}
+      {% endwith %}
+    </div>
+  </section>
+</div>

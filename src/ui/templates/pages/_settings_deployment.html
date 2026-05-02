@@ -1,0 +1,37 @@
+{#
+  Settings · Deployment tab body.
+  Args:
+    settings : Settings singleton
+    deployment : dict {mode, status, version, meta, update_available_version}
+    log_lines  : list[{timestamp, level, message}]
+    on_disk    : list[{label, path, sub, icon}]
+#}
+<div class="flex flex-col gap-6 max-w-5xl">
+  {% with mode=deployment.mode, status=deployment.status, version=deployment.version,
+          meta=deployment.meta, update_available_version=deployment.update_available_version %}
+    {% include "components/deployment_status_card.html" %}
+  {% endwith %}
+
+  {% if deployment.mode == "self-hosted" %}
+    {% with log_path="~/.naavik/logs · live tail", lines=log_lines, streaming=true %}
+      {% include "components/log_tail.html" %}
+    {% endwith %}
+
+    <section>
+      <h2 class="text-base font-medium text-slate-50 mb-3">On disk</h2>
+      {% with paths=on_disk %}
+        {% include "components/on_disk_card.html" %}
+      {% endwith %}
+    </section>
+  {% else %}
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+      <p class="text-sm text-slate-300">Logs available in the cloud dashboard.</p>
+      <a href="https://jobs.crypticsoul.dev/dashboard"
+         hx-boost="false" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 mt-3 text-sm text-indigo-300 hover:text-indigo-200">
+        Open dashboard
+        <i data-lucide="external-link" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      </a>
+    </div>
+  {% endif %}
+</div>

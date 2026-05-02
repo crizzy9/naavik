@@ -47,10 +47,42 @@
   });
 
   // Public registration API (used from page templates / plan 09).
+  function click(id) {
+    var el = document.getElementById(id);
+    if (el) el.click();
+  }
+
   window.naavikKeys = {
     register: function (templatePath, keyMap) {
       handlers[templatePath] = Object.assign(handlers[templatePath] || {}, keyMap);
     },
     activeTabIs: activeTabIs,
+    click: click,
   };
+
+  // Plan 09 — register Discover + Discover-review handler maps. Page-bound
+  // helpers (triggerRewriteSelection etc.) are no-ops here; pages can override
+  // via naavikKeys.register if they want richer behavior.
+  window.naavikKeys.register("/discover", {
+    "ArrowLeft":  function () { click("skip-btn"); },
+    "ArrowRight": function () { click("auto-apply-btn"); },
+    "ArrowUp":    function () { click("save-btn"); },
+    "Enter":      function () { click("review-btn"); },
+  });
+
+  window.naavikKeys.register("/discover/:id", {
+    "meta+k":     function () {
+      if (!activeTabIs("cover-letter")) return;
+      click("apply-rewrite-selection");
+    },
+    "meta+Enter": function () {
+      if (!activeTabIs("cover-letter")) return;
+      click("apply-cover-regen");
+    },
+    "meta+c":     function () {
+      if (!activeTabIs("cover-letter")) return;
+      var ta = document.getElementById("apply-cover-letter-text");
+      if (ta && navigator.clipboard) navigator.clipboard.writeText(ta.innerText || "");
+    },
+  });
 })();

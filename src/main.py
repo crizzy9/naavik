@@ -15,7 +15,9 @@ from ui.routes import (
     auth,
     design,
     discover,
+    email,
     fragments,
+    integrations,
     outreach,
     overview,
     profile,
@@ -46,6 +48,8 @@ app.include_router(tracking.router)
 app.include_router(outreach.router)
 app.include_router(ui_settings.router)
 app.include_router(fragments.router)
+app.include_router(integrations.router)
+app.include_router(email.router)
 app.include_router(design.router)
 
 

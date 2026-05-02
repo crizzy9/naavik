@@ -1,0 +1,450 @@
+"""Per-stub-endpoint shape + ?fail=1 failure-mode coverage (plan 09 § I)."""
+
+from __future__ import annotations
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture(scope="module")
+def client() -> TestClient:
+    from main import app
+
+    return TestClient(app, raise_server_exceptions=True)
+
+
+@pytest.fixture(autouse=True)
+def _restore_state():
+    """Restore mutable in-memory lists across endpoint smoke tests."""
+    from db import sample_data as sd
+
+    apps_snap = [a.model_copy(deep=True) for a in sd.APPLICATIONS]
+    bullets_snap = [b.model_copy(deep=True) for b in sd.BULLETS]
+    jobs_snap = [j.model_copy(deep=True) for j in sd.JOBS]
+    om_snap = [m.model_copy(deep=True) for m in sd.OUTREACH_MESSAGES]
+    yield
+    sd.APPLICATIONS.clear()
+    sd.APPLICATIONS.extend(apps_snap)
+    sd.BULLETS.clear()
+    sd.BULLETS.extend(bullets_snap)
+    sd.JOBS.clear()
+    sd.JOBS.extend(jobs_snap)
+    sd.OUTREACH_MESSAGES.clear()
+    sd.OUTREACH_MESSAGES.extend(om_snap)
+
+
+# ── Auth ────────────────────────────────────────────────────────────────
+
+
+def test_auth_login_ok(client):
+    r = client.post("/api/v1/auth/login", data={"email": "[email protected]", "password": "x"})
+    assert r.status_code == 204
+    assert r.headers.get("hx-redirect") == "/"
+    assert "naavik_session" in r.headers.get("set-cookie", "")
+
+
+def test_auth_login_onboarding_sentinel(client):
+    r = client.post("/api/v1/auth/login", data={"email": "onboarding@test", "password": "x"})
+    assert r.headers.get("hx-redirect") == "/onboarding"
+
+
+def test_auth_login_fail(client):
+    r = client.post("/api/v1/auth/login?fail=1", data={"email": "x@y", "password": "z"})
+    assert r.status_code == 401
+    assert "Invalid credentials" in r.text
+
+
+def test_auth_logout(client):
+    r = client.post("/api/v1/auth/logout")
+    assert r.status_code == 204
+    assert r.headers.get("hx-redirect") == "/login"
+
+
+def test_auth_me_unauthenticated(client):
+    # Brand-new client to drop cookies.
+    from fastapi.testclient import TestClient as TC
+
+    from main import app
+
+    bare = TC(app, raise_server_exceptions=True)
+    r = bare.get("/api/v1/auth/me")
+    assert r.status_code == 401
+
+
+def test_auth_me_authenticated(client):
+    r = client.get("/api/v1/auth/me", cookies={"naavik_session": "fake-1"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["email"] == "shyam.padia930@gmail.com"
+
+
+def test_auth_csrf(client):
+    r = client.get("/api/v1/auth/csrf")
+    assert r.status_code == 200
+    assert "csrf_token" in r.json()
+
+
+# ── Profile / bullets ────────────────────────────────────────────────────
+
+
+def test_profile_field_put_returns_oob_indicator(client):
+    r = client.put("/api/v1/profile/full_name", data={"value": "Shyam P."})
+    assert r.status_code == 200
+    assert 'id="autosave"' in r.text
+    assert "Auto-saved" in r.text
+
+
+def test_profile_field_put_fail_returns_error_indicator(client):
+    r = client.put("/api/v1/profile/full_name?fail=1", data={"value": "x"})
+    assert r.status_code == 422
+    assert "retry" in r.text.lower() or "couldn" in r.text.lower()
+
+
+def test_profile_field_put_unknown_field_returns_404(client):
+    r = client.put("/api/v1/profile/random_field_xyz", data={"value": "x"})
+    assert r.status_code == 404
+
+
+def test_bullets_post_get_put_delete_roundtrip(client):
+    # POST
+    r = client.post("/api/v1/bullets", data={"text": "Test bullet", "experience_id": 1})
+    assert r.status_code == 200
+    assert "Test bullet" in r.text
+    # PUT
+    # extract id from the data-bullet-id attribute
+    import re
+
+    m = re.search(r'data-bullet-id="(\d+)"', r.text)
+    assert m
+    bid = int(m.group(1))
+    r2 = client.put(f"/api/v1/bullets/{bid}", data={"text": "Edited bullet"})
+    assert r2.status_code == 200
+    assert "closeModal" in r2.headers.get("hx-trigger", "")
+    # DELETE
+    r3 = client.delete(f"/api/v1/bullets/{bid}")
+    assert r3.status_code == 204
+
+
+def test_bullets_rewrite(client):
+    r = client.post("/api/v1/bullets/1/rewrite")
+    assert r.status_code == 200
+    assert r.json().get("edited") is True
+
+
+def test_bullets_reorder(client):
+    r = client.post("/api/v1/bullets/reorder", json={"bullet_ids": [1, 2, 3]})
+    assert r.status_code == 204
+
+
+# ── Discover / jobs ──────────────────────────────────────────────────────
+
+
+def test_jobs_list(client):
+    r = client.get("/api/v1/jobs")
+    assert r.status_code == 200
+    body = r.json()
+    assert "items" in body
+    assert len(body["items"]) > 0
+
+
+def test_jobs_get_by_id(client):
+    r = client.get("/api/v1/jobs/101")
+    assert r.status_code == 200
+    assert r.json()["company"] == "Stripe"
+
+
+def test_jobs_by_url(client):
+    r = client.post("/api/v1/jobs/by-url", json={"url": "https://example.com/job/123"})
+    assert r.status_code == 200
+    assert r.json()["url"] == "https://example.com/job/123"
+
+
+def test_discover_skip_returns_swipe_card(client):
+    r = client.post("/api/v1/discover/124/skip")
+    assert r.status_code == 200
+    assert 'id="discover-card"' in r.text
+
+
+def test_discover_skip_fail(client):
+    r = client.post("/api/v1/discover/124/skip?fail=1")
+    assert r.status_code == 502
+
+
+def test_discover_save_returns_swipe_card(client):
+    r = client.post("/api/v1/discover/115/save")
+    assert r.status_code == 200
+
+
+def test_auto_submit_creates_draft(client):
+    from db import sample_data as sd
+
+    n_before = len([a for a in sd.APPLICATIONS if a.status.value == "DRAFT"])
+    r = client.post("/api/v1/applications/126/auto-submit")
+    assert r.status_code == 200
+    n_after = len([a for a in sd.APPLICATIONS if a.status.value == "DRAFT"])
+    assert n_after == n_before + 1
+
+
+# ── Applications ─────────────────────────────────────────────────────────
+
+
+def test_applications_list(client):
+    r = client.get("/api/v1/applications")
+    assert r.status_code == 200
+    assert "items" in r.json()
+
+
+def test_applications_get(client):
+    r = client.get("/api/v1/applications/1")
+    assert r.status_code == 200
+    assert r.json()["company"] == "Figma"
+
+
+def test_applications_move(client):
+    r = client.post(
+        "/api/v1/applications/move", json={"application_id": 5, "target_status": "RECRUITER_SCREEN"}
+    )
+    assert r.status_code == 204
+
+
+def test_applications_move_fail(client):
+    r = client.post("/api/v1/applications/move?fail=1", json={})
+    assert r.status_code == 502
+
+
+def test_applications_manual_creates_row(client):
+    r = client.post("/api/v1/applications/manual", data={"company": "Test Co", "role": "Sr Eng"})
+    assert r.status_code == 204
+    assert r.headers.get("hx-redirect") == "/tracking"
+
+
+def test_applications_bundle_returns_zip(client):
+    r = client.get("/api/v1/applications/1/bundle")
+    assert r.status_code == 200
+    assert r.headers.get("content-type") == "application/zip"
+
+
+# ── Settings ─────────────────────────────────────────────────────────────
+
+
+def test_settings_test_connection_ok(client):
+    r = client.post("/_fragments/settings/test-connection")
+    assert r.status_code == 200
+    assert "Connection ok" in r.text
+
+
+def test_settings_test_connection_fail(client):
+    r = client.post("/_fragments/settings/test-connection?fail=1")
+    assert r.status_code == 200
+    assert "check your key" in r.text or "Couldn" in r.text
+
+
+def test_settings_llm_usage(client):
+    r = client.get("/api/v1/settings/llm/usage")
+    assert r.status_code == 200
+    body = r.json()
+    assert "month_cost_usd" in body
+    assert body["month_cost_usd"] > 0
+
+
+def test_settings_account_password_ok(client):
+    r = client.put("/api/v1/settings/account/password", data={"current": "x", "new": "y"})
+    assert r.status_code == 200
+
+
+def test_settings_account_password_fail(client):
+    r = client.put("/api/v1/settings/account/password?fail=1", data={"current": "x", "new": "y"})
+    assert r.status_code == 422
+
+
+def test_settings_deployment_restart_self_hosted_returns_202(client):
+    r = client.post("/api/v1/settings/deployment/restart")
+    assert r.status_code == 202
+
+
+def test_settings_notifications_test_discord(client):
+    r = client.post("/api/v1/settings/notifications/test?channel=discord")
+    assert r.status_code == 200
+
+
+# ── Integrations + email ─────────────────────────────────────────────────
+
+
+def test_integrations_list(client):
+    r = client.get("/api/v1/integrations")
+    assert r.status_code == 200
+    items = r.json()
+    providers = {i["provider"] for i in items}
+    assert {"gmail", "outlook", "calendar"}.issubset(providers)
+
+
+def test_gmail_connect_redirects_to_callback(client):
+    r = client.get("/api/v1/integrations/gmail/connect", follow_redirects=False)
+    assert r.status_code == 302
+    assert "callback" in r.headers["location"]
+
+
+def test_gmail_callback_then_disconnect(client):
+    r = client.get("/api/v1/integrations/gmail/callback?code=fake-1", follow_redirects=False)
+    assert r.status_code == 302
+    assert "/tracking?connected=gmail" in r.headers["location"]
+    r2 = client.post("/api/v1/integrations/gmail/disconnect")
+    assert r2.status_code == 204
+    assert r2.headers.get("hx-redirect") == "/tracking"
+
+
+def test_email_threads_list(client):
+    r = client.get("/api/v1/email/threads")
+    assert r.status_code == 200
+    assert len(r.json()) > 0
+
+
+def test_email_thread_get(client):
+    r = client.get("/api/v1/email/threads/601")
+    assert r.status_code == 200
+    assert r.json()["subject"].startswith("Re: Senior ML")
+
+
+def test_email_thread_draft_reply(client):
+    r = client.post("/api/v1/email/threads/601/draft-reply", json={"intent": "follow_up"})
+    assert r.status_code == 200
+    assert "body" in r.json()
+
+
+# ── Outreach / contacts ──────────────────────────────────────────────────
+
+
+def test_contacts_list(client):
+    r = client.get("/api/v1/contacts")
+    assert r.status_code == 200
+    assert len(r.json()) > 0
+
+
+def test_contacts_find(client):
+    r = client.post("/api/v1/contacts/find", json={"company": "Stripe"})
+    assert r.status_code == 200
+    assert len(r.json()) >= 3
+
+
+def test_outreach_draft(client):
+    r = client.post("/api/v1/outreach/draft", json={"contact_id": 211, "intent": "follow_up"})
+    assert r.status_code == 200
+    assert "body" in r.json()
+
+
+def test_outreach_send(client):
+    # Draft first to get a known ID.
+    r0 = client.post("/api/v1/outreach/draft", json={"contact_id": 211, "intent": "follow_up"})
+    msg_id = r0.json()["id"]
+    r = client.post("/api/v1/outreach/send", json={"message_id": msg_id})
+    assert r.status_code == 200
+    assert r.json()["status"] == "sent"
+
+
+# ── Fragments ────────────────────────────────────────────────────────────
+
+
+def test_fragment_next_card(client):
+    r = client.get("/_fragments/discover/next-card")
+    assert r.status_code == 200
+    assert 'id="discover-card"' in r.text or "No more matches" in r.text
+
+
+def test_fragment_priority_actions(client):
+    r = client.get("/_fragments/overview/priority-actions")
+    assert r.status_code == 200
+
+
+def test_fragment_email_signal(client):
+    r = client.get("/_fragments/overview/email-signal")
+    assert r.status_code == 200
+
+
+def test_fragment_pipeline_strip(client):
+    r = client.get("/_fragments/overview/pipeline-strip")
+    assert r.status_code == 200
+    assert "overview-pipeline" in r.text
+
+
+def test_fragment_tracking_board(client):
+    r = client.get("/_fragments/tracking/board")
+    assert r.status_code == 200
+
+
+def test_fragment_tracking_list(client):
+    r = client.get("/_fragments/tracking/list")
+    assert r.status_code == 200
+
+
+def test_fragment_tracking_followup(client):
+    r = client.get("/_fragments/tracking/followup-banner")
+    assert r.status_code == 200
+
+
+def test_fragment_outreach_app_detail(client):
+    r = client.get("/_fragments/outreach/app-detail/2")
+    assert r.status_code == 200
+    assert "Anthropic" in r.text
+
+
+def test_fragment_match_breakdown(client):
+    r = client.get("/_fragments/discover/match-breakdown/101")
+    assert r.status_code == 200
+
+
+def test_fragment_tailored_bullets(client):
+    r = client.get("/_fragments/apply/tailored-bullets/113")
+    assert r.status_code == 200
+
+
+def test_fragment_cover_letter_section_view(client):
+    r = client.get("/_fragments/apply/cover-letter-section/13/intro")
+    assert r.status_code == 200
+    assert "INTRO" in r.text
+
+
+def test_fragment_cover_letter_section_edit(client):
+    r = client.get("/_fragments/apply/cover-letter-section/13/intro?mode=edit")
+    assert r.status_code == 200
+    assert "<form" in r.text or "<textarea" in r.text
+
+
+def test_fragment_screener(client):
+    r = client.get("/_fragments/apply/screener/13/817")
+    assert r.status_code == 200
+
+
+def test_modal_bullet_editor(client):
+    r = client.get("/_modal/bullet-editor/1")
+    assert r.status_code == 200
+    assert "bullet-editor-modal" in r.text
+
+
+def test_modal_add_by_url(client):
+    r = client.get("/_modal/add-by-url")
+    assert r.status_code == 200
+    assert "add-by-url-modal" in r.text
+
+
+def test_onboarding_step_fragment(client):
+    r1 = client.get("/_fragments/onboarding/step/1")
+    assert r1.status_code == 200
+    r2 = client.get("/_fragments/onboarding/step/2")
+    assert r2.status_code == 200
+    r3 = client.get("/_fragments/onboarding/step/3")
+    assert r3.status_code == 200
+
+
+def test_extraction_upload_returns_step2(client):
+    r = client.post(
+        "/api/v1/extraction/upload", files={"resume": ("cv.pdf", b"%PDF", "application/pdf")}
+    )
+    assert r.status_code == 200
+    assert "Reading your resume" in r.text
+
+
+def test_extraction_upload_fail(client):
+    r = client.post(
+        "/api/v1/extraction/upload?fail=1", files={"resume": ("cv.pdf", b"%PDF", "application/pdf")}
+    )
+    assert r.status_code == 422

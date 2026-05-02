@@ -1,0 +1,24 @@
+{# Tracking list partial. Args: rows (list of application dicts) #}
+<div class="overflow-x-auto bg-slate-900 border border-slate-800 rounded-lg">
+  <table class="w-full text-left">
+    <thead>
+      <tr class="border-b border-slate-800 text-[11px] uppercase tracking-wide text-slate-500 font-medium">
+        <th class="px-4 py-3">Company</th>
+        <th class="px-4 py-3">Role</th>
+        <th class="px-4 py-3">Stage</th>
+        <th class="px-4 py-3">Score</th>
+        <th class="px-4 py-3">Salary</th>
+        <th class="px-4 py-3">Last activity</th>
+        <th class="px-4 py-3">Source</th>
+        <th class="px-2 py-3 text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+        {% with application=r %}
+          {% include "components/tracking_list_row.html" %}
+        {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

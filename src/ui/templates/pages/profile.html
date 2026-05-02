@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Profile — Naavik{% endblock %}
+
+{% block main %}
+<div class="px-6 lg:px-8 py-6 lg:py-8 max-w-7xl mx-auto">
+  <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-6 lg:gap-8">
+    {# Main column #}
+    <div class="flex flex-col gap-6 min-w-0">
+      {% with profile=hero, editable=true %}
+        {% include "components/profile_hero.html" %}
+      {% endwith %}
+
+      {# Summary #}
+      <section id="summary" class="bg-slate-900 border border-slate-800 rounded-lg p-6 scroll-mt-6">
+        <header class="flex items-baseline justify-between mb-3 gap-3">
+          <h2 class="text-base font-medium text-slate-50">Summary</h2>
+          <button type="button" class="text-xs text-slate-400 hover:text-slate-100">Expand</button>
+        </header>
+        <p class="text-sm text-slate-200 leading-relaxed">{{ profile.summary_short }}</p>
+      </section>
+
+      {# Experience #}
+      <section id="experience" class="scroll-mt-6">
+        <header class="flex items-baseline justify-between mb-3 gap-3">
+          <h2 class="text-base font-medium text-slate-50">Experience</h2>
+          <span class="text-xs text-slate-500 font-mono">{{ experiences | length }} of {{ experiences | length }} roles</span>
+        </header>
+        <div class="flex flex-col gap-3">
+          {% for exp in experiences %}
+            {% with experience=exp.display, bullets=exp.bullets, expanded=loop.first %}
+              {% include "components/experience_card.html" %}
+            {% endwith %}
+          {% endfor %}
+        </div>
+      </section>
+
+      {# Application details #}
+      <section id="application-details" class="scroll-mt-6 bg-slate-900 border border-slate-800 rounded-lg p-6">
+        <header class="flex items-baseline justify-between mb-3 gap-3">
+          <h2 class="text-base font-medium text-slate-50">Application details</h2>
+          <a href="/profile/edit#application-qs" class="text-xs text-slate-400 hover:text-slate-100">Edit →</a>
+        </header>
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-2.5 gap-x-6">
+          {% for k, v in app_questions %}
+            <div class="flex items-baseline gap-2 min-w-0">
+              <dt class="text-[11px] uppercase tracking-wide text-slate-500 font-mono w-44 shrink-0">{{ k }}</dt>
+              <dd class="text-sm text-slate-200 truncate">{{ v }}</dd>
+            </div>
+          {% endfor %}
+        </dl>
+      </section>
+
+      {# Skills #}
+      <section id="skills" class="scroll-mt-6 bg-slate-900 border border-slate-800 rounded-lg p-6">
+        <header class="mb-3">
+          <h2 class="text-base font-medium text-slate-50">Skills</h2>
+        </header>
+        <div class="flex flex-col gap-3">
+          {% for s in skills %}
+            <div>
+              <div class="text-xs uppercase tracking-wide text-slate-500 font-medium mb-2">{{ s["category"] }}</div>
+              <div class="flex flex-wrap gap-1.5">
+                {% for item in s["items"] %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-xs font-mono">{{ item }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      {# Education #}
+      <section id="education" class="scroll-mt-6 bg-slate-900 border border-slate-800 rounded-lg p-6">
+        <header class="mb-3">
+          <h2 class="text-base font-medium text-slate-50">Education</h2>
+        </header>
+        <ul class="flex flex-col gap-3">
+          {% for e in educations %}
+            <li class="flex items-start gap-3 py-2 border-b border-slate-800/50 last:border-0">
+              <i data-lucide="graduation-cap" class="h-5 w-5 text-slate-500 shrink-0 mt-0.5" stroke-width="1.5"></i>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-slate-100">{{ e.degree }}</div>
+                <div class="text-xs text-slate-400">{{ e.institution }}{% if e.school %} · {{ e.school }}{% endif %}{% if e.location %} · {{ e.location }}{% endif %}</div>
+                <div class="text-xs text-slate-500 font-mono mt-0.5">{{ e.dates }}{% if e.gpa %} · GPA {{ e.gpa }}{% endif %}</div>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      {# Projects #}
+      <section id="projects" class="scroll-mt-6">
+        <header class="flex items-baseline justify-between mb-3 gap-3">
+          <h2 class="text-base font-medium text-slate-50">Projects</h2>
+        </header>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {% for p in projects %}
+            <article class="p-4 bg-slate-900 border border-slate-800 rounded-lg flex flex-col gap-2 min-w-0">
+              <header class="flex items-baseline justify-between gap-2">
+                <h3 class="text-sm font-medium text-slate-100 truncate">{{ p.title }}</h3>
+                {% if p.link %}
+                  <a href="{{ p.link }}" target="_blank" rel="noopener" hx-boost="false" class="text-xs text-slate-400 hover:text-slate-100 shrink-0">
+                    <i data-lucide="external-link" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+                  </a>
+                {% endif %}
+              </header>
+              <p class="text-xs text-slate-300 leading-relaxed line-clamp-3">{{ p.text }}</p>
+              <div class="flex flex-wrap gap-1 mt-1">
+                {% for t in p.tags %}
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">{{ t }}</span>
+                {% endfor %}
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      {# Certifications #}
+      <section id="certifications" class="scroll-mt-6 bg-slate-900 border border-slate-800 rounded-lg p-6">
+        <header class="mb-3">
+          <h2 class="text-base font-medium text-slate-50">Certifications</h2>
+        </header>
+        <ul class="flex flex-col">
+          {% for c in certifications %}
+            <li class="flex items-start gap-3 py-2 border-b border-slate-800/50 last:border-0">
+              <i data-lucide="award" class="h-4 w-4 text-amber-400 shrink-0 mt-1" stroke-width="1.5"></i>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-slate-100">{{ c.title }}</div>
+                <div class="text-xs text-slate-400">{{ c.issuer }}{% if c.date %} · {{ c.date }}{% endif %}</div>
+                {% if c.description %}<div class="text-xs text-slate-500 mt-0.5">{{ c.description }}</div>{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    </div>
+
+    {# Sticky right rail #}
+    <aside class="hidden lg:block">
+      <div class="flex flex-col gap-6 sticky top-6">
+        {% with anchors=anchors, active_id="experience" %}
+          {% include "components/section_anchor_nav.html" %}
+        {% endwith %}
+        {% with missing_count=readiness.missing_count, fields=readiness.fields %}
+          {% include "components/application_readiness_card.html" %}
+        {% endwith %}
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

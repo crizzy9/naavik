@@ -1,8 +1,9 @@
 ---
-Status: ACTIVE
+Status: USED
 Type: prompt
 Authored: 2026-04-30
-Last updated: 2026-04-30
+Last updated: 2026-05-02 (retired)
+Used: 2026-04-30 → 2026-05-02 (drove plan 08 + prompt 08 + plan 09 + prompt 09 + plan 10 + prompt 10 authoring across multiple planning sessions)
 Purpose: Kickoff prompt for a fresh Claude Code session to author plans 08–10 (Stage 2 component lib + Stage 3 page templates + backend implementation) and their kickoff prompts. Successor to docs/prompts/archive/00-session-continue-2026-04-30.md.
 ---
 

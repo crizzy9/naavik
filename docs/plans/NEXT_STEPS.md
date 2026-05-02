@@ -1,6 +1,6 @@
 # Naavik · Post-MVP next steps
 
-> **Last updated:** 2026-05-01
+> **Last updated:** 2026-05-02 (Wave 3 / plan 09 EXECUTED — added Playwright local-capture paper cut)
 >
 > Forward-looking plan you read **after Phase 1 ships** (plan 08 + plan 09 + plan 10 Wave 3 + plan 10 Wave 6 all archived). Use this as the entry point to figure out what to author + ship next.
 >
@@ -172,6 +172,27 @@ Two lines, one file. `uv run fastapi dev` → finds `app.py` → imports `app` �
 **Option B — move `src/main.py` to repo root.** Bigger refactor: requires updating every `from src.X import Y` (we have many), adjusting `pyproject.toml`'s `[tool.setuptools.packages]` layout, and revisiting how `Jinja2Templates(directory="src/ui/templates")` resolves. Not recommended unless we're reorganizing the package layout anyway.
 
 **Pick A**, ship it as a single commit in this paper-cuts plan or at the start of plan 11. While we're there, also update README's "Manual local development setup" step 2 to drop `src/main.py`.
+
+### 3. Playwright local capture on NixOS
+
+**Symptom observed during plan 09 testing:**
+- `uv run python tests/visual/capture.py` fails on NixOS with `Could not start dynamically linked executable: …/playwright/driver/node` → `stub-ld` error.
+- Root cause: pip-installed `playwright` ships its own bundled `node` binary built for generic Linux. NixOS won't run dynamically-linked executables without the right interpreter.
+- The plan-09 capture script is wired correctly and the per-screen routes return 200; only the binary spawn fails.
+
+**Already mitigated in plan 09:**
+- `nix/devshell.nix` adds `playwright-driver.browsers` (chromium + dependencies) and exports `PLAYWRIGHT_BROWSERS_PATH` + `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` so chromium itself works.
+- `pyproject.toml` lists `playwright>=1.50` in dev extras.
+- `tests/visual/capture.py` parametrizes 20 snapshots (10 screens + bullet modal + 2 Discover-review variants × 2 viewports).
+- `tests/visual/screenshots/README.md` documents the gap.
+
+**What's owed in this paper-cuts plan:**
+- Replace the pip-installed `playwright` with `pkgs.python312Packages.playwright` (NixOS-patched driver) — wire it into the dev shell so `uv` doesn't shadow it. Likely: add to `buildInputs` and prepend `${pkgs.python312Packages.playwright}/lib/python3.12/site-packages` onto `PYTHONPATH` in `shellHook`, then drop `playwright` from `pyproject.toml` dev extras.
+- Alternative if the above is fiddly: ship a `nix run .#snapshots` flake app that wraps the capture script via `steam-run` or `buildFHSEnv`, hiding the impedance mismatch entirely. Trade-off: ~200MB FHS closure on first use vs. cleaner `uv run` ergonomics.
+- Capture the first 20-snapshot baseline and commit alongside the dev-shell fix. **This is the prerequisite for § Cross-cutting #8 below** — no local-capture path = no CI diff gate.
+- Document the chosen approach in `tests/visual/screenshots/README.md` (replace the current "must run from nix develop" note with the actual command).
+
+**Out of scope for this paper cut:** the CI-side per-PR diff gate. That's § Cross-cutting #8, scheduled after 2-3 Phase 2-6 plans ship and the snapshots stabilize.
 
 ---
 
@@ -348,7 +369,7 @@ These aren't plan-shaped but worth a tracked TODO list as you ship Phase 2-6:
 5. **Portfolio site dependency.** `crypticsoul.dev`'s `cv.astro` build-time fetches `/api/portfolio/cv`. Any contract change to that endpoint must coordinate with the portfolio repo (separate codebase). Currently zero versioning — Phase 2+ adds `?version=v1`.
 6. **Multi-user readiness.** Every entity already has `user_id`; the multi-tenant cloud tier is unblocked at the model layer. But cron jobs assume single-user (`user_id=1`) — the `applications.auto_apply` cron, `tracking.sync_gmail`, etc. all need a `for user in users` loop wrapping their existing logic. Track as a Phase 2+ item.
 7. **Backups.** `~/.naavik/data/snapshots/` daily SQL gzip — but no off-site backup story yet. Document for self-hosters: the vault + snapshots dir together is the full backup; off-site to S3 / Backblaze / etc. is the user's responsibility.
-8. **Visual regression as PR gate.** Once snapshots stabilize (probably after 2-3 of Phase 2-6 plans ship without breaking visual parity), wire Playwright diff into CI. A plan dedicated to the CI integration around then.
+8. **Visual regression as PR gate (CI-side).** Depends on § Immediate paper cut #3 landing first (local capture must work on NixOS before CI can run it). Once the local baseline is committed AND snapshots stabilize across 2-3 Phase 2-6 plans, wire a Playwright + pixelmatch (or Percy / similar) diff step into CI: capture per-PR snapshots, compare against `tests/visual/screenshots/` baseline, fail on >1% per-screen pixel delta. Author as a dedicated plan around then; not folded into a feature plan.
 
 ---
 
