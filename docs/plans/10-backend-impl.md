@@ -2,13 +2,33 @@
 Status: APPROVED
 Type: implementation
 Authored: 2026-05-01
-Last updated: 2026-05-01
+Last updated: 2026-05-02 (added § Tracking callout + Wave-name cross-walk after consolidation of all task tracking into ROADMAP per AGENTS.md § Single-doc-tracking principle; no scope change)
 Approved: 2026-05-01
-Depends on: 04-backend-architecture (graduated → docs/design/BACKEND.md), 05-data-model (graduated → docs/design/DATA_MODEL.md), 07-sample-data (graduated → docs/design/SAMPLE_DATA.md), 09-stage-3-impl (page templates + stub handlers — APPROVED 2026-05-01; this plan's Wave 4 part swaps plan 09's accessor bodies for DB queries, signatures preserved)
-Wave order: this plan covers **Wave 4 (§ B — backend substrate + accessor swap)** and **Wave 5 (§ C — services + Typst + ATS)** in ROADMAP.md § Phase 1 (Scenario A — linear: 08 → 09 → 10 W3 → 10 W6).
+Depends on: 04-backend-architecture (graduated → docs/design/BACKEND.md), 05-data-model (graduated → docs/design/DATA_MODEL.md), 07-sample-data (graduated → docs/design/SAMPLE_DATA.md), 09-stage-3-impl (page templates + stub handlers — EXECUTED 2026-05-02; this plan's Wave 4 part swaps plan 09's accessor bodies for DB queries, signatures preserved), 09a-stage-3-bugfix (EXECUTED 2026-05-02; plan-09 surface bugfixes — does not affect plan 10's scope)
 ---
 
 # 10 · Backend implementation (multi-wave)
+
+## Tracking + wave-name cross-walk
+
+**Per `AGENTS.md` § Single-doc-tracking principle, this plan describes _how_ to implement; ROADMAP records the `[x]` completion state.** When you finish a sub-section, mark the matching ROADMAP row, not anywhere in this file. The plan's approval checklist at the bottom is plan-acceptance (already `[x]` ticked); the cross-plan task ledger lives at:
+
+- **`ROADMAP.md` § Phase 1 § Implementation waves table** — rows **Wave 4** + **Wave 5** track this plan's completion.
+- **`ROADMAP.md` § Phase 1 § Wave 4 — Backend Wave 3 (plan 10 § B)** — the `4.1`–`4.15` per-task checklist for § B (this plan's "Wave 3" content below).
+- **`ROADMAP.md` § Phase 1 § Wave 5 — Backend Wave 6 (plan 10 § C)** — the `5.1`–`5.15` per-task checklist for § C (this plan's "Wave 6" content below).
+
+### Wave-name cross-walk
+
+The plan body uses the labels "Wave 3" (initial backend) and "Wave 6" (real backend) inherited from `BACKEND.md`'s original 6-wave numbering across Phases 1–6. ROADMAP uses sequential implementation-wave numbering inside Phase 1 (Wave 0 = doc realignment → Wave 5 = real backend). The two views:
+
+| In this plan body | In ROADMAP § Phase 1 § Implementation waves | Scope |
+|---|---|---|
+| § B (Wave 3 — initial backend) | Wave 4 | models + auth + LLM abstraction + vault + initial services + accessor body swap |
+| § C (Wave 6 — real backend) | Wave 5 | 14 services + Typst document generator + DRAFT lifecycle + Greenhouse / Lever / Ashby ATS + portfolio sync + auto-apply cron |
+
+The kickoff prompt at `docs/prompts/10-backend-impl.md` uses ROADMAP's labels (Wave 4, Wave 5) in its required reading + hand-back sections so the implementer marks the right rows.
+
+---
 
 ## Goal
 
