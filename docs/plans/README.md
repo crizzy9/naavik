@@ -54,11 +54,30 @@ Two flavors of plan:
 - **Body sections (in order):**
   1. **Goal** — one paragraph
   2. **Context / why** — what motivates this
-  3. **Proposal** — the actual plan content (tables, checklists, file-by-file edits, design sketches, whatever fits)
+  3. **Proposal** — the actual plan content (tables, scope-per-item, file-by-file edits, design sketches, build sequence, risk table — whatever the plan needs to communicate intent and gather approval).
   4. **Open questions** — things needing user input before approval
-  5. **Approval checklist** — the user ticks these off when approving
+  5. **Approval checklist** — the user ticks these off when approving the plan (plan-acceptance gate, not implementation tracking)
 - **No code edits** while a plan is in `DRAFT` or `AWAITING REVIEW`. Plan-only.
 - **One plan per concern.** If two ideas tangle, split them.
+
+### Plan content vs. ROADMAP tracking (per `AGENTS.md` § Single-doc-tracking principle)
+
+A plan stays rich. It describes scope, design decisions, sub-section deliverables, build sequence, file lists — whatever the plan needs to communicate intent. **All of that lives in the plan file.**
+
+What does NOT live in plan files: the project-wide `[ ]` / `[~]` / `[x]` ledger that gates "is Phase X done?". That single bit lives in `ROADMAP.md`'s per-phase tables. The plan describes the work; ROADMAP records its completion.
+
+| In the plan | In ROADMAP |
+|---|---|
+| Goal + context / why | Phase header + deliverable line |
+| Detailed scope per sub-section | One row per phase task with one-line description |
+| File-by-file edits, code snippets, design sketches | (not duplicated) |
+| Build sequence, risk + mitigation table, spec-impact summary, test plan per fix | (not duplicated) |
+| Approval checklist (`[ ]` for "user agrees with this approach") | (not duplicated — this is plan-acceptance, not tracking) |
+| (not duplicated — see ROADMAP →) | The `[ ]` / `[~]` / `[x]` task ledger that says "is Phase 2 task 2.3 done?" |
+| (not duplicated — see ROADMAP →) | Plan-to-phase mapping (each phase header points at the implementing plan) |
+| (not duplicated — see ROADMAP →) | Phase 1.x deferred backlog + pre-Phase-2 paper cuts tables |
+
+When the plan ships, the implementer marks the ROADMAP row `[x]` and archives the plan — the plan's rich detail stays preserved in `docs/plans/archive/`, ROADMAP's checkbox is the authoritative "done" gate.
 
 ---
 

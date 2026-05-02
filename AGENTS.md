@@ -284,24 +284,61 @@ Never let the roadmap drift from the actual state of the codebase. If you discov
 
 ### Single-doc-tracking principle (codified 2026-05-02)
 
-**All task / backlog / phase tracking lives in `ROADMAP.md` — full stop.** Plans, prompts, design docs, and operational guides may *reference* it but must not duplicate the same task tables. Drift between two tracking surfaces is the most common source of plan/reality mismatch in this repo.
+**Project-wide task / backlog / phase tracking lives only in `ROADMAP.md`.** Plans, prompts, design docs, and operational guides reference ROADMAP but must not duplicate the same cross-plan tracking tables. Drift between two tracking surfaces is the most common source of plan/reality mismatch in this repo.
 
-Concretely:
+#### What "tracking" means here
 
-- **Phase task tables** (Phase 0–6, including all wave + sub-task lists) → ROADMAP only.
-- **Phase 1.x deferred items** (the post-Phase-1 backlog) → ROADMAP only.
-- **Pre-phase-2 paper cuts** → ROADMAP only.
-- **Plan-to-phase mapping** (e.g. "plan 11 implements Phase 2") → ROADMAP only.
-- **Cross-cutting concerns / monitoring / risk register** → may live in supporting docs (e.g. `POST_PHASE_1.md`) since these are operational guidance, not discrete tasks.
+The thing that's centralized in ROADMAP is the **`[ ]` / `[~]` / `[x]` task ledger that gates "is this phase done"**. That ledger has exactly one home — the per-phase tables in ROADMAP — so anyone glancing at the roadmap sees the real state of the project at a glance.
 
-When you author a new plan (`docs/plans/NN-name.md`):
+What "tracking" does **not** mean: it does not mean a plan can't have its own scope breakdown. Plans should still describe the work in whatever depth the plan needs to communicate intent.
 
-- The plan describes **how** to implement.
-- ROADMAP tracks **what / when / status** — the plan adds rows to ROADMAP's phase table on approval, not into the plan file.
-- If a plan introduces a new sub-task list, that list lives in ROADMAP under the relevant phase, with the plan referenced from the table header.
-- Operational guidance (testing playbook, authoring workflow, "when things go wrong") goes in `POST_PHASE_1.md` or a new `docs/plans/<topic>_GUIDE.md` — not duplicated as task rows.
+#### What lives in `ROADMAP.md` only
 
-If a supporting doc has a checklist or backlog table, it's drift. Move it to ROADMAP and replace it with a one-line pointer.
+- **Per-phase task ledgers** (Phase 0–6, including wave + sub-task lists) — the canonical `[ ]` / `[~]` / `[x]` checkboxes that gate phase completion.
+- **Phase 1.x deferred backlog** (the post-Phase-1 deferred items table).
+- **Pre-Phase-2 paper cuts** (immediate dev-experience fixes before plan 11).
+- **Plan-to-phase mapping** (each phase header names its implementing plan via `**Plan:** docs/plans/NN-name.md`).
+- **Phase deliverable specs** (the "Deliverable (end of Phase X)" lines).
+
+#### What plans (`docs/plans/NN-name.md`) DO contain
+
+Plans describe **how** to implement and gather the user's approval before code lands. A healthy plan has all of:
+
+- **Goal + context / why** — why this work, why now, what motivates the scope.
+- **Proposal** — the actual plan content. This is rich on purpose: scope items per sub-section, file-by-file edits, design sketches, code snippets, option matrices, build sequence, risk + mitigation tables, spec-impact summaries, test-plan-per-fix. **Plan-internal scope tables are fine and encouraged** — the plan is the only place this design-time detail lives.
+- **Open questions** — things that need user input before approval.
+- **Approval checklist** — `[ ]` boxes the user ticks to gate plan APPROVAL (one row per design decision the user must sign off on). This is plan-acceptance, not implementation-tracking.
+
+Plan-internal scope tables, "build sequence" lists, and approval checklists are NOT cross-plan task tracking — they're plan-acceptance + plan-internal-coherence. They stay in the plan.
+
+#### What plans DO NOT duplicate
+
+- The phase-level `[ ]` / `[~]` / `[x]` ledger that says "is Phase 2 task 2.3 done?" — that single bit lives in ROADMAP. The plan describes 2.3 in detail; ROADMAP records its completion.
+- A "Phase 1.x deferred backlog" mirror — there's exactly one of those, in ROADMAP.
+- A "pre-Phase-2 paper cuts" mirror — there's exactly one of those too, in ROADMAP.
+
+#### Operational guidance (separate from tracking)
+
+Cross-cutting concerns, monitoring playbooks, testing playbooks, "when things go wrong" notes, success criteria — none of these are discrete trackable tasks. They live in `POST_PHASE_1.md` (or a new `docs/plans/<topic>_GUIDE.md` if a new operational topic appears).
+
+If a supporting doc grows a backlog table or a `[ ]` / `[x]` ledger that mirrors ROADMAP, that's drift. Move the rows to ROADMAP and replace them with a one-line pointer.
+
+#### Step-by-step: plan author / implementer responsibilities
+
+When you author a plan:
+
+1. Pull scope from `ROADMAP.md`'s phase header (or "Phase 1.x deferred" / "Pre-Phase-2 paper cuts" tables).
+2. Write the plan with all the implementation detail it needs (scope, sub-tasks, file lists, design sketches, build sequence, risk table, approval checklist).
+3. ROADMAP's phase header gets a `**Plan:** docs/plans/NN-name.md` line if it doesn't already (the canonical "this plan implements this phase / sub-task" link).
+
+When you implement a plan:
+
+1. Mark ROADMAP's tracking row `[~]` when starting.
+2. Mark ROADMAP's tracking row `[x]` + add a one-line deliverable note when done.
+3. Archive the plan + prompt per AGENTS.md § Workflow step 7.
+4. Bump ROADMAP's "Last updated" line if the change is meaningful.
+
+The plan stays rich; ROADMAP stays current.
 
 ---
 
