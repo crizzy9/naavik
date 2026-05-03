@@ -77,3 +77,6 @@ migrations/versions/__pycache__/
 # Nix
 result
 result-*
+
+# Visual QA — local capture output (baseline/ is committed; screenshots/ is ad-hoc)
+tests/visual/screenshots/

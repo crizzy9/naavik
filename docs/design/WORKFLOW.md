@@ -212,6 +212,26 @@ Run before merging any screen implementation:
 | Dark mode | Looks correct (light mode is Phase 6) |
 | Empty / loading / error states | Each declared state in SCREENS.md exists |
 
+### Capturing a new visual baseline
+
+Plan 10a (PC.3) committed the first 20-PNG baseline at `tests/visual/baseline/` (one per screen at desktop / 1440×900). When a screen intentionally changes appearance (new component variant, copy tweak, layout reflow, etc.), regenerate the affected PNGs:
+
+```bash
+nix develop                              # one terminal
+nix run .#dev                            # second terminal — boots db + migrate + app
+# Wait for [app] Application startup complete
+
+# Third terminal — capture (or just the affected screen):
+uv run python tests/visual/capture.py --baseline                     # all 20 screens
+uv run python tests/visual/capture.py --baseline --screen=discover   # one screen
+```
+
+Commit the updated `tests/visual/baseline/<slug>-desktop.png`. The CI-side per-PR visual-diff gate (deferred — see `ROADMAP.md` § POST_PHASE_1 cross-cutting concerns) will compare new PR snapshots against this baseline at ≤ 1 % per-screen pixel delta.
+
+The capture script's default mode (no `--baseline`) writes to `tests/visual/screenshots/` (gitignored) for ad-hoc local checks. Use `--baseline` only when intentionally updating the committed reference set.
+
+NixOS notes: the dev shell (`nix/devshell.nix`) wires `PLAYWRIGHT_NODEJS_PATH` and `PLAYWRIGHT_BROWSERS_PATH` so the pip-installed playwright python package can use the Nix-built node + chromium. If `pyproject.toml`'s playwright pin drifts past the chromium revision shipped by `pkgs.playwright-driver.browsers`, you'll see "Executable doesn't exist at chromium_headless_shell-NNNN" — re-pin pypi playwright to match (currently 1.58.x; bump nixpkgs in tandem).
+
 ---
 
 ## When to Revisit / Update

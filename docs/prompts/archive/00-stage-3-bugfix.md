@@ -1,8 +1,10 @@
 ---
 
-Status: ACTIVE
+Status: USED
 Type: implementation kickoff (plan + execute)
 Authored: 2026-05-02
+Used: 2026-05-02
+Plan: docs/plans/archive/09a-stage-3-bugfix.md (EXECUTED 2026-05-02)
 
 ---
 

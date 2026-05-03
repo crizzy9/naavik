@@ -26,8 +26,12 @@
         ...
       }: let
         py = pkgs.python312;
-        # Tools every dev-orchestrator process needs in PATH
-        devTools = with pkgs; [uv py typst];
+        # Tools every dev-orchestrator process needs in PATH.
+        # Plan 10a (PC.1, 2026-05-02): coreutils added so `setsid` is in PATH —
+        # used to detach migrate / app from the orchestrator's controlling TTY,
+        # otherwise fastapi-cli's `/dev/tty` open + read triggers SIGTTIN and
+        # the process wedges in `T` state without ever binding `:8000`.
+        devTools = with pkgs; [uv py typst coreutils];
         devPath = pkgs.lib.makeBinPath devTools;
       in {
         devShells.default = pkgs.callPackage ./nix/devshell.nix {};
@@ -97,6 +101,14 @@
               # lines look invisible for ~5s — easy to mistake for "app never
               # started" when actually output was still in a kernel pipe buffer.
               export PYTHONUNBUFFERED=1
+              # Plan 10a (PC.1, 2026-05-02): scrub PYTHONPATH before any uv-managed
+              # process starts. A `nix develop` shell sets `PYTHONPATH=src:<lots of
+              # python3.13 site-packages from pre-commit's deps>` for interactive
+              # convenience. Inheriting that into the orchestrator's python3.12 venv
+              # leaks 3.13 paths onto sys.path and is a documented source of
+              # async-loop / SSL-module weirdness. The venv already has src/ on its
+              # import path via setuptools `package-dir = {"" = "src"}`.
+              unset PYTHONPATH
             '';
             # Every dev process gets the same shutdown discipline so Ctrl-C
             # never hangs: SIGTERM first, SIGKILL after 10s if the child is
@@ -105,31 +117,74 @@
               signal = 15; # SIGTERM
               timeout_seconds = 10;
             };
+            # Plan 10a (PC.1, 2026-05-02 — orphan fix): `setsid -w` detaches
+            # children into a new session so /dev/tty access fails gracefully
+            # (the actual wedge cure). The trade-off is that SIGTERM to
+            # `setsid -w` doesn't propagate to its detached child session —
+            # process-compose's normal cleanShutdown leaves uvicorn workers
+            # orphaned and bound to :8000. Override `shutdown.command` to
+            # pkill by command-line pattern so the orphans get swept too.
+            # Patterns are tight enough (the fastapi cmdline + the project's
+            # venv path in multiprocessing-spawn workers / alembic) to avoid
+            # hitting unrelated processes on the host. `|| true` keeps the
+            # shutdown clean if procs are already gone (crashed / completed
+            # early). Use absolute /nix/store paths since shutdown.command
+            # runs in process-compose's shell, not the per-process devEnv.
+            pkill = "${pkgs.procps}/bin/pkill";
+            sleep = "${pkgs.coreutils}/bin/sleep";
+            setsidShutdown = cleanShutdown // {
+              command = ''
+                ${pkill} -TERM -f 'fastapi dev src/main.py' 2>/dev/null || true
+                ${pkill} -TERM -f 'naavik/.venv/bin/python -s -c' 2>/dev/null || true
+                ${pkill} -TERM -f 'naavik/.venv/bin/alembic' 2>/dev/null || true
+                ${sleep} 1
+                ${pkill} -KILL -f 'fastapi dev src/main.py' 2>/dev/null || true
+                ${pkill} -KILL -f 'naavik/.venv/bin/python -s -c' 2>/dev/null || true
+                ${pkill} -KILL -f 'naavik/.venv/bin/alembic' 2>/dev/null || true
+                true
+              '';
+            };
           in {
             # 1. Sync Python deps from uv.lock.
             # We dropped `--quiet` so first-run download progress is visible —
             # the previous silent variant looked like a 30+ second hang.
+            # Plan 10a (PC.3, 2026-05-02): `--extra dev` keeps playwright +
+            # pytest + ruff in `.venv` so visual-QA capture and pytest don't
+            # need a manual `uv sync --extra dev` after the orchestrator
+            # uninstalls them. The dev orchestrator IS for development; the
+            # production path runs `uv sync --no-dev` separately.
             deps = {
               command = ''
                 ${devEnv}
-                exec uv sync
+                exec uv sync --extra dev
               '';
               availability.restart = "exit_on_failure";
               shutdown = cleanShutdown;
             };
 
-            # 2. Run alembic migrations once Postgres is ready
+            # 2. Run alembic migrations once Postgres is ready.
+            # Plan 10a (PC.1, 2026-05-02 — revised after user-side wedge):
+            #   * `setsid -w` puts alembic in a new session with no controlling
+            #     TTY, so any `/dev/tty` open() fails fast (ENXIO) instead of
+            #     blocking with SIGTTIN. `-w` keeps setsid waiting on the
+            #     child so process-compose still tracks the real exit code.
+            #   * `--no-sync` skips uv's per-run venv resync (deps already did
+            #     the full sync — saves 50-200ms per cold boot).
+            #   * `< /dev/null` redirects stdin away from the inherited pipe
+            #     (defense in depth on top of setsid's session detach).
+            # env.py is sync (psycopg) so the migration path has no greenlet
+            # bridge, no asyncio loop. Fast and predictable.
             migrate = {
               command = ''
                 ${devEnv}
-                exec uv run alembic upgrade head
+                exec setsid -w uv run --no-sync alembic upgrade head < /dev/null
               '';
               depends_on = {
                 "db".condition = "process_healthy";
                 "deps".condition = "process_completed_successfully";
               };
               availability.restart = "exit_on_failure";
-              shutdown = cleanShutdown;
+              shutdown = setsidShutdown;
             };
 
             # 3. FastAPI dev server with auto-reload.
@@ -140,13 +195,23 @@
             # `connection refused` line every run. Without the probe, app is
             # marked "running" once the process is alive — verify it's actually
             # serving by hitting <http://localhost:8000> in a browser.
+            # 3. FastAPI dev server with auto-reload.
+            # Plan 10a (PC.1, 2026-05-02 — revised): `setsid -w` is the actual
+            # cure for the user-reported wedge. fastapi-cli opens `/dev/tty`
+            # for terminal-detection (Rich / Click), and when process-compose
+            # runs the child in a background process group of an interactive
+            # TTY (the user's foreground `nix run .#dev`), reading /dev/tty
+            # raises SIGTTIN and stops the process in `T` state — `:8000`
+            # never binds and no [app] log line ever appears. setsid creates
+            # a new session with no controlling TTY → /dev/tty open returns
+            # ENXIO → fastapi-cli takes its headless code path → starts cleanly.
             app = {
               command = ''
                 ${devEnv}
-                exec uv run fastapi dev src/main.py
+                exec setsid -w uv run --no-sync fastapi dev src/main.py < /dev/null
               '';
               depends_on."migrate".condition = "process_completed_successfully";
-              shutdown = cleanShutdown;
+              shutdown = setsidShutdown;
             };
           };
         };

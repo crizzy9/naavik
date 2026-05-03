@@ -1,14 +1,15 @@
 ---
-Status: ACTIVE
+Status: USED
 Type: implementation kickoff (paper cuts)
-Plan: docs/plans/10a-dev-orchestrator-paper-cuts.md (to be authored by the implementing agent — see § Workflow)
+Plan: docs/plans/archive/10a-dev-orchestrator-paper-cuts.md (EXECUTED 2026-05-02)
 Authored: 2026-05-02
+Used: 2026-05-02
 Prerequisite: Plan 10 Wave 3 / § B EXECUTED (2026-05-02). Backend substrate is live; this prompt fixes dev-experience paper cuts before plan 11 (Phase 2 scrapers) starts.
 ---
 
-# Naavik · Pre-Phase-2 paper cuts (PC.1 / PC.2 / PC.3)
+# Naavik · POST_PHASE_1 paper cuts (PC.1 / PC.2 / PC.3)
 
-You are starting a fresh session to ship the three "Pre-Phase-2 paper cuts" tracked in `ROADMAP.md` § Pre-Phase-2 paper cuts (PC.1, PC.2, PC.3). These are dev-experience fixes that block plan 11 (Phase 2 scrapers) from feeling clean. Per ROADMAP, "ship as a single tiny plan (`docs/plans/10a-dev-orchestrator-paper-cuts.md`) or fold inline into the start of plan 11" — we're going with the dedicated plan since PC.1 needs root-cause investigation.
+You are starting a fresh session to ship the three "POST_PHASE_1 paper cuts" tracked in `ROADMAP.md` § POST_PHASE_1 paper cuts (PC.1, PC.2, PC.3). These are dev-experience fixes that block plan 11 (Phase 2 scrapers) from feeling clean. Per ROADMAP, "ship as a single tiny plan (`docs/plans/10a-dev-orchestrator-paper-cuts.md`) or fold inline into the start of plan 11" — we're going with the dedicated plan since PC.1 needs root-cause investigation.
 
 PC.1 is **urgent** and gates everything: until the dev orchestrator reliably brings the `[app]` step up, every developer touching this repo loses ~5min per session restart.
 
@@ -155,9 +156,11 @@ If migrate completes when stdin is closed but hangs when stdin is a TTY, H4 is c
 When the agent that shipped plan 10 § B ran `nix run .#dev` to verify their work, it completed normally on the same machine. Two material differences from the user's run:
 
 1. The agent ran the orchestrator with stdout redirected to a file in the background:
+
    ```bash
    nix run .#dev > /tmp/dev-orchestrator.log 2>&1 &
    ```
+
    Stdout is a pipe, not a TTY. Combined with `disown`, stdin is also detached.
 2. The agent did NOT have an active `nix develop` shell with `PYTHONPATH` set when invoking. The user's interactive shell may have `PYTHONPATH` containing nix-store python3.13 paths (we observed this earlier — see plan 10 hand-back § Test results note about `env -u PYTHONPATH`).
 
@@ -187,7 +190,7 @@ If only #1 hangs and #2/#3/#4 don't, you've cornered the cause.
 
 1. `AGENTS.md` § Workflow + § Roadmap Maintenance Rules.
 2. `CLAUDE.md`.
-3. `ROADMAP.md` § Pre-Phase-2 paper cuts (PC.1 / PC.2 / PC.3 rows).
+3. `ROADMAP.md` § POST_PHASE_1 paper cuts (PC.1 / PC.2 / PC.3 rows).
 4. `docs/plans/POST_PHASE_1.md` — operational playbook for what comes after Phase 1.
 5. `flake.nix` — process-compose `"dev"` target's full config (lines 39–168).
 6. `migrations/env.py` — alembic async wrapper.
@@ -210,7 +213,7 @@ This is a paper-cut bundle, not a major plan. Use the lightweight version of `AG
    - Approval checklist (one row per PC + per fix)
 2. **Stop and request review.** Do not write any code until the user ticks the approval checklist.
 3. **Implement** PC.1 → PC.2 → PC.3 in that order. Each ships as its own commit with a clear scope-bounded message.
-4. **Update `ROADMAP.md`** § Pre-Phase-2 paper cuts: PC.1 / PC.2 / PC.3 rows from `[ ]` → `[x]` with a one-line deliverable note. Bump "Last updated".
+4. **Update `ROADMAP.md`** § POST_PHASE_1 paper cuts: PC.1 / PC.2 / PC.3 rows from `[ ]` → `[x]` with a one-line deliverable note. Bump "Last updated".
 5. **Archive** plan + this prompt to `docs/plans/archive/10a-dev-orchestrator-paper-cuts.md` and `docs/prompts/archive/10a-dev-orchestrator-paper-cuts.md` with `Status: EXECUTED` / `Status: USED`.
 
 ---

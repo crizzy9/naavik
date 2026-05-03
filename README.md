@@ -170,17 +170,17 @@ This reads `uv.lock` and creates `.venv/` with Python 3.12 and every pinned dep.
 **2 · Run the dev server**
 
 ```bash
-uv run fastapi dev src/main.py
+uv run fastapi dev
 ```
 
-Open <http://localhost:8000>. Auto-reload is on — edits to `src/ui/templates/**/*.html`, `src/ui/static/**`, and `src/**/*.py` reload automatically.
+Open <http://localhost:8000>. Auto-reload is on — edits to `src/ui/templates/**/*.html`, `src/ui/static/**`, and `src/**/*.py` reload automatically. (The repo-root `app.py` is a two-line re-export of `src/main:app` so `fastapi dev` auto-discovers the app object — see plan 10a / PC.2.)
 
 To enable `/_design/components` (the component fixture page):
 
 ```bash
 # Plan 10 § B Wave 4: gate is now persisted Settings.debug. The legacy env-var
 # fallback below still works for the no-DB / static path.
-NAAVIK_DEBUG=1 uv run fastapi dev src/main.py
+NAAVIK_DEBUG=1 uv run fastapi dev
 ```
 
 With the DB live, set `Settings.debug = True` for `user_id=1` instead — the env var is the legacy path.

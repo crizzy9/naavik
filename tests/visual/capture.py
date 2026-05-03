@@ -54,7 +54,12 @@ VIEWPORTS = {
 }
 
 
-def capture(base_url: str, only_screen: str | None, out_dir: Path) -> int:
+def capture(
+    base_url: str,
+    only_screen: str | None,
+    out_dir: Path,
+    viewports: dict[str, dict[str, int]] | None = None,
+) -> int:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -65,6 +70,9 @@ def capture(base_url: str, only_screen: str | None, out_dir: Path) -> int:
         )
         return 1
 
+    if viewports is None:
+        viewports = VIEWPORTS
+
     out_dir.mkdir(parents=True, exist_ok=True)
     targets = [(s, u) for s, u in SCREENS if (only_screen is None or s == only_screen)]
     if not targets:
@@ -73,7 +81,7 @@ def capture(base_url: str, only_screen: str | None, out_dir: Path) -> int:
 
     failures: list[tuple[str, str]] = []
     with sync_playwright() as p:
-        for vp_name, vp in VIEWPORTS.items():
+        for vp_name, vp in viewports.items():
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(viewport=vp)
             context.add_cookies(
@@ -99,7 +107,7 @@ def capture(base_url: str, only_screen: str | None, out_dir: Path) -> int:
                 page.wait_for_timeout(300)
                 out = out_dir / f"{slug}-{vp_name}.png"
                 page.screenshot(path=str(out), full_page=True)
-                print(f"  ✓ {slug}@{vp_name} → {out.relative_to(Path.cwd())}")
+                print(f"  ✓ {slug}@{vp_name} → {out}")
                 page.close()
             context.close()
             browser.close()
@@ -109,7 +117,7 @@ def capture(base_url: str, only_screen: str | None, out_dir: Path) -> int:
         for slug, vp in failures:
             print(f"  - {slug}@{vp}")
         return 1
-    print(f"\n{len(targets) * len(VIEWPORTS)} snapshots written to {out_dir}.")
+    print(f"\n{len(targets) * len(viewports)} snapshots written to {out_dir}.")
     return 0
 
 
@@ -129,8 +137,19 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("tests/visual/screenshots"),
         help="Output directory for PNGs.",
     )
+    # Plan 10a (PC.3, 2026-05-02): write to tests/visual/baseline/ instead,
+    # AND capture desktop only so the baseline is 20 PNGs (one per slug)
+    # rather than 40. Mobile / state-variant baselines can be layered on
+    # later as a separate set; the per-PR diff gate compares like-for-like.
+    parser.add_argument(
+        "--baseline",
+        action="store_true",
+        help="Write to tests/visual/baseline/ (committed). Desktop only (20 PNGs).",
+    )
     args = parser.parse_args(argv)
-    return capture(args.base_url, args.screen, args.out_dir)
+    out_dir = Path("tests/visual/baseline") if args.baseline else args.out_dir
+    viewports = {"desktop": VIEWPORTS["desktop"]} if args.baseline else None
+    return capture(args.base_url, args.screen, out_dir, viewports)
 
 
 if __name__ == "__main__":
