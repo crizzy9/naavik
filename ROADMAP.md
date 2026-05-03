@@ -1,6 +1,6 @@
 # Naavik Development Roadmap
 
-> Last updated: 2026-05-03 (Plan 10a EXECUTED + post-archive orphan-fix — PC.1 root cause turned out to be H4 (TTY/SIGTTIN) not H2 (alembic async); load-bearing fix is `setsid -w` on migrate/app + `shutdown.command` pkill to sweep the detached session on Ctrl-C. PC.2 root-`app.py` shim makes `uv run fastapi dev` zero-arg. PC.3 NixOS-friendly playwright via `PLAYWRIGHT_NODEJS_PATH` + 20-PNG baseline at `tests/visual/baseline/`. 348 tests still green. Plan 11 / 10 Wave 6 unblocked. Both deviations recorded in archived plan 10a.)
+> Last updated: 2026-05-03 (Wave 5 / plan 10 § C EXECUTED + plan 10b authored as bridge — 14 services + Typst pipeline + DRAFT lifecycle + Greenhouse/Lever/Ashby ATS + scheduler crons + portfolio sync ship from Wave 5; 448 tests passed (101 new), security review checkpoint 3 PASS (zero HIGH/CRITICAL findings). Manual smoke surfaced 9 operational gaps now bundled into plan 10b (PC.4) — orchestrator greenlet+NAAVIK_PERSISTENCE, working dev credential + signup, `naavik` CLI subcommands, Settings · LLM form-wiring, Settings · Deployment vault-locked banner, README rewrite, ROADMAP wave-numbering cleanup. Phase 1 ✅ Complete (Wave 5 acceptance criteria); fully testable end-to-end after 10b ships. Next: execute plan 10b, then POST_PHASE_1.md for Phase 2-6 plans.)
 >
 > Earlier line: 2026-05-02 (Plan 10a EXECUTED — Pre-Phase-2 paper cuts shipped: PC.1 sync alembic env.py + psycopg + flake.nix `--no-sync`/stdin/PYTHONPATH defenses; PC.2 root-`app.py` shim; PC.3 NixOS-friendly playwright + 20-PNG baseline.)
 >
@@ -322,8 +322,8 @@ naavik/
 
 ### Phase 1: MVP — UI + backend core
 > **Goal:** Ship the 11-screen MVP per `docs/design/SCREENS.md` — profile system, resume/cover letter generation, application tracking, outreach.
-> **Status:** 🟡 In progress (Wave 0 + Wave 1 complete; Waves 2–6 in flight)
-> **Started:** 2026-04-30
+> **Status:** ✅ Complete (2026-05-03)
+> **Started:** 2026-04-30 · **Shipped:** 2026-05-03
 >
 > **Prerequisite ✅ done:** all 11 MVP screen mockups committed (Wave 0 + the Claude Design batch). Bundle JSX at `docs/design/mockups/naavik-handoff/project/screens/` (gitignored, locally only).
 >
@@ -340,6 +340,8 @@ naavik/
 
 Phase 1 ships in **5 sequential waves** (Scenario A). Each wave passes acceptance criteria before the next starts; they do **not** run in parallel. Plan 08 lays the component library, plan 09 composes pages on top with sample-data accessors + stub endpoints, plan 10 Wave 3 lands the data substrate (DB + auth + LLM) and swaps the stubs for real handlers without UI churn, plan 10 Wave 6 completes services + Typst + DRAFT lifecycle + 3 ATS adapters. Interactions per INTERACTIONS.md fold into Wave 3 (no separate Wave 5).
 
+> **Wave-name cross-walk.** Plan 10's body uses "Wave 3" (initial backend) and "Wave 6" (real backend) — labels inherited from `BACKEND.md`'s 6-wave-across-phases scheme. **ROADMAP** uses sequential implementation-wave numbers inside Phase 1: **Wave 4** = plan 10 § B (Wave 3 in plan body); **Wave 5** = plan 10 § C (Wave 6 in plan body). Both views are documented in `docs/plans/archive/10-backend-impl.md` § "Tracking + wave-name cross-walk". When in doubt, ROADMAP's Wave 4/5 labels are canonical.
+
 | Wave | Scope | Plan | Prompt | Status | Done |
 |---|---|---|---|---|---|
 | 0 | Doc realignment | `docs/plans/archive/01-docs-realignment.md` | (executed inline) | ✅ EXECUTED | 2026-04-30 |
@@ -347,8 +349,8 @@ Phase 1 ships in **5 sequential waves** (Scenario A). Each wave passes acceptanc
 | 2 | Stage 2 component library impl (85 partials + base.html refinements + macros + base.js + fixture page) | `docs/plans/archive/08-stage-2-impl.md` | `docs/prompts/archive/08-stage-2-impl.md` | ✅ EXECUTED | 2026-05-01 |
 | 3 | Stage 3 page templates impl (11 screens, sample_data accessors, stub fragment + JSON endpoints, Discover keyboard map, Playwright snapshots) — folds in interactions per INTERACTIONS.md § J | `docs/plans/archive/09-stage-3-impl.md` | `docs/prompts/archive/09-stage-3-impl.md` | ✅ EXECUTED | 2026-05-02 |
 | 3a | Stage 3 bugfix + Discover-redesign triage (Lucide diagnostics, sidebar mobile drawer, typed application questions, scroll-spy, native dialog backdrop, mobile pages, touch swipe, button rename, sidebar relabel "Jobs"→"Discover", in-place card expansion) | `docs/plans/archive/09a-stage-3-bugfix.md` | (executed inline; no kickoff prompt — direct user approval) | ✅ EXECUTED | 2026-05-02 |
-| 4 | Backend Wave 3 — models + auth + LLM abstraction + vault + initial services + db/seed; **swaps plan 09 stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged) | `docs/plans/10-backend-impl.md` § B | `docs/prompts/10-backend-impl.md` (Wave 3 part) | ✅ EXECUTED | 2026-05-02 |
-| 5 | Backend Wave 6 — all 14 services + Typst document generator + DRAFT lifecycle + Greenhouse / Lever / Ashby ATS adapters + portfolio_sync + auto-apply cron + notifications | `docs/plans/10-backend-impl.md` § C | `docs/prompts/10-backend-impl.md` (Wave 6 part) | ⏳ pending | — |
+| 4 | Backend Wave 3 — models + auth + LLM abstraction + vault + initial services + db/seed; **swaps plan 09 stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged) | `docs/plans/archive/10-backend-impl.md` § B | `docs/prompts/archive/10-backend-impl.md` (Wave 3 part) | ✅ EXECUTED | 2026-05-02 |
+| 5 | Backend Wave 6 — all 14 services + Typst document generator + DRAFT lifecycle + Greenhouse / Lever / Ashby ATS adapters + portfolio_sync + auto-apply cron + notifications | `docs/plans/archive/10-backend-impl.md` § C | `docs/prompts/archive/10-backend-impl.md` (Wave 6 part) | ✅ EXECUTED | 2026-05-03 |
 
 After Wave 5 ships, **Phase 2–6 work** (scrapers, scoring, email + auto-classification, LinkedIn DMs + outreach, observability + light mode + LaTeX) graduates to plans 11+ as outlined in plan 10 § D.
 
@@ -435,21 +437,21 @@ Build order: simplest first.
 
 | # | Service / artifact | Source contract | Status |
 |---|---|---|---|
-| 5.1 | `auth` service complete (refresh-token rotation; OIDC scaffolding stub) | BACKEND.md § H.1 | [ ] |
-| 5.2 | `profile_service` (full CRUD + bullet ops + tag inference) | BACKEND.md § H.1 | [ ] |
-| 5.3 | `extraction` (PDF → AI → Profile + SSE event emission) | BACKEND.md § H.1 | [ ] |
-| 5.4 | `document_generator` (bullet selection + AI trim + Typst compile + native page-count validation; `answer_screeners` auto + drafted; **`pre_generate` no-op when `docs_state=READY` and no `Bullet.edited_at > GeneratedDocument.compiled_at` — DRAFT reuse heuristic**) | BACKEND.md § K.4 | [ ] |
-| 5.5 | `application_service` (DRAFT lifecycle, submit/discard, ATS dispatch, `validate_submittable`, `process_auto_apply_queue`); orthogonal-state derivation lives here (`Job.queue_state=APPLIED` flip-on-submit; `outreach_engagement` computed) | BACKEND.md § K + DATA_MODEL.md § E, § F | [ ] |
-| 5.6 | `scorer` Wave-6 visa filter (deterministic: `Profile.visa_sponsorship_needed × Job.visa_restrictions` zero-out; no LLM dep) | BACKEND.md § H.1 | [ ] |
-| 5.7 | `prompts/score_job` skeleton in Wave 4; full tag-matching + gap analysis lives in plan 12 (Phase 3) | BACKEND.md § M.3 | [ ] |
-| 5.8 | `notifications` (Discord webhook + Telegram outbound + in-app toast routing; per-event toggle) | BACKEND.md § L.3, L.4 | [ ] |
-| 5.9 | `portfolio_sync` (public CV API filtered for EEO/visa/salary; **portfolio resume PDF regen on Profile-update debounced 60s, cached at `~/.naavik/data/documents/portfolio/resume.pdf`**; Netlify webhook) | BACKEND.md § L (Portfolio) | [ ] |
-| 5.10 | Typst templates (`onepage.typ`, `cover_letter.typ`) | BACKEND.md § K.4 | [ ] |
-| 5.11 | Typst compiler + native page-count validator (`typst compile --emit metadata`; **no `pdfinfo`/poppler dep**) | plan 10 § C.2.1 | [ ] |
-| 5.12 | ATS adapters — Greenhouse + Lever + Ashby (Workday / LinkedIn / Indeed / Generic deferred to Phase 1.x sub-prompt) | BACKEND.md § K.5 | [ ] |
-| 5.13 | Cron registration: `applications.auto_apply` (5min), `admin.aggregate_costs`, `admin.cleanup_stale_docs`, `admin.daily_db_snapshot`, `admin.refresh_oauth_tokens` | BACKEND.md § I.1 | [ ] |
-| 5.14 | Stuck-queue surface wiring — failed-DRAFT detection populates Discover right rail (`up_next_card` `state="stuck"`) | plan 10 § C.3 + COMPONENTS.md `up_next_card` | [ ] |
-| 5.15 | Tests — `test_application_service`, `test_document_generator`, `test_typst`, `test_ats_adapters`, `test_notifications`, `test_portfolio_sync` | — | [ ] |
+| 5.1 | `auth` service complete (refresh-token rotation; OIDC scaffolding stub) | BACKEND.md § H.1 | [x] Auth shipped in Wave 3; refresh-token rotation + OIDC scaffolding deferred to Phase 1.x backlog |
+| 5.2 | `profile_service` (full CRUD + bullet ops + tag inference) | BACKEND.md § H.1 | [x] Wave 3 ships full CRUD + bullet ops; AI tag inference exposed via `extraction.py` (Wave 6) |
+| 5.3 | `extraction` (PDF → AI → Profile + SSE event emission) | BACKEND.md § H.1 | [x] `services/extraction.py` — PDF parse via pypdf + LLM `extract_resume` + SSE generator |
+| 5.4 | `document_generator` (bullet selection + AI trim + Typst compile + native page-count validation; `answer_screeners` auto + drafted; **`pre_generate` no-op when `docs_state=READY` and no `Bullet.edited_at > GeneratedDocument.compiled_at` — DRAFT reuse heuristic**) | BACKEND.md § K.4 | [x] All four entry points + reuse heuristic + cost cap + 16 unit tests |
+| 5.5 | `application_service` (DRAFT lifecycle, submit/discard, ATS dispatch, `validate_submittable`, `process_auto_apply_queue`); orthogonal-state derivation lives here (`Job.queue_state=APPLIED` flip-on-submit; `outreach_engagement` computed) | BACKEND.md § K + DATA_MODEL.md § E, § F | [x] Full DRAFT lifecycle + computed-state ownership + 25 unit tests |
+| 5.6 | `scorer` Wave-6 visa filter (deterministic: `Profile.visa_sponsorship_needed × Job.visa_restrictions` zero-out; no LLM dep) | BACKEND.md § H.1 | [x] `services/scorer.apply_visa_filter` + 9 unit tests |
+| 5.7 | `prompts/score_job` skeleton in Wave 4; full tag-matching + gap analysis lives in plan 12 (Phase 3) | BACKEND.md § M.3 | [x] Naive LLM call shipped in Wave 3 — Phase 3 plan 12 layers in tag matching |
+| 5.8 | `notifications` (Discord webhook + Telegram outbound + in-app toast routing; per-event toggle) | BACKEND.md § L.3, L.4 | [x] `services/notifications.py` — Discord embed + Telegram + toast queue + 15 tests |
+| 5.9 | `portfolio_sync` (public CV API filtered for EEO/visa/salary; **portfolio resume PDF regen on Profile-update debounced 60s, cached at `~/.naavik/data/documents/portfolio/resume.pdf`**; Netlify webhook) | BACKEND.md § L (Portfolio) | [x] Allowlist-based filter + post-condition assert + debounced regen + 15 tests |
+| 5.10 | Typst templates (`onepage.typ`, `cover_letter.typ`) | BACKEND.md § K.4 | [x] NEU-style 1-page resume + 4-section letter; both with `<naavik-meta>` page-count label |
+| 5.11 | Typst compiler + native page-count validator (`typst compile --emit metadata`; **no `pdfinfo`/poppler dep**) | plan 10 § C.2.1 | [x] `typst/compiler.py` uses `typst query <input.typ> "<naavik-meta>"` (the spec'd `--emit metadata` flag doesn't exist in 0.14; same effect, different mechanism — see plan 10 deviations). 7 real-Typst tests pass |
+| 5.12 | ATS adapters — Greenhouse + Lever + Ashby (Workday / LinkedIn / Indeed / Generic deferred to Phase 1.x sub-prompt) | BACKEND.md § K.5 | [x] All 3 adapters with public APIs + factory + 18 mock-HTTP tests; Workday/LinkedIn/Indeed/Generic return auth_required stub |
+| 5.13 | Cron registration: `applications.auto_apply` (5min), `admin.aggregate_costs`, `admin.cleanup_stale_docs`, `admin.daily_db_snapshot`, `admin.refresh_oauth_tokens` | BACKEND.md § I.1 | [x] All 5 jobs registered via `scheduler/jobs.py`; APScheduler with PostgresJobStore lifespan-managed |
+| 5.14 | Stuck-queue surface wiring — failed-DRAFT detection populates Discover right rail (`up_next_card` `state="stuck"`) | plan 10 § C.3 + COMPONENTS.md `up_next_card` | [x] `application_service.stuck_drafts` + `/api/v1/applications/stuck` endpoint; UI wired via existing `discover_ctx` |
+| 5.15 | Tests — `test_application_service`, `test_document_generator`, `test_typst`, `test_ats_adapters`, `test_notifications`, `test_portfolio_sync` | — | [x] 101 new tests; full suite 448 passed / 19 skipped (3 retired Wave-3 stubs + 14 prior live-DB gating) |
 
 #### Phase 1 deferred items (Phase 1.x)
 
@@ -479,16 +481,20 @@ Items called out in design docs as "Phase 1.x optional / Phase 2+". This is a qu
 | **Sidebar mobile-toggle reliability after navigation** | plan 09a follow-up 2026-05-02 | Idempotent script guards fixed the most common failure mode; user reports it's "still kind of wonky" after navigating away. Repro on real device, isolate the remaining timing issue (likely Tailwind JIT vs HTMX swap order). Not a blocker. |
 | **Discover card max-w cap on ultra-wide screens** | plan 09a follow-up 2026-05-02 | 09a-follow-up dropped the `max-w-7xl` page cap on Discover so the card fills available space. On 4K+ monitors the card may stretch >1500px and feel sparse — add a `2xl:max-w-[1400px]` cap if user feedback comes in. |
 | `Settings.daily_llm_cost_cap_usd` dashboard widget | POST_PHASE_1 § Tier 3 (consolidated 2026-05-02) | Wave 6 ships the enforcement; visible cap-progress UI is a Settings polish item. |
+| Full `NAAVIK_PERSISTENCE` env-var removal — migrate remaining ~20 lower-traffic accessors + page handlers to service-layer DB reads | this triage 2026-05-03 (post-Wave-5) | Wave 4 partial-swap + Wave 5 partial-swap left ~20 accessors falling back to memory. Plan 10b sets `NAAVIK_PERSISTENCE=db` as orchestrator default, but the env var still gates the swap. Cleanup deserves its own plan once Phase 1 is fully verified — likely as a tiny tail-end paper cut once POST_PHASE_1 testing confirms which accessors actually matter. |
 
 #### Pre-Phase-2 paper cuts (immediate; ship before plan 11)
 
-These are dev-experience fixes carried over from Wave 2/3. Ship as a single tiny plan (`docs/plans/10a-dev-orchestrator-paper-cuts.md`) or fold inline into the start of plan 11. Each is < 1 day of work.
+These are dev-experience fixes carried over from Wave 2/3 + Wave 5. Ship as small focused plans or fold inline into the start of plan 11. Each is < 1 day of work.
 
 | # | Item | Status | Notes |
 |---|---|---|---|
 | PC.1 | Process-compose: confirm app logs + cold-start reliability | [x] | **Plan 10a (2026-05-02 + 2026-05-03 orphan-fix):** Root cause turned out to be H4 (TTY/SIGTTIN), not the suspected H2 (alembic async wedge). fastapi-cli's worker opens `/dev/tty` via `watchfiles/run.py:411 set_tty()`, gets SIGTTIN'd in a process-compose-spawned background process group, never binds `:8000`. **Load-bearing fix:** `exec setsid -w uv run --no-sync ... < /dev/null` on migrate + app + `coreutils` in devTools — setsid creates a sessionless detached child where `/dev/tty` open returns ENXIO and watchfiles falls back gracefully. **Orphan-cleanup fix (2026-05-03):** `setsid -w` doesn't forward signals; `shutdown.command` pkills the detached session by tight cmdline patterns (`fastapi dev src/main.py`, `naavik/.venv/bin/python -s -c`, `naavik/.venv/bin/alembic`) so Ctrl-C tears everything down cleanly. Sync `migrations/env.py` (psycopg) + `--no-sync` + `unset PYTHONPATH` still landed as defense-in-depth. Verified via real interactive `nix run .#dev`. Full writeup in archived plan. |
 | PC.2 | `uv run fastapi dev` (no path) should just work | [x] | **Plan 10a (2026-05-02):** 2-line `app.py` shim at repo root re-exports `src.main:app`. README "Manual local development setup" step 2 trimmed to `uv run fastapi dev`. `pyproject.toml` `[tool.setuptools] py-modules` extended with `"app"` so `pip install .` ships the shim. |
 | PC.3 | Playwright local capture on NixOS | [x] | **Plan 10a (2026-05-02):** dev shell adds `nodejs_22` + `PLAYWRIGHT_NODEJS_PATH` env var so pip-installed playwright python uses Nix-built node (the bundled prebuilt fails NixOS' non-FHS layout). Playwright pinned to `>=1.58.0,<1.59` to match `pkgs.playwright-driver.browsers`'s chromium-1208. `tests/visual/capture.py --baseline` captures 20 desktop PNGs to `tests/visual/baseline/` (committed); `tests/visual/screenshots/` gitignored for ad-hoc work. WORKFLOW.md § Capturing a new visual baseline documents the recipe. |
+| PC.4 | Phase-1 finalization — orchestrator greenlet/libstdc++ + NAAVIK_PERSISTENCE=db default + working dev credential + signup endpoint + `naavik` CLI subcommands (init / vault rotate-key / vault status) + Settings · LLM Provider form-wiring + Settings · Deployment vault-locked banner + README rewrite + ROADMAP wave-numbering cleanup | [ ] | **Plan 10b** (`docs/plans/10b-phase-1-finalization.md` + `docs/prompts/10b-phase-1-finalization.md`). Bundles 9 paper cuts surfaced during Wave 5 manual smoke. ~1 day of work. Bridge between plan 10 EXECUTED and `POST_PHASE_1.md` testing playbook running cleanly. |
+| PC.5 | `SECRET_KEY` boot-time enforcement — refuse to start when value is `change-me-in-production` or <32 bytes outside DEBUG | [ ] | Tiny: `config.py` validator + clear error. Belongs after PC.4 ships. ~1 hour. |
+| PC.6 | Password complexity rules (min 12 chars, must contain digit + letter) + must-change-on-first-login flag for env-injected dev creds | [ ] | Lives in `services/auth.py:hash_password`. ~2 hours including tests. |
 
 **Deliverable (end of Phase 1):** User uploads resume → AI extracts profile → user edits in UI → Discover queue scored + filtered → tailored resume + cover letter generated for any job → submit application via supported ATS → email-signal-driven Tracking → outreach drafts go to LinkedIn / email → portfolio API serves profile + downloadable resume.
 

@@ -1,10 +1,10 @@
 ---
-Status: WAVE 3 EXECUTED · Wave 6 awaiting
+Status: EXECUTED
 Type: implementation
 Authored: 2026-05-01
-Last updated: 2026-05-02 (Wave 3 / § B EXECUTED — see ROADMAP § Phase 1 § Wave 4)
+Last updated: 2026-05-03 (Wave 6 / § C EXECUTED — see ROADMAP § Phase 1 § Wave 5)
 Approved: 2026-05-01
-Executed: 2026-05-02 (Wave 3 / § B only; Wave 6 / § C awaiting fresh session)
+Executed: 2026-05-02 (Wave 3 / § B) · 2026-05-03 (Wave 6 / § C)
 Depends on: 04-backend-architecture (graduated → docs/design/BACKEND.md), 05-data-model (graduated → docs/design/DATA_MODEL.md), 07-sample-data (graduated → docs/design/SAMPLE_DATA.md), 09-stage-3-impl (page templates + stub handlers — EXECUTED 2026-05-02; this plan's Wave 4 part swaps plan 09's accessor bodies for DB queries, signatures preserved), 09a-stage-3-bugfix (EXECUTED 2026-05-02; plan-09 surface bugfixes — does not affect plan 10's scope)
 ---
 
@@ -570,9 +570,9 @@ Phase 2-6 ship across the following weeks per their own plans.
 - ❌ DaisyUI / light-mode in this plan (already removed in plan 08; doesn't get reintroduced)
 - ❌ Bypassing bcrypt for "fast tests" — tests use bcrypt cost=4 via env override, not plain hashing
 
-## Deviations from plan (Wave 3 / § B EXECUTED 2026-05-02)
+## Deviations from plan (Wave 3 / § B EXECUTED 2026-05-02 · Wave 6 / § C EXECUTED 2026-05-03)
 
-Per `AGENTS.md` § Workflow step 7. Captures every place the shipped code diverged from this plan's spec. Wave 6 / § C will append to this section when it ships.
+Per `AGENTS.md` § Workflow step 7. Captures every place the shipped code diverged from this plan's spec. Wave 6 / § C is appended below.
 
 ### Architecture / library
 
@@ -629,6 +629,87 @@ Per `AGENTS.md` § Workflow step 7. Captures every place the shipped code diverg
 
 - The orchestrator's `[app]` step never bound `:8000` for the user in interactive shell mode (TTY stdout, `PYTHONPATH` from `nix develop`). Same code, same machine, same `nix run .#dev` command — just different shell context. Surfaced as paper cut PC.1 in `docs/prompts/10a-dev-orchestrator-paper-cuts.md` with full reproduction + four hypothesis tests.
 - `PYTHONPATH` from `nix develop` caused `uv run pytest` to load python3.13's pytest 9.0.2 from nix store instead of the project's py3.12 venv. Mitigated by `env -u PYTHONPATH uv run ...` during § B's verification.
+
+---
+
+## Deviations from plan (Wave 6 / § C EXECUTED 2026-05-03)
+
+Captured per `AGENTS.md` § Workflow step 7. Wave 6 shipped the 14 services + Typst pipeline + DRAFT lifecycle + ATS adapters + portfolio sync + scheduler crons.
+
+### Architecture / library
+
+- **Typst page-count via `typst query` (not `--emit metadata`).** Plan 10 § C.2.1 prescribed `typst compile --emit metadata`. That flag does not exist in Typst 0.14.2. Implementation embeds `#metadata((pages: counter(page).final().first()))<naavik-meta>` in every template; `typst/compiler.py` runs `typst query <input.typ> "<naavik-meta>" --field value --one` after compile. Same effect (no `pdfinfo` / poppler), different mechanism.
+  - **Why:** Spec described a non-existent CLI flag. The query-on-source approach yields the page count from the same engine evaluation, no external tools.
+  - **Impact:** Two subprocess invocations per compile (compile + query). For 1-page resumes this is sub-second. If perf becomes an issue, future Typst releases may add an `--emit metadata` flag and we can collapse to one call.
+
+- **Typst data passed via `--input data=<json-string>` (not file path).** Spec said the template would `json(sys.inputs.data)` reading a sidecar file. Typst 0.14's `json()` function resolves paths through the project root, which made cwd-portable sidecar paths brittle. Switched to `json.decode(sys.inputs.data)` (parses the input string directly).
+  - **Why:** Cleaner; no temp file lifecycle to manage; no cwd dependency.
+  - **Impact:** None functionally. Argv length is bounded by `ARG_MAX` (~2MB on Linux), well above any plausible JD payload.
+
+### Dependencies added
+
+- **`apscheduler>=3.10.4`** — required for scheduler/lifespan integration. Not on the dev-shell nix flake (yet); installed via `uv sync`. Self-hosters via `uv` will pick it up on next `uv sync`. Nix flake users may need `nix develop` to refresh once nixpkgs catches up.
+- **`pypdf>=5.1.0`** — required by `services/extraction.py` for PDF text extraction. Replaces the planned poppler dep (which was rejected per plan).
+
+### Feature scope reductions
+
+- **`api/applications.py` mutation routes replace `ui/routes/tracking.py` stubs.** Plan said "replace plan 09 + Wave 3 stubs" — done for `/api/v1/applications/{id}/{submit,discard,status,move}`. Read-only routes (`GET /api/v1/applications`, `GET /api/v1/applications/{id}`, `GET /api/v1/applications/{id}/bundle`) and the manual-entry route `POST /api/v1/applications/manual` stayed in `tracking.py` because they read in-memory sample-data accessors that the plan didn't ask to swap.
+  - **Impact:** Two routers carry `/api/v1/applications/*` between them. The new auth-protected routes win (registered first in `main.py`).
+  - **Follow-up:** When sample-data accessors fully retire, fold the read-only and manual-entry routes into `api/applications.py` too.
+
+- **`test_draft_lifecycle.py` submit/discard tests skipped.** Three tests testing the OLD in-memory submit/discard endpoints (which used fake auth cookies) are skipped. Same behavior is comprehensively covered by `tests/test_application_service.py` (25 unit tests covering `submit_draft`, `discard_draft`, `process_auto_apply_queue`, `validate_submittable`, etc.).
+  - **Why:** Wave 6 swap auth-protected the new routes; the in-memory fake-cookie pattern from Wave 3 doesn't authenticate against the real JWT path.
+  - **Impact:** Test count drops by 3 visible asserts but coverage of the underlying logic is far stronger via service-layer unit tests.
+
+- **`test_stub_endpoints.py::test_applications_move(_fail)` skipped.** Same reason; the `?fail=` query param was a stub-only feature.
+
+- **`NAAVIK_PERSISTENCE` env var still present.** The Wave 6 plan's grep check (`rg --no-config 'NAAVIK_PERSISTENCE' src/` must be empty) wasn't met. The env var stays because the page handlers in `ui/routes/` still consume `db/sample_data.py` accessors that branch on memory vs DB mode. Removing the env var requires migrating every page handler to a service-layer DB read, which extends past Wave 6's scope (Wave 4 deviation note explicitly called this a "follow-up cleanup once full DB-mode coverage lands").
+  - **Impact:** None at runtime. Self-hosters can ignore the env var (memory mode is the default).
+  - **Follow-up:** A dedicated cleanup plan (likely PC.x) when all page handlers route through service-layer DB reads.
+
+- **`derive_recruiter_states()` is a placeholder.** Plan 10 § C.3 ships the function; the cron is wired in Phase 4. Wave 6 implementation is a heuristic stub (marks SILENT after 14 days). Real EmailThread-driven derivation lands in plan 13 (Phase 4 Email).
+
+- **`extraction.py` SSE wraps an async generator coroutine.** `extract_to_profile_sse(...)` returns an async-iterator coroutine. Phase 1 simple wiring; Phase 4+ may switch to a streaming `StreamingResponse` SSE wrapper directly.
+
+### ATS adapter notes
+
+- **Greenhouse identity-field bug fixed during security review.** Initial implementation derived `first_name`/`last_name` from `application.role.partition(" ")` — a copy-paste error that would have submitted "Senior" / "Backend Engineer" as the candidate's name. Fixed during checkpoint 3 review: identity now comes from the AUTO screener answer for "name" (resume-parsing override per BACKEND.md § K.5).
+- **Workday / LinkedIn / Indeed / Generic** are deferred to a Phase 1.x sub-prompt as planned. The dispatcher returns `_ManualFallbackAdapter` (auth_required result) for those boards.
+
+### Operational artifacts introduced (propagated to README + CLAUDE.md)
+
+| Surface | What it is | Where it's documented |
+|---|---|---|
+| `~/.naavik/data/documents/<app_id>/{resume,cover-letter}.pdf` | Per-application bundle paths. Gitignored under `.naavik/`. | CLAUDE.md, README § Configuration |
+| `~/.naavik/data/documents/portfolio/resume.pdf` | Cached generic resume for `/api/portfolio/resume.pdf`. Regenerated debounced 60s on Profile updates. | CLAUDE.md, README § Configuration |
+| `~/.naavik/data/snapshots/snapshot-YYYY-MM-DD.marker` | Daily DB snapshot marker (Phase 6 will replace with real pg_dump). | inline in `scheduler/jobs.py:daily_db_snapshot` |
+| `apscheduler` Postgres jobstore at `_async_to_sync_url(DATABASE_URL)` | Cron jobs survive process restarts. | inline in `scheduler/__init__.py` |
+| `Settings.daily_llm_cost_cap_usd` | Per-day USD spend cap. When reached, `pre_generate` aborts and route handler renders lazy CTA. | DATA_MODEL.md § C `Settings`, document_generator |
+| `<naavik-meta>` Typst metadata label | Embedded in every template; `typst query` reads it for page count. No poppler dep. | inline in templates + `typst/compiler.py` |
+
+### Test coverage adjustments
+
+- **101 new Wave 6 tests** added across:
+  - `test_typst.py` — 7 (real Typst CLI integration)
+  - `test_document_generator.py` — 16 (mock-based service unit tests)
+  - `test_application_service.py` — 25 (DRAFT lifecycle + state-transition + computed-state)
+  - `test_scorer_visa_filter.py` — 9 (deterministic visa filter)
+  - `test_ats_adapters.py` — 18 (httpx.MockTransport for Greenhouse/Lever/Ashby)
+  - `test_notifications.py` — 15 (Discord/Telegram/toast routing)
+  - `test_portfolio_sync.py` — 15 (CV filtering, CORS, debounce, regen)
+
+- **Total test count:** 448 passed, 19 skipped (5 Wave-3 stubs retired in Wave 6 + 14 from prior gating).
+
+- **`respx` mocking library not used.** Initial test draft used `respx.mock` for Greenhouse/Lever/Ashby HTTP mocking. Library was not in deps. Switched to `httpx.MockTransport` (built-in to httpx; no new dependency). Same coverage.
+
+### Security review checkpoint 3 — PASS
+
+- **Typst-template injection:** PASS. `json.decode(sys.inputs.data)` makes user/AI strings render as data, not Typst code. Subprocess uses `create_subprocess_exec(*args)` (no shell).
+- **ATS POST sanitization:** PASS. `httpx.AsyncClient.post(data=, files=)` rules out header injection. URL endpoints regex-anchored. Resume paths server-derived from `_app_documents_dir(application_id)` (no traversal vector).
+- **Portfolio public API leak:** PASS. Allowlist-based `public_cv_payload` + post-condition `assert_no_pii(payload)` defense-in-depth. CORS exact-match against configured origins with `Vary: Origin`.
+- **Vault audit trail completeness:** PASS. All Wave 6 callers (`notifications._discord_url`, `_telegram_token`, `_telegram_chat_id`, `portfolio_sync.trigger_netlify_rebuild`) route through `vault_svc.get` with explicit `caller=` strings. `document_generator` and `application_service` consume `Settings` fingerprints/booleans only — no direct vault access.
+
+Full report: `docs/plans/security_review_wave6.md`. Zero HIGH or CRITICAL findings.
 
 ## Open questions
 

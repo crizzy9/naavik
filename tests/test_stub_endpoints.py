@@ -205,16 +205,22 @@ def test_applications_get(client):
     assert r.json()["company"] == "Figma"
 
 
-def test_applications_move(client):
-    r = client.post(
-        "/api/v1/applications/move", json={"application_id": 5, "target_status": "RECRUITER_SCREEN"}
+@pytest.mark.skip(
+    reason=(
+        "Wave-3 stub-behavior test. Wave 6 swap moved /api/v1/applications/move "
+        "to src/api/applications.py with auth required. Behavior is "
+        "tested at the service level in test_application_service.py."
     )
-    assert r.status_code == 204
+)
+def test_applications_move(client):
+    pass
 
 
+@pytest.mark.skip(
+    reason="Wave-6 endpoint no longer accepts ?fail= query param (test was a stub artifact)."
+)
 def test_applications_move_fail(client):
-    r = client.post("/api/v1/applications/move?fail=1", json={})
-    assert r.status_code == 502
+    pass
 
 
 def test_applications_manual_creates_row(client):

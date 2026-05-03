@@ -1,9 +1,9 @@
 ---
-Status: WAVE 3 USED · Wave 6 awaiting
+Status: USED
 Type: implementation kickoff (two-part)
 Plan: docs/plans/10-backend-impl.md
 Authored: 2026-05-01
-Last updated: 2026-05-02 (PART 1 / Wave 3 USED — implementation EXECUTED; PART 2 / Wave 6 awaiting fresh session)
+Last updated: 2026-05-03 (PART 1 / Wave 3 + PART 2 / Wave 6 both USED — Phase 1 backend complete)
 Prerequisite: Wave 3 (plan 09) shipped clean — every screen renders end-to-end with sample data, all 22 Playwright snapshots committed, all stub endpoints respond.
 ---
 

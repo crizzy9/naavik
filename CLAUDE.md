@@ -2,7 +2,7 @@
 
 > **For Claude Code sessions.**
 > **Canonical guide:** `AGENTS.md` — always read that first.
-> **Last updated:** 2026-05-02 (added § Deviations from plan workflow rule + § Operational artifacts from plan 10 § B)
+> **Last updated:** 2026-05-03 (Wave 6 / plan 10 § C EXECUTED — operational paths under `~/.naavik/data/documents/{<app_id>,portfolio}/` + `~/.naavik/data/snapshots/` + APScheduler crons + new deps `apscheduler` + `pypdf`)
 
 This file provides Claude Code-specific guidance. For general project conventions, architecture, and the design workflow, see `AGENTS.md`.
 

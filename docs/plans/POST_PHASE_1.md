@@ -10,17 +10,17 @@
 
 **Single tracking principle (per `AGENTS.md` § Roadmap Maintenance Rules):** all task / backlog / phase tracking lives in `ROADMAP.md`. This doc and other supporting docs reference ROADMAP but never duplicate task tables.
 
-| If you're looking for... | Read |
-|---|---|
-| Phase 2–6 task tables (what + when + status) | `ROADMAP.md` § Phase 2, § Phase 3, § Phase 4, § Phase 5, § Phase 6 |
-| Phase 1.x deferred backlog | `ROADMAP.md` § Phase 1 deferred items (Phase 1.x) |
-| Pre-Phase-2 paper cuts (ship before plan 11) | `ROADMAP.md` § Pre-Phase-2 paper cuts |
-| Plan-to-phase mapping (which plan implements which phase) | Each ROADMAP phase header has a `**Plan:**` line pointing at `docs/plans/NN-name.md` |
-| Phase 1 deliverable spec | `ROADMAP.md` § Phase 1 → "Deliverable (end of Phase 1)" |
-| Plan-file conventions | `docs/plans/README.md` |
-| Workflow lifecycle (plan → review → design doc → prompt → implement → archive) | `AGENTS.md` § Workflow |
-| Design contracts (visual / functional / data / interactions) | `DESIGN.md`, `docs/design/SCREENS.md`, `docs/design/COMPONENTS.md`, `docs/design/DATA_MODEL.md`, `docs/design/INTERACTIONS.md`, `docs/design/BACKEND.md`, `docs/design/SAMPLE_DATA.md` |
-| Operational playbook for shipping Phase 1 + post-Phase-1 plans | This doc (below) |
+| If you're looking for...                                                       | Read                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 2–6 task tables (what + when + status)                                   | `ROADMAP.md` § Phase 2, § Phase 3, § Phase 4, § Phase 5, § Phase 6                                                                                                                     |
+| Phase 1.x deferred backlog                                                     | `ROADMAP.md` § Phase 1 deferred items (Phase 1.x)                                                                                                                                      |
+| Pre-Phase-2 paper cuts (ship before plan 11)                                   | `ROADMAP.md` § Pre-Phase-2 paper cuts                                                                                                                                                  |
+| Plan-to-phase mapping (which plan implements which phase)                      | Each ROADMAP phase header has a `**Plan:**` line pointing at `docs/plans/NN-name.md`                                                                                                   |
+| Phase 1 deliverable spec                                                       | `ROADMAP.md` § Phase 1 → "Deliverable (end of Phase 1)"                                                                                                                                |
+| Plan-file conventions                                                          | `docs/plans/README.md`                                                                                                                                                                 |
+| Workflow lifecycle (plan → review → design doc → prompt → implement → archive) | `AGENTS.md` § Workflow                                                                                                                                                                 |
+| Design contracts (visual / functional / data / interactions)                   | `DESIGN.md`, `docs/design/SCREENS.md`, `docs/design/COMPONENTS.md`, `docs/design/DATA_MODEL.md`, `docs/design/INTERACTIONS.md`, `docs/design/BACKEND.md`, `docs/design/SAMPLE_DATA.md` |
+| Operational playbook for shipping Phase 1 + post-Phase-1 plans                 | This doc (below)                                                                                                                                                                       |
 
 ---
 

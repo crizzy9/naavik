@@ -1,0 +1,598 @@
+"""Wave 6 — application_service tests.
+
+Per plan 10 § E. Coverage:
+- get_or_create_draft (eager / lazy gates)
+- submit_draft success + persistent failure (stuck-queue surface)
+- discard_draft
+- process_auto_apply_queue
+- validate_submittable
+- forward-only state-transition enforcement
+- service-layer computed state — referral rollup, outreach engagement,
+  Job.queue_state flip on submit
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from services import application_service as svc
+from services.application_service import (
+    IllegalStateTransition,
+    ValidationError,
+    _is_forward_transition,
+    _roll_up_referral_state,
+    compute_outreach_engagement,
+    discard_draft,
+    get_or_create_draft,
+    process_auto_apply_queue,
+    submit_draft,
+    update_status,
+    validate_submittable,
+)
+from services.ats.base import (
+    FAILURE_AUTH_REQUIRED,
+    FAILURE_RATE_LIMIT,
+    SubmissionResult,
+)
+
+# ── In-memory fakes — minimal stand-ins for SQLModel rows ────────────
+
+
+class _FakeSession:
+    """Tracks add()/flush()/exec() calls; serves canned exec results."""
+
+    def __init__(self) -> None:
+        self.added: list = []
+        self.deleted: list = []
+        self.exec_queue: list = []
+        self.flush_count = 0
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def flush(self):
+        self.flush_count += 1
+
+    async def delete(self, obj):
+        self.deleted.append(obj)
+
+    async def exec(self, _stmt):
+        if not self.exec_queue:
+            return SimpleNamespace(one_or_none=lambda: None, all=lambda: [], one=lambda: 0)
+        return self.exec_queue.pop(0)
+
+
+def _exec_one(value):
+    return SimpleNamespace(one_or_none=lambda: value, all=lambda: [value] if value else [],
+                           one=lambda: value)
+
+
+def _exec_all(values):
+    return SimpleNamespace(one_or_none=lambda: values[0] if values else None,
+                           all=lambda: values, one=lambda: len(values))
+
+
+def _exec_count(count):
+    return SimpleNamespace(one=lambda: count, all=lambda: [count],
+                           one_or_none=lambda: count)
+
+
+def _make_settings(**kw):
+    base = {
+        "user_id": 1,
+        "eager_review_generation": True,
+        "auto_apply_enabled": True,
+        "auto_apply_score_threshold": 0.7,
+        "auto_apply_daily_cap": None,
+        "daily_llm_cost_cap_usd": None,
+    }
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def _make_job(jid: int = 100, **kw):
+    from models import ApplicationBoard, JobQueueState
+
+    base = {
+        "id": jid,
+        "company": "Stripe",
+        "role": "Senior Backend Engineer",
+        "team": None,
+        "location": "Remote",
+        "salary_min": 180000,
+        "salary_max": 240000,
+        "equity_pct": None,
+        "url": "https://boards.greenhouse.io/stripe/jobs/123456",
+        "url_type": "https",
+        "board": ApplicationBoard.GREENHOUSE,
+        "queue_state": JobQueueState.UNSWIPED,
+        "description": "Build payment infra at scale",
+        "description_html": None,
+        "skills_required": ["python", "go"],
+        "visa_restrictions": None,
+        "updated_at": datetime.now(UTC),
+    }
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def _make_app(aid: int = 1, **kw):
+    from models import ApplicationBoard, ApplicationStatus, DocsState, RecruiterState, ReferralState
+
+    base = {
+        "id": aid,
+        "user_id": 1,
+        "job_id": 100,
+        "company": "Stripe",
+        "role": "Senior Backend Engineer",
+        "team": None,
+        "location": "Remote",
+        "salary_min": None,
+        "salary_max": None,
+        "equity_pct": None,
+        "applied_at": None,
+        "board": ApplicationBoard.GREENHOUSE,
+        "external_url": "https://boards.greenhouse.io/stripe/jobs/123456",
+        "status": ApplicationStatus.DRAFT,
+        "closed_reason": None,
+        "docs_state": DocsState.READY,
+        "referral_state": ReferralState.NONE,
+        "recruiter_state": RecruiterState.NONE,
+        "submission_artifacts": None,
+        "notes": None,
+        "deleted_at": None,
+        "updated_at": datetime.now(UTC),
+    }
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+# ── Forward-transition rules ─────────────────────────────────────────
+
+
+def test_forward_transition_rules():
+    from models import ApplicationStatus as S
+
+    assert _is_forward_transition(S.DRAFT, S.APPLIED) is True
+    assert _is_forward_transition(S.APPLIED, S.RECRUITER_SCREEN) is True
+    assert _is_forward_transition(S.RECRUITER_SCREEN, S.APPLIED) is False
+    assert _is_forward_transition(S.OFFER, S.CLOSED) is True
+    assert _is_forward_transition(S.CLOSED, S.APPLIED) is False
+    assert _is_forward_transition(S.DRAFT, S.OFFER) is False
+
+
+# ── get_or_create_draft ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_draft_eager_calls_pre_generate():
+    settings = _make_settings(eager_review_generation=True)
+    job = _make_job()
+    session = _FakeSession()
+    # exec calls in order: existing app lookup (None), job lookup (job).
+    session.exec_queue = [_exec_one(None), _exec_one(job)]
+
+    pre_gen = AsyncMock()
+    draft = await get_or_create_draft(
+        session, user_id=1, job_id=100, settings=settings, pre_generate_fn=pre_gen
+    )
+    from models import ApplicationStatus
+
+    assert draft.status == ApplicationStatus.DRAFT
+    assert draft.user_id == 1
+    assert draft.job_id == 100
+    pre_gen.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_draft_lazy_skips_pre_generate():
+    settings = _make_settings(eager_review_generation=False)
+    job = _make_job()
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(None), _exec_one(job)]
+    pre_gen = AsyncMock()
+    await get_or_create_draft(
+        session, user_id=1, job_id=100, settings=settings, pre_generate_fn=pre_gen
+    )
+    pre_gen.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_draft_returns_existing():
+    settings = _make_settings()
+    existing = _make_app()
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(existing)]
+    out = await get_or_create_draft(
+        session, user_id=1, job_id=100, settings=settings, pre_generate_fn=AsyncMock()
+    )
+    assert out is existing
+
+
+# ── validate_submittable ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_validate_submittable_rejects_non_draft():
+    from models import ApplicationStatus
+
+    a = _make_app(status=ApplicationStatus.APPLIED)
+    session = _FakeSession()
+    with pytest.raises(ValidationError) as exc:
+        await validate_submittable(session, a)
+    assert exc.value.code == "not_draft"
+
+
+@pytest.mark.asyncio
+async def test_validate_submittable_rejects_unready_docs():
+    from models import DocsState
+
+    a = _make_app(docs_state=DocsState.GENERATING)
+    session = _FakeSession()
+    with pytest.raises(ValidationError) as exc:
+        await validate_submittable(session, a)
+    assert exc.value.code == "docs_not_ready"
+
+
+@pytest.mark.asyncio
+async def test_validate_submittable_blocks_unreviewed_screeners():
+    a = _make_app()
+    session = _FakeSession()
+    session.exec_queue = [_exec_count(2)]
+    with pytest.raises(ValidationError) as exc:
+        await validate_submittable(session, a)
+    assert exc.value.code == "screeners_unreviewed"
+
+
+@pytest.mark.asyncio
+async def test_validate_submittable_passes_when_clean():
+    a = _make_app()
+    session = _FakeSession()
+    session.exec_queue = [_exec_count(0)]
+    # No raise = pass.
+    await validate_submittable(session, a)
+
+
+# ── submit_draft success + failure paths ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_submit_draft_success_flips_state_and_job_queue_state():
+    """Happy path — DRAFT → APPLIED + Job.queue_state=APPLIED."""
+    from models import ApplicationStatus, JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job()
+
+    session = _FakeSession()
+    # exec sequence:
+    # 1. get_application(id) → app
+    # 2. validate: count(unreviewed) = 0
+    # 3. _build_bundle: resume → None, cover → None, screeners → []
+    # 4. job lookup (post-success flip)
+    session.exec_queue = [
+        _exec_one(app_row),
+        _exec_count(0),
+        _exec_one(None),  # resume lookup
+        _exec_one(None),  # cover lookup
+        _exec_all([]),    # screeners
+        _exec_one(job_row),  # post-success
+    ]
+
+    fake_adapter = SimpleNamespace(
+        submit=AsyncMock(
+            return_value=SubmissionResult(
+                ok=True, board_application_id="GH-12345"
+            )
+        )
+    )
+    notify = AsyncMock()
+
+    with patch(
+        "services.application_service.ats_dispatch", return_value=fake_adapter
+    ):
+        out = await submit_draft(session, app_row.id, notify_fn=notify)
+
+    assert out.status == ApplicationStatus.APPLIED
+    assert out.applied_at is not None
+    assert (out.submission_artifacts or {}).get("board_application_id") == "GH-12345"
+    assert job_row.queue_state == JobQueueState.APPLIED
+    notify.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_submit_draft_persistent_failure_keeps_draft_and_writes_last_failure():
+    """Auth-required failure → DRAFT stays + submission_artifacts.last_failure.kind='auth_required'."""
+    from models import ApplicationStatus
+
+    app_row = _make_app()
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_one(app_row),  # get_application
+        _exec_count(0),       # validate
+        _exec_one(None),
+        _exec_one(None),
+        _exec_all([]),
+    ]
+
+    fake_adapter = SimpleNamespace(
+        submit=AsyncMock(
+            return_value=SubmissionResult(
+                ok=False,
+                error=FAILURE_AUTH_REQUIRED,
+                error_message="Greenhouse cookie expired",
+            )
+        )
+    )
+    with patch(
+        "services.application_service.ats_dispatch", return_value=fake_adapter
+    ):
+        out = await submit_draft(session, app_row.id)
+
+    assert out.status == ApplicationStatus.DRAFT
+    assert out.applied_at is None
+    artifacts = out.submission_artifacts or {}
+    last = artifacts.get("last_failure") or {}
+    assert last.get("kind") == "auth_required"
+    assert "Greenhouse" in last.get("message", "")
+    assert artifacts.get("retry_count") == 1
+
+
+@pytest.mark.asyncio
+async def test_submit_draft_rate_limit_failure_classified():
+    app_row = _make_app()
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_one(app_row),
+        _exec_count(0),
+        _exec_one(None),
+        _exec_one(None),
+        _exec_all([]),
+    ]
+    fake_adapter = SimpleNamespace(
+        submit=AsyncMock(
+            return_value=SubmissionResult(
+                ok=False,
+                error=FAILURE_RATE_LIMIT,
+                error_message="429",
+                retry_after=60,
+            )
+        )
+    )
+    with patch(
+        "services.application_service.ats_dispatch", return_value=fake_adapter
+    ):
+        out = await submit_draft(session, app_row.id)
+    assert out.submission_artifacts["last_failure"]["kind"] == "rate_limit"
+
+
+@pytest.mark.asyncio
+async def test_submit_draft_validates_first_raises_validation_error():
+    """validate_submittable raises before the adapter is ever called."""
+    from models import ApplicationStatus
+
+    app_row = _make_app(status=ApplicationStatus.APPLIED)
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(app_row)]
+    with pytest.raises(ValidationError):
+        await submit_draft(session, app_row.id)
+
+
+# ── discard_draft ───────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_discard_draft_flips_to_closed_and_soft_deletes():
+    from models import ApplicationStatus, ClosedReason
+
+    app_row = _make_app()
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(app_row), _exec_one(None)]  # app, then job lookup
+    out = await discard_draft(session, app_row.id)
+    assert out.status == ApplicationStatus.CLOSED
+    assert out.closed_reason == ClosedReason.WITHDRAWN_BY_ME
+    assert out.deleted_at is not None
+
+
+@pytest.mark.asyncio
+async def test_discard_rejects_non_draft():
+    from models import ApplicationStatus
+
+    app_row = _make_app(status=ApplicationStatus.APPLIED)
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(app_row)]
+    with pytest.raises(IllegalStateTransition):
+        await discard_draft(session, app_row.id)
+
+
+# ── process_auto_apply_queue ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_process_auto_apply_queue_dispatches_one_app():
+    from models import ApplicationStatus, JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY)
+    settings_row = SimpleNamespace(
+        user_id=1,
+        auto_apply_enabled=True,
+        auto_apply_daily_cap=None,
+    )
+
+    session = _FakeSession()
+    # Order: queue scan returns [(app, job)]; per-user settings lookup; submit_draft
+    # is replaced via patch so its internal exec calls don't matter here.
+    session.exec_queue = [
+        _exec_all([(app_row, job_row)]),
+        _exec_one(settings_row),
+    ]
+
+    fake_submit = AsyncMock()
+    success_app = _make_app(status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
+    fake_submit.return_value = success_app
+
+    with patch("services.application_service.submit_draft", new=fake_submit):
+        result = await process_auto_apply_queue(session)
+    assert result.processed == 1
+    assert result.submitted == 1
+    assert result.failed == 0
+
+
+@pytest.mark.asyncio
+async def test_process_auto_apply_queue_respects_daily_cap():
+    from models import JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY)
+    settings_row = SimpleNamespace(
+        user_id=1,
+        auto_apply_enabled=True,
+        auto_apply_daily_cap=1,  # cap reached after 1 submit
+    )
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_all([(app_row, job_row)]),
+        _exec_one(settings_row),
+        _exec_count(5),  # already submitted 5 today
+    ]
+    result = await process_auto_apply_queue(session)
+    assert result.skipped_by_cap == 1
+    assert result.submitted == 0
+
+
+@pytest.mark.asyncio
+async def test_process_auto_apply_queue_disabled_setting_skips():
+    from models import JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY)
+    settings_row = SimpleNamespace(
+        user_id=1,
+        auto_apply_enabled=False,
+        auto_apply_daily_cap=None,
+    )
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_all([(app_row, job_row)]),
+        _exec_one(settings_row),
+    ]
+    result = await process_auto_apply_queue(session)
+    assert result.processed == 1
+    assert result.submitted == 0
+
+
+# ── update_status forward-only enforcement + manual override ──────
+
+
+@pytest.mark.asyncio
+async def test_update_status_requires_closed_reason_for_close():
+    from models import ApplicationStatus
+
+    app_row = _make_app(status=ApplicationStatus.APPLIED)
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(app_row)]
+    with pytest.raises(ValidationError):
+        await update_status(session, app_row.id, ApplicationStatus.CLOSED)
+
+
+@pytest.mark.asyncio
+async def test_update_status_records_manual_override_for_backwards():
+    """ONSITE_LOOP → APPLIED is allowed but logged as manual override."""
+    from models import ApplicationStatus
+
+    app_row = _make_app(status=ApplicationStatus.ONSITE_LOOP, applied_at=datetime.now(UTC))
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(app_row)]
+    out = await update_status(
+        session, app_row.id, ApplicationStatus.APPLIED, notes="recruiter pulled back"
+    )
+    assert out.status == ApplicationStatus.APPLIED
+
+
+# ── Computed state — referral rollup ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_roll_up_referral_state_picks_max():
+    from models import ReferralState
+
+    app_row = _make_app(referral_state=ReferralState.NONE)
+    links = [
+        SimpleNamespace(referral_state=ReferralState.REQUESTED),
+        SimpleNamespace(referral_state=ReferralState.PROVIDED),
+        SimpleNamespace(referral_state=ReferralState.IN_FLIGHT),
+    ]
+    session = _FakeSession()
+    session.exec_queue = [_exec_all(links), _exec_one(app_row)]
+    out = await _roll_up_referral_state(session, app_row.id)
+    assert out == ReferralState.PROVIDED
+    assert app_row.referral_state == ReferralState.PROVIDED
+
+
+@pytest.mark.asyncio
+async def test_roll_up_referral_state_no_links_is_none():
+    from models import ReferralState
+
+    app_row = _make_app(referral_state=ReferralState.REQUESTED)
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([]), _exec_one(app_row)]
+    out = await _roll_up_referral_state(session, app_row.id)
+    assert out == ReferralState.NONE
+
+
+# ── Computed outreach engagement ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_compute_outreach_engagement_referred():
+    from models import ReferralState
+
+    links = [SimpleNamespace(referral_state=ReferralState.PROVIDED)]
+    session = _FakeSession()
+    session.exec_queue = [_exec_all(links)]
+    assert await compute_outreach_engagement(session, 1) == "referred"
+
+
+@pytest.mark.asyncio
+async def test_compute_outreach_engagement_awaiting_reply():
+    from models import OutreachStatus, ReferralState
+
+    links = [SimpleNamespace(referral_state=ReferralState.NONE)]
+    msgs = [
+        SimpleNamespace(
+            sent_at=datetime.now(UTC) - timedelta(days=2),
+            replied_at=None,
+            status=OutreachStatus.SENT,
+        )
+    ]
+    session = _FakeSession()
+    session.exec_queue = [_exec_all(links), _exec_all(msgs)]
+    assert await compute_outreach_engagement(session, 1) == "awaiting_reply"
+
+
+@pytest.mark.asyncio
+async def test_compute_outreach_engagement_cold_when_empty():
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([]), _exec_all([])]
+    assert await compute_outreach_engagement(session, 1) == "cold"
+
+
+# ── Stuck queue surface ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_stuck_drafts_filters_to_apps_with_last_failure():
+    failed = _make_app(
+        submission_artifacts={"last_failure": {"kind": "auth_required"}}
+    )
+    clean = _make_app(submission_artifacts=None)
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([failed, clean])]
+    rows = await svc.stuck_drafts(session, user_id=1)
+    assert len(rows) == 1
+    assert rows[0] is failed

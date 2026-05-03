@@ -281,7 +281,9 @@ PORTFOLIO_WEBHOOK_URL=...    # Netlify/Vercel rebuild trigger
 # Data dir (mirrors production /app/.naavik in Docker, ~/.naavik on NixOS)
 # Holds: secrets.enc (encrypted vault), secrets.enc.lock (concurrency lockfile),
 # secrets.enc.bak.YYYY-MM-DD-HH-MM (rotate-key backups), logs/vault-audit.log,
-# data/documents/<app_id>/{resume,cover-letter}.pdf
+# data/documents/<app_id>/{resume,cover-letter}.pdf — per-application bundle PDFs (Wave 6)
+# data/documents/portfolio/resume.pdf — cached generic resume served by /api/portfolio/resume.pdf
+# data/snapshots/snapshot-YYYY-MM-DD.marker — daily DB snapshot markers (Phase 6 will replace)
 DATA_DIR=.naavik
 ```
 
