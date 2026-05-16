@@ -137,9 +137,7 @@ async def test_send_discord_no_op_when_event_muted():
     s = _settings(notifications_enabled={EVENT_NEW_HIGH_SCORE: False})
     captured = {}
     client = _mock_client(captured)
-    with patch(
-        "services.notifications._discord_url", return_value="https://discord/x"
-    ):
+    with patch("services.notifications._discord_url", return_value="https://discord/x"):
         ok = await send_discord(
             settings=s, event=EVENT_NEW_HIGH_SCORE, job=_job(), http_client=client
         )
@@ -166,8 +164,7 @@ async def test_send_discord_posts_embed():
         return_value="https://discord.example/webhook",
     ):
         ok = await send_discord(
-            settings=s, event=EVENT_APPLICATION_SENT,
-            application=_application(), http_client=client
+            settings=s, event=EVENT_APPLICATION_SENT, application=_application(), http_client=client
         )
     await client.aclose()
     assert ok is True

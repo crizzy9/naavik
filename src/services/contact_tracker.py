@@ -54,9 +54,7 @@ def _normalize_linkedin_id(raw: str | None) -> str | None:
 async def get_contact(session: AsyncSession, contact_id: int) -> Contact | None:
     return (
         await session.exec(
-            select(Contact).where(
-                Contact.id == contact_id, Contact.deleted_at.is_(None)
-            )
+            select(Contact).where(Contact.id == contact_id, Contact.deleted_at.is_(None))
         )
     ).one_or_none()
 
@@ -197,9 +195,7 @@ async def soft_delete(session: AsyncSession, contact_id: int) -> Contact | None:
 # ── State inference (roll up to ContactApplicationLink + Application) ──
 
 
-async def infer_link_referral_state(
-    session: AsyncSession, *, link_id: int
-) -> ReferralState:
+async def infer_link_referral_state(session: AsyncSession, *, link_id: int) -> ReferralState:
     """Infer `ContactApplicationLink.referral_state` from outreach activity.
 
     Rules (Phase 1 best-effort; Phase 4 layers in email-classification signals):
@@ -214,9 +210,7 @@ async def infer_link_referral_state(
     """
     link = (
         await session.exec(
-            select(ContactApplicationLink).where(
-                ContactApplicationLink.id == link_id
-            )
+            select(ContactApplicationLink).where(ContactApplicationLink.id == link_id)
         )
     ).one_or_none()
     if link is None:
@@ -232,9 +226,7 @@ async def infer_link_referral_state(
     if not msgs:
         return ReferralState.NONE
 
-    has_referral = any(
-        m.intent.value == "referral_request" for m in msgs
-    )
+    has_referral = any(m.intent.value == "referral_request" for m in msgs)
     if not has_referral:
         return link.referral_state
 
@@ -268,9 +260,7 @@ async def update_link_referral_state(
     """Manual user override (e.g. clicking "Mark as referred" in the UI)."""
     link = (
         await session.exec(
-            select(ContactApplicationLink).where(
-                ContactApplicationLink.id == link_id
-            )
+            select(ContactApplicationLink).where(ContactApplicationLink.id == link_id)
         )
     ).one_or_none()
     if link is None:

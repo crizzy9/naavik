@@ -45,15 +45,11 @@ async def auto_apply() -> None:
 
         async def _notify(application: Application):
             settings = (
-                await session.exec(
-                    _select(Settings).where(Settings.user_id == application.user_id)
-                )
+                await session.exec(_select(Settings).where(Settings.user_id == application.user_id))
             ).one_or_none()
             if settings is None:
                 return
-            await notify_application_submitted(
-                settings=settings, application=application
-            )
+            await notify_application_submitted(settings=settings, application=application)
 
         result = await process_auto_apply_queue(session, notify_fn=_notify)
         await session.commit()
@@ -73,18 +69,26 @@ async def aggregate_costs() -> None:
         from sqlalchemy import func
 
         threshold = datetime.now(UTC) - timedelta(days=1)
-        stmt = select(
-            ApiUsage.provider,
-            func.count(ApiUsage.id),
-            func.coalesce(func.sum(ApiUsage.cost_usd), 0.0),
-            func.coalesce(func.sum(ApiUsage.input_tokens), 0),
-            func.coalesce(func.sum(ApiUsage.output_tokens), 0),
-        ).where(ApiUsage.occurred_at >= threshold).group_by(ApiUsage.provider)
+        stmt = (
+            select(
+                ApiUsage.provider,
+                func.count(ApiUsage.id),
+                func.coalesce(func.sum(ApiUsage.cost_usd), 0.0),
+                func.coalesce(func.sum(ApiUsage.input_tokens), 0),
+                func.coalesce(func.sum(ApiUsage.output_tokens), 0),
+            )
+            .where(ApiUsage.occurred_at >= threshold)
+            .group_by(ApiUsage.provider)
+        )
         rows = (await session.exec(stmt)).all()
         for provider, count, cost, in_tok, out_tok in rows:
             log.info(
                 "aggregate_costs %s: %d calls, $%.4f, %d/%d tokens",
-                provider, count, float(cost), int(in_tok), int(out_tok),
+                provider,
+                count,
+                float(cost),
+                int(in_tok),
+                int(out_tok),
             )
 
 

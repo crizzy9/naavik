@@ -144,7 +144,12 @@ def _ahead(*, days: int = 0, hours: int = 0, minutes: int = 0) -> datetime:
 USER: User = User(
     id=1,
     email="shyam.padia930@gmail.com",
-    password_hash="$2b$12$placeholder.hash.for.dev.password.only.not.real",
+    # Plan 10b (item 3, 2026-05-03): password_hash is filled in at seed time
+    # via `db.seed:_resolve_dev_password()` → `services.auth.hash_password()`.
+    # The shadow row keeps an empty string here so the in-memory dataset is
+    # self-consistent (no fake-but-decodable bcrypt that would invite mistakes).
+    # Memory-mode auth never reads this field; DB-mode receives the real hash.
+    password_hash="",
     is_active=True,
     is_admin=True,
     created_at=_ago(days=120),
@@ -6797,6 +6802,26 @@ async def email_signal_feed(limit: int = 6) -> list[EmailThread]:
 
 
 async def get_settings() -> Settings:
+    """Settings singleton accessor.
+
+    Plan 10b (item 6, 2026-05-03): Wave 4 catalogued get_settings as a
+    DB-swap target but the body shipped reading from the in-memory shadow.
+    Closed here so the Settings · LLM Provider form's PUT round-trip
+    reflects DB state on reload.
+    """
+    if _is_db_mode():
+        from sqlmodel import select
+
+        from db.session import async_session
+        from models import Settings as SQLSettings
+
+        async with async_session() as session:
+            stmt = select(SQLSettings).where(SQLSettings.user_id == 1)
+            row = (await session.exec(stmt)).one_or_none()
+            shadow = await _shadow_from_sql(row, Settings)
+            if shadow is not None:
+                return shadow
+        return SETTINGS
     return SETTINGS
 
 

@@ -141,9 +141,7 @@ def _decode(blob: bytes, master_key: bytes) -> tuple[dict, bytes]:
         raise VaultError("vault file magic header invalid")
     stored_fp = blob[HEADER_SIZE : HEADER_SIZE + FINGERPRINT_SIZE]
     salt = blob[HEADER_SIZE + FINGERPRINT_SIZE : HEADER_SIZE + FINGERPRINT_SIZE + SALT_SIZE]
-    nonce = blob[
-        HEADER_SIZE + FINGERPRINT_SIZE + SALT_SIZE : PREAMBLE_SIZE
-    ]
+    nonce = blob[HEADER_SIZE + FINGERPRINT_SIZE + SALT_SIZE : PREAMBLE_SIZE]
     ciphertext = blob[PREAMBLE_SIZE:]
 
     expected_fp = fingerprint_for_key(master_key)

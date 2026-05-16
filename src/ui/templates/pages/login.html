@@ -1,5 +1,8 @@
 {% extends "components/auth_shell.html" %}
-{% block title %}Sign in — Naavik{% endblock %}
+{% set mode = mode | default("signin") %}
+{% set is_signup = (mode == "signup") %}
+{% set signup_disabled = signup_disabled | default(false) %}
+{% block title %}{% if is_signup %}Create account{% else %}Sign in{% endif %} — Naavik{% endblock %}
 
 {% block caller %}
 <div id="login-card" class="w-full max-w-[440px] bg-slate-900 border border-slate-800 rounded-xl p-7 shadow-2xl shadow-black/45">
@@ -13,51 +16,97 @@
     <span class="font-semibold text-lg text-slate-50 tracking-tight">Naavik</span>
   </div>
 
-  <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Welcome back</h1>
-  <p class="mt-1.5 text-sm text-slate-400">Sign in to your Naavik instance.</p>
+  {% if is_signup %}
+    <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Create your account</h1>
+    <p class="mt-1.5 text-sm text-slate-400">First-time setup on this self-hosted instance.</p>
+  {% else %}
+    <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Welcome back</h1>
+    <p class="mt-1.5 text-sm text-slate-400">Sign in to your Naavik instance.</p>
+  {% endif %}
 
-  <form
-    class="mt-6 flex flex-col gap-4"
-    hx-post="/api/v1/auth/login"
-    hx-target="#login-card"
-    hx-swap="outerHTML"
-    hx-disabled-elt="find button[type=submit]">
-    <div>
-      {% with label="EMAIL", for_id="login-email" %}{% include "components/field_label.html" %}{% endwith %}
-      {% with name="email", type="email", id="login-email", required=true, autocomplete="email", placeholder="[email protected]" %}
-        {% include "components/input.html" %}
-      {% endwith %}
+  {% if is_signup and signup_disabled %}
+    {# Plan 10c (10c.2b, 2026-05-11): server-side gate. When the User table is
+       non-empty AND Settings.allow_multiple_users=False, /api/v1/auth/signup
+       returns 403; surface that as an explanatory banner instead of a form
+       the operator can submit and get a 403 with no on-page explanation. #}
+    <div data-signup-disabled-banner="true" class="mt-6 rounded-lg bg-amber-500/10 border border-amber-500/30 p-4">
+      <div class="flex gap-3 items-start">
+        <i data-lucide="lock" class="h-5 w-5 text-amber-300 shrink-0" stroke-width="1.5"></i>
+        <div class="flex-1 min-w-0">
+          <h3 class="text-sm font-medium text-amber-100">This instance already has an account.</h3>
+          <p class="text-xs text-amber-200/80 mt-1">Sign-ups are disabled on a single-user instance.
+            <a href="/login" class="font-medium underline underline-offset-2 hover:text-amber-50">Sign in</a>
+            with the existing account, or contact your admin to enable multi-user
+            (Settings · Deployment).</p>
+        </div>
+      </div>
     </div>
-    <div>
-      {% with label="PASSWORD", for_id="login-password" %}{% include "components/field_label.html" %}{% endwith %}
-      {% with name="password", type="password", id="login-password", required=true, autocomplete="current-password" %}
-        {% include "components/input.html" %}
-      {% endwith %}
-    </div>
+  {% else %}
+    <form
+      class="mt-6 flex flex-col gap-4"
+      {% if is_signup %}
+      hx-post="/api/v1/auth/signup"
+      {% else %}
+      hx-post="/api/v1/auth/login"
+      {% endif %}
+      hx-target="#login-card"
+      hx-swap="outerHTML"
+      hx-disabled-elt="find button[type=submit]">
+      <div>
+        {% with label="EMAIL", for_id="login-email" %}{% include "components/field_label.html" %}{% endwith %}
+        {% with name="email", type="email", id="login-email", required=true, autocomplete="email", placeholder="[email protected]" %}
+          {% include "components/input.html" %}
+        {% endwith %}
+      </div>
+      <div>
+        {% with label="PASSWORD", for_id="login-password" %}{% include "components/field_label.html" %}{% endwith %}
+        {% with name="password", type="password", id="login-password", required=true, autocomplete=("new-password" if is_signup else "current-password") %}
+          {% include "components/input.html" %}
+        {% endwith %}
+        {% if is_signup %}
+          <p class="mt-1.5 text-xs text-slate-500">At least 8 characters.</p>
+        {% endif %}
+      </div>
 
-    <label class="flex items-center gap-2 text-sm text-slate-300 select-none">
-      <input type="checkbox" name="keep_signed_in" value="true" checked
-             class="h-4 w-4 accent-indigo-500">
-      Keep me signed in on this device
-    </label>
+      <label class="flex items-center gap-2 text-sm text-slate-300 select-none">
+        <input type="checkbox" name="keep_signed_in" value="true" checked
+               class="h-4 w-4 accent-indigo-500">
+        Keep me signed in on this device
+      </label>
 
-    <button type="submit"
-            class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:opacity-50 disabled:cursor-not-allowed">
-      <span class="htmx-show-loading hidden">{% include "components/spinner.html" %}</span>
-      <span class="htmx-hide-loading">Sign in</span>
-    </button>
+      <button type="submit"
+              class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:opacity-50 disabled:cursor-not-allowed">
+        <span class="htmx-show-loading hidden">{% include "components/spinner.html" %}</span>
+        <span class="htmx-hide-loading">{% if is_signup %}Create account{% else %}Sign in{% endif %}</span>
+      </button>
 
-    <div class="mt-2">
-      {% with tone="info", icon="key-round", title="SSO coming soon.",
-              body="Self-hosted instances will support OIDC providers like <strong>Authentik</strong>, Keycloak, and Okta." %}
-        {% include "components/info_card.html" %}
-      {% endwith %}
-    </div>
-  </form>
+      {# Plan 10c (10c.2a, 2026-05-11): prominent alternate-mode CTA below
+         the submit button. Lifted out of the footer so the operator finds
+         it before scanning past the SSO info-card. #}
+      {% if is_signup %}
+        <p data-auth-mode-toggle="signin" class="mt-1 text-center text-sm text-slate-400">
+          Already have an account?
+          <a href="/login" class="text-indigo-300 hover:text-indigo-200 font-medium transition">Sign in</a>
+        </p>
+      {% else %}
+        <p data-auth-mode-toggle="signup" class="mt-1 text-center text-sm text-slate-400">
+          First time?
+          <a href="/login?mode=signup" class="text-indigo-300 hover:text-indigo-200 font-medium transition">Create account</a>
+        </p>
+      {% endif %}
+
+      {% if not is_signup %}
+        <div class="mt-2">
+          {% with tone="info", icon="key-round", title="SSO coming soon.",
+                  body="Self-hosted instances will support OIDC providers like <strong>Authentik</strong>, Keycloak, and Okta." %}
+            {% include "components/info_card.html" %}
+          {% endwith %}
+        </div>
+      {% endif %}
+    </form>
+  {% endif %}
 
   <footer class="mt-6 flex items-center justify-center gap-3 text-xs text-slate-500">
-    <a href="/login?create=1" class="hover:text-slate-300 transition">Create account</a>
-    <span aria-hidden="true">·</span>
     <a href="https://github.com/crizzy9/naavik" hx-boost="false" class="hover:text-slate-300 transition">Docs</a>
     <span aria-hidden="true">·</span>
     <a href="https://github.com/crizzy9/naavik" hx-boost="false" class="hover:text-slate-300 transition">Source</a>

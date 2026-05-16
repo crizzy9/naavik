@@ -87,8 +87,7 @@ def _make_resume_doc(path: Path):
     )
 
 
-def _make_screener(qid, text, answer, source=ScreenerAnswerSource.AUTO,
-                   reviewed=True):
+def _make_screener(qid, text, answer, source=ScreenerAnswerSource.AUTO, reviewed=True):
     from datetime import UTC, datetime
 
     return SimpleNamespace(
@@ -113,8 +112,9 @@ def _make_bundle(board: ApplicationBoard, url: str, with_cover: bool = True):
             _make_screener(1, "Email", "shyam@example.com"),
             _make_screener(2, "Phone", "+1 555 555 0100"),
             _make_screener(3, "Name", "Shyam Padia"),
-            _make_screener(4, "Why Stripe?", "Because of payments infra.",
-                           source=ScreenerAnswerSource.DRAFTED),
+            _make_screener(
+                4, "Why Stripe?", "Because of payments infra.", source=ScreenerAnswerSource.DRAFTED
+            ),
         ],
     )
 
@@ -151,9 +151,7 @@ async def test_greenhouse_submit_success():
     bundle = _make_bundle(
         ApplicationBoard.GREENHOUSE, "https://boards.greenhouse.io/stripe/jobs/123456"
     )
-    client = _mock_client(
-        response=httpx.Response(201, json={"application_id": "GH-987"})
-    )
+    client = _mock_client(response=httpx.Response(201, json={"application_id": "GH-987"}))
     adapter = GreenhouseAdapter(http_client=client)
     result = await adapter.submit(bundle.application, bundle)
     await client.aclose()
@@ -190,9 +188,7 @@ async def test_greenhouse_submit_rate_limit_carries_retry_after():
         ApplicationBoard.GREENHOUSE, "https://boards.greenhouse.io/stripe/jobs/77"
     )
     client = _mock_client(
-        response=httpx.Response(
-            429, headers={"retry-after": "120"}, text="slow down"
-        )
+        response=httpx.Response(429, headers={"retry-after": "120"}, text="slow down")
     )
     result = await GreenhouseAdapter(http_client=client).submit(bundle.application, bundle)
     await client.aclose()
@@ -222,9 +218,7 @@ async def test_greenhouse_field_mismatch_when_url_unparseable():
 async def test_greenhouse_field_mismatch_when_resume_missing():
     pdf = _tmp_pdf()
     pdf.unlink()
-    app = _make_app(
-        ApplicationBoard.GREENHOUSE, "https://boards.greenhouse.io/stripe/jobs/12"
-    )
+    app = _make_app(ApplicationBoard.GREENHOUSE, "https://boards.greenhouse.io/stripe/jobs/12")
     bundle = ApplicationBundle(
         application=app,
         resume=SimpleNamespace(path=str(pdf), byte_size=0, kind="resume"),
@@ -270,9 +264,7 @@ def test_greenhouse_can_submit_only_for_greenhouse_urls():
 
 @pytest.mark.asyncio
 async def test_lever_submit_success():
-    bundle = _make_bundle(
-        ApplicationBoard.LEVER, "https://jobs.lever.co/foo/abc-123"
-    )
+    bundle = _make_bundle(ApplicationBoard.LEVER, "https://jobs.lever.co/foo/abc-123")
     client = _mock_client(response=httpx.Response(200, json={"id": "lever-app-1"}))
     result = await LeverAdapter(http_client=client).submit(bundle.application, bundle)
     await client.aclose()
@@ -282,9 +274,7 @@ async def test_lever_submit_success():
 
 @pytest.mark.asyncio
 async def test_lever_submit_auth_required():
-    bundle = _make_bundle(
-        ApplicationBoard.LEVER, "https://jobs.lever.co/foo/x"
-    )
+    bundle = _make_bundle(ApplicationBoard.LEVER, "https://jobs.lever.co/foo/x")
     client = _mock_client(response=httpx.Response(403))
     result = await LeverAdapter(http_client=client).submit(bundle.application, bundle)
     await client.aclose()
@@ -303,12 +293,8 @@ async def test_lever_field_mismatch_when_url_unparseable():
 
 @pytest.mark.asyncio
 async def test_ashby_submit_success():
-    bundle = _make_bundle(
-        ApplicationBoard.ASHBY, "https://jobs.ashbyhq.com/foo/abc-def-123"
-    )
-    client = _mock_client(
-        response=httpx.Response(200, json={"applicationId": "ashby-1"})
-    )
+    bundle = _make_bundle(ApplicationBoard.ASHBY, "https://jobs.ashbyhq.com/foo/abc-def-123")
+    client = _mock_client(response=httpx.Response(200, json={"applicationId": "ashby-1"}))
     result = await AshbyAdapter(http_client=client).submit(bundle.application, bundle)
     await client.aclose()
     assert result.ok is True
@@ -317,9 +303,7 @@ async def test_ashby_submit_success():
 
 @pytest.mark.asyncio
 async def test_ashby_submit_field_mismatch_on_422():
-    bundle = _make_bundle(
-        ApplicationBoard.ASHBY, "https://jobs.ashbyhq.com/foo/abc"
-    )
+    bundle = _make_bundle(ApplicationBoard.ASHBY, "https://jobs.ashbyhq.com/foo/abc")
     client = _mock_client(response=httpx.Response(422, text="missing"))
     result = await AshbyAdapter(http_client=client).submit(bundle.application, bundle)
     await client.aclose()

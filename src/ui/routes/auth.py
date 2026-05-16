@@ -13,13 +13,21 @@ not on Wave 4's critical path.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
+from sqlalchemy import func
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
+from db.session import get_session
+from models import Settings, User
 from ui.auth_stub import FAKE_SESSION_VALUE, SESSION_COOKIE
 from ui.templates_setup import templates
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -29,14 +37,61 @@ router = APIRouter()
 # ─────────────────────────────────────────────────────────────────────────
 
 
+async def _compute_signup_disabled(session: AsyncSession) -> bool:
+    """`True` iff the User table is non-empty AND multi-user signup is off.
+
+    Mirrors the gate that `POST /api/v1/auth/signup` enforces (see
+    `src/api/auth.py:post_signup`) so the form is suppressed BEFORE the
+    operator hits Submit. Scalar selects sidestep the live-worker
+    ORM-mapping quirk noted in plan 10b's deviations (B6 cleanup).
+
+    Returns `False` on any error so the form still renders — failing
+    closed would lock out a fresh-install operator on a transient DB
+    glitch, which is worse than showing a form that may 403 later.
+    """
+    try:
+        count_row = (await session.exec(select(func.count()).select_from(User))).one()
+        if hasattr(count_row, "_mapping") or isinstance(count_row, tuple):
+            # SQLAlchemy Row → first column.
+            existing_count = int(count_row[0])
+        else:
+            existing_count = int(count_row)
+        if existing_count == 0:
+            return False
+        allow_multi_scalar = await session.exec(
+            select(Settings.allow_multiple_users).order_by(Settings.user_id).limit(1)
+        )
+        allow_multi = bool(allow_multi_scalar.one_or_none())
+        return not allow_multi
+    except Exception as exc:  # noqa: BLE001
+        log.debug("signup_disabled probe failed: %s — falling through to form", exc)
+        return False
+
+
 @router.get("/login", response_class=HTMLResponse, name="login")
-async def get_login(request: Request):
+async def get_login(
+    request: Request,
+    mode: Annotated[str | None, Query(pattern="^(signin|signup)$")] = None,
+    session: AsyncSession = Depends(get_session),
+):
+    """Login page. `?mode=signup` swaps the form into account-creation mode
+    (plan 10b item 4 — replaces the dead `?create=1` link).
+
+    Plan 10c (10c.2b, 2026-05-11): compute `signup_disabled` server-side so
+    the signup form is replaced by an explanatory banner when this is a
+    seeded single-user instance — instead of letting the operator submit
+    a form that comes back 403 with no on-page explanation.
+    """
+    resolved_mode = mode or "signin"
+    signup_disabled = await _compute_signup_disabled(session)
     return templates.TemplateResponse(
         request,
         "pages/login.html",
         {
             "active_sidebar": None,
             "active_template_path": "/login",
+            "mode": resolved_mode,
+            "signup_disabled": signup_disabled,
         },
     )
 

@@ -69,4 +69,3 @@ class EmailThread(SQLModel, table=True):
         default_factory=utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
-

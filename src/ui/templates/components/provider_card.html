@@ -4,13 +4,17 @@
   Args:
     provider : dict — id, name, model_default, description, kind ("CLOUD"/"LOCAL")
     selected : bool
+    radio_attrs : str (optional) — extra HTML attributes to inject on the
+      radio input (used by _settings_llm.html to wire HTMX provider-change
+      behavior; the design-components catalog leaves it empty for static
+      preview rendering).
 #}
 {% set p = provider %}
 {% set _is_local = p.kind == "LOCAL" %}
 {% set _kind_class = "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30" if _is_local else "bg-indigo-500/15 text-indigo-300 ring-indigo-500/30" %}
 <label class="flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition focus-within:ring-2 focus-within:ring-indigo-500/40
               {% if selected %}border-indigo-500 bg-indigo-500/5{% else %}border-slate-700 hover:border-slate-600{% endif %}">
-  <input type="radio" name="llm_provider" value="{{ p.id }}" class="sr-only" {% if selected %}checked{% endif %}>
+  <input type="radio" name="llm_provider" value="{{ p.id }}" class="sr-only" {% if selected %}checked{% endif %} {{ radio_attrs | default("") | safe }}>
   <div class="mt-0.5 shrink-0">
     {% if selected %}
       <i data-lucide="circle-check" class="h-5 w-5 text-indigo-400" stroke-width="1.5"></i>

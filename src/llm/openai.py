@@ -127,6 +127,6 @@ class OpenAIProvider(LLMProvider):
 
     def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
         rates = _PRICING.get(self._model, _PRICING["_default"])
-        return (input_tokens / 1_000_000) * rates["input"] + (
-            output_tokens / 1_000_000
-        ) * rates["output"]
+        return (input_tokens / 1_000_000) * rates["input"] + (output_tokens / 1_000_000) * rates[
+            "output"
+        ]

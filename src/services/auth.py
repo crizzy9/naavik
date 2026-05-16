@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 import bcrypt
 import jwt
 from fastapi import Cookie, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from config import settings as app_settings

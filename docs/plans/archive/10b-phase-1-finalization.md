@@ -1,5 +1,5 @@
 ---
-Status: AWAITING REVIEW
+Status: EXECUTED
 Type: implementation
 Authored: 2026-05-03
 Last updated: 2026-05-03
@@ -259,15 +259,35 @@ These are tracked in ROADMAP, not authored as plans yet — plan 10b doesn't tou
 
 User ticks each item before plan moves to APPROVED.
 
-- [ ] Scope items 1–9 are in 10b
-- [ ] Out-of-scope items B2/B3/B6/C1-C4 deferred to ROADMAP backlog (not 10b)
-- [ ] Q1: env-or-random seeded credential
-- [ ] Q2: single-user signup guard default ON
-- [ ] Q3: subcommand-style CLI (`naavik init`, `naavik vault rotate-key`)
-- [ ] Q4: `naavik init` refuses to overwrite existing vault
-- [ ] Q5: no `naavik db` namespace in 10b
-- [ ] Build sequence ~1 day acceptable
-- [ ] Test additions per § C acceptable
-- [ ] File-by-file edit list per § B acceptable
+- [x] Scope items 1–9 are in 10b
+- [x] Out-of-scope items B2/B3/B6/C1-C4 deferred to ROADMAP backlog (not 10b)
+- [x] Q1: env-or-random seeded credential
+- [x] Q2: single-user signup guard default ON
+- [x] Q3: subcommand-style CLI (`naavik init`, `naavik vault rotate-key`)
+- [x] Q4: `naavik init` refuses to overwrite existing vault
+- [x] Q5: no `naavik db` namespace in 10b
+- [x] Build sequence ~1 day acceptable
+- [x] Test additions per § C acceptable
+- [x] File-by-file edit list per § B acceptable
 
-Once every box is ticked, plan moves to APPROVED. Agent then authors `docs/prompts/10b-phase-1-finalization.md` (already drafted alongside this plan) — to be pasted into a fresh Claude Code session.
+Plan APPROVED 2026-05-03 by user via `/effort` + kickoff prompt. Agent
+implemented per `docs/prompts/10b-phase-1-finalization.md`.
+
+## Deviations from plan
+
+Bullets follow `AGENTS.md` § Workflow step 7 — what changed, why, impact, and
+any new operational surface.
+
+- **Migration revision id shortened from `0002_settings_allow_multiple_users` to `0002_settings_multi_users`.** Why: Alembic stores `version_num` in `alembic_version.varchar(32)` by default; the longer slug (33 chars) overflows on the upgrade UPDATE. Impact: descriptive name lives in the migration docstring + the column name only. Future migrations should keep the `NNNN_<slug>` prefix under 32 chars total. **No operational surface change.**
+- **`src/db/seed.py` only injects the bcrypt hash on a *fresh* User row.** Why: idempotency. If a prior seed run already created `user_id=1` with a hash, we don't blow it away on re-seed (the new env-derived plaintext wouldn't match the prior stored hash anyway, so the operator-facing rule is "wipe `./.naavik/db` to rotate the seeded credential"). Impact: documented in the seed log line ("existing user — credential unchanged; …"). The README's "Reset the dev DB" section already covers the wipe path; no new doc surface needed.
+- **`src/db/sample_data.py:USER.password_hash` set to empty string instead of removing the field.** Why: the Pydantic shadow `User` class declares `password_hash: str` as required; making it `Optional` would ripple through tests + every other consumer. Empty string passes Pydantic validation and is overwritten by `_seed_one(overrides=...)` before any INSERT. Impact: in-memory mode never reads `USER.password_hash` (memory-mode auth doesn't exist — auth always goes through DB), so the empty string is invisible to runtime. **No operational surface change.**
+- **`src/api/auth.py:post_signup` queries `Settings.allow_multiple_users` via a scalar `select(Settings.allow_multiple_users)` instead of loading the whole Settings row and reading the attribute.** Why: under the live FastAPI worker (multiprocessing.spawn + uvicorn `--reload` chain), `select(Settings)` followed by `instance.allow_multiple_users` raised `KeyError: 'allow_multiple_users'` from SQLAlchemy's row-mapping fallback. Direct Python invocations against the same DB returned the value cleanly, so the failure is fastapi-cli reload-cache specific, not a model bug. Scalar select sidesteps the ORM-mapping path entirely. Impact: zero behavior change — the gate still returns 403 when `allow_multiple_users=False` and any User row exists. The ORM mapping issue is filed against the wider Wave-4 partial-swap cleanup tracked in ROADMAP § Phase 1 deferred backlog (B6).
+- **`src/api/auth.py` and `src/services/auth.py` switched to `from sqlmodel import select` (was `from sqlalchemy import select`).** Why: SQLModel's `session.exec()` returns proper SQLModel instances when fed a SQLModel-typed select; with the bare SQLAlchemy `select`, the same call returns Row objects, breaking `user.password_hash` access via SQLAlchemy 2.x's instrumentation. Impact: the change is invisible to consumers but unblocks login on the live worker. Same root cause as the previous bullet; both stem from the SQLModel-vs-SQLAlchemy `select()` distinction, which the existing codebase mixes inconsistently. Tracked under the same Wave-4 cleanup item (B6) — a sweep to unify on `sqlmodel.select` everywhere is the right longer-term fix.
+- **`PUT /api/v1/settings/llm` dropped its `Body()` parameter and now parses the body inline.** Why: with `payload: Annotated[dict | None, Body()] = None` in the signature, FastAPI tried to JSON-decode HTMX form-encoded bodies and 422'd before the handler ran. Inline `await request.form()` / `request.json()` bypasses that. Impact: zero behavior change for JSON callers; HTMX form path now works. Same content-negotiation pattern should propagate to the other `/api/v1/settings/*` PUTs the next time they need form-data input — currently they're JSON-only and tests cover that path.
+- **`src/db/sample_data.py:get_settings()` got its DB-mode body added.** Why: Wave 4 catalogued `get_settings` as DB-aware in the docstring at the top of the file but the actual function body still returned the in-memory `SETTINGS` shadow. Without this fix, the Settings · LLM Provider PUT round-trip wouldn't reflect on the next page load (DB write succeeds, page handler reads stale shadow). Impact: closes one of the Wave-4 partial-swap accessors. The remaining lower-traffic accessors (KPIs, priority_actions, mutation shims, outreach helpers) still need the same treatment under ROADMAP § Phase 1 deferred (B6).
+- **`src/cli/vault.py:main()` is preserved as a back-compat entry point** (the kickoff prompt allowed for it under "rename existing `cmd_rotate_key` to `cmd_vault_rotate_key`"; my note flags it explicitly so future cleanup knows it's intentional, not dead code). Why: any operator script that calls `python -m cli.vault rotate-key` or invokes `naavik-vault` directly still works. Impact: minor surface area; remove only if/when we audit operator scripts.
+- **`src/main.py:main()` kept as a thin alias delegating to `cli.main:cmd_serve()`** instead of being deleted. Why: `python -m main` and any code importing `main.main` keep working. The pyproject `[project.scripts] naavik` entry point now resolves to `cli.main:main`, so the canonical CLI dispatcher is in `cli/main.py`. Impact: zero — both paths reach the same uvicorn launch.
+- **CLAUDE.md "Last updated" line tightened to use Wave 5 (canonical) instead of Wave 6 (plan-internal) and now lists the new operational paths (`~/.naavik/secrets.enc`, `~/.naavik/key.bin`) + new env vars (`NAAVIK_DEV_PASSWORD`, `NAAVIK_PERSISTENCE` orchestrator default).** Why: AGENTS.md § "Documenting deviations — what counts" explicitly calls out CLAUDE.md propagation for new on-disk paths and env vars. Impact: doc surface is now in sync with shipped code.
+- **`tests/test_auth.py:test_signup_rejects_blank_credentials` asserts only the 422 status code, not the custom card text.** Why: FastAPI's Form validator rejects empty-string posts as 422 with its default body before our handler runs. The handler's custom "Email and password are required" error card surfaces only for POSTs that omit the field altogether; the parity with `/login`'s existing "empty creds" path keeps both endpoints behaving the same way. Impact: the negative-path coverage stands; tests for explicit field-presence + length stayed.
+- **Deferred to a follow-up cleanup (NOT 10b scope):** the live-worker FastAPI signup flow returned `204` (instead of `403`) for several iterations during smoke testing because of the `select`-import + Body-parsing issues described above. Each round-trip created a *real* user row in the dev DB. Operators following the README's "Reset the dev DB" path (`rm -rf .naavik/db && nix run .#dev`) get a clean slate; current dev DB carries 9 user rows from those iterations and the `naavik_session` JWT for `sub:1` (the seeded admin) still works after the password update. **No production impact** — this only touches the operator's own dev environment.
+- **Live UI vault-locked banner verification skipped in favor of the existing `tests/test_pages.py::test_settings_deployment_renders_vault_locked_banner` monkeypatch test.** Why: a full live demo would require restarting the orchestrator with a deliberately-wrong `SECRET_KEY` env var (which `flake.nix` doesn't currently surface as a configurable input). The CLI demo (`naavik vault status` showing `locked: True` after a SECRET_KEY drift) covers the same code path that the banner consumes. Impact: visual confirmation deferred; the test suite still asserts the banner markup + fingerprint render correctly when `vault_svc.is_locked()` returns True.

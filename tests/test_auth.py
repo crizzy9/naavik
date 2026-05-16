@@ -216,3 +216,63 @@ def test_csrf_token_endpoint_sets_cookie_when_missing() -> None:
     assert "csrf_token" in response.json()
     # Cookie set on first call.
     assert "naavik_csrf" in response.cookies
+
+
+# ── Plan 10b (item 4) — signup endpoint validation ───────────────────────
+
+
+def _signup_client():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.auth import router as api_auth_router
+
+    app = FastAPI()
+    app.include_router(api_auth_router)
+    return TestClient(app)
+
+
+def test_signup_rejects_blank_credentials() -> None:
+    """Plan 10b: empty email or password short-circuits before DB access.
+
+    FastAPI's Form parser rejects empty-string posts as 422 *before* the
+    handler runs (matches the existing /login parity); the cookie still
+    must not be set.
+    """
+    client = _signup_client()
+    r = client.post("/api/v1/auth/signup", data={"email": "", "password": ""})
+    assert r.status_code == 422
+    assert "naavik_session" not in r.cookies
+
+
+def test_signup_rejects_short_password() -> None:
+    client = _signup_client()
+    r = client.post(
+        "/api/v1/auth/signup",
+        data={"email": "[email protected]", "password": "short"},
+    )
+    assert r.status_code == 422
+    assert "at least 8 characters" in r.text
+    assert "naavik_session" not in r.cookies
+
+
+def test_signup_rejects_invalid_email_shape() -> None:
+    client = _signup_client()
+    r = client.post(
+        "/api/v1/auth/signup",
+        data={"email": "not-an-email", "password": "longenoughpw"},
+    )
+    assert r.status_code == 422
+    assert "valid email" in r.text
+
+
+def test_signup_password_round_trips_via_real_bcrypt() -> None:
+    """Whatever is stored MUST be a real bcrypt hash that verify_password accepts."""
+    raw = "hunter2hunter2"
+    hashed = hash_password(raw)
+    assert hashed.startswith("$2b$")
+    assert verify_password(raw, hashed) is True
+    assert verify_password("wrong", hashed) is False
+    # Sample-data fixture must NOT carry a placeholder bcrypt anywhere — that
+    # value used to short-circuit verify_password to True even on miss.
+    assert "placeholder.hash.for.dev.password" not in hashed

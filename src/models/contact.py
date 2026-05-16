@@ -152,4 +152,3 @@ class OutreachMessage(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),
     )
-

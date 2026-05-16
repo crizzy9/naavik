@@ -59,8 +59,9 @@ _FILTERED_PROFILE_FIELDS = frozenset(
 )
 
 
-def public_cv_payload(profile: Profile, *, experiences=None, skills=None,
-                      education=None, projects=None) -> dict[str, Any]:
+def public_cv_payload(
+    profile: Profile, *, experiences=None, skills=None, education=None, projects=None
+) -> dict[str, Any]:
     """Filter a Profile (+ optional related rows) for the public API.
 
     Strips email/phone/EEO/visa/salary. Returns plain JSON-serializable dict.
@@ -88,19 +89,10 @@ def public_cv_payload(profile: Profile, *, experiences=None, skills=None,
         pdict[key] = val
     return {
         "profile": pdict,
-        "experiences": [
-            _serialize_experience(e) for e in (experiences or [])
-        ],
-        "skills": [
-            {"category": s.category, "items": list(s.items or [])}
-            for s in (skills or [])
-        ],
-        "education": [
-            _serialize_education(e) for e in (education or [])
-        ],
-        "projects": [
-            _serialize_project(p) for p in (projects or [])
-        ],
+        "experiences": [_serialize_experience(e) for e in (experiences or [])],
+        "skills": [{"category": s.category, "items": list(s.items or [])} for s in (skills or [])],
+        "education": [_serialize_education(e) for e in (education or [])],
+        "projects": [_serialize_project(p) for p in (projects or [])],
     }
 
 
@@ -206,9 +198,7 @@ async def regenerate_generic_resume(
 # ── Netlify rebuild webhook (debounced) ────────────────────────────────
 
 
-async def trigger_netlify_rebuild(
-    *, http_client: httpx.AsyncClient | None = None
-) -> bool:
+async def trigger_netlify_rebuild(*, http_client: httpx.AsyncClient | None = None) -> bool:
     """Fire the Netlify build hook stored in the vault (`scope=misc`)."""
     url = vault_svc.get(_VAULT_SCOPE, _NETLIFY_KEY, caller="portfolio_sync")
     if not url:
@@ -249,9 +239,7 @@ def schedule_debounced_regen(
 
     async def _do_work():
         try:
-            await regenerate_generic_resume(
-                settings=settings, session=session, user_id=user_id
-            )
+            await regenerate_generic_resume(settings=settings, session=session, user_id=user_id)
             if fire_netlify:
                 await trigger_netlify_rebuild()
         except Exception as exc:  # noqa: BLE001

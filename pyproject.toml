@@ -50,7 +50,10 @@ dev = [
 ]
 
 [project.scripts]
-naavik = "main:main"
+# Plan 10b (item 5, 2026-05-03): `naavik` is now a subcommand-based CLI
+# (`naavik serve` / `init` / `vault status` / `vault rotate-key`). Bare
+# `naavik` defaults to `serve` so the old behavior is preserved.
+naavik = "cli.main:main"
 naavik-alembic = "alembic.config:main"
 
 [build-system]
@@ -59,7 +62,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["api", "db", "llm", "models", "scheduler", "scraper", "services", "typst", "ui"]
+packages = ["api", "cli", "db", "llm", "models", "scheduler", "scraper", "services", "typst", "ui"]
 py-modules = ["config", "main", "app"]
 
 [tool.ruff]

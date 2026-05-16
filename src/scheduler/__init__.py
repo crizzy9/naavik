@@ -25,9 +25,8 @@ def _sync_database_url() -> str:
 
     raw = settings.database_url
     # APScheduler's SQLAlchemyJobStore wants the sync driver. Strip async suffix.
-    return (
-        raw.replace("postgresql+asyncpg://", "postgresql+psycopg://")
-        .replace("postgresql+psycopg_async://", "postgresql+psycopg://")
+    return raw.replace("postgresql+asyncpg://", "postgresql+psycopg://").replace(
+        "postgresql+psycopg_async://", "postgresql+psycopg://"
     )
 
 

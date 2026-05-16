@@ -67,9 +67,7 @@ class GreenhouseAdapter(ATSAdapter):
     def can_submit(self, job: Job) -> bool:
         return _parse_url(job.url) is not None
 
-    async def submit(
-        self, application: Application, bundle: ApplicationBundle
-    ) -> SubmissionResult:
+    async def submit(self, application: Application, bundle: ApplicationBundle) -> SubmissionResult:
         url = application.external_url
         parsed = _parse_url(url)
         if parsed is None:
@@ -161,9 +159,7 @@ def _interpret_response(response: httpx.Response) -> SubmissionResult:
             payload = response.json()
         except json.JSONDecodeError:
             payload = {}
-        board_app_id = str(
-            payload.get("application_id") or payload.get("id") or ""
-        ) or None
+        board_app_id = str(payload.get("application_id") or payload.get("id") or "") or None
         return SubmissionResult(ok=True, board_application_id=board_app_id, raw=payload)
     if response.status_code == 401 or response.status_code == 403:
         return SubmissionResult(

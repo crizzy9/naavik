@@ -72,9 +72,7 @@ async def get_cv(
     ).all()
     skills = (
         await session.exec(
-            select(Skill)
-            .where(Skill.profile_id == profile.id)
-            .order_by(Skill.order_index)
+            select(Skill).where(Skill.profile_id == profile.id).order_by(Skill.order_index)
         )
     ).all()
     education = (

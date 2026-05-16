@@ -84,6 +84,12 @@ class Settings(SQLModel, table=True):
     # Deployment
     deployment_mode: DeploymentMode = Field(default=DeploymentMode.SELF_HOSTED)
 
+    # Plan 10b (item 4, 2026-05-03): single-user signup gate.
+    # When False (default), POST /api/v1/auth/signup returns 403 once any
+    # User row exists — keeps a self-hosted instance from accidentally
+    # turning into a multi-tenant SaaS. Multi-user proper lands in Phase 2+.
+    allow_multiple_users: bool = Field(default=False)
+
     # Misc
     debug: bool = Field(default=False)
 
@@ -95,4 +101,3 @@ class Settings(SQLModel, table=True):
         default_factory=utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
-

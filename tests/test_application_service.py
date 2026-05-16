@@ -67,18 +67,21 @@ class _FakeSession:
 
 
 def _exec_one(value):
-    return SimpleNamespace(one_or_none=lambda: value, all=lambda: [value] if value else [],
-                           one=lambda: value)
+    return SimpleNamespace(
+        one_or_none=lambda: value, all=lambda: [value] if value else [], one=lambda: value
+    )
 
 
 def _exec_all(values):
-    return SimpleNamespace(one_or_none=lambda: values[0] if values else None,
-                           all=lambda: values, one=lambda: len(values))
+    return SimpleNamespace(
+        one_or_none=lambda: values[0] if values else None,
+        all=lambda: values,
+        one=lambda: len(values),
+    )
 
 
 def _exec_count(count):
-    return SimpleNamespace(one=lambda: count, all=lambda: [count],
-                           one_or_none=lambda: count)
+    return SimpleNamespace(one=lambda: count, all=lambda: [count], one_or_none=lambda: count)
 
 
 def _make_settings(**kw):
@@ -279,22 +282,16 @@ async def test_submit_draft_success_flips_state_and_job_queue_state():
         _exec_count(0),
         _exec_one(None),  # resume lookup
         _exec_one(None),  # cover lookup
-        _exec_all([]),    # screeners
+        _exec_all([]),  # screeners
         _exec_one(job_row),  # post-success
     ]
 
     fake_adapter = SimpleNamespace(
-        submit=AsyncMock(
-            return_value=SubmissionResult(
-                ok=True, board_application_id="GH-12345"
-            )
-        )
+        submit=AsyncMock(return_value=SubmissionResult(ok=True, board_application_id="GH-12345"))
     )
     notify = AsyncMock()
 
-    with patch(
-        "services.application_service.ats_dispatch", return_value=fake_adapter
-    ):
+    with patch("services.application_service.ats_dispatch", return_value=fake_adapter):
         out = await submit_draft(session, app_row.id, notify_fn=notify)
 
     assert out.status == ApplicationStatus.APPLIED
@@ -313,7 +310,7 @@ async def test_submit_draft_persistent_failure_keeps_draft_and_writes_last_failu
     session = _FakeSession()
     session.exec_queue = [
         _exec_one(app_row),  # get_application
-        _exec_count(0),       # validate
+        _exec_count(0),  # validate
         _exec_one(None),
         _exec_one(None),
         _exec_all([]),
@@ -328,9 +325,7 @@ async def test_submit_draft_persistent_failure_keeps_draft_and_writes_last_failu
             )
         )
     )
-    with patch(
-        "services.application_service.ats_dispatch", return_value=fake_adapter
-    ):
+    with patch("services.application_service.ats_dispatch", return_value=fake_adapter):
         out = await submit_draft(session, app_row.id)
 
     assert out.status == ApplicationStatus.DRAFT
@@ -363,9 +358,7 @@ async def test_submit_draft_rate_limit_failure_classified():
             )
         )
     )
-    with patch(
-        "services.application_service.ats_dispatch", return_value=fake_adapter
-    ):
+    with patch("services.application_service.ats_dispatch", return_value=fake_adapter):
         out = await submit_draft(session, app_row.id)
     assert out.submission_artifacts["last_failure"]["kind"] == "rate_limit"
 
@@ -587,9 +580,7 @@ async def test_compute_outreach_engagement_cold_when_empty():
 
 @pytest.mark.asyncio
 async def test_stuck_drafts_filters_to_apps_with_last_failure():
-    failed = _make_app(
-        submission_artifacts={"last_failure": {"kind": "auth_required"}}
-    )
+    failed = _make_app(submission_artifacts={"last_failure": {"kind": "auth_required"}})
     clean = _make_app(submission_artifacts=None)
     session = _FakeSession()
     session.exec_queue = [_exec_all([failed, clean])]

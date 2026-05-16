@@ -63,9 +63,7 @@ class ATSAdapter(ABC):
     board_name: str = "abstract"
 
     @abstractmethod
-    async def submit(
-        self, application: Application, bundle: ApplicationBundle
-    ) -> SubmissionResult:
+    async def submit(self, application: Application, bundle: ApplicationBundle) -> SubmissionResult:
         """Submit the bundle to the board. Never raises for predictable failures —
         return SubmissionResult(ok=False, error=<FAILURE_*>) instead.
 

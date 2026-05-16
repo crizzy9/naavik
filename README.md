@@ -130,7 +130,7 @@ servicesConfig.apps.tools.naavik = {
 
 ### Development
 
-The repo is **Nix-first**. One command boots Postgres (with pgvector), runs migrations, and starts FastAPI dev with auto-reload:
+The repo is **Nix-first**. One command boots Postgres (with pgvector), runs migrations, seeds the canonical fixture set, and starts FastAPI dev with auto-reload:
 
 ```bash
 nix run .#dev
@@ -146,11 +146,55 @@ nix develop          # or set up direnv to load automatically
 
 `direnv` users: an `.envrc` is included; `direnv allow` once and the shell loads on `cd`.
 
+#### First-time setup (live DB)
+
+`nix run .#dev` is the happy path — orchestrator handles Postgres, migrations, seeding, and FastAPI in one terminal. On the **first** run the orchestrator's `seed` step prints a dev credential to stdout:
+
+```
+[seed] dev user: shyam.padia930@gmail.com
+[seed] dev password: K7nQ2pXa4VtRm9zL  (set NAAVIK_DEV_PASSWORD env to override on next reseed)
+```
+
+Plan 10c (2026-05-12): the credential ALSO lands on disk at `~/.naavik/dev-credentials` (mode 0600, owner-readable only) AND is re-echoed by the `[app]` lifespan ~750 ms after `Application startup complete.`, so it's still visible at the bottom of the orchestrator's scrollback if the `[seed]` line interleaved past your eyes. If you missed it either way, read the file back:
+
+```bash
+cat ~/.naavik/dev-credentials                      # email + password, two lines
+cat ~/.naavik/dev-credentials && rm ~/.naavik/dev-credentials  # shred-after-read
+```
+
+The file is only created when (a) `NAAVIK_DEV_PASSWORD` is unset (so we generated a fresh value), (b) `NAAVIK_DEBUG` / `DEBUG` is truthy (the orchestrator sets it; production stacks don't), and (c) the seeded `Settings.deployment_mode` is `SELF_HOSTED` (cloud-tier installs never persist plaintext creds). Production self-hosters with `DEBUG` unset never see this file.
+
+To pin the credential up-front so future reseeds don't surprise you, export the env var **before** the orchestrator boots:
+
+```bash
+export NAAVIK_DEV_PASSWORD='your-stable-password'
+nix run .#dev
+```
+
+With `NAAVIK_DEV_PASSWORD` set, the `dev-credentials` file is NOT written — operator-supplied creds are the operator's to track.
+
+Then:
+
+1. Visit <http://localhost:8000/login>, sign in with the seeded email + password — JWT cookie is set, you land on Overview.
+2. Visit `/settings/llm-provider`, pick a provider (Anthropic / OpenAI / Ollama), paste your API key, hit **Save**. Test the connection. Cost cards begin populating once real generations run.
+3. Your API key flows through the encrypted vault at `~/.naavik/secrets.enc`; the Settings DB row holds only its SHA-256 fingerprint.
+4. Edit your profile via `/profile/edit`. Per-field autosave persists changes to Postgres immediately — verify with `psql -h 127.0.0.1 -p 5433 -U naavik -d naavik -c "SELECT headline FROM profile WHERE user_id=1"`.
+
+#### Signup (multi-user / fresh-install)
+
+Plan 10b adds a real `POST /api/v1/auth/signup` so a self-hoster on a fresh DB (no seed) can bootstrap an account from the UI:
+
+1. On a fresh DB, hit `/login`, click **Create account**, enter your email + password (≥ 8 characters).
+2. The first user lands as `is_admin=True`. Their default Settings has `allow_multiple_users=False`, which gates subsequent signups.
+3. Once one user exists, additional `POST /api/v1/auth/signup` returns **403** unless an admin flips `Settings.allow_multiple_users=True` (multi-user proper is Phase 2+).
+
+Same brute-force rate limit as `/login` (5 attempts / 15 min / IP).
+
 ### Manual local development setup
 
 The long-form path: Postgres + migrations + FastAPI dev with no Nix orchestrator and no Docker. Use this when you want fine-grained control over each step, or when `nix run .#dev` errors out and you need to bisect what failed.
 
-> **As of plan 10 § B (Wave 4, 2026-05-02)**, the backend substrate is live: 20 SQLModel entities, single Alembic migration, bcrypt+JWT auth, AES-256-GCM vault, LLM provider abstraction. Steps **4–6** below are required for any DB-backed route. Steps **1–3** still work for the static / template-only routes.
+> **As of plan 10b (2026-05-03)**, the backend substrate is live (20+ SQLModel entities, two Alembic migrations, bcrypt+JWT auth + signup endpoint, AES-256-GCM vault, LLM provider abstraction with form-driven Settings UI, Typst document generator + ATS adapters + APScheduler crons). Steps **4–6** below are required for any DB-backed route. Steps **1–3** still work for the static / template-only routes.
 
 **Prerequisites:**
 
@@ -233,11 +277,24 @@ export DATABASE_URL="postgresql+asyncpg://naavik:password@localhost:5432/naavik"
 **6 · Run migrations + seed**
 
 ```bash
-uv run alembic upgrade head     # creates 20 tables + pgvector extension
+uv run alembic upgrade head     # creates all tables + pgvector extension
 uv run python -m db.seed         # populates the seeded fixture set (372 rows; idempotent)
 ```
 
 `db.seed` reads `src/db/sample_data.py` and INSERTs with `ON CONFLICT (id) DO NOTHING`, then bumps each table's autoincrement sequence past the seeded max so subsequent inserts don't collide. Safe to re-run.
+
+The seed prints the dev-user credential — capture it on first run (or pin it via `NAAVIK_DEV_PASSWORD`). On re-runs against an existing DB, the credential stays unchanged and the seed prints a hint about how to reset.
+
+**7 · (Optional) Initialize the encrypted vault**
+
+If you're not seeding (truly bare install) and want to bootstrap the vault yourself:
+
+```bash
+naavik init                      # prompts for SECRET_KEY, writes ~/.naavik/key.bin (mode 0600), creates empty vault
+naavik vault status              # confirms path + fingerprint + scope summary (no secret values)
+```
+
+`naavik init` refuses to overwrite an existing vault — use `naavik vault rotate-key` to change keys instead.
 
 After model changes, generate a new revision:
 
@@ -284,6 +341,7 @@ PORTFOLIO_WEBHOOK_URL=...    # Netlify/Vercel rebuild trigger
 # data/documents/<app_id>/{resume,cover-letter}.pdf — per-application bundle PDFs (Wave 6)
 # data/documents/portfolio/resume.pdf — cached generic resume served by /api/portfolio/resume.pdf
 # data/snapshots/snapshot-YYYY-MM-DD.marker — daily DB snapshot markers (Phase 6 will replace)
+# dev-credentials — plaintext dev login (mode 0600, debug + SELF_HOSTED + generated-password only — plan 10c)
 DATA_DIR=.naavik
 ```
 
@@ -294,9 +352,10 @@ These exist for development and CI; production should leave them unset.
 | Var | Purpose | Default |
 |---|---|---|
 | `NAAVIK_BCRYPT_COST` | bcrypt rounds for password hashing. Set to `4` in tests for ~10× speedup; production uses `12`. Out-of-range values fall back to `12`. | `12` |
-| `NAAVIK_PERSISTENCE` | Sample-data accessor mode. `memory` (default) reads in-memory fixture lists; `db` reads from Postgres via SQLModel. **Wave 4 partial swap** — only the high-traffic read accessors honor `db`; the rest fall back to memory in DB env. Removed in a follow-up cleanup once full DB-mode coverage lands. | `memory` |
+| `NAAVIK_DEV_PASSWORD` | Dev-user password for the seeded `User` row. Set this **before** the first `nix run .#dev` (or `python -m db.seed`) to pin a stable credential; otherwise `db.seed` generates a 16-char alphanumeric value and prints it once. Reseeds against an existing User row never change the hash. | unset → generated |
+| `NAAVIK_PERSISTENCE` | Sample-data accessor mode. `memory` (default for ad-hoc Python invocations) reads in-memory fixture lists; `db` reads from Postgres via SQLModel. **Plan 10b** flipped the orchestrator default to `db`; **plan 10c** added the same default to `nix develop` (and direnv-on-`cd`) so the interactive shell stays in parity. **Wave 4 partial swap** — only the high-traffic read accessors honor `db`; the rest fall back to memory in DB env. Removed in a follow-up cleanup once full DB-mode coverage lands. | `db` (orchestrator + `nix develop` + direnv) · `memory` (bare Python outside the dev shell) |
 | `NAAVIK_LIVE_DB` | Opt-in to the live-DB-gated test suite (`tests/test_seed.py`, the DB-mode tests in `tests/test_persistence_swap.py`, the integration tests in `tests/test_stub_endpoints.py`). Set to `1` together with `DATABASE_URL` to run them. | unset |
-| `NAAVIK_DEBUG` | Legacy gate for `/_design/components`. Wave 4 swapped this to the persisted `Settings.debug` flag; the env var still works as a no-DB fallback so plan-08-era component tests stay green. | unset |
+| `NAAVIK_DEBUG` | Boot-time debug flag. Wave 4 introduced this as the legacy gate for `/_design/components` (the canonical path is now the persisted `Settings.debug` flag; the env var stays as a no-DB fallback). **Plan 10c** also wires this to `app_settings.debug`, gating the seed-time `dev-credentials` file write + the FastAPI lifespan credential echo. The orchestrator (`nix run .#dev`) exports `NAAVIK_DEBUG=1` automatically; production stacks (`docker compose up`, NixOS module) leave it unset. `DEBUG` is accepted as a synonym. | unset (orchestrator: `1`) |
 
 Auth is form-based (email + password) in v1. OIDC support for self-hosted (Authentik / Keycloak / Okta) is on the Phase 2+ roadmap.
 
@@ -347,6 +406,41 @@ rm -rf .naavik/db                 # nuke postgres data dir; nix run .#dev re-ini
 # or, with the orchestrator running:
 uv run alembic downgrade base && uv run alembic upgrade head && uv run python -m db.seed
 ```
+
+### `naavik` CLI
+
+> **Sunset track — do not extend.** The `naavik` script and the encrypted vault it mostly serves are scheduled for removal in Phase 2 (see `ROADMAP.md` § Phase 2 task **2.12** for the vault → env-only-secrets switch, then task **2.11** for the CLI deletion). New operator capabilities — secret rotation, dev-credential retrieval, etc. — ship as Settings UI surfaces or `.env`-based config, not new CLI subcommands. Plan 10c specifically chose `cat ~/.naavik/dev-credentials` over a `naavik dev creds` subcommand for this reason.
+
+Plan 10b promotes the `naavik` script from a 1-line uvicorn launcher to a subcommand-based CLI:
+
+```bash
+naavik                              # default: serve (back-compat)
+naavik serve                        # explicit alias for default
+naavik init                         # generate SECRET_KEY, write ~/.naavik/key.bin (mode 0600), init empty vault
+naavik vault status                 # path + fingerprint + per-scope key counts (NEVER values)
+naavik vault rotate-key --old=...   # see § Rotating SECRET_KEY above
+```
+
+`naavik init` refuses to overwrite an existing vault — the operator must run `naavik vault rotate-key` to change keys, or remove `~/.naavik/secrets.enc` manually for a hard reset. `naavik vault status` prints the stored + expected fingerprints; mismatch means the vault is locked (Settings · Deployment surfaces a rose banner alongside).
+
+### Troubleshooting
+
+#### `greenlet_spawn` / `libstdc++` errors under `nix run .#dev`
+
+If you see `the greenlet library is required to use this function` or `libstdc++.so.6: cannot open shared object file` on the first DB write, your `flake.nix` is older than plan 10b. SQLAlchemy's greenlet bridge dlopens `libstdc++.so.6` and NixOS' Python venv doesn't ship it on the loader path. Pull the latest `flake.nix` (the orchestrator now exports `LD_LIBRARY_PATH=${pkgs.stdenv.cc.cc.lib}/lib`) — same fix `nix/devshell.nix` has had since plan 09.
+
+#### `SECRET_KEY` mismatch / vault locked
+
+If the on-disk vault was encrypted with a `SECRET_KEY` that no longer matches your env, the Settings · Deployment tab renders a rose **Vault locked** banner showing the stored vs expected fingerprint. Two recoveries:
+
+1. Restore the original `SECRET_KEY` env var (the value used when the vault was first created), or
+2. Run `naavik vault rotate-key --old="$OLD" --new="$NEW"` to re-encrypt the vault with the new key, then update your env.
+
+`naavik vault status` shows the same fingerprints from the CLI without standing up the server.
+
+#### UI shows mock-looking data after `nix run .#dev`
+
+Plan 10b sets `NAAVIK_PERSISTENCE=db` in the orchestrator so the high-traffic page handlers read from Postgres. If you're running `uv run fastapi dev` directly (bypassing the orchestrator) and notice that profile edits don't persist, export `NAAVIK_PERSISTENCE=db` in your shell. The `memory` mode is intentional for ad-hoc Python invocations that don't have a live DB on hand.
 
 ## Project Structure
 

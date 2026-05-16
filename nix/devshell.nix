@@ -29,6 +29,13 @@ pkgs.mkShell {
     echo "Naavik dev shell ready"
     export PYTHONPATH="$PWD/src:$PYTHONPATH"
     export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    # Plan 10c (10c.1, 2026-05-11): mirror the orchestrator's default so
+    # `uv run python -m db.seed` and `uv run fastapi dev` inside `nix develop`
+    # (or under direnv on `cd`) hit the live dev Postgres instead of the
+    # in-memory shadow lists. Without this, an operator who drops into the
+    # interactive shell silently runs in memory mode while the orchestrator
+    # ran in db mode — same defect class as 10b items 1/2 on the shell side.
+    export NAAVIK_PERSISTENCE=db
     # Point Playwright at the Nix-provided Chromium so `playwright install`
     # is a no-op when the dev shell ships the browsers.
     export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"

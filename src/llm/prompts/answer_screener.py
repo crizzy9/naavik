@@ -42,9 +42,7 @@ async def answer_screener(
     question_type: str = "TEXTAREA",
     choices: list[str] | None = None,
 ) -> ScreenerAnswer:
-    choices_str = (
-        f"Choices: {choices}" if choices else ""
-    )
+    choices_str = f"Choices: {choices}" if choices else ""
     rendered = PROMPT.format(
         profile=f"{profile.get('full_name')}\n{profile.get('summary_short') or ''}",
         job=f"{job.get('company')} — {job.get('role')}",

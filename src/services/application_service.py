@@ -94,18 +94,14 @@ _FORWARD_FROM: dict[ApplicationStatus, set[ApplicationStatus]] = {
 }
 
 
-def _is_forward_transition(
-    current: ApplicationStatus, target: ApplicationStatus
-) -> bool:
+def _is_forward_transition(current: ApplicationStatus, target: ApplicationStatus) -> bool:
     return target in _FORWARD_FROM.get(current, set())
 
 
 # ── Get / load helpers ──────────────────────────────────────────────────
 
 
-async def get_application(
-    session: AsyncSession, application_id: int
-) -> Application | None:
+async def get_application(session: AsyncSession, application_id: int) -> Application | None:
     return (
         await session.exec(select(Application).where(Application.id == application_id))
     ).one_or_none()
@@ -176,9 +172,7 @@ async def get_or_create_draft(
             )
         return existing
 
-    job = (
-        await session.exec(select(Job).where(Job.id == job_id))
-    ).one_or_none()
+    job = (await session.exec(select(Job).where(Job.id == job_id))).one_or_none()
     if job is None:
         raise ApplicationServiceError(f"job {job_id} not found")
 
@@ -238,9 +232,7 @@ async def _maybe_pre_generate(
     try:
         await pre_generate_fn(session, application, settings=settings)
     except Exception as exc:  # noqa: BLE001 — caller may not want to crash on generation failures
-        log.warning(
-            "pre_generate failed for application %s: %s", application.id, exc
-        )
+        log.warning("pre_generate failed for application %s: %s", application.id, exc)
 
 
 async def queue_auto_apply(
@@ -259,9 +251,7 @@ async def queue_auto_apply(
         settings=settings,
         pre_generate_fn=pre_generate_fn,
     )
-    job = (
-        await session.exec(select(Job).where(Job.id == job_id))
-    ).one_or_none()
+    job = (await session.exec(select(Job).where(Job.id == job_id))).one_or_none()
     if job is not None:
         job.queue_state = JobQueueState.QUEUED_FOR_AUTO_APPLY
         job.updated_at = datetime.now(UTC)
@@ -285,9 +275,7 @@ async def queue_auto_apply(
 # ── Submission (validate + ATS dispatch + state flip) ───────────────────
 
 
-async def validate_submittable(
-    session: AsyncSession, application: Application
-) -> None:
+async def validate_submittable(session: AsyncSession, application: Application) -> None:
     """Raise `ValidationError` if the DRAFT can't be submitted yet.
 
     Rules per plan 10 § C.3:
@@ -296,9 +284,7 @@ async def validate_submittable(
     - all required DRAFTED screener answers must have reviewed_at NOT NULL
     """
     if application.status != ApplicationStatus.DRAFT:
-        raise ValidationError(
-            f"application {application.id} not in DRAFT", code="not_draft"
-        )
+        raise ValidationError(f"application {application.id} not in DRAFT", code="not_draft")
     if application.docs_state != DocsState.READY:
         raise ValidationError(
             "documents not ready (regen the resume first)",
@@ -312,9 +298,7 @@ async def validate_submittable(
         )
 
 
-async def _unreviewed_required_screener_count(
-    session: AsyncSession, application_id: int
-) -> int:
+async def _unreviewed_required_screener_count(session: AsyncSession, application_id: int) -> int:
     stmt = select(func.count(ApplicationScreenerAnswer.id)).where(
         ApplicationScreenerAnswer.application_id == application_id,
         ApplicationScreenerAnswer.required.is_(True),
@@ -327,9 +311,7 @@ async def _unreviewed_required_screener_count(
     return int(result or 0)
 
 
-async def _build_bundle(
-    session: AsyncSession, application: Application
-) -> ApplicationBundle:
+async def _build_bundle(session: AsyncSession, application: Application) -> ApplicationBundle:
     resume = (
         await session.exec(
             select(GeneratedDocument)
@@ -422,9 +404,7 @@ async def submit_draft(
     await validate_submittable(session, application)
 
     if application.board is None:
-        raise ValidationError(
-            "application has no board; cannot dispatch", code="no_board"
-        )
+        raise ValidationError("application has no board; cannot dispatch", code="no_board")
 
     bundle = await _build_bundle(session, application)
     adapter = ats_dispatch(application.board)
@@ -460,15 +440,11 @@ async def submit_draft(
     application.status = ApplicationStatus.APPLIED
     application.applied_at = now
     application.updated_at = now
-    await _record_success(
-        session, application, board_application_id=result.board_application_id
-    )
+    await _record_success(session, application, board_application_id=result.board_application_id)
     session.add(application)
 
     if application.job_id:
-        job = (
-            await session.exec(select(Job).where(Job.id == application.job_id))
-        ).one_or_none()
+        job = (await session.exec(select(Job).where(Job.id == application.job_id))).one_or_none()
         if job is not None:
             job.queue_state = JobQueueState.APPLIED
             job.updated_at = now
@@ -497,17 +473,13 @@ async def submit_draft(
     return application
 
 
-async def discard_draft(
-    session: AsyncSession, application_id: int
-) -> Application:
+async def discard_draft(session: AsyncSession, application_id: int) -> Application:
     """DRAFT → CLOSED `withdrawn_by_me` + soft-delete."""
     application = await get_application(session, application_id)
     if application is None:
         raise ApplicationServiceError(f"application {application_id} not found")
     if application.status != ApplicationStatus.DRAFT:
-        raise IllegalStateTransition(
-            f"can only discard DRAFTs (was {application.status.value})"
-        )
+        raise IllegalStateTransition(f"can only discard DRAFTs (was {application.status.value})")
     now = datetime.now(UTC)
     application.status = ApplicationStatus.CLOSED
     application.closed_reason = ClosedReason.WITHDRAWN_BY_ME
@@ -516,9 +488,7 @@ async def discard_draft(
     session.add(application)
 
     if application.job_id:
-        job = (
-            await session.exec(select(Job).where(Job.id == application.job_id))
-        ).one_or_none()
+        job = (await session.exec(select(Job).where(Job.id == application.job_id))).one_or_none()
         if job is not None and job.queue_state == JobQueueState.QUEUED_FOR_AUTO_APPLY:
             job.queue_state = JobQueueState.SAVED
             job.updated_at = now
@@ -588,9 +558,7 @@ async def process_auto_apply_queue(
     async def _settings_for(uid: int) -> Settings:
         if uid in settings_cache:
             return settings_cache[uid]
-        s = (
-            await session.exec(select(Settings).where(Settings.user_id == uid))
-        ).one_or_none()
+        s = (await session.exec(select(Settings).where(Settings.user_id == uid))).one_or_none()
         if s is None:
             s = Settings(user_id=uid)
         settings_cache[uid] = s
@@ -630,9 +598,7 @@ async def process_auto_apply_queue(
         try:
             await validate_submittable(session, application)
         except ValidationError as exc:
-            log.info(
-                "auto-apply skipped application %s: %s", application.id, exc
-            )
+            log.info("auto-apply skipped application %s: %s", application.id, exc)
             continue
 
         before = application.status
@@ -650,9 +616,7 @@ async def process_auto_apply_queue(
 
         if after.status == ApplicationStatus.APPLIED:
             out.submitted += 1
-            today_count[application.user_id] = today_count.get(
-                application.user_id, 0
-            ) + 1
+            today_count[application.user_id] = today_count.get(application.user_id, 0) + 1
         else:
             out.failed += 1
             # Persistent failure — pull job out of the auto-apply queue.
@@ -740,9 +704,7 @@ _REFERRAL_PRIORITY = {
 }
 
 
-async def _roll_up_referral_state(
-    session: AsyncSession, application_id: int
-) -> ReferralState:
+async def _roll_up_referral_state(session: AsyncSession, application_id: int) -> ReferralState:
     """Application.referral_state = max-priority across all links."""
     links = (
         await session.exec(
@@ -769,9 +731,7 @@ async def _roll_up_referral_state(
     return new_state
 
 
-async def compute_outreach_engagement(
-    session: AsyncSession, application_id: int
-) -> str:
+async def compute_outreach_engagement(session: AsyncSession, application_id: int) -> str:
     """Pure function over OutreachMessage[] + ContactApplicationLink[].
 
     Returns one of `referred / awaiting_reply / cold / active`.
@@ -789,9 +749,7 @@ async def compute_outreach_engagement(
 
     msgs = (
         await session.exec(
-            select(OutreachMessage).where(
-                OutreachMessage.application_id == application_id
-            )
+            select(OutreachMessage).where(OutreachMessage.application_id == application_id)
         )
     ).all()
     if not msgs and not links:
@@ -853,9 +811,7 @@ async def derive_recruiter_states(session: AsyncSession) -> int:
 # ── Stuck-queue surface ────────────────────────────────────────────────
 
 
-async def stuck_drafts(
-    session: AsyncSession, *, user_id: int
-) -> list[Application]:
+async def stuck_drafts(session: AsyncSession, *, user_id: int) -> list[Application]:
     """DRAFTs with `submission_artifacts.last_failure` populated.
 
     Surfaces in Discover right rail "Stuck in queue · {N}" card. Filtered to
@@ -873,7 +829,5 @@ async def stuck_drafts(
         )
     ).all()
     return [
-        a
-        for a in apps
-        if a.submission_artifacts and a.submission_artifacts.get("last_failure")
+        a for a in apps if a.submission_artifacts and a.submission_artifacts.get("last_failure")
     ]

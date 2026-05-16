@@ -36,7 +36,9 @@ async def submit(
     try:
         out = await svc.submit_draft(session, application_id)
     except svc.ValidationError as exc:
-        raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=409, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
     except svc.ApplicationServiceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -109,7 +111,9 @@ async def put_status(
             notes=payload.get("notes"),
         )
     except svc.ValidationError as exc:
-        raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=409, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
     except svc.ApplicationServiceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
@@ -138,9 +142,7 @@ async def move(
         if cr:
             closed_reason = ClosedReason(cr)
     try:
-        await svc.update_status(
-            session, app_id, new_status, closed_reason=closed_reason
-        )
+        await svc.update_status(session, app_id, new_status, closed_reason=closed_reason)
     except svc.ApplicationServiceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()

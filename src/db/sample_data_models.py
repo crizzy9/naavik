@@ -469,6 +469,11 @@ class Settings(_Base):
 
     deployment_mode: DeploymentMode = DeploymentMode.SELF_HOSTED
 
+    # Plan 10b (item 4, 2026-05-03): single-user signup gate. Mirrors the
+    # `Settings.allow_multiple_users` SQLModel column so the shadow stays
+    # round-trippable through `db.seed:_shadow_to_payload`.
+    allow_multiple_users: bool = False
+
     debug: bool = False
 
     created_at: datetime

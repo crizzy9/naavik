@@ -46,9 +46,7 @@ async def _read_pdf_text(path: Path) -> str:
         try:
             from pypdf import PdfReader
         except ImportError as exc:  # pragma: no cover — pypdf is optional in tests
-            raise ExtractionError(
-                "pypdf not installed; run `uv sync` to add the dep"
-            ) from exc
+            raise ExtractionError("pypdf not installed; run `uv sync` to add the dep") from exc
         try:
             reader = PdfReader(str(path))
             return "\n\n".join(page.extract_text() or "" for page in reader.pages)
@@ -125,9 +123,7 @@ async def extract_to_profile_sse(
         except Exception as exc:  # noqa: BLE001
             yield _sse_event("error", {"message": str(exc)})
             return
-        yield _sse_event(
-            "done", {"step": 4, "of": 4, "label": "Profile ready", "complete": True}
-        )
+        yield _sse_event("done", {"step": 4, "of": 4, "label": "Profile ready", "complete": True})
 
     return _gen()
 
@@ -146,9 +142,7 @@ async def _structure_with_llm(
     provider: LLMProvider,
     resume_text: str,
 ) -> dict[str, Any]:
-    schema = __import__(
-        "llm.prompts.extract_resume", fromlist=["ExtractedResume"]
-    ).ExtractedResume
+    schema = __import__("llm.prompts.extract_resume", fromlist=["ExtractedResume"]).ExtractedResume
     prompt = (
         "Extract structured fields from this resume.\n\n"
         f"Resume text:\n{resume_text[:8000]}\n\n"
@@ -177,9 +171,7 @@ async def _persist_profile(
 
     existing = (
         await session.exec(
-            select(Profile).where(
-                Profile.user_id == user_id, Profile.deleted_at.is_(None)
-            )
+            select(Profile).where(Profile.user_id == user_id, Profile.deleted_at.is_(None))
         )
     ).one_or_none()
 

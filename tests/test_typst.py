@@ -46,8 +46,7 @@ def _minimal_resume_data() -> dict:
             "linkedin_handle": "shyampadia",
             "github_handle": "crizzy9",
             "summary_short": (
-                "Backend + ML engineer with 8+ years building "
-                "personalization platforms at scale."
+                "Backend + ML engineer with 8+ years building personalization platforms at scale."
             ),
         },
         "experiences": [
@@ -58,8 +57,7 @@ def _minimal_resume_data() -> dict:
                 "start_date": "Jul 2020",
                 "end_date": None,
                 "bullets": [
-                    "Built ML personalization platform serving 100M+ users; "
-                    "+23% homepage CTR",
+                    "Built ML personalization platform serving 100M+ users; +23% homepage CTR",
                     "Led 3-engineer team migrating legacy services to Kubernetes",
                 ],
             }
@@ -98,9 +96,7 @@ def _minimal_letter_data() -> dict:
         "job": {"company": "Stripe", "role": "Senior Backend Engineer"},
         "letter": {
             "intro": "I'm excited to apply for the Senior Backend Engineer role at Stripe.",
-            "body": (
-                "At Intuit I led the personalization platform that served 100M+ users."
-            ),
+            "body": ("At Intuit I led the personalization platform that served 100M+ users."),
             "why_company": "Stripe's emphasis on durable infrastructure resonates.",
             "close": "I would love to contribute to your team.",
         },

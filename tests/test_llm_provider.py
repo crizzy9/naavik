@@ -92,12 +92,15 @@ def test_provider_rejects_empty_api_key() -> None:
 def test_factory_anthropic() -> None:
     from llm import get_provider
 
-    settings = Settings(user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="claude-3.5-sonnet-20250219")
+    settings = Settings(
+        user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="claude-3.5-sonnet-20250219"
+    )
 
     with patch("services.vault.get", return_value="sk-from-vault"):
         provider = get_provider(settings)
 
     from llm.anthropic import AnthropicProvider
+
     assert isinstance(provider, AnthropicProvider)
     assert provider.model_name == "claude-3.5-sonnet-20250219"
 
@@ -111,6 +114,7 @@ def test_factory_openai() -> None:
         provider = get_provider(settings)
 
     from llm.openai import OpenAIProvider
+
     assert isinstance(provider, OpenAIProvider)
 
 
@@ -123,6 +127,7 @@ def test_factory_ollama_no_vault_lookup() -> None:
     provider = get_provider(settings)
 
     from llm.ollama import OllamaProvider
+
     assert isinstance(provider, OllamaProvider)
 
 
@@ -184,9 +189,11 @@ class _StubProvider(LLMProvider):
 
     async def stream(self, prompt: str, *, max_tokens: int = 1024):
         self.calls += 1
+
         async def gen():
             yield "chunk1"
             yield "chunk2"
+
         return gen()
 
     def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:

@@ -58,9 +58,7 @@ class AshbyAdapter(ATSAdapter):
     def can_submit(self, job: Job) -> bool:
         return _parse_url(job.url) is not None
 
-    async def submit(
-        self, application: Application, bundle: ApplicationBundle
-    ) -> SubmissionResult:
+    async def submit(self, application: Application, bundle: ApplicationBundle) -> SubmissionResult:
         parsed = _parse_url(application.external_url)
         if parsed is None:
             return SubmissionResult(
@@ -120,9 +118,7 @@ class AshbyAdapter(ATSAdapter):
         try:
             response = await client.post(endpoint, data=data, files=files)
         except httpx.RequestError as exc:
-            return SubmissionResult(
-                ok=False, error=FAILURE_UNKNOWN, error_message=str(exc)
-            )
+            return SubmissionResult(ok=False, error=FAILURE_UNKNOWN, error_message=str(exc))
         finally:
             if owns:
                 await client.aclose()
@@ -151,9 +147,8 @@ def _interpret_response(response: httpx.Response) -> SubmissionResult:
             payload = {}
         return SubmissionResult(
             ok=True,
-            board_application_id=str(
-                payload.get("applicationId") or payload.get("id") or ""
-            ) or None,
+            board_application_id=str(payload.get("applicationId") or payload.get("id") or "")
+            or None,
             raw=payload,
         )
     if response.status_code in (401, 403):

@@ -126,9 +126,7 @@ def test_contacts_instantiate() -> None:
 
 
 def test_contact_application_links_instantiate() -> None:
-    items = [
-        _convert(link, ContactApplicationLink) for link in sd.CONTACT_APPLICATION_LINKS
-    ]
+    items = [_convert(link, ContactApplicationLink) for link in sd.CONTACT_APPLICATION_LINKS]
     assert len(items) >= 20
 
 

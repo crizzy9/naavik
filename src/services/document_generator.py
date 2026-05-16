@@ -61,6 +61,7 @@ from typst.compiler import TypstError
 
 log = logging.getLogger(__name__)
 
+
 # Documents directory — relative to DATA_DIR; per-app subdir.
 def _documents_dir() -> Path:
     raw = app_settings.data_dir
@@ -112,9 +113,7 @@ def _hash_jd(text: str | None) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()[:32]
 
 
-async def _latest_resume(
-    session: AsyncSession, application_id: int
-) -> GeneratedDocument | None:
+async def _latest_resume(session: AsyncSession, application_id: int) -> GeneratedDocument | None:
     stmt = (
         select(GeneratedDocument)
         .where(
@@ -171,14 +170,10 @@ class ProfileSnapshot:
     projects: list[Project]
 
 
-async def load_profile_snapshot(
-    session: AsyncSession, user_id: int
-) -> ProfileSnapshot | None:
+async def load_profile_snapshot(session: AsyncSession, user_id: int) -> ProfileSnapshot | None:
     profile = (
         await session.exec(
-            select(Profile).where(
-                Profile.user_id == user_id, Profile.deleted_at.is_(None)
-            )
+            select(Profile).where(Profile.user_id == user_id, Profile.deleted_at.is_(None))
         )
     ).one_or_none()
     if profile is None:
@@ -305,9 +300,7 @@ async def _ai_select_bullets(
     return selected_ids[:max_select]
 
 
-def _render_select_prompt(
-    bullets: list[dict], job: dict, remaining: int
-) -> str:
+def _render_select_prompt(bullets: list[dict], job: dict, remaining: int) -> str:
     lines = "\n".join(f"{b['id']} → {b['text']}" for b in bullets)
     return (
         f"Select the {remaining} most relevant bullets for this job.\n\n"
@@ -349,9 +342,7 @@ async def _trim_one_bullet(
             prompt_name="trim_bullet",
             application_id=application_id,
             prompt=prompt,
-            schema=__import__(
-                "llm.prompts.trim_bullet", fromlist=["TrimmedBullet"]
-            ).TrimmedBullet,
+            schema=__import__("llm.prompts.trim_bullet", fromlist=["TrimmedBullet"]).TrimmedBullet,
         )
         return str(result.value.get("trimmed") or bullet.text)
     except LLMProviderError as exc:
@@ -413,9 +404,7 @@ async def _build_resume_data(
             for e in snap.education
         ],
         "skills": [{"category": s.category, "items": list(s.items)} for s in snap.skills],
-        "projects": [
-            {"title": pr.title, "text": pr.text, "link": pr.link} for pr in snap.projects
-        ],
+        "projects": [{"title": pr.title, "text": pr.text, "link": pr.link} for pr in snap.projects],
     }
 
 
@@ -440,9 +429,7 @@ async def generate_resume(
     if snap is None:
         raise ValueError(f"no profile for user_id={user_id}")
     if job is None and application.job_id is not None:
-        job = (
-            await session.exec(select(Job).where(Job.id == application.job_id))
-        ).one_or_none()
+        job = (await session.exec(select(Job).where(Job.id == application.job_id))).one_or_none()
     if job is None:
         raise ValueError(f"application {application.id} has no job context")
 
@@ -459,9 +446,7 @@ async def generate_resume(
         application_id=application.id,
         max_select=12,
     )
-    selected_bullets: list[Bullet] = [
-        b for b in _bullet_inventory(snap) if b.id in selected_ids
-    ]
+    selected_bullets: list[Bullet] = [b for b in _bullet_inventory(snap) if b.id in selected_ids]
     trimmed: dict[int, str] = {}
     for b in selected_bullets:
         trimmed[b.id] = await _trim_one_bullet(
@@ -516,9 +501,7 @@ async def generate_resume(
             break
         # Drop the last (lowest-priority) bullet and retry.
         dropped = candidate_ids.pop()
-        log.info(
-            "resume overflowed page 1 (attempt %d); dropping bullet %d", attempt + 1, dropped
-        )
+        log.info("resume overflowed page 1 (attempt %d); dropping bullet %d", attempt + 1, dropped)
     else:
         final_result = result  # noqa: F821 — set in last loop iteration
 
@@ -563,9 +546,7 @@ async def generate_cover_letter(
     if snap is None:
         raise ValueError(f"no profile for user_id={user_id}")
     if job is None and application.job_id is not None:
-        job = (
-            await session.exec(select(Job).where(Job.id == application.job_id))
-        ).one_or_none()
+        job = (await session.exec(select(Job).where(Job.id == application.job_id))).one_or_none()
     if job is None:
         raise ValueError(f"application {application.id} has no job context")
 
@@ -734,17 +715,13 @@ async def answer_screeners(
 
     profile_row = (
         await session.exec(
-            select(Profile).where(
-                Profile.user_id == user_id, Profile.deleted_at.is_(None)
-            )
+            select(Profile).where(Profile.user_id == user_id, Profile.deleted_at.is_(None))
         )
     ).one_or_none()
     if profile_row is None:
         raise ValueError(f"no profile for user_id={user_id}")
     if job is None and application.job_id is not None:
-        job = (
-            await session.exec(select(Job).where(Job.id == application.job_id))
-        ).one_or_none()
+        job = (await session.exec(select(Job).where(Job.id == application.job_id))).one_or_none()
 
     # Pull existing rows so we can update in-place where appropriate.
     existing = (
@@ -815,9 +792,7 @@ async def answer_screeners(
                     method="structured",
                     prompt_name="answer_screener",
                     application_id=application.id,
-                    prompt=_render_screener_prompt(
-                        profile_row, job, text, qtype.value, choices
-                    ),
+                    prompt=_render_screener_prompt(profile_row, job, text, qtype.value, choices),
                     schema=__import__(
                         "llm.prompts.answer_screener", fromlist=["ScreenerAnswer"]
                     ).ScreenerAnswer,
@@ -869,9 +844,7 @@ def _render_screener_prompt(
     question_type: str,
     choices: list[str] | None,
 ) -> str:
-    job_str = (
-        f"{job.company} — {job.role}" if job is not None else "(no job context)"
-    )
+    job_str = f"{job.company} — {job.role}" if job is not None else "(no job context)"
     choices_str = f"Choices: {choices}" if choices else ""
     return (
         f"Draft an answer for this screener question.\n\n"
@@ -915,9 +888,7 @@ async def pre_generate(
     `force=True` bypasses both gates (used by manual "Regenerate" actions).
     """
     if job is None and application.job_id is not None:
-        job = (
-            await session.exec(select(Job).where(Job.id == application.job_id))
-        ).one_or_none()
+        job = (await session.exec(select(Job).where(Job.id == application.job_id))).one_or_none()
 
     if not force:
         if await is_cost_capped(session, application.user_id, settings):
@@ -926,12 +897,8 @@ async def pre_generate(
             return PreGenerateResult(skipped_reason="reuse_heuristic")
 
     resume = await generate_resume(session, application, settings=settings, job=job)
-    cover = await generate_cover_letter(
-        session, application, settings=settings, job=job
-    )
-    screeners = await answer_screeners(
-        session, application, settings=settings, job=job
-    )
+    cover = await generate_cover_letter(session, application, settings=settings, job=job)
+    screeners = await answer_screeners(session, application, settings=settings, job=job)
     return PreGenerateResult(resume=resume, cover_letter=cover, screeners=screeners)
 
 

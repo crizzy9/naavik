@@ -107,7 +107,17 @@ class InterviewScheduledPayload(BaseModel):
 
 
 AppEventPayload = Annotated[
-    StatusChangePayload | DocsGeneratedPayload | DocsFailedPayload | ReferralRequestedPayload | ReferralProvidedPayload | EmailReceivedPayload | EmailSentPayload | LinkedInDmSentPayload | LinkedInDmRepliedPayload | NoteAddedPayload | InterviewScheduledPayload,
+    StatusChangePayload
+    | DocsGeneratedPayload
+    | DocsFailedPayload
+    | ReferralRequestedPayload
+    | ReferralProvidedPayload
+    | EmailReceivedPayload
+    | EmailSentPayload
+    | LinkedInDmSentPayload
+    | LinkedInDmRepliedPayload
+    | NoteAddedPayload
+    | InterviewScheduledPayload,
     Field(discriminator="kind"),
 ]
 

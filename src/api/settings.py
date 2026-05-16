@@ -6,20 +6,39 @@ settings endpoints. Plan-09's HTML page route (`GET /settings`) stays in
 
 API key for `PUT /api/v1/settings/llm` flows through the vault (never
 stored on the Settings row directly).
+
+Plan 10b (item 6, 2026-05-03): `PUT /api/v1/settings/llm` now accepts BOTH
+JSON (machine API consumers) and form-encoded (HTMX UI form). The form
+path returns a re-rendered `_settings_llm.html` partial with `save_status`
+set so the existing form swaps in place via outerHTML.
 """
 
 from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+# Plan 10b (item 6): the LLM PUT handler intentionally drops `Body()` from
+# its signature so an HTMX form-encoded body does not trigger FastAPI's
+# JSON parser (which would 422 the request). Body parsing is done inline.
 from db.session import get_session
 from models import LLMProvider as LLMProviderEnum
 from services import settings_service
 
 router = APIRouter()
+
+
+_FORM_CONTENT_TYPES = (
+    "application/x-www-form-urlencoded",
+    "multipart/form-data",
+)
+
+
+def _is_form_request(request: Request) -> bool:
+    ct = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    return ct in _FORM_CONTENT_TYPES
 
 
 @router.get("/api/v1/settings/llm", name="api_settings_llm_get")
@@ -38,23 +57,76 @@ async def get_llm(session: AsyncSession = Depends(get_session)):
 
 @router.put("/api/v1/settings/llm", name="api_settings_llm_put")
 async def put_llm(
-    payload: Annotated[dict[str, Any] | None, Body()] = None,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    payload = payload or {}
+    """Update LLM provider config.
+
+    Two content types are accepted (plan 10b § 6):
+      * `application/x-www-form-urlencoded` (HTMX UI form) → returns the
+        re-rendered `pages/_settings_llm.html` partial as HTML.
+      * `application/json` (machine consumers) → returns JSON with the
+        post-update Settings shape.
+
+    Body is parsed inline — keeping `Body()` in the signature would tempt
+    FastAPI to JSON-decode the form payload and 422 the request.
+    """
+    is_form = _is_form_request(request)
+    if is_form:
+        form = await request.form()
+        # Pydantic / dict semantics: blanks are treated as "no change", not
+        # "explicit null", so the operator can leave the API-key field empty
+        # to keep the previously-stored value.
+        payload = {k: v for k, v in form.items() if str(v).strip()}
+    else:
+        try:
+            payload = await request.json()
+        except Exception:  # noqa: BLE001
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+
     provider = payload.get("llm_provider")
     fallback_provider = payload.get("llm_fallback_provider")
+    api_key = payload.get("api_key") or None
     s = await settings_service.update_llm(
         session,
         user_id=1,
         provider=LLMProviderEnum(provider) if provider else None,
         model=payload.get("llm_model"),
-        api_key=payload.get("api_key"),
-        fallback_provider=(
-            LLMProviderEnum(fallback_provider) if fallback_provider else None
-        ),
+        api_key=api_key,
+        fallback_provider=(LLMProviderEnum(fallback_provider) if fallback_provider else None),
     )
+
+    # Form path may also carry the Ollama base URL — store via vault so it
+    # survives restarts; the on-row Settings stay secret-free.
+    ollama_url = payload.get("ollama_base_url") if is_form else None
+    if ollama_url:
+        from services import vault as vault_svc
+
+        vault_svc.set(
+            "llm",
+            "ollama_base_url",
+            str(ollama_url),
+            caller="settings_llm_form",
+        )
+
     await session.commit()
+
+    if is_form:
+        # Re-render the LLM tab fragment with the post-save state. We have
+        # to import lazily to avoid the circular `api → ui.routes → api`.
+        from ui.routes.settings import _ctx_for_tab
+        from ui.templates_setup import templates as ui_templates
+
+        ctx = await _ctx_for_tab(request, "llm-provider")
+        ctx["save_status"] = "saved"
+        return ui_templates.TemplateResponse(
+            request,
+            "pages/_settings_llm.html",
+            ctx,
+        )
+
     return {
         "llm_provider": s.llm_provider.value,
         "llm_model": s.llm_model,

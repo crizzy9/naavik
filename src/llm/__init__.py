@@ -33,24 +33,25 @@ def get_provider(
     API keys are resolved via the vault — never from `Settings` directly.
     Key for scope `"llm"` is keyed by provider id (`"anthropic"`, `"openai"`).
     """
-    target = (
-        user_settings.llm_fallback_provider
-        if fallback
-        else user_settings.llm_provider
-    )
+    target = user_settings.llm_fallback_provider if fallback else user_settings.llm_provider
     if target is None:
         raise LLMProviderError("no llm_provider configured", kind="auth_required")
 
     if target is LLMProviderEnum.ANTHROPIC:
         from .anthropic import AnthropicProvider
 
-        api_key = vault_svc.get("llm", "anthropic", caller="llm.factory") or app_settings.anthropic_api_key
+        api_key = (
+            vault_svc.get("llm", "anthropic", caller="llm.factory")
+            or app_settings.anthropic_api_key
+        )
         return AnthropicProvider(api_key=api_key or "", model=user_settings.llm_model)
 
     if target is LLMProviderEnum.OPENAI:
         from .openai import OpenAIProvider
 
-        api_key = vault_svc.get("llm", "openai", caller="llm.factory") or app_settings.openai_api_key
+        api_key = (
+            vault_svc.get("llm", "openai", caller="llm.factory") or app_settings.openai_api_key
+        )
         return OpenAIProvider(api_key=api_key or "", model=user_settings.llm_model)
 
     if target is LLMProviderEnum.OLLAMA:

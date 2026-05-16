@@ -95,6 +95,32 @@
             devEnv = ''
               export PATH="${devPath}:$PATH"
               export DATABASE_URL="postgresql+asyncpg://naavik:password@127.0.0.1:5433/naavik"
+              # Plan 10b (item 1, 2026-05-03): SQLAlchemy's greenlet bridge
+              # dlopens libstdc++.so.6 the first time an async DB statement runs.
+              # NixOS' Python venv has no system libstdc++ on the loader's search
+              # path, so the dlopen fails with `cannot open shared object file`
+              # and the greenlet bridge raises ValueError. nix/devshell.nix sets
+              # this for the interactive shell; the orchestrator must do the
+              # same so `nix run .#dev` sees a writable Postgres path.
+              export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+              # Plan 10b (item 2, 2026-05-03): default DB-mode persistence so
+              # the orchestrator's UI reads from Postgres, not the in-memory
+              # fixtures in db/sample_data.py. Wave 4 of plan 10 swapped the
+              # high-traffic accessors (Profile, User, Settings, Experience,
+              # Bullet, Skill, Education, Project, Cert, Job, Application,
+              # discover_queue, applications_visible_in_tracking) to honor this
+              # env. Lower-traffic accessors fall back to in-memory until a
+              # follow-up plan finishes the swap (deferred backlog item B6).
+              export NAAVIK_PERSISTENCE=db
+              # Plan 10c (10c.3, 2026-05-11): flip `app_settings.debug` on so
+              # the `[seed]` step writes `<data_dir>/dev-credentials` (mode
+              # 0600) and the `[app]` lifespan re-emits the credential ~750ms
+              # after startup. Production self-hosters (docker compose / the
+              # NixOS module) leave this unset → no plaintext-credential
+              # artifacts and no lifespan echo. Same env var that already
+              # gates `/_design/components` via the legacy fallback in
+              # `ui/routes/design.py`.
+              export NAAVIK_DEBUG=1
               # Force line-buffered stdout. Without this, when fastapi/alembic
               # stdout is a pipe (not a TTY), Python block-buffers up to 4-8 KB
               # before flushing. That made the FastAPI banner + uvicorn "started"
@@ -187,7 +213,23 @@
               shutdown = setsidShutdown;
             };
 
-            # 3. FastAPI dev server with auto-reload.
+            # 3. Seed the canonical dataset (idempotent — ON CONFLICT DO NOTHING).
+            # Plan 10b (item 3, 2026-05-03): seed prints the dev login credential
+            # to stdout on first run. NAAVIK_DEV_PASSWORD env (when set) keeps
+            # the password stable across reseeds; otherwise a fresh 16-char
+            # value is generated and surfaced in the [seed] log line.
+            # `setsid -w` for the same TTY-detach reason as migrate.
+            seed = {
+              command = ''
+                ${devEnv}
+                exec setsid -w uv run --no-sync python -m db.seed < /dev/null
+              '';
+              depends_on."migrate".condition = "process_completed_successfully";
+              availability.restart = "exit_on_failure";
+              shutdown = setsidShutdown;
+            };
+
+            # 4. FastAPI dev server with auto-reload.
             # No readiness_probe by design: nothing depends on app being healthy
             # (it's the leaf of the chain), so the probe was purely cosmetic.
             # The probe used to fire at t=2s before fastapi finished binding
@@ -195,7 +237,6 @@
             # `connection refused` line every run. Without the probe, app is
             # marked "running" once the process is alive — verify it's actually
             # serving by hitting <http://localhost:8000> in a browser.
-            # 3. FastAPI dev server with auto-reload.
             # Plan 10a (PC.1, 2026-05-02 — revised): `setsid -w` is the actual
             # cure for the user-reported wedge. fastapi-cli opens `/dev/tty`
             # for terminal-detection (Rich / Click), and when process-compose
@@ -210,7 +251,7 @@
                 ${devEnv}
                 exec setsid -w uv run --no-sync fastapi dev src/main.py < /dev/null
               '';
-              depends_on."migrate".condition = "process_completed_successfully";
+              depends_on."seed".condition = "process_completed_successfully";
               shutdown = setsidShutdown;
             };
           };

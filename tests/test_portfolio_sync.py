@@ -181,12 +181,8 @@ async def test_regenerate_generic_resume_calls_generator(tmp_path):
         output_path.write_bytes(b"%PDF-fake")
         return SimpleNamespace(byte_size=8, page_count=1)
 
-    with patch(
-        "services.portfolio_sync.portfolio_resume_path", return_value=out
-    ):
-        result = await regenerate_generic_resume(
-            settings=settings, generate_fn=fake_gen
-        )
+    with patch("services.portfolio_sync.portfolio_resume_path", return_value=out):
+        result = await regenerate_generic_resume(settings=settings, generate_fn=fake_gen)
     assert result == out
     assert out.exists()
 
@@ -199,12 +195,8 @@ async def test_regenerate_generic_resume_handles_failure(tmp_path):
     async def failing_gen(*a, **kw):
         raise RuntimeError("compile bombed")
 
-    with patch(
-        "services.portfolio_sync.portfolio_resume_path", return_value=out
-    ):
-        result = await regenerate_generic_resume(
-            settings=settings, generate_fn=failing_gen
-        )
+    with patch("services.portfolio_sync.portfolio_resume_path", return_value=out):
+        result = await regenerate_generic_resume(settings=settings, generate_fn=failing_gen)
     assert result is None
 
 

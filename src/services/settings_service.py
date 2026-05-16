@@ -196,16 +196,39 @@ async def update_account_password(
 
 
 async def get_deployment_info(session: AsyncSession, user_id: int) -> dict[str, Any]:
-    """Return the bundle Settings · Deployment renders."""
+    """Return the bundle Settings · Deployment renders.
+
+    Plan 10b (item 7, 2026-05-03): also exposes the vault status as top-level
+    `vault_locked`, `vault_fingerprint_stored`, `vault_fingerprint_expected`
+    fields so the rendered Jinja template can read them without dereffing
+    a nested dict. The legacy nested `vault.{...}` block stays for any
+    JSON consumer that already pinned to it.
+    """
     s = await get_or_create(session, user_id)
+
+    try:
+        stored = vault_svc.fingerprint()
+    except Exception:  # noqa: BLE001
+        stored = None
+    try:
+        expected = vault_svc.expected_fingerprint()
+    except Exception:  # noqa: BLE001
+        expected = None
+    try:
+        locked = vault_svc.is_locked()
+    except Exception:  # noqa: BLE001
+        locked = False
 
     return {
         "deployment_mode": s.deployment_mode.value,
         "vault": {
-            "fingerprint": vault_svc.fingerprint(),
-            "expected_fingerprint": vault_svc.expected_fingerprint(),
-            "is_locked": vault_svc.is_locked(),
+            "fingerprint": stored,
+            "expected_fingerprint": expected,
+            "is_locked": locked,
         },
+        "vault_locked": bool(locked),
+        "vault_fingerprint_stored": stored,
+        "vault_fingerprint_expected": expected,
         "debug": s.debug,
         "settings_user_id": s.user_id,
     }

@@ -71,9 +71,7 @@ async def get_experience(session: AsyncSession, experience_id: int) -> Experienc
     return (await session.exec(stmt)).one_or_none()
 
 
-async def get_bullets_for_experience(
-    session: AsyncSession, experience_id: int
-) -> list[Bullet]:
+async def get_bullets_for_experience(session: AsyncSession, experience_id: int) -> list[Bullet]:
     stmt = (
         select(Bullet)
         .where(Bullet.experience_id == experience_id, Bullet.deleted_at.is_(None))

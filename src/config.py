@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +31,16 @@ class Settings(BaseSettings):
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
+
+    # Plan 10c (10c.3, 2026-05-11): boot-time debug flag used by the seed-time
+    # `dev-credentials` file write + the FastAPI lifespan credential echo.
+    # Read from either `NAAVIK_DEBUG` (consolidates with the legacy gate in
+    # `ui/routes/design.py`) or plain `DEBUG`. Production (`docker compose up`
+    # / NixOS module) leaves it unset → no dev-credentials artifacts.
+    debug: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("NAAVIK_DEBUG", "DEBUG"),
+    )
 
 
 settings = Settings()

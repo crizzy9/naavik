@@ -202,9 +202,7 @@ def _bullet_row_response(request: Request, bullet) -> HTMLResponse:
                 "text": bullet.text,
                 "tags": list(bullet.tags or []),
                 "selection_override": (
-                    bullet.selection_override.value
-                    if bullet.selection_override
-                    else None
+                    bullet.selection_override.value if bullet.selection_override else None
                 ),
                 "edited": True,
                 "edited_at_display": "just now",

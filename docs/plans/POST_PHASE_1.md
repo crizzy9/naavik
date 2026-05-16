@@ -33,7 +33,7 @@ After plan 10 Wave 6 ships, the deliverable line in `ROADMAP.md` § Phase 1 is s
 Concretely, **end-to-end smoke after Phase 1**:
 
 1. `nix run .#dev` boots Postgres + alembic + FastAPI in one terminal.
-2. Visit `http://localhost:8000/login`. Log in as the seeded user (Shyam).
+2. Visit `http://localhost:8000/login`. Log in as the seeded user (Shyam). (Plan 10c: the credential prints on first boot AND lands at `~/.naavik/dev-credentials` (mode 0600) for later retrieval via `cat`; the `[app]` lifespan also re-echoes it ~750 ms after startup so it's near the bottom of the orchestrator's scrollback.)
 3. Land on Overview. Real KPIs from seeded `Application` rows. Email signal feed shows seeded `EmailThread` rows. Pipeline strip shows 5 stages.
 4. Visit `/profile/edit`. Edit a bullet via the modal. Autosave indicator cycles `saving → saved`. Tag picker toggles. Drag a bullet to reorder — Sortable.js fires the reorder API; bullet order persists across reload.
 5. Visit `/discover`. The seeded queue is sorted by score. Skip / Save / Auto-apply work via keyboard (←/↑/→). Auto-apply right-swipe creates a DRAFT; the queue advances.

@@ -119,7 +119,6 @@ class Application(SQLModel, table=True):
     )
 
 
-
 class GeneratedDocument(SQLModel, table=True):
     __tablename__ = "generated_document"
     __table_args__ = (
@@ -159,7 +158,6 @@ class GeneratedDocument(SQLModel, table=True):
     )
 
 
-
 class ApplicationScreenerAnswer(SQLModel, table=True):
     __tablename__ = "application_screener_answer"
 
@@ -192,7 +190,6 @@ class ApplicationScreenerAnswer(SQLModel, table=True):
         default_factory=utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
-
 
 
 class ATSCredential(SQLModel, table=True):

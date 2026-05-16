@@ -1,0 +1,57 @@
+{#
+  _settings_llm_api_key_field.html — API-key + auxiliary inputs for one provider.
+
+  Args:
+    provider_id        : "anthropic" / "openai" / "ollama"
+    placeholder        : str — input placeholder ("sk-ant-…" etc.)
+    has_existing_key   : bool — render "current key set" hint
+    ollama_base_url    : str | None — current OLLAMA_BASE_URL value (Ollama only)
+
+  Anthropic / OpenAI: API key required → password input + Test button.
+  Ollama: API key not required → input hidden, OLLAMA_BASE_URL field shown instead.
+#}
+{% if provider_id == "ollama" %}
+  <div>
+    {% with label="OLLAMA BASE URL", for_id="llm-ollama-url" %}
+      {% include "components/field_label.html" %}
+    {% endwith %}
+    {% with name="ollama_base_url", type="url", id="llm-ollama-url", mono=true,
+            placeholder="http://localhost:11434",
+            value=(ollama_base_url or "") %}
+      {% include "components/input.html" %}
+    {% endwith %}
+    <p class="mt-2 text-xs text-slate-500">
+      Local provider — no API key required. Tests hit
+      <code class="font-mono">$OLLAMA_BASE_URL/api/tags</code>.
+    </p>
+    {# Hidden empty field so the form payload always includes the api_key
+       parameter; the PUT handler treats blank as "no change". #}
+    <input type="hidden" name="api_key" value="">
+  </div>
+{% else %}
+  <div>
+    {% with label="API KEY", for_id="llm-api-key", hint="show / hide via icon" %}
+      {% include "components/field_label.html" %}
+    {% endwith %}
+    <div class="flex items-stretch gap-2">
+      {% with name="api_key", type="password", id="llm-api-key", mono=true,
+              placeholder=placeholder, value="" %}
+        {% include "components/input.html" %}
+      {% endwith %}
+      <button type="button"
+              class="inline-flex items-center justify-center gap-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm transition shrink-0"
+              hx-post="/_fragments/settings/test-connection?provider={{ provider_id }}"
+              hx-target="#llm-test-result"
+              hx-swap="innerHTML">
+        <i data-lucide="zap" class="h-4 w-4" stroke-width="1.5"></i>
+        Test connection
+      </button>
+    </div>
+    {% if has_existing_key %}
+      <p class="mt-2 text-xs text-slate-500">
+        A key for <strong>{{ provider_id }}</strong> is already stored — leave blank to keep it.
+      </p>
+    {% endif %}
+    <div id="llm-test-result" class="mt-3 min-h-[44px]"></div>
+  </div>
+{% endif %}

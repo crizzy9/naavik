@@ -2,7 +2,9 @@
 
 > **For Claude Code sessions.**
 > **Canonical guide:** `AGENTS.md` — always read that first.
-> **Last updated:** 2026-05-03 (Wave 6 / plan 10 § C EXECUTED — operational paths under `~/.naavik/data/documents/{<app_id>,portfolio}/` + `~/.naavik/data/snapshots/` + APScheduler crons + new deps `apscheduler` + `pypdf`)
+> **Last updated:** 2026-05-12 (Plan 10c EXECUTED — first-time-setup ergonomics paper cut. New operational surface: `~/.naavik/dev-credentials` (mode 0600, written only when `NAAVIK_DEBUG` is set AND `NAAVIK_DEV_PASSWORD` is unset AND the seeded `Settings.deployment_mode == SELF_HOSTED`). Plain `cat ~/.naavik/dev-credentials` is the canonical retrieval path — **NOT** a new CLI subcommand: `AGENTS.md` § Key Conventions § CLI codifies the "do not extend" rule (CLI sunset per ROADMAP § Phase 2 task 2.11; vault deprecation per task 2.12). `nix develop` shellHook also exports `NAAVIK_PERSISTENCE=db` for parity with the orchestrator, and `flake.nix:devEnv` exports `NAAVIK_DEBUG=1` so the lifespan credential echo + on-disk file fire under `nix run .#dev`. New config field `Settings.debug` (config.py) reads `NAAVIK_DEBUG` / `DEBUG` via pydantic-settings alias.)
+>
+> Earlier line: 2026-05-03 (Wave 5 / plan 10 § C EXECUTED + plan 10b EXECUTED — operational paths under `~/.naavik/data/documents/{<app_id>,portfolio}/` + `~/.naavik/data/snapshots/` + `~/.naavik/secrets.enc` + `~/.naavik/key.bin` + APScheduler crons + new deps `apscheduler` + `pypdf`. ROADMAP's canonical Wave numbers are 4 (plan 10 § B) and 5 (plan 10 § C); the plan body's "Wave 3 / Wave 6" labels are aliases. New env vars: `NAAVIK_DEV_PASSWORD` (seeded credential override), `NAAVIK_PERSISTENCE` (now defaults to `db` under the orchestrator).)
 
 This file provides Claude Code-specific guidance. For general project conventions, architecture, and the design workflow, see `AGENTS.md`.
 

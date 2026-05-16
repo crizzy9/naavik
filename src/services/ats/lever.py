@@ -31,9 +31,7 @@ from .base import (
 log = logging.getLogger(__name__)
 
 _API = "https://api.lever.co/v0"
-_URL_PATTERN = re.compile(
-    r"https?://jobs\.lever\.co/(?P<site>[^/]+)/(?P<posting_id>[a-zA-Z0-9-]+)"
-)
+_URL_PATTERN = re.compile(r"https?://jobs\.lever\.co/(?P<site>[^/]+)/(?P<posting_id>[a-zA-Z0-9-]+)")
 
 
 def _parse_url(url: str | None) -> tuple[str, str] | None:
@@ -57,9 +55,7 @@ class LeverAdapter(ATSAdapter):
     def can_submit(self, job: Job) -> bool:
         return _parse_url(job.url) is not None
 
-    async def submit(
-        self, application: Application, bundle: ApplicationBundle
-    ) -> SubmissionResult:
+    async def submit(self, application: Application, bundle: ApplicationBundle) -> SubmissionResult:
         parsed = _parse_url(application.external_url)
         if parsed is None:
             return SubmissionResult(
@@ -102,9 +98,7 @@ class LeverAdapter(ATSAdapter):
         try:
             response = await client.post(endpoint, data=data, files=files)
         except httpx.RequestError as exc:
-            return SubmissionResult(
-                ok=False, error=FAILURE_UNKNOWN, error_message=str(exc)
-            )
+            return SubmissionResult(ok=False, error=FAILURE_UNKNOWN, error_message=str(exc))
         finally:
             if owns:
                 await client.aclose()

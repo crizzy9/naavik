@@ -84,8 +84,7 @@ def _make_experience(eid: int, profile_id: int = 1):
     )
 
 
-def _make_bullet(bid: int, exp_id: int, text: str, override=None, tags=None,
-                 edited_at=None):
+def _make_bullet(bid: int, exp_id: int, text: str, override=None, tags=None, edited_at=None):
     return SimpleNamespace(
         id=bid,
         experience_id=exp_id,
@@ -162,8 +161,7 @@ def test_auto_field_for_question_recognizes_canonical_questions():
         == "visa_sponsorship_needed"
     )
     assert (
-        dg._auto_field_for_question("What is your salary expectation?")
-        == "salary_expectation_usd"
+        dg._auto_field_for_question("What is your salary expectation?") == "salary_expectation_usd"
     )
     assert dg._auto_field_for_question("Why Stripe?") is None
 
@@ -199,9 +197,7 @@ async def test_cost_cap_short_circuits_before_llm_calls():
         patch("services.document_generator._today_spend", new=AsyncMock(return_value=0.05)),
         pytest.raises(CostCapExceededError),
     ):
-        await generate_resume(
-            fake_session, application, settings=settings, job=_make_job()
-        )
+        await generate_resume(fake_session, application, settings=settings, job=_make_job())
 
 
 @pytest.mark.asyncio
@@ -222,9 +218,7 @@ async def test_cost_cap_pre_generate_returns_skipped_reason():
         patch.object(fake_session, "exec", new=AsyncMock()) as exec_mock,
     ):
         exec_mock.return_value.one_or_none = AsyncMock(return_value=_make_job())
-        result = await pre_generate(
-            fake_session, application, settings=settings, job=_make_job()
-        )
+        result = await pre_generate(fake_session, application, settings=settings, job=_make_job())
     assert isinstance(result, PreGenerateResult)
     assert result.skipped_reason == "cost_cap_reached"
     assert result.resume is None
@@ -387,9 +381,7 @@ async def test_answer_screeners_drafts_custom_question_via_llm():
     questions = [{"question_text": "Why Stripe?", "question_type": "textarea"}]
 
     with (
-        patch(
-            "services.document_generator.get_provider", return_value=fake_provider
-        ),
+        patch("services.document_generator.get_provider", return_value=fake_provider),
         patch(
             "services.document_generator.llm_tracker.tracked_call",
             new=fake_tracked_call,
@@ -476,9 +468,7 @@ async def test_generate_resume_honors_always_include(tmp_path):
     pinned = _make_bullet(
         1, 1, "Pinned forever - this must show up", override=BulletSelectionOverride.ALWAYS_INCLUDE
     )
-    skipped = _make_bullet(
-        2, 1, "NEVER show this", override=BulletSelectionOverride.NEVER_INCLUDE
-    )
+    skipped = _make_bullet(2, 1, "NEVER show this", override=BulletSelectionOverride.NEVER_INCLUDE)
     auto1 = _make_bullet(3, 1, "Auto-decide bullet A")
     auto2 = _make_bullet(4, 1, "Auto-decide bullet B")
     skill = SimpleNamespace(
@@ -534,9 +524,7 @@ async def test_generate_resume_honors_always_include(tmp_path):
             new=fake_select_bullets,
         ),
     ):
-        doc = await generate_resume(
-            fake_session, application, settings=settings, job=job
-        )
+        doc = await generate_resume(fake_session, application, settings=settings, job=job)
     assert doc.kind.value == "resume"
     selected = doc.bullet_selection["selected_ids"]
     assert 1 in selected, "always_include bullet must be selected"
@@ -608,9 +596,7 @@ async def test_pre_generate_force_bypasses_reuse_and_cost_cap():
         # functions get called.)
         exec_result = SimpleNamespace(one_or_none=lambda: _make_job())
         fake_session.exec = AsyncMock(return_value=exec_result)
-        result = await pre_generate(
-            fake_session, application, settings=settings, force=True
-        )
+        result = await pre_generate(fake_session, application, settings=settings, force=True)
     assert result.skipped_reason is None
     assert result.resume is not None
     assert result.cover_letter is not None

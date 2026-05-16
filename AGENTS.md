@@ -1,7 +1,7 @@
 # Naavik — Agent Guide
 
 > **This is the canonical reference for AI agents working on Naavik.**
-> **Last updated:** 2026-04-30
+> **Last updated:** 2026-05-10 (§ Key Conventions § CLI — both the `naavik` script AND the encrypted vault are on a sunset track per ROADMAP § Phase 2 tasks 2.12 (vault → env-based secrets) and 2.11 (CLI deletion, sequenced after 2.12). Do NOT extend either; new operator features ship as Settings UI or `.env.example` slots.)
 > **Always read this before starting work.**
 
 ---
@@ -156,6 +156,19 @@ When you need to know what's currently in any of these directories, **list them*
 - Optional per-bullet `selection_override`: `always_include`, `never_include`, or `null` (default — AI auto-decides per JD)
 - AI selects/deselects bullets per job based on tag relevance + JD signals; the override pins the result when the user wants manual control
 - **Removed from earlier drafts:** `oneline`, `detailed`, `default_include`, metric fields (revenue / percentage / team_size). See `docs/design/SCREENS.md` § Section 6 for the canonical bullet editor spec.
+
+### CLI (sunset track — do not extend)
+
+The `naavik` script (`serve`, `init`, `vault status`, `vault rotate-key`) shipped in plan 10b for first-install bootstrap and operator vault hygiene. Both the script AND the encrypted vault are on a **sunset track**:
+
+- `ROADMAP.md` § Phase 2 **task 2.12** — vault deprecation. Delete `src/services/vault.py` + the AES-GCM/PBKDF2/audit-log machinery; switch to standard self-hosted-app pattern (env-based secrets via gitignored `.env`).
+- `ROADMAP.md` § Phase 2 **task 2.11** — CLI sunset. Sequenced AFTER 2.12: most of the CLI's reason-to-exist (`init`, `vault status`, `vault rotate-key`) is the vault, so 2.12 leaves only `serve` to delete.
+
+**Rule:** do **not** add new subcommands to `naavik` in interim plans, and do **not** extend the vault either. New operator capability — secret rotation, dev-credential retrieval, anything that today might feel like "this should be a CLI command" — either ships as a **Settings UI surface** (read-only "configured via env" indicator post-2.12) or, for genuinely-secret material, lands in `.env` per the 2.12 pattern. Don't write helpers that pretend the vault has a future.
+
+Why: the CLI is also not actually reachable today (`uv run naavik` is required because `.venv/bin` isn't on PATH inside `nix develop`), and the encrypted vault is being removed in favor of a simpler env-based pattern that matches what every other self-hosted app does. Leaning on either today doubles down on a path we're walking away from. `naavik-alembic` stays — that's alembic's own CLI surface, not a Naavik feature.
+
+If you find yourself wanting to add a `naavik <thing>` subcommand or a new vault scope/key, stop and design the equivalent Settings UI flow OR add it to `.env.example` (post-2.12). Document any deferral on the relevant plan as a deviation pointing at task 2.11 / 2.12.
 
 ---
 

@@ -117,3 +117,117 @@ async def test_seed_idempotent():
         assert len(after) == before_count
     await engine.dispose()
     await engine2.dispose()
+
+
+async def test_seeded_user_password_hash_is_real_bcrypt():
+    """Plan 10b (item 3): seeded User.password_hash MUST be a real bcrypt hash
+    that `verify_password` accepts when given the matching plaintext.
+
+    The CI runner sets `NAAVIK_DEV_PASSWORD` so the credential is stable across
+    runs; we read the same env to recover the plaintext for verification.
+    """
+    from services.auth import verify_password
+
+    expected_password = os.environ.get("NAAVIK_DEV_PASSWORD")
+    if not expected_password:
+        pytest.skip("NAAVIK_DEV_PASSWORD not set — can't recover the seeded plaintext")
+
+    sm, engine = _fresh_session()
+    async with sm() as session:
+        user = (await session.scalars(select(User).where(User.id == 1))).first()
+        assert user is not None
+        # The placeholder bcrypt string from the in-memory shadow must be GONE.
+        assert "placeholder.hash.for.dev.password" not in user.password_hash
+        # Real bcrypt hash → bcrypt prefix
+        assert user.password_hash.startswith("$2b$")
+        # And the env-provided plaintext verifies.
+        assert verify_password(expected_password, user.password_hash) is True
+        # Wrong plaintext fails
+        assert verify_password("definitely-not-the-pw", user.password_hash) is False
+    await engine.dispose()
+
+
+# ── Plan 10c (10c.3a) — dev-credentials file ────────────────────────────
+
+
+async def test_seed_writes_dev_credentials_when_generated_in_debug_mode(monkeypatch, tmp_path):
+    """When `dev_password_source == "generated"` AND `app_settings.debug` is
+    True AND the seeded Settings are SELF_HOSTED, `db.seed.seed()` MUST
+    persist `<data_dir>/dev-credentials` at mode 0600 with the canonical
+    two-line format.
+
+    Plan 10c (10c.3a, 2026-05-11). Live-DB test — the User row must NOT
+    already exist (the file is only written on a fresh-seed path), so we
+    drop everything via downgrade/upgrade through alembic before seeding.
+    """
+    import stat
+
+    from config import settings as app_settings
+    from db import seed as seed_mod
+
+    # Use a tmp_path so the test doesn't write into the operator's
+    # `./.naavik/dev-credentials` mid-development.
+    monkeypatch.setattr(app_settings, "data_dir", str(tmp_path))
+    monkeypatch.setattr(app_settings, "debug", True)
+
+    # Force the generated-password code path even if NAAVIK_DEV_PASSWORD is
+    # set in the CI environment (which it usually is for stable creds).
+    monkeypatch.delenv("NAAVIK_DEV_PASSWORD", raising=False)
+
+    # Wipe every seeded row so seed() takes the fresh-user branch + writes
+    # the file. We delete in reverse dependency order to dodge FK violations.
+    from sqlalchemy import text
+
+    sm, engine = _fresh_session()
+    async with sm() as session:
+        await session.execute(text('TRUNCATE TABLE "user" RESTART IDENTITY CASCADE'))
+        await session.commit()
+    await engine.dispose()
+
+    await seed_mod.seed()
+
+    creds_path = tmp_path / "dev-credentials"
+    assert creds_path.exists(), f"{creds_path} should exist after generated-mode seed"
+    # Mode 0600 — owner-readable only.
+    mode = stat.S_IMODE(creds_path.stat().st_mode)
+    assert mode == 0o600, f"expected mode 0600, got {oct(mode)}"
+    # Canonical two-line format.
+    content = creds_path.read_text()
+    assert "email: " in content
+    assert "password: " in content
+    # Email matches the seeded fixture.
+    from db import sample_data as sd
+
+    assert f"email: {sd.USER.email}" in content
+
+
+async def test_seed_skips_dev_credentials_when_password_from_env(monkeypatch, tmp_path):
+    """When `NAAVIK_DEV_PASSWORD` is exported, the dev-credentials file MUST
+    NOT be written — env-supplied passwords are owned by the operator;
+    echoing them back to disk is noise and a security smell.
+
+    Plan 10c (10c.3a, 2026-05-11).
+    """
+    from sqlalchemy import text
+
+    from config import settings as app_settings
+    from db import seed as seed_mod
+
+    monkeypatch.setattr(app_settings, "data_dir", str(tmp_path))
+    monkeypatch.setattr(app_settings, "debug", True)
+    monkeypatch.setenv("NAAVIK_DEV_PASSWORD", "test-stable-pw")
+
+    # Fresh slate so seed() takes the fresh-user branch.
+    sm, engine = _fresh_session()
+    async with sm() as session:
+        await session.execute(text('TRUNCATE TABLE "user" RESTART IDENTITY CASCADE'))
+        await session.commit()
+    await engine.dispose()
+
+    await seed_mod.seed()
+
+    creds_path = tmp_path / "dev-credentials"
+    assert not creds_path.exists(), (
+        f"{creds_path} must NOT be written when NAAVIK_DEV_PASSWORD is set "
+        "(env-supplied creds are operator-owned)"
+    )
