@@ -255,6 +255,80 @@ def test_login_signup_mode_renders_banner_on_seeded_db(client: TestClient, monke
     assert 'stroke-width="1.5"' in body
 
 
+# ── Plan 18 (PC.6) — /auth/change-password page ─────────────────────────
+
+
+def _fake_flagged_user():
+    """Return an in-memory User flagged must_change_password=True. Used by
+    `app.dependency_overrides[get_current_user]` to bypass DB lookup.
+    """
+    from models import User
+
+    return User(
+        id=1,
+        email="dev@local",
+        password_hash="$2b$04$placeholder.hash.for.test.only",
+        is_active=True,
+        is_admin=True,
+        must_change_password=True,
+    )
+
+
+def _fake_unflagged_user():
+    from models import User
+
+    return User(
+        id=1,
+        email="dev@local",
+        password_hash="$2b$04$placeholder.hash.for.test.only",
+        is_active=True,
+        is_admin=True,
+        must_change_password=False,
+    )
+
+
+def test_change_password_page_renders_with_banner_when_flagged(client: TestClient):
+    """Plan 18 (PC.6): when must_change_password=True, the amber banner +
+    "Set a new password" heading + HTMX form wire show up.
+    """
+    from main import app
+    from services.auth import get_current_user
+
+    app.dependency_overrides[get_current_user] = _fake_flagged_user
+    try:
+        r = client.get("/auth/change-password")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert r.status_code == 200
+    body = r.text
+    assert "Change your password to continue" in body
+    assert "Set a new password" in body
+    assert 'hx-post="/api/v1/auth/change-password"' in body
+    assert 'data-lucide="key-round"' in body
+    assert 'data-must-change-banner="true"' in body
+
+
+def test_change_password_page_no_banner_when_not_flagged(client: TestClient):
+    """Voluntary change-password mode: no banner, "Change password" heading,
+    "Back to Overview" affordance present.
+    """
+    from main import app
+    from services.auth import get_current_user
+
+    app.dependency_overrides[get_current_user] = _fake_unflagged_user
+    try:
+        r = client.get("/auth/change-password")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert r.status_code == 200
+    body = r.text
+    assert "Change your password to continue" not in body
+    assert "← Back to Overview" in body
+    assert 'data-must-change-banner="true"' not in body
+
+
 # ── Plan 10b (item 7) — Settings · Deployment vault-locked banner ────────
 
 

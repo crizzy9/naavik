@@ -28,6 +28,14 @@ class User(SQLModel, table=True):
     is_active: bool = Field(default=True)
     is_admin: bool = Field(default=False)
 
+    # Plan 18 (PC.6, 2026-05-17): set True at seed time when the dev password
+    # is server-generated (no NAAVIK_DEV_PASSWORD override). Cleared on the
+    # first successful POST /api/v1/auth/change-password that satisfies
+    # services.auth.validate_password_complexity. While True,
+    # services.auth.require_password_complete redirects every authed request
+    # to /auth/change-password.
+    must_change_password: bool = Field(default=False)
+
     created_at: datetime = Field(
         default_factory=utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),

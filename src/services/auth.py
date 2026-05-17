@@ -47,6 +47,30 @@ _LOGIN_ATTEMPT_THRESHOLD = 5
 _login_attempts: dict[str, deque[datetime]] = {}
 
 
+# ── Password complexity (plan 18 / PC.6) ─────────────────────────────────
+
+PASSWORD_MIN_LENGTH = 12
+
+
+def validate_password_complexity(plain: str) -> str | None:
+    """Return None if `plain` meets PC.6 rules; else a user-facing message.
+
+    Stop-at-first-violation order: empty → length → letter → digit. Caller
+    renders the returned string in the `_login_error_card` HTMX swap.
+    Constant-time-ness not relevant — runs on operator-typed plaintext, not
+    on a credential that could leak via timing.
+    """
+    if not plain:
+        return "Password must not be empty."
+    if len(plain) < PASSWORD_MIN_LENGTH:
+        return f"Password must be at least {PASSWORD_MIN_LENGTH} characters."
+    if not any("a" <= c.lower() <= "z" for c in plain):
+        return "Password must contain at least one letter (a-z)."
+    if not any("0" <= c <= "9" for c in plain):
+        return "Password must contain at least one digit (0-9)."
+    return None
+
+
 # ── Password hashing ─────────────────────────────────────────────────────
 
 
@@ -69,6 +93,18 @@ def hash_password(plain: str) -> str:
         raise ValueError("password must not be empty")
     salt = bcrypt.gensalt(rounds=_bcrypt_cost())
     return bcrypt.hashpw(plain.encode("utf-8"), salt).decode("utf-8")
+
+
+def hash_password_with_complexity_check(plain: str) -> str:
+    """`hash_password` after validating PC.6 complexity. Canonical entry
+    point for plaintext-entry auth routes; bare `hash_password` is reserved
+    for seed (which generates passwords that satisfy the rules by
+    construction) and tests that need to inject known weak hashes.
+    """
+    err = validate_password_complexity(plain)
+    if err is not None:
+        raise ValueError(err)
+    return hash_password(plain)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -231,6 +267,30 @@ async def get_current_user(
     user = await get_user_by_id(session, user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
+    return user
+
+
+async def require_password_complete(
+    user: User = Depends(get_current_user),
+) -> User:
+    """Like `get_current_user`, but raises 303 with HX-Redirect when the
+    user must change their password. Wrap every authed route except the
+    change-password page + endpoint with this.
+
+    Plan 18 (PC.6, 2026-05-17). Use `get_current_user` directly only for
+    the /auth/change-password page + POST /api/v1/auth/change-password +
+    POST /api/v1/auth/logout + GET /api/v1/auth/me. Every other authed
+    route uses this.
+    """
+    if user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            detail="Password change required.",
+            headers={
+                "HX-Redirect": "/auth/change-password",
+                "Location": "/auth/change-password",
+            },
+        )
     return user
 
 

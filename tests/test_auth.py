@@ -252,7 +252,8 @@ def test_signup_rejects_short_password() -> None:
         data={"email": "[email protected]", "password": "short"},
     )
     assert r.status_code == 422
-    assert "at least 8 characters" in r.text
+    # Plan 18 (PC.6): the 8-char rule tightened to 12 + complexity.
+    assert "at least 12 characters" in r.text
     assert "naavik_session" not in r.cookies
 
 
@@ -260,7 +261,9 @@ def test_signup_rejects_invalid_email_shape() -> None:
     client = _signup_client()
     r = client.post(
         "/api/v1/auth/signup",
-        data={"email": "not-an-email", "password": "longenoughpw"},
+        # Password meets PC.6 complexity (12+ chars, letter, digit) so the
+        # email-shape check is the only failure surface.
+        data={"email": "not-an-email", "password": "longenoughpw1"},
     )
     assert r.status_code == 422
     assert "valid email" in r.text
@@ -276,3 +279,61 @@ def test_signup_password_round_trips_via_real_bcrypt() -> None:
     # Sample-data fixture must NOT carry a placeholder bcrypt anywhere — that
     # value used to short-circuit verify_password to True even on miss.
     assert "placeholder.hash.for.dev.password" not in hashed
+
+
+# ── Plan 18 (PC.6) — password complexity validator ──────────────────────
+
+
+def test_validate_password_complexity_passes_strong() -> None:
+    from services.auth import validate_password_complexity
+
+    assert validate_password_complexity("StrongPass123") is None
+    assert validate_password_complexity("a" * 12 + "1") is None
+
+
+def test_validate_password_complexity_fails_too_short() -> None:
+    from services.auth import validate_password_complexity
+
+    msg = validate_password_complexity("abc123")
+    assert msg is not None
+    assert "12" in msg
+
+
+def test_validate_password_complexity_fails_no_digit() -> None:
+    from services.auth import validate_password_complexity
+
+    msg = validate_password_complexity("abcdefghijklmn")
+    assert msg is not None
+    assert "digit" in msg.lower()
+
+
+def test_validate_password_complexity_fails_no_letter() -> None:
+    from services.auth import validate_password_complexity
+
+    msg = validate_password_complexity("123456789012345")
+    assert msg is not None
+    assert "letter" in msg.lower()
+
+
+def test_validate_password_complexity_empty() -> None:
+    from services.auth import validate_password_complexity
+
+    msg = validate_password_complexity("")
+    assert msg is not None
+
+
+def test_hash_password_with_complexity_check_rejects_weak() -> None:
+    import pytest
+
+    from services.auth import hash_password_with_complexity_check
+
+    with pytest.raises(ValueError) as exc:
+        hash_password_with_complexity_check("short")
+    assert "12" in str(exc.value)
+
+
+def test_hash_password_with_complexity_check_accepts_strong() -> None:
+    from services.auth import hash_password_with_complexity_check
+
+    h = hash_password_with_complexity_check("StrongPass123")
+    assert h.startswith("$2b$")

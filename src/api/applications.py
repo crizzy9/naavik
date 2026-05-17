@@ -20,7 +20,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from db.session import get_session
 from models import ApplicationStatus, ClosedReason, User
 from services import application_service as svc
-from services.auth import get_current_user
+from services.auth import require_password_complete
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/applications")
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/api/v1/applications")
 async def submit(
     application_id: int,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_complete),
 ):
     """DRAFT → APPLIED. Validates first; returns the row or 409 with the reason."""
     try:
@@ -62,7 +62,7 @@ async def submit(
 async def discard(
     application_id: int,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_complete),
 ):
     try:
         await svc.discard_draft(session, application_id)
@@ -81,7 +81,7 @@ async def put_status(
     application_id: int,
     payload: Annotated[dict[str, Any], Body()],
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_complete),
 ):
     raw = payload.get("status")
     if not raw:
@@ -124,7 +124,7 @@ async def put_status(
 async def move(
     payload: Annotated[dict[str, Any] | None, Body()] = None,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_complete),
 ):
     if not payload:
         return Response(status_code=204)
@@ -152,7 +152,7 @@ async def move(
 @router.get("/stuck", name="api_applications_stuck")
 async def get_stuck(
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_complete),
 ):
     """Stuck-queue endpoint — DRAFTs with `submission_artifacts.last_failure`.
 
