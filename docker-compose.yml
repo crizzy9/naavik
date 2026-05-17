@@ -50,7 +50,7 @@ services:
     # Override here or in .env (auto-loaded by Compose).
     environment:
       DATABASE_URL: postgresql+asyncpg://naavik:${POSTGRES_PASSWORD:-password}@db:5432/naavik
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY must be set (see .env.example); generate with python -c 'import secrets; print(secrets.token_urlsafe(48))'}"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
