@@ -194,7 +194,26 @@ Append to `traces/<run-id>/engineer.log`:
 [ISO-timestamp] TEST <suite> result=<pass|fail> notes=<one-line>
 [ISO-timestamp] DEVIATION plan=<path> what=<one-line> why=<one-line>
 [ISO-timestamp] QA_GATE surface=<HTMX|API|cron|migration|service> outcome=<pass|fail> evidence=<one-line>
+[ISO-timestamp] COMMIT <sha> branch=<name> trailer=<closes-N>
+[ISO-timestamp] PUSH origin/<branch> <range>
+[ISO-timestamp] PR_BODY_UPDATE pr=#<N>
 ```
+
+**Tracing contract — mandatory** (codified 2026-05-17 per `docs/AGENT_OPS.md` § 7.2). Two event families apply to every dispatch:
+
+1. **`ERROR` events the moment they happen.** Quality-gate failures, test flakes, build-gate retries, hook-skipping branches, sandbox-blocked commands, push-rejected race conditions, "plan said X but reality is Y" pivots — all get one explicit line:
+   ```
+   [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
+   ```
+   Examples: `ERROR step=pytest-x kind=retry reason='tests/test_X intermittent fail; rerunning with -n0' attempt=2/3`; `ERROR step=find-replace kind=pivot reason='plan § C.8 said 25 sites; grep returned 5; filing PC.6a follow-up' attempt=1/1`. Don't bury these in `DEVIATION` (which is for plan-vs-shipped mismatches) — `ERROR` is for things that went wrong during execution.
+
+2. **`BUILT` line at end of dispatch.** One sentence summary of what shipped, as the LAST line of the log:
+   ```
+   [ISO-timestamp] BUILT files_added=<n> files_modified=<n> files_deleted=<n> tests_added=<n> summary='<one-sentence>'
+   ```
+   Example: `BUILT files_added=3 files_modified=7 files_deleted=0 tests_added=11 summary='PC.6 password complexity + must-change flag + alembic 0003 + change-password HTMX page + path-C re-loop hardening'`.
+
+`devops-trace-manifest` aggregates `ERROR` events into `MANIFEST.json:errors_encountered` and `BUILT` summaries into `MANIFEST.json:what_built` at end of run. Empty `BUILT` line is fine for "no material changes shipped — investigation only" — say so explicitly in `summary='...'`.
 
 # Output
 

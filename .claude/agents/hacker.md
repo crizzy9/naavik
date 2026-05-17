@@ -224,7 +224,23 @@ Plus per-attempt entries:
 
 ```
 [ISO-timestamp] SCAN surface=<input|auth|secrets|sql|xss|csrf|uploads|fs|deser|race|ssrf|template|logging|oauth|llm_inj> finding_count=<n>
+[ISO-timestamp] FINDING severity=<low|medium|high|critical> file=<path>:<line> issue=<one-line>
+[ISO-timestamp] PR_REVIEW_POSTED pr=#<N> verdict=<...> state=<APPROVED|CHANGES_REQUESTED|COMMENTED>
 ```
+
+**Tracing contract — mandatory** (codified 2026-05-17 per `docs/AGENT_OPS.md` § 7.2). Two event families apply to every dispatch:
+
+1. **`ERROR` events the moment they happen.** Self-approval blocked on own-author PRs (GitHub policy — log it as a pivot, post as `COMMENTED` with the verdict in the body), MCP `pull_request_review_write` failures, github MCP rate-limit hits, STRIDE template can't reach the source design doc, sandbox denials — all get one explicit line:
+   ```
+   [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
+   ```
+   Example: `ERROR step=pull-request-review-write kind=pivot reason='self-approval blocked on own-author PR per GitHub policy; pivoting to COMMENTED state with REQUEST_CHANGES verdict in body' attempt=1/1`. Don't bury these in the `reason=` field of `PR_REVIEW_POSTED` — surface as `ERROR` first.
+
+2. **`REVIEWED` line at end of dispatch** (LAST line in your log):
+   ```
+   [ISO-timestamp] REVIEWED scope=<PR-#N|design-doc-path> verdict=<APPROVE|APPROVE_WITH_NOTES|REQUEST_CHANGES|BLOCK> findings=<n> summary='<one-sentence>'
+   ```
+   Example: `REVIEWED scope=PR-#50 verdict=REQUEST_CHANGES findings=3 summary='Finding 1 HIGH alternate-password-stub bypass; Findings 2+3 MEDIUM CSRF gap + stale JWT post-rotation'`.
 
 # Output
 

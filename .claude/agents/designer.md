@@ -174,6 +174,19 @@ Append to `traces/<run-id>/designer.log`:
 [ISO-timestamp] HANDOFF to=engineer mockup=<path> notes=<path>
 ```
 
+**Tracing contract — mandatory** (codified 2026-05-17 per `docs/AGENT_OPS.md` § 7.2). Two event families apply to every dispatch:
+
+1. **`ERROR` events the moment they happen.** Claude Design skill failures, Playwright capture aborts, mockup export size/format mismatches, COMPONENTS.md catalog says "no fit" (forcing NEW_VARIANT), source design doc missing — all get one explicit line:
+   ```
+   [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
+   ```
+
+2. **`BUILT` line at end of dispatch** (LAST line in your log):
+   ```
+   [ISO-timestamp] BUILT mockups=<n> components_referenced=<n> components_new=<n> summary='<one-sentence>'
+   ```
+   Example: `BUILT mockups=2 components_referenced=14 components_new=0 summary='discover-detail desktop+mobile mockups; reused existing partials; no new components'`.
+
 # When to escalate
 
 - **Implementation handoff** → engineer.

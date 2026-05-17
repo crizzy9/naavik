@@ -34,7 +34,7 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
    - `hacker.log` (if hacker was dispatched)
    - `designer.log` (if designer was dispatched)
 
-3. **Parse the canonical schema** from `docs/AGENT_OPS.md § 7.3`:
+3. **Parse the canonical schema** from `docs/AGENT_OPS.md § 7.3` (extended 2026-05-17 with `outcome`, `what_built`, `errors_encountered`):
 
    ```json
    {
@@ -42,12 +42,17 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
      "started_at": "2026-05-16T09:30:15Z",
      "ended_at": "2026-05-16T11:45:02Z",
      "milestone": "Pre-Phase-2 paper cuts",
+     "outcome": "delivered",
+     "halt_reason": null,
      "issues_closed": [42, 43],
      "prs_merged": ["https://github.com/crizzy9/naavik/pull/87"],
      "files_touched": ["src/cli/init.py", "..."],
      "deviations_recorded": ["docs/plans/archive/10d-secret-key-hardening.md § Deviations"],
      "tokens_spent": {"manager": 152000, "architect": 410000, "engineer": 893000, "hacker": 200000, "devops": 50000, "designer": 0},
-     "halt_reason": null
+     "what_built": "<one-paragraph summary derived from per-agent BUILT/REVIEWED lines>",
+     "errors_encountered": [
+       {"agent": "engineer", "step": "<...>", "kind": "<retry|skip|halt|pivot>", "reason": "<line>", "attempt": "<n>/<max>"}
+     ]
    }
    ```
 
@@ -57,14 +62,50 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
    - **`started_at`** — first timestamp from `manager.log` line 1, ISO-8601 UTC.
    - **`ended_at`** — last timestamp across all logs, ISO-8601 UTC.
    - **`milestone`** — current milestone name (e.g. `Pre-Phase-2 paper cuts`, `Phase A`).
-   - **`issues_closed`** — numeric list of Issue numbers closed during this run (from `manager.log` GATE events or PR `Closes #N` lines).
-   - **`prs_merged`** — URL list of merged PRs (from `manager.log` MIRROR events or `gh pr list --state merged --search "<branch>"`).
-   - **`files_touched`** — paths edited, derived from `engineer.log` EDIT events.
+   - **`outcome`** — one of `delivered` / `halted` / `failed`. Devops writes `halted` at end of dispatch (PR not yet merged); manager flips to `delivered` at merge or `failed` on three-attempt-exhaustion.
+   - **`halt_reason`** — `null` when `outcome=delivered`; else short string (`pr_review_gate` / `plan_review_gate` / `milestone_boundary` / `budget_ceiling` / `three_attempt_exhaustion` / `user_halted` / `hacker_block`).
+   - **`issues_closed`** — numeric list of Issue numbers closed during this run (from `manager.log` MERGE events or PR `Closes #N` trailer detection).
+   - **`prs_merged`** — URL list of merged PRs (from `manager.log` MERGE events or `gh pr list --state merged --search "<branch>"`).
+   - **`files_touched`** — paths edited, derived from `engineer.log` EDIT events plus `git diff --name-only` over the run window.
    - **`deviations_recorded`** — list of `docs/plans/<NN-name>.md § Deviations from plan` references (promoted via `manager-deviation-promote` skill).
    - **`tokens_spent`** — per-agent token spend, from `.claude/budget-ledger.json` delta over the run window.
-   - **`halt_reason`** — `null` if completed; otherwise one of `budget_exceeded`, `user_halted`, `hacker_block`, `failure_recovery_exhausted`, `manual_pause`.
+   - **`what_built`** — one-paragraph plain-English summary aggregated from every agent's terminal `BUILT` / `REVIEWED` line (the LAST line of each per-agent log). Reader skims this BEFORE drilling into per-agent logs. Format: 2-4 sentences naming the headline deliverable + side artifacts + follow-ups filed. Empty-run case: `"no material changes shipped — investigation only; see <log> for findings"`.
+   - **`errors_encountered`** — list of every `ERROR` event from every per-agent log. Each entry has `agent` (which log it came from), `step` (what failed), `kind` (`retry`/`skip`/`halt`/`pivot`), `reason` (one-line), `attempt` (`n/max`). Empty array if nothing failed.
 
-4. **Write atomically:**
+4. **Aggregate `errors_encountered` from per-agent logs:**
+
+   ```bash
+   # Pull every ERROR line from every per-agent log + parse into the structured form
+   for log in traces/$RUN_ID/*.log; do
+     agent=$(basename "$log" .log)
+     grep -E "^\[.*\] ERROR step=" "$log" | while IFS= read -r line; do
+       step=$(echo "$line" | sed -nE 's/.*step=([^ ]+).*/\1/p')
+       kind=$(echo "$line" | sed -nE 's/.*kind=([^ ]+).*/\1/p')
+       reason=$(echo "$line" | sed -nE "s/.*reason='([^']+)'.*/\1/p")
+       attempt=$(echo "$line" | sed -nE 's/.*attempt=([0-9/]+).*/\1/p')
+       jq -nc --arg a "$agent" --arg s "$step" --arg k "$kind" --arg r "$reason" --arg t "$attempt" \
+         '{agent: $a, step: $s, kind: $k, reason: $r, attempt: $t}'
+     done
+   done | jq -s . > /tmp/errors_$RUN_ID.json
+   ```
+
+5. **Aggregate `what_built` from terminal `BUILT` / `REVIEWED` lines:**
+
+   ```bash
+   for log in traces/$RUN_ID/*.log; do
+     agent=$(basename "$log" .log)
+     # Last line if it starts with BUILT or REVIEWED
+     last=$(tail -1 "$log")
+     if echo "$last" | grep -qE "^\[.*\] (BUILT|REVIEWED) "; then
+       summary=$(echo "$last" | sed -nE "s/.*summary='([^']+)'.*/\1/p")
+       echo "$agent: $summary"
+     fi
+   done
+   ```
+
+   Stitch into one paragraph for the manifest. Manager populates this string when flipping `outcome` to `delivered` (post-merge); devops can populate a draft at end of dispatch.
+
+6. **Write atomically:**
 
    ```bash
    cat > traces/<RUN_ID>/MANIFEST.json.tmp <<EOF
@@ -73,15 +114,17 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
      "started_at": "<iso>",
      "ended_at": "<iso>",
      "milestone": "<name>",
+     "outcome": "<delivered|halted|failed>",
+     "halt_reason": <null | "reason">,
      "issues_closed": [<nums>],
      "prs_merged": [<urls>],
      "files_touched": [<paths>],
      "deviations_recorded": [<refs>],
      "tokens_spent": {<per-agent>},
-     "halt_reason": <null | "reason">
+     "what_built": "<one-paragraph summary>",
+     "errors_encountered": [<aggregated-from-per-agent-logs>]
    }
    EOF
-   mv traces/<RUN_ID>/MANIFEST.json.tmp traces/<RUN_ID>/MANIFEST.json
    ```
 
    Use `jq` to validate before the move:
@@ -89,7 +132,7 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
    jq empty traces/<RUN_ID>/MANIFEST.json.tmp && mv traces/<RUN_ID>/MANIFEST.json.tmp traces/<RUN_ID>/MANIFEST.json
    ```
 
-5. **Append a one-liner to the run index:**
+7. **Append a one-liner to the run index:**
 
    ```bash
    ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -98,8 +141,10 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
 
    Outcome values:
    - `delivered` — `halt_reason == null` AND `issues_closed` non-empty.
-   - `halted` — `halt_reason != null` (budget / user / hacker block / failure).
-   - `failed` — `halt_reason == "failure_recovery_exhausted"` specifically.
+   - `halted` — `halt_reason != null` (budget / user / hacker block / pr-review-gate / plan-review-gate / milestone-boundary).
+   - `failed` — `halt_reason == "three_attempt_exhaustion"` specifically.
+
+   **At PR open (devops's dispatch closes):** write `outcome=halted halt_reason=pr_review_gate`. **At merge (manager's COMMIT_PUSH event):** manager re-runs this skill to flip `outcome` → `delivered`, re-aggregate `tokens_spent` from the post-merge ledger, refresh `what_built` from any `BUILT` lines added during the merge-bookkeeping, and append a SECOND line to `runs.log` reflecting the delivered state. Don't rewrite the original `halted` line — append-only convention preserves the audit trail.
 
 ## Worked example
 

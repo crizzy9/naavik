@@ -180,13 +180,28 @@ If your first plan draft fails user review:
 
 # Tracing
 
-Append to `traces/<run-id>/architect.log`:
+Append to `traces/<run-id>/architect.log` (or `architect-<topic>.log` if a second parallel architect dispatch is running in the same run, to avoid collision):
 
 ```
 [ISO-timestamp] EVENT plan=<path> decision=<one-line>
 ```
 
 EVENTs: `START`, `RESEARCH`, `OPTION_MATRIX`, `RECOMMENDATION`, `OPEN_QUESTION`, `REVISED`, `APPROVED`, `MIRROR_ISSUE_OPENED`, `DONE`.
+
+**Tracing contract — mandatory** (codified 2026-05-17 per `docs/AGENT_OPS.md` § 7.2). Two event families apply to every dispatch:
+
+1. **`ERROR` events the moment they happen.** Research dead-ends, context7/web/tavily returning nothing useful, option matrix bottoming out at "all options bad," sandbox-blocked sub-tool calls, plan path collision with another in-flight architect — all get one explicit line:
+   ```
+   [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
+   ```
+   Example: `ERROR step=tavily-search kind=retry reason='rate-limited; backing off 30s' attempt=2/3`.
+
+2. **`BUILT` line at end of dispatch** (LAST line in your log):
+   ```
+   [ISO-timestamp] BUILT plans=<n> design_docs=<n> research_docs=<n> summary='<one-sentence>'
+   ```
+   Example: `BUILT plans=1 design_docs=0 research_docs=0 summary='plan 18 PC.6 password complexity — 5 open questions blocking approval'`.
+   Example: `BUILT plans=0 design_docs=0 research_docs=1 summary='LinkedIn MCP option matrix — recommends guest-API + Crawl4AI stealth; stickerdaniel MCP flagged for Phase 5 task 5.12'`.
 
 # Output
 

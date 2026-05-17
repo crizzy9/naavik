@@ -168,9 +168,29 @@ Append to `traces/<run-id>/manager.log`:
 [ISO-timestamp] GATE name=<plan_review|pr_review|milestone_boundary> outcome=<pass|halt|fail>
 [ISO-timestamp] BUDGET spent=<n> remaining=<n>
 [ISO-timestamp] MIRROR action=<set-status|sync> item=<id> from=<state> to=<state>
+[ISO-timestamp] AGENT_RETURN agent=<name> verdict=<...> tokens=<n>
+[ISO-timestamp] COMMIT_PUSH sha=<...> branch=<name> note=<line>
+[ISO-timestamp] MERGE pr=#<N> squash=<sha> base=<branch>
+[ISO-timestamp] ARCHIVE plan=<NN> path=<archive-path> status=EXECUTED
+[ISO-timestamp] ROADMAP_EDIT row=<id> change=<line>
+[ISO-timestamp] BLOCKED action=<what> reason=<one-line>
 ```
 
-At end of run, write `traces/<run-id>/MANIFEST.json` (schema in AGENT_OPS.md § 7.3) and append a one-liner to `traces/runs.log`.
+**Tracing contract — mandatory** (codified 2026-05-17). Two event families apply to every dispatch:
+
+1. **`ERROR` events as failures happen.** Sandbox denials, retry triggers, ROADMAP-vs-Project drift, three-attempt-protocol firings, gate halts because of upstream failure — all get an explicit one-line `ERROR` event:
+   ```
+   [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
+   ```
+   Don't bury these in free-text `BLOCKED` or `RATIONALE` lines. The `ERROR` event is what `devops-trace-manifest` aggregates into `errors_encountered`.
+
+2. **`BUILT` line at the end of every dispatch.** One sentence summarizing what this run shipped, even if "nothing material":
+   ```
+   [ISO-timestamp] BUILT files_added=<n> files_modified=<n> files_deleted=<n> summary='<one-sentence>'
+   ```
+   Example: `BUILT files_added=2 files_modified=4 files_deleted=2 summary='PC.6 + A.11 shipped via PR #50; plans 16+18 archived; PC.6a + JWT denylist filed as follow-ups'`.
+
+At end of run, write `traces/<run-id>/MANIFEST.json` (schema in AGENT_OPS.md § 7.3 — includes `what_built` paragraph + `errors_encountered` array auto-aggregated from all per-agent `ERROR` lines) and append a one-liner to `traces/runs.log`.
 
 # Output
 

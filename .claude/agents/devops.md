@@ -187,9 +187,27 @@ Append to `traces/<run-id>/devops.log`:
 [ISO-timestamp] EVIDENCE <one-line>
 [ISO-timestamp] FIX <path>:<line> reason=<one-line>
 [ISO-timestamp] TEST <suite> result=<pass|fail>
+[ISO-timestamp] VERIFY <surface> outcome=<pass|fail>
+[ISO-timestamp] VERDICT <PASS|FAIL_BLOCKING|FAIL_RECOVERABLE>
 [ISO-timestamp] QA_GATE surface=<...> outcome=<pass|fail>
 [ISO-timestamp] RUNBOOK_ENTRY section=<2.X> title=<one-line>
 ```
+
+**Tracing contract — mandatory** (codified 2026-05-17 per `docs/AGENT_OPS.md` § 7.2). Two event families apply to every dispatch:
+
+1. **`ERROR` events the moment they happen.** Quality-gate failures, migration round-trip errors, sandbox-blocked subprocess calls (e.g. `rm -rf` guard, gh-cli denials post-direct-push), orchestrator port collisions, `nix run .#dev` boot failures, Playwright NixOS crashes — all get one explicit line:
+   ```
+   [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
+   ```
+   Example: `ERROR step=live-orchestrator-boot kind=pivot reason='auto-mode destructive-rm guard blocked .naavik/db wipe; pivoting to TestClient surrogate' attempt=1/1`. Don't bury these in `RATIONALE` free-text in `devops-qa.log` — `ERROR` is the canonical event the manifest aggregates.
+
+2. **`REVIEWED` line at end of dispatch** (LAST line in your log):
+   ```
+   [ISO-timestamp] REVIEWED scope=<PR-#N|target> verdict=<PASS|FAIL_BLOCKING|FAIL_RECOVERABLE> gates_pass=<n>/<n> summary='<one-sentence>'
+   ```
+   Example: `REVIEWED scope=PR-#50 verdict=PASS gates_pass=7/7 summary='all quality gates green, 3 new tests pass, migration round-trip clean, Closes #8 trailer × 2 commits'`.
+
+At end of run (your dispatch on the PR closes the loop), use `Skill: devops-trace-manifest` to write `traces/<run-id>/MANIFEST.json` — schema in AGENT_OPS § 7.3 includes `what_built` paragraph + `errors_encountered` array auto-aggregated from all agents' `ERROR` lines.
 
 # Output
 

@@ -353,19 +353,48 @@ Example: `traces/2026-05-16T09-30-15_a3f2b8/`
 
 ### 7.2 Per-agent logs
 
-Each agent writes one file in the run dir, format frozen per agent's prompt:
+Each agent writes one file in the run dir, format frozen per agent's prompt. Three event families apply to ALL agents (codified 2026-05-17 per "Tracing contract"):
 
-- `manager.log` — `[ts] DISPATCH agent=<name> task=<one-line> reason=<why>` + `[ts] GATE name=<...> outcome=<...>`
-- `architect.log` — `[ts] EVENT plan=<path> decision=<line>`
-- `engineer.log` — `[ts] EDIT <path> reason=<...>` + `[ts] TEST <suite> result=<...>` + `[ts] DEVIATION plan=<path> what=<...> why=<...>`
-- `devops.log` — `[ts] REPRO <...>` + `HYPOTHESIS` + `EVIDENCE` + `FIX` + `TEST`
-- `hacker.log` — `VERDICT: <...>` + `FINDINGS:` block
-- `designer.log` — `[ts] DESIGN screen=<...> source=<skill> output=<path>` + `REUSE` + `NEW_VARIANT`
-- `engineer-deviations.log` — append-only one-liner per deviation, promoted into the plan's `## Deviations from plan` section at archive time.
+- **Agent-specific events** — the canonical shapes per role.
+- **`ERROR`** — fires the moment something fails, retries, gets skipped, gets halted, or pivots away from the dispatched plan. Append-only; one line per failure event. Format frozen across all agents:
+  ```
+  [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
+  ```
+  Examples:
+  - `[ts] ERROR step=pytest-x kind=retry reason='tests/test_seed::test_X flaked' attempt=2/3`
+  - `[ts] ERROR step=gh-pr-create kind=halt reason='sandbox denied gh subcommand after direct-push' attempt=1/1`
+  - `[ts] ERROR step=find-replace kind=pivot reason='plan § C.8 said 25 sites; grep returned 5; pivoting to file PC.6a follow-up' attempt=1/1`
+  - `[ts] ERROR step=live-orchestrator-boot kind=pivot reason='auto-mode destructive-rm guard blocked .naavik/db wipe; pivoting to TestClient surrogate' attempt=1/1`
+- **`BUILT` / `REVIEWED`** — one summary line at the end of every dispatch (last line in the agent's log). `BUILT` for agents that produce artifacts (architect, engineer, designer, manager); `REVIEWED` for agents that gate (hacker, devops). One sentence in `summary='...'`. Format frozen across all agents:
+  ```
+  [ts] BUILT files_added=<n> files_modified=<n> files_deleted=<n> summary='<one-sentence>'
+  [ts] BUILT plans=<n> design_docs=<n> research_docs=<n> summary='<one-sentence>'   # architect variant
+  [ts] BUILT mockups=<n> components_referenced=<n> components_new=<n> summary='<one-sentence>'   # designer variant
+  [ts] REVIEWED scope=<PR-or-target> verdict=<PASS|FAIL_BLOCKING|...|APPROVE|REQUEST_CHANGES> findings=<n> summary='<one-sentence>'
+  ```
+
+#### Per-agent shapes
+
+- `manager.log` — `[ts] DISPATCH agent=<name> task=<one-line> reason=<why>` + `[ts] GATE name=<...> outcome=<...>` + `[ts] MIRROR action=<set-status|sync> item=<id> from=<state> to=<state>` + `[ts] BUDGET spent=<n> remaining=<n>` + `[ts] AGENT_RETURN agent=<name> verdict=<...> tokens=<n>` + `[ts] COMMIT_PUSH sha=<...> branch=<...> note=<line>` + `[ts] MERGE pr=#<N> squash=<sha> base=<branch>` + `[ts] ARCHIVE plan=<NN> path=<archive-path> status=EXECUTED` + `[ts] ROADMAP_EDIT row=<id> change=<line>` + `[ts] BLOCKED action=<...> reason=<line>` + `ERROR` + `BUILT`.
+- `architect.log` — `[ts] START plan=<path> decision=<line>` + `[ts] RESEARCH source=<context7|web|tavily|nixos|github> what=<line>` + `[ts] OPTION_MATRIX plan=<path> decision=<which-decision-locked>` + `[ts] RECOMMENDATION plan=<path> decision=<chosen-option>` + `[ts] OPEN_QUESTION plan=<path> count=<n>` + `[ts] DONE plan=<path>` + `ERROR` + `BUILT`.
+- `engineer.log` — `[ts] EDIT <path> reason=<one-line>` + `[ts] TEST <suite> result=<PASS|FAIL> count=<n>` + `[ts] DEVIATION plan=<path> what=<...> why=<...>` + `[ts] COMMIT <sha> branch=<name> trailer=<closes-N>` + `[ts] PUSH origin/<branch> <range>` + `[ts] PR_BODY_UPDATE pr=#<N>` + `[ts] QA_GATE surface=<...> outcome=<pass|fail>` + `ERROR` + `BUILT`.
+- `devops.log` — `[ts] REPRO <line>` + `[ts] HYPOTHESIS <line>` + `[ts] EVIDENCE <line>` + `[ts] FIX <line>` + `[ts] TEST <suite> result=<PASS|FAIL>` + `[ts] VERIFY <surface> outcome=<pass|fail>` + `[ts] VERDICT <PASS|FAIL_BLOCKING|FAIL_RECOVERABLE>` + `ERROR` + `REVIEWED`.
+- `hacker.log` — `[ts] SCAN surface=<input|auth|secrets|csrf|sql|xss|...> finding_count=<n>` + `[ts] FINDING severity=<low|medium|high|critical> file=<path>:<line> issue=<one-line>` + `[ts] VERDICT <APPROVE|APPROVE_WITH_NOTES|REQUEST_CHANGES|BLOCK> severity=<...>` + `[ts] PR_REVIEW_POSTED pr=#<N> verdict=<...> state=<APPROVED|CHANGES_REQUESTED|COMMENTED>` + `ERROR` + `REVIEWED`.
+- `designer.log` — `[ts] DESIGN screen=<slug> source=<skill> output=<path>` + `[ts] REUSE component=<name>` + `[ts] NEW_VARIANT component=<name> args=<...>` + `[ts] HANDOFF memo=<path> engineer=<dispatch-id>` + `ERROR` + `BUILT`.
+- `engineer-deviations.log` — append-only one-liner per deviation. Format: `[ts] DEVIATION plan=<path> what=<line> why=<line> impact=<line>`. Promoted into the plan's `## Deviations from plan` section at archive time.
+- `*-qa.log` (optional, when manual QA is significant) — append-only per-smoke-step record. Format: `[ts] SMOKE step=<id> surface=<...> outcome=<pass|fail> evidence=<line>`.
+
+#### Tracing contract — enforcement rules
+
+1. **Log errors as they happen, not at the end.** Buffering errors and writing them at hand-back loses the ordering signal that helps the next debugger.
+2. **Every dispatch ends with a `BUILT` or `REVIEWED` line.** Empty-dispatch case still gets the line (`summary='no changes — investigation revealed pre-existing state was already correct'`).
+3. **Free-text rationale in logs is OK** but doesn't substitute for an explicit `ERROR` event. If your devops surrogate pivoted because of a sandbox guard, write the `ERROR` line first, THEN the longer `RATIONALE` if you need it.
+4. **Devops's `MANIFEST.json` writer (per `devops-trace-manifest` skill) aggregates `ERROR` and `BUILT`/`REVIEWED` events** from all per-agent logs into the manifest's `errors_encountered` array + `what_built` summary string. Manager owns the final manifest flip from `outcome=halted` → `outcome=delivered` at merge.
+5. **Manager records its own `ERROR` events** for sandbox denials, ROADMAP-vs-Project drift discoveries, retry-protocol triggers, gate halt-because-of-failure. Don't bury those in free-text BLOCKED entries.
 
 ### 7.3 Run manifest
 
-At end of run, manager writes `traces/<run-id>/MANIFEST.json`:
+At end of run, devops writes `traces/<run-id>/MANIFEST.json` via `Skill: devops-trace-manifest`. Manager flips `outcome` from `halted` → `delivered` at merge, refreshes `tokens_spent` from the ledger, and re-writes:
 
 ```json
 {
@@ -373,14 +402,31 @@ At end of run, manager writes `traces/<run-id>/MANIFEST.json`:
   "started_at": "2026-05-16T09:30:15Z",
   "ended_at": "2026-05-16T11:45:02Z",
   "milestone": "Pre-Phase-2 paper cuts",
+  "outcome": "delivered",
+  "halt_reason": null,
   "issues_closed": [42, 43],
   "prs_merged": ["https://github.com/crizzy9/naavik/pull/87"],
   "files_touched": ["src/cli/init.py", "..."],
   "deviations_recorded": ["docs/plans/archive/10d-secret-key-hardening.md § Deviations"],
   "tokens_spent": {"manager": 152000, "architect": 410000, "engineer": 893000, "hacker": 200000, "devops": 50000},
-  "halt_reason": null
+  "what_built": "<one-paragraph plain-English summary of what shipped this run — typically 2–4 sentences naming the headline deliverable, the side artifacts, and any follow-ups filed>",
+  "errors_encountered": [
+    {"agent": "engineer", "step": "find-replace", "kind": "pivot", "reason": "plan § C.8 said 25 sites; grep returned 5; filed PC.6a follow-up", "attempt": "1/1"},
+    {"agent": "hacker", "step": "pr-review-write", "kind": "pivot", "reason": "self-approval blocked on own-author PR; posted as COMMENTED with REQUEST_CHANGES in body", "attempt": "1/1"},
+    {"agent": "devops", "step": "live-orchestrator-boot", "kind": "pivot", "reason": "auto-mode destructive-rm guard blocked .naavik/db wipe; pivoted to TestClient surrogate", "attempt": "1/1"},
+    {"agent": "manager", "step": "gh-project.sh create-issue PC.6a", "kind": "halt", "reason": "sandbox denial post-direct-push to main", "attempt": "1/1"}
+  ]
 }
 ```
+
+**Field semantics:**
+
+- `outcome` — one of `delivered` / `halted` / `failed`. Devops writes `halted` at end of dispatch; manager flips to `delivered` on merge or `failed` if the 3-attempt protocol bottoms out.
+- `halt_reason` — `null` when `outcome=delivered`; else short string (`pr_review_gate` / `plan_review_gate` / `milestone_boundary` / `budget_ceiling` / `three_attempt_exhaustion`).
+- `what_built` — plain-English run summary. Reader skims this BEFORE drilling into per-agent logs. Manager populates from each agent's terminal `BUILT`/`REVIEWED` lines.
+- `errors_encountered` — list of every `ERROR` event from every per-agent log. Auto-aggregated by `devops-trace-manifest` skill. Empty array if nothing failed.
+
+If you find yourself adding fields not in this schema (`screenshots_captured`, `migrations_run`, etc.), extend the schema doc here AND `devops-trace-manifest/SKILL.md` first — don't fork the format silently.
 
 ### 7.4 Run index
 
