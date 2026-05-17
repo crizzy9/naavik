@@ -1,0 +1,72 @@
+name: Feature request
+description: Propose new functionality. Frame the user need first.
+title: "[feature] <one-line summary>"
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, scan `ROADMAP.md` to see if this is already on a phase. If yes, comment on the relevant phase instead of opening a duplicate issue.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: User need
+      description: What problem does this solve? Whose problem? When does it bite?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch the shape. Mockups / API surface / data model / UX flow welcome but optional.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you try / consider? Why not those?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (your view)
+      options:
+        - CRITICAL
+        - HIGH
+        - MEDIUM
+        - LOW
+      default: 2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Suggested phase (if known)
+      options:
+        - Phase 2 — Scraping
+        - Phase 3 — Scoring
+        - Phase 4 — Tracking + Auto-apply
+        - Phase 5 — Email + Outreach
+        - Phase 6 — Polish + Performance
+        - Phase 1.x deferred
+        - Pre-Phase-2 paper cuts
+        - Phase A — Agent System
+        - Not sure
+      default: 8
+    validations:
+      required: false
+
+  - type: textarea
+    id: success
+    attributes:
+      label: Success criteria
+      description: How will we know this is done? Acceptance tests if obvious.
+    validations:
+      required: false

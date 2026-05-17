@@ -1,0 +1,62 @@
+name: Bug report
+description: Something is broken. Repro + expected vs actual.
+title: "[bug] <one-line summary>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing! Before submitting, search existing issues to avoid duplicates.
+
+        For self-hosted issues, also check `docs/AGENT_OPS.md` § 9 Troubleshooting and the README § Troubleshooting.
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Exact commands. Include what you ran, what you expected, what happened.
+      placeholder: |
+        1. `nix run .#dev`
+        2. Visit http://localhost:8000/login
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      placeholder: |
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: NixOS / macOS / Linux distro, Naavik version (commit SHA), nix flake commit, relevant env vars
+      placeholder: |
+        - OS: NixOS 25.05
+        - Naavik: <SHA>
+        - nix run .#dev or docker compose or bare uv
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / stack trace
+      description: Paste relevant log output. Triple-backtick fence helps formatting.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Workarounds tried, related PRs, etc.
+    validations:
+      required: false

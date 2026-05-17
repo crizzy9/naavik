@@ -1,0 +1,84 @@
+name: Plan execution (auto-created via /plan)
+description: Used by the agent system. Manual filers — prefer "Bug" or "Feature" templates.
+title: "[<task-id>] <plan title>"
+labels: ["plan-execution"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This template mirrors the structure auto-created by `scripts/gh-project.sh create-issue` (run by the agent system's `/plan` command). Use it manually only if you're filing an Issue for a plan you authored by hand.
+
+        See `AGENTS.md` § Workflow for the canonical lifecycle and `docs/AGENT_OPS.md` § 6 for the GitHub Mirror conventions.
+
+  - type: input
+    id: task-id
+    attributes:
+      label: ROADMAP task ID
+      description: The row ID in ROADMAP.md (e.g., `2.11`, `PC.5`, `A.8`). Add the row to ROADMAP FIRST if it doesn't exist.
+      placeholder: "2.11"
+    validations:
+      required: true
+
+  - type: input
+    id: plan-path
+    attributes:
+      label: Plan path
+      description: Path under docs/plans/ (e.g., `docs/plans/11-phase-2-scrapers.md`).
+      placeholder: "docs/plans/<NN>-<kebab-name>.md"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Milestone (phase)
+      options:
+        - Phase 2
+        - Phase 3
+        - Phase 4
+        - Phase 5
+        - Phase 6
+        - Phase A
+        - Pre-Phase-2 paper cuts
+        - Phase 1.x deferred
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - CRITICAL
+        - HIGH
+        - MEDIUM
+        - LOW
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal (from plan)
+      description: One paragraph. Copy from the plan's Goal section.
+    validations:
+      required: true
+
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: Deliverables
+      description: Bulleted list of concrete files / behaviors that ship.
+    validations:
+      required: false
+
+  - type: textarea
+    id: deviations-discipline
+    attributes:
+      label: Deviations discipline
+      value: |
+        Per `AGENTS.md` § Workflow step 7, this plan **MUST** add a `## Deviations from plan` section before archiving — including any new operational surface (env var, on-disk path, CLI command, schedule, port) that gets propagated to README.md / CLAUDE.md / docs/plans/POST_PHASE_1.md.
+
+        The engineer / `/build` flow handles this automatically; manual implementers do it by hand.
+    validations:
+      required: false
