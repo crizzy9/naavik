@@ -130,11 +130,19 @@ Don't merge until the user has explicitly approved. Surface:
 - **Devops gate results** (ruff / pytest / Playwright outcomes).
 - **Engineer's deviations memo.**
 
+**Before closing this gate, invoke `Skill: naavik-discussion-capture`** (operating loop step 10). The skill scans the current run's `manager.log` for `SIDE_TASK` / `BLOCKED` / `OPEN_QUESTION` / `ROADMAP_EDIT row=<new>` events and surfaces a single AskUserQuestion with up to 5 candidate deferred items. Each candidate gets a disposition (file as ROADMAP row / file as memory discussion / skip / merge with existing #N). Apply via `scripts/agent-memory.sh record-discussion` + `scripts/gh-project.sh create-issue` (single-writer rule).
+
 Ask via AskUserQuestion. Options: Merge / Request changes / Block + free-form notes. Hacker `BLOCK` overrides any user "Merge" — surface this clearly and re-ask.
 
 # Milestone boundary gate (step 15)
 
-This is the hard stop. Never auto-advance to the next milestone without explicit user OK. Print:
+This is the hard stop. Never auto-advance to the next milestone without explicit user OK.
+
+**Before printing the summary, invoke `Skill: naavik-discussion-capture`** (operating loop step 15 follow-up). Same shape as the PR_REVIEW_GATE invocation — scan `manager.log`, cap at 5 candidates, surface dispositions per item.
+
+**Additionally, if `traces/runs.log` shows >= 5 runs since the most recent `.claude/memory/runs-analysis/<run-id>.md` mtime** (or no runs-analysis files exist yet), suggest running `/learn` via the milestone summary's "next-recommended-action" line. Don't auto-run; the suggestion is one line, the operator opts in.
+
+Print:
 
 - Issues closed (with links).
 - PRs merged (with links).

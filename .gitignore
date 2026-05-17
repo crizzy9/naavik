@@ -89,3 +89,13 @@ traces/*
 .claude/github-project.json
 .claude/github-issue-map.json
 .claude/budget-ledger.json
+
+# Agent memory stores — gitignored per-fork (A.15), EXCEPT:
+#   - .keep (tracks the dir)
+#   - knowledge/*.md (seeded + promoted entries ship in git as shared cross-contributor reference)
+# Writes go through scripts/agent-memory.sh (single writer rule).
+.claude/memory/*
+!.claude/memory/.keep
+!.claude/memory/knowledge/
+.claude/memory/knowledge/*
+!.claude/memory/knowledge/*.md

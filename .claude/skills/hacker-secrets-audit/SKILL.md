@@ -1,5 +1,5 @@
 ---
-description: Scan a diff (or full codebase) for hardcoded secrets, weak hashing, env-var bypass paths, and secret-leaking log/template patterns. Cross-checks Naavik-specific invariants — `~/.naavik/dev-credentials` triple-gate (NAAVIK_DEBUG + NAAVIK_DEV_PASSWORD unset + SELF_HOSTED), vault audit log (never values), portfolio public API allowlist. Use on every PR that touches auth / secrets / env handling / vault / Settings, before merging anything security-sensitive. Triggers on phrases like "secrets audit", "scan for secrets", "hardcoded keys", "leak check", "secret in logs", "env var leak", "dev credentials", "vault audit".
+description: Scan a diff (or full codebase) for hardcoded secrets, weak hashing, env-var bypass paths, and secret-leaking log/template patterns. Cross-checks Naavik-specific invariants — `~/.naavik/dev-credentials` triple-gate (NAAVIK_DEBUG + NAAVIK_DEV_PASSWORD unset + SELF_HOSTED), vault audit log (never values), portfolio public API allowlist, agent-memory single-writer rule (`.claude/memory/` writes only via `scripts/agent-memory.sh`). Use on every PR that touches auth / secrets / env handling / vault / Settings / `.claude/memory/`, before merging anything security-sensitive. Triggers on phrases like "secrets audit", "scan for secrets", "hardcoded keys", "leak check", "secret in logs", "env var leak", "dev credentials", "vault audit", "memory store write", "agent memory single writer".
 ---
 
 # hacker-secrets-audit
@@ -115,6 +115,21 @@ Patterns to reject:
 - Visa status
 - Salary expectation
 - Application questions / screener answers
+
+**Agent memory single-writer rule** (Phase A row A.15, shipped 2026-05-17). The diff must NOT contain:
+- Direct `Edit` / `Write` / `>` / `>>` against any path matching `.claude/memory/**` outside `scripts/agent-memory.sh`. The script is the sole writer; all other code paths read-only.
+- Programmatic writes to `~/.claude/projects/<...>/memory/MEMORY.md`. That file is Claude Code's auto-managed personal memory; this codebase is read-only on it.
+- Bypassing append-only JSONL invariant — no in-place updates to `.claude/memory/*.jsonl` rows; supersession only via the script's `--supersedes <id>` flag.
+- New code that mints a parallel memory store outside `.claude/memory/` (drift trap — defeats the single-writer rule).
+
+Patterns to reject (search the diff):
+
+```bash
+Grep -nE "(Edit|Write|fs\.write|open\(.+['\"]\.claude/memory)" <changed files>
+Grep -nE "open\(.+memory/MEMORY\.md.*['\"]w" <changed files>
+```
+
+Allowed: `Read` / `Grep` / `jq` against `.claude/memory/**` from any code path; `Bash(scripts/agent-memory.sh:*)` invocations. See `docs/design/AGENT_MEMORY.md § 1` (single-writer rule).
 
 ### 6. Hand back the verdict
 

@@ -1,7 +1,8 @@
 # Naavik — Agent Guide
 
 > **This is the canonical reference for AI agents working on Naavik.**
-> **Last updated:** 2026-05-10 (§ Key Conventions § CLI — both the `naavik` script AND the encrypted vault are on a sunset track per ROADMAP § Phase 2 tasks 2.12 (vault → env-based secrets) and 2.11 (CLI deletion, sequenced after 2.12). Do NOT extend either; new operator features ship as Settings UI or `.env.example` slots.)
+> **Last updated:** 2026-05-17 (Plan 19 / A.15 EXECUTED — agent memory + learning system. § Agent System infrastructure table adds `.claude/memory/` + `scripts/agent-memory.sh` (single-writer rule per A.15) + 4 memory-aware skills; slash commands table adds `/memory` + `/learn`. Design doc: `docs/design/AGENT_MEMORY.md`. Workflow integration: `docs/AGENT_OPS.md § 14`.)
+> Earlier line: 2026-05-10 (§ Key Conventions § CLI — both the `naavik` script AND the encrypted vault are on a sunset track per ROADMAP § Phase 2 tasks 2.12 (vault → env-based secrets) and 2.11 (CLI deletion, sequenced after 2.12). Do NOT extend either; new operator features ship as Settings UI or `.env.example` slots.)
 > **Always read this before starting work.**
 
 ---
@@ -517,17 +518,21 @@ Naavik uses 6 specialized Claude Code subagents and 13 slash commands at project
 | `/sync-roadmap` | Diff ROADMAP vs Project; --apply pushes ROADMAP → Project. |
 | `/budget` | Token spend ledger vs caps. |
 | `/runs` | Trace history. |
+| `/memory` | Read-only inspection of `.claude/memory/` stores (decisions / discussions / lessons / patterns / knowledge / runs-analysis). |
+| `/learn` | Manual retrospective. Analyzes last N runs, mines patterns, surfaces promotion + ROADMAP candidates. |
 
 ### Infrastructure
 
 - `scripts/gh-project.sh` — GitHub Projects v2 helper (init / bootstrap / refresh-map / sync / create-issue / create-epic / milestone-status / add-item / set-status / set-priority / set-effort / next-unblocked / runs). **Sole writer for Issue / Milestone / Project state** per § GitHub state — single writer rule.
+- `scripts/agent-memory.sh` — agent memory single writer (init / record-decision / record-discussion / record-knowledge / record-lesson / list / query / analyze-run / mine-patterns / promote-lesson). **Sole writer for `.claude/memory/` stores** per Phase A row A.15 design (`docs/design/AGENT_MEMORY.md`).
 - `scripts/roadmap_parser.py` — parses ROADMAP.md task tables to JSONL (used by bootstrap + sync).
 - `traces/<run-id>/` — per-run agent logs + MANIFEST.json. Run-id format: `YYYY-MM-DDTHH-MM-SS_<6hex>`.
 - `traces/watch.sh` — tmux session, one pane per agent log.
 - `traces/runs.log` — append-only run index.
 - `.claude/agents/` — 6 subagent prompts (manager, architect, engineer, devops, hacker, designer).
-- `.claude/commands/` — 13 slash command prompts (/build, /plan, /discuss, /triage-bug, /review-pr, /threat-model, /design-screen, /groom, /standup, /bootstrap, /sync-roadmap, /budget, /runs).
-- `.claude/skills/` — project-level auto-trigger skills, one directory per skill (`<name>/SKILL.md`). **Shipped by Phase A.11 Phase 1** (`naavik-cold-start`) + Phase 2 (per-agent suites). One directory per skill (`<name>/SKILL.md`). Six agent prefixes (`manager-*`, `architect-*`, etc.) + shared `naavik-*` prefix for cross-agent skills.
+- `.claude/commands/` — 15 slash command prompts (/build, /plan, /discuss, /triage-bug, /review-pr, /threat-model, /design-screen, /groom, /standup, /bootstrap, /sync-roadmap, /budget, /runs, /memory, /learn).
+- `.claude/skills/` — project-level auto-trigger skills, one directory per skill (`<name>/SKILL.md`). **Shipped by Phase A.11 Phase 1** (`naavik-cold-start`) + Phase 2 (per-agent suites) + **A.15** (`naavik-memory-lookup`, `naavik-discussion-capture`, `naavik-learn`, `manager-promote-lesson`). One directory per skill (`<name>/SKILL.md`). Six agent prefixes (`manager-*`, `architect-*`, etc.) + shared `naavik-*` prefix for cross-agent skills.
+- `.claude/memory/` — agent memory stores (decisions / discussions / lessons / knowledge / recurring-patterns / runs-analysis). Sole writer: `scripts/agent-memory.sh`. Gitignored per-fork EXCEPT `.keep` + `knowledge/*.md` (committed as shared corpus). Design doc: `docs/design/AGENT_MEMORY.md`; daily workflow: `docs/AGENT_OPS.md § 14`.
 - `.claude/hooks/` — Claude Code SessionStart hook + git hooks. **Shipped by Phase A.11 Phase 1.** Holds `cold-start.sh` (SessionStart, injects required-reading context) and `git/prepare-commit-msg` (auto-appends `Closes #N` from branch name using `.claude/github-issue-map.json`). Git hook installed via symlink (see `docs/AGENT_OPS.md` § 2.8).
 - `.claude/settings.json` — Claude Code config (hooks registration, permissions, env vars).
 - `.claude/budget.json` — daily ceiling + per-agent caps.

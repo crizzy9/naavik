@@ -448,6 +448,19 @@ naavik vault rotate-key --old=...   # see § Rotating SECRET_KEY above
 
 `naavik init` refuses to overwrite an existing vault — the operator must run `naavik vault rotate-key` to change keys, or remove `~/.naavik/secrets.enc` manually for a hard reset. `naavik vault status` prints the stored + expected fingerprints; mismatch means the vault is locked (Settings · Deployment surfaces a rose banner alongside).
 
+### Agent memory + learning (Phase A row A.15)
+
+`.claude/memory/` holds decisions, discussions, lessons, knowledge entries, recurring patterns, and per-run analytics — owned by a single writer (`scripts/agent-memory.sh`) mirroring the GitHub state pattern. Slash commands for daily use:
+
+```bash
+claude /memory list knowledge                    # see the captured corpus
+claude /memory query decisions '.state == "active"'
+claude /memory knowledge linkedin-scraping       # read a specific entry
+claude /learn 10                                  # retrospective on last 10 runs
+```
+
+Manager auto-invokes `Skill: naavik-discussion-capture` at every PR_REVIEW_GATE + MILESTONE_GATE to surface deferred items the system noticed during the run. Architecture + extension guide: `docs/design/AGENT_MEMORY.md`. Daily-workflow integration: `docs/AGENT_OPS.md § 14`.
+
 ### Troubleshooting
 
 #### `greenlet_spawn` / `libstdc++` errors under `nix run .#dev`
