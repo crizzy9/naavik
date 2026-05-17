@@ -233,7 +233,14 @@ async def seed() -> dict[str, int]:
                     sql_cls,
                     rows,
                     pk_cols,
-                    overrides={"password_hash": hash_password(dev_password)},
+                    overrides={
+                        "password_hash": hash_password(dev_password),
+                        # Plan 18 (PC.6, 2026-05-17): server-generated dev
+                        # credentials force a change on first login. Env-
+                        # supplied creds stay operator-owned (matches plan
+                        # 10c's "echo to disk" gate-2 logic).
+                        "must_change_password": dev_password_source == "generated",
+                    },
                 )
             else:
                 count = await _seed_one(session, sql_cls, rows, pk_cols)

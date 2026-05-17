@@ -7,6 +7,8 @@ The HTML page handlers (`GET /login`, `GET /onboarding`) stay in
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import (
@@ -23,6 +25,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from config import settings as app_settings
 from db.session import get_session
 from models import Profile, Settings, User
 from services.auth import (
@@ -34,14 +37,17 @@ from services.auth import (
     get_client_ip,
     get_current_user,
     get_user_by_email,
-    hash_password,
+    hash_password_with_complexity_check,
     is_rate_limited,
     issue_csrf_token,
     issue_jwt,
     record_login_attempt,
     validate_csrf,
+    validate_password_complexity,
+    verify_password,
 )
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/auth")
 
 
@@ -147,12 +153,6 @@ async def post_logout(request: Request):
     return response
 
 
-# Plan 10b (item 4, 2026-05-03): minimum viable plaintext-password length.
-# Real complexity rules (character classes, breached-password check) ship
-# with PC.5 in ROADMAP § Pre-Phase-2 paper cuts.
-_SIGNUP_MIN_PASSWORD_LEN = 8
-
-
 @router.post("/signup", name="api_auth_signup")
 async def post_signup(
     request: Request,
@@ -180,11 +180,9 @@ async def post_signup(
     if not email or not password:
         return _login_error_card("Email and password are required.", 422)
 
-    if len(password) < _SIGNUP_MIN_PASSWORD_LEN:
-        return _login_error_card(
-            f"Password must be at least {_SIGNUP_MIN_PASSWORD_LEN} characters.",
-            422,
-        )
+    complexity_err = validate_password_complexity(password)
+    if complexity_err is not None:
+        return _login_error_card(complexity_err, 422)
 
     norm_email = email.strip().lower()
 
@@ -231,7 +229,7 @@ async def post_signup(
     is_first_user = existing_count == 0
     user = User(
         email=norm_email,
-        password_hash=hash_password(password),
+        password_hash=hash_password_with_complexity_check(password),
         is_active=True,
         is_admin=is_first_user,
     )
@@ -270,6 +268,94 @@ async def post_signup(
     return response
 
 
+def require_csrf(
+    request: Request,
+    naavik_csrf: str | None = Cookie(default=None, alias=CSRF_COOKIE),
+    x_csrf_token: Annotated[str | None, Header()] = None,
+) -> None:
+    """Reusable dependency for state-changing routes — validates double-submit."""
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return
+    if not validate_csrf(naavik_csrf, x_csrf_token):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token invalid")
+
+
+@router.post("/change-password", name="api_auth_change_password")
+async def post_change_password(
+    request: Request,
+    current_password: Annotated[str, Form()],
+    new_password: Annotated[str, Form()],
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Change-password endpoint. Re-verifies current password (defense in
+    depth — even though `get_current_user` validated the JWT, this pins the
+    operation to a live cred-presenting actor). Validates the new password
+    against PC.6 complexity rules. On success, clears
+    `User.must_change_password` and updates `password_hash` atomically.
+
+    Returns 204 + HX-Redirect: / on success. Returns 422 + `_login_error_card`
+    HTMX swap on validation failure.
+
+    Plan 18 (PC.6, 2026-05-17).
+    """
+    ip = get_client_ip(request)
+    if is_rate_limited(ip):
+        return _login_error_card(
+            "Too many attempts. Try again in 15 minutes.",
+            status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
+    if not current_password or not new_password:
+        return _login_error_card("Current and new passwords are required.", 422)
+
+    if not verify_password(current_password, user.password_hash):
+        record_login_attempt(ip, success=False)
+        return _login_error_card("Current password is incorrect.", 422)
+
+    if new_password == current_password:
+        return _login_error_card(
+            "New password must differ from your current password.",
+            422,
+        )
+
+    try:
+        new_hash = hash_password_with_complexity_check(new_password)
+    except ValueError as exc:
+        return _login_error_card(str(exc), 422)
+
+    user.password_hash = new_hash
+    user.must_change_password = False
+    await session.commit()
+    record_login_attempt(ip, success=True)
+
+    # Plan 18 § Open Q2: delete the stale on-disk dev credential once the
+    # operator has chosen their own password. The file is owner-only (mode
+    # 0600) and best-effort — fs errors don't fail the rotation.
+    try:
+        creds_path = Path(app_settings.data_dir) / "dev-credentials"
+        creds_path.unlink(missing_ok=True)
+    except OSError as exc:
+        log.warning("could not remove stale dev-credentials file: %s", exc)
+
+    # Rotate session + CSRF cookies on credential change (auth event).
+    secure = not request.app.debug if hasattr(request.app, "debug") else True
+    jwt_value = issue_jwt(user.id, keep_signed_in=False)
+    csrf_value = issue_csrf_token()
+
+    response = Response(status_code=204)
+    response.headers["HX-Redirect"] = "/"
+    _set_session_cookies(
+        response,
+        jwt_value=jwt_value,
+        csrf_value=csrf_value,
+        keep_signed_in=False,
+        secure=secure,
+    )
+    return response
+
+
 @router.get("/me", name="api_auth_me")
 async def get_me(user: User = Depends(get_current_user)):
     return {
@@ -300,18 +386,6 @@ async def get_csrf(
             path="/",
         )
     return response
-
-
-def require_csrf(
-    request: Request,
-    naavik_csrf: str | None = Cookie(default=None, alias=CSRF_COOKIE),
-    x_csrf_token: Annotated[str | None, Header()] = None,
-) -> None:
-    """Reusable dependency for state-changing routes — validates double-submit."""
-    if request.method in {"GET", "HEAD", "OPTIONS"}:
-        return
-    if not validate_csrf(naavik_csrf, x_csrf_token):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token invalid")
 
 
 def _now():

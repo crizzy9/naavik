@@ -252,7 +252,8 @@ def test_signup_rejects_short_password() -> None:
         data={"email": "[email protected]", "password": "short"},
     )
     assert r.status_code == 422
-    assert "at least 8 characters" in r.text
+    # Plan 18 (PC.6): the 8-char rule tightened to 12 + complexity.
+    assert "at least 12 characters" in r.text
     assert "naavik_session" not in r.cookies
 
 
@@ -260,7 +261,9 @@ def test_signup_rejects_invalid_email_shape() -> None:
     client = _signup_client()
     r = client.post(
         "/api/v1/auth/signup",
-        data={"email": "not-an-email", "password": "longenoughpw"},
+        # Password meets PC.6 complexity (12+ chars, letter, digit) so the
+        # email-shape check is the only failure surface.
+        data={"email": "not-an-email", "password": "longenoughpw1"},
     )
     assert r.status_code == 422
     assert "valid email" in r.text
@@ -276,3 +279,148 @@ def test_signup_password_round_trips_via_real_bcrypt() -> None:
     # Sample-data fixture must NOT carry a placeholder bcrypt anywhere — that
     # value used to short-circuit verify_password to True even on miss.
     assert "placeholder.hash.for.dev.password" not in hashed
+
+
+# ── Plan 18 (PC.6) — password complexity validator ──────────────────────
+
+
+def test_validate_password_complexity_passes_strong() -> None:
+    from services.auth import validate_password_complexity
+
+    assert validate_password_complexity("StrongPass123") is None
+    assert validate_password_complexity("a" * 12 + "1") is None
+
+
+def test_validate_password_complexity_fails_too_short() -> None:
+    from services.auth import validate_password_complexity
+
+    msg = validate_password_complexity("abc123")
+    assert msg is not None
+    assert "12" in msg
+
+
+def test_validate_password_complexity_fails_no_digit() -> None:
+    from services.auth import validate_password_complexity
+
+    msg = validate_password_complexity("abcdefghijklmn")
+    assert msg is not None
+    assert "digit" in msg.lower()
+
+
+def test_validate_password_complexity_fails_no_letter() -> None:
+    from services.auth import validate_password_complexity
+
+    msg = validate_password_complexity("123456789012345")
+    assert msg is not None
+    assert "letter" in msg.lower()
+
+
+def test_validate_password_complexity_empty() -> None:
+    from services.auth import validate_password_complexity
+
+    msg = validate_password_complexity("")
+    assert msg is not None
+
+
+def test_hash_password_with_complexity_check_rejects_weak() -> None:
+    import pytest
+
+    from services.auth import hash_password_with_complexity_check
+
+    with pytest.raises(ValueError) as exc:
+        hash_password_with_complexity_check("short")
+    assert "12" in str(exc.value)
+
+
+def test_hash_password_with_complexity_check_accepts_strong() -> None:
+    from services.auth import hash_password_with_complexity_check
+
+    h = hash_password_with_complexity_check("StrongPass123")
+    assert h.startswith("$2b$")
+
+
+def test_change_password_rejects_missing_csrf_token() -> None:
+    """Plan 18 (PC.6) re-loop (hacker Finding 2, MEDIUM): the change-password
+    endpoint is gated by `Depends(require_csrf)`. A POST without the
+    matching `X-CSRF-Token` header (or with mismatched cookie/header) gets
+    403, not 422/204 — even with a valid JWT cookie + complexity-passing new
+    password. The HTMX form on `pages/change_password.html` carries the
+    header via the global `base.html` `hx-headers` attribute, so this gate
+    is invisible to honest UI clients.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.auth import router as api_auth_router
+    from models import User
+    from services.auth import get_current_user
+
+    app = FastAPI()
+    app.include_router(api_auth_router)
+
+    def _fake_user():
+        return User(
+            id=1,
+            email="dev@local",
+            password_hash="$2b$04$placeholder.hash.for.test.only",
+            is_active=True,
+            is_admin=True,
+            must_change_password=True,
+        )
+
+    app.dependency_overrides[get_current_user] = _fake_user
+    client = TestClient(app)
+
+    # Mismatched cookie + header — validate_csrf returns False.
+    r = client.post(
+        "/api/v1/auth/change-password",
+        data={"current_password": "anything", "new_password": "StrongerThanThat1"},
+        cookies={"naavik_csrf": "cookie-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+        headers={"X-CSRF-Token": "header-token-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    )
+    assert r.status_code == 403
+    assert "CSRF" in r.text or "csrf" in r.text
+
+
+def test_change_password_accepts_matching_csrf_token() -> None:
+    """Confirm the CSRF gate does NOT reject a legitimate request — cookie +
+    header carrying the same token pass through to the complexity check.
+    Uses a deliberately-weak new password so we stop at the 422 complexity
+    rejection without needing a live DB to flip the flag. The point is
+    proving `require_csrf` is not a false-positive on the matching path.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.auth import router as api_auth_router
+    from models import User
+    from services.auth import get_current_user
+
+    app = FastAPI()
+    app.include_router(api_auth_router)
+
+    def _fake_user():
+        return User(
+            id=1,
+            email="dev@local",
+            password_hash="$2b$04$placeholder.hash.for.test.only",
+            is_active=True,
+            is_admin=True,
+            must_change_password=True,
+        )
+
+    app.dependency_overrides[get_current_user] = _fake_user
+    client = TestClient(app)
+
+    matching = "matching-token-cccccccccccccccccccccccccccccccccc"
+    r = client.post(
+        "/api/v1/auth/change-password",
+        data={"current_password": "anything", "new_password": "short"},
+        cookies={"naavik_csrf": matching},
+        headers={"X-CSRF-Token": matching},
+    )
+    # CSRF passes (would be 403 otherwise); flow continues to verify_password,
+    # which fails on the placeholder hash → 422 "Current password is
+    # incorrect." The status proves require_csrf accepted matching tokens.
+    assert r.status_code == 422
+    assert "Current password" in r.text

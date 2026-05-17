@@ -258,14 +258,74 @@ def test_settings_llm_usage(client):
     assert body["month_cost_usd"] > 0
 
 
+def _override_account_password_dep(*, flagged: bool):
+    """Inject a fake `get_current_user` so the gated Settings · Account
+    password stub is reachable from a TestClient without a real JWT cookie.
+    Returns the (app, restore) tuple so callers can clean up.
+    """
+    from main import app
+    from models import User
+    from services.auth import get_current_user
+
+    def _fake():
+        return User(
+            id=1,
+            email="dev@local",
+            password_hash="$2b$04$placeholder.hash.for.test.only",
+            is_active=True,
+            is_admin=True,
+            must_change_password=flagged,
+        )
+
+    app.dependency_overrides[get_current_user] = _fake
+    return app, lambda: app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_settings_account_password_ok(client):
-    r = client.put("/api/v1/settings/account/password", data={"current": "x", "new": "y"})
+    """Plan 18 (PC.6) re-loop: the stub is gated by `require_password_complete`
+    — unflagged user still reaches the 200 happy-path response.
+    """
+    _app, restore = _override_account_password_dep(flagged=False)
+    try:
+        r = client.put("/api/v1/settings/account/password", data={"current": "x", "new": "y"})
+    finally:
+        restore()
     assert r.status_code == 200
 
 
 def test_settings_account_password_fail(client):
-    r = client.put("/api/v1/settings/account/password?fail=1", data={"current": "x", "new": "y"})
+    _app, restore = _override_account_password_dep(flagged=False)
+    try:
+        r = client.put(
+            "/api/v1/settings/account/password?fail=1",
+            data={"current": "x", "new": "y"},
+        )
+    finally:
+        restore()
     assert r.status_code == 422
+
+
+def test_settings_account_password_redirects_flagged_user(client):
+    """Plan 18 (PC.6) re-loop (hacker Finding 1, HIGH): a flagged user
+    (`must_change_password=True`) hitting the alternate Settings · Account
+    password endpoint must NOT see the "Password updated" stub success —
+    `require_password_complete` raises 303 to /auth/change-password instead,
+    closing the complexity-bypass surface the hacker review flagged.
+    """
+    _app, restore = _override_account_password_dep(flagged=True)
+    try:
+        r = client.put(
+            "/api/v1/settings/account/password",
+            data={"current": "x", "new": "y"},
+            follow_redirects=False,
+        )
+    finally:
+        restore()
+    assert r.status_code == 303
+    assert r.headers.get("hx-redirect") == "/auth/change-password"
+    assert r.headers.get("location") == "/auth/change-password"
+    # Importantly: the stub's success blob is NOT in the response body.
+    assert "Password updated" not in r.text
 
 
 def test_settings_deployment_restart_self_hosted_returns_202(client):

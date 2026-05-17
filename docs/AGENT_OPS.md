@@ -153,6 +153,16 @@ Examples that silently no-op (no `Closes #N` appended; commit message untouched)
 The hook never aborts a commit. If you need to bypass it, `git commit --no-verify`
 works (but you shouldn't need to — non-matching branches are already silent).
 
+**Branch task-id case is enforced uppercase.** The hook regex matches `PC`, `DEF`, `A`
+etc. case-sensitively. Lowercase branch names like `feat/pc.6-foo` silently no-op the
+`Closes #N` append — your commit will lack the trailer and the issue won't auto-close
+on merge. Always use UPPERCASE task-id in branch names: `feat/PC.6-foo`,
+`fix/DEF-12-bar`, `chore/A.11-baz`. Surfaced 2026-05-17 during plan 18 / PC.6 (PR #50)
+when the original lowercase branch dispatch silently dropped the trailer; documented
+here as a one-time gotcha so future authors notice before pushing. The hook itself is
+unchanged — flipping the regex to case-insensitive is a separate paper cut someone
+can file standalone.
+
 ---
 
 ## 3. Daily workflow
@@ -187,21 +197,23 @@ If you find yourself doing those manually, something in the system is broken —
 
 ## 4. Commands reference
 
-| Command | Purpose | Argument |
-|---|---|---|
-| `/build` | Autonomous milestone delivery loop. Halts at plan / PR / milestone gates. | `<milestone name \| "next">` |
-| `/plan` | Architect drafts a plan + opens the GH Issue + adds to Project. | `<scope description or roadmap task id>` |
-| `/discuss` | Multi-agent debate; synthesizes verdicts. | `<topic, PR URL, plan path, design doc path>` |
-| `/triage-bug` | devops repros → engineer patches → hacker reviews if security-sensitive. | `<bug description, issue URL, stack trace>` |
-| `/review-pr` | engineer + hacker review in parallel, post combined verdict. | `<PR number or URL>` |
-| `/threat-model` | hacker produces STRIDE table for a feature / design doc / plan. | `<feature, doc path, plan path>` |
-| `/design-screen` | designer mocks a screen per DESIGN.md + SCREENS.md. | `<screen name>` |
-| `/groom` | manager grooms the board against ROADMAP. | `[milestone name]` |
-| `/standup` | Current milestone state + drift + budget snapshot. | — |
-| `/bootstrap` | First-time setup wrapper: `init` + create Project fields check + `bootstrap`. | — |
-| `/sync-roadmap` | Diff ROADMAP vs Projects; with `--apply` pushes ROADMAP → Project. | `[--apply]` |
-| `/budget` | Token spend ledger vs caps; today + week. | — |
-| `/runs` | Recent runs from `traces/runs.log` with outcomes + trace links. | `[count]` |
+Each row is a **slash command** the user can type. The **Skill mirror** column lists the agent-invocable `Skill: <name>` entry point (per § 10.2 dual-surface convention). `✓ explicit` means a canonical `.claude/skills/<name>/SKILL.md` exists; `auto` means the harness exposes the slash command as a skill implicitly (no explicit SKILL.md yet — author one when an agent needs to invoke the flow ambient-triggered, using `build` as the template).
+
+| Command | Skill mirror | Purpose | Argument |
+|---|---|---|---|
+| `/build` | ✓ explicit | Autonomous milestone delivery loop. Halts at plan / PR / milestone gates. | `<milestone name \| "next">` |
+| `/plan` | auto | Architect drafts a plan + opens the GH Issue + adds to Project. | `<scope description or roadmap task id>` |
+| `/discuss` | auto | Multi-agent debate; synthesizes verdicts. | `<topic, PR URL, plan path, design doc path>` |
+| `/triage-bug` | auto | devops repros → engineer patches → hacker reviews if security-sensitive. | `<bug description, issue URL, stack trace>` |
+| `/review-pr` | auto | engineer + hacker review in parallel, post combined verdict. | `<PR number or URL>` |
+| `/threat-model` | auto | hacker produces STRIDE table for a feature / design doc / plan. | `<feature, doc path, plan path>` |
+| `/design-screen` | auto | designer mocks a screen per DESIGN.md + SCREENS.md. | `<screen name>` |
+| `/groom` | auto | manager grooms the board against ROADMAP. | `[milestone name]` |
+| `/standup` | auto | Current milestone state + drift + budget snapshot. | — |
+| `/bootstrap` | auto | First-time setup wrapper: `init` + create Project fields check + `bootstrap`. | — |
+| `/sync-roadmap` | auto | Diff ROADMAP vs Projects; with `--apply` pushes ROADMAP → Project. | `[--apply]` |
+| `/budget` | auto | Token spend ledger vs caps; today + week. | — |
+| `/runs` | auto | Recent runs from `traces/runs.log` with outcomes + trace links. | `[count]` |
 
 Each command spawns the relevant agent(s) via the Task tool. You see the agent's output, you approve at each gate.
 
@@ -527,11 +539,34 @@ Both AGENTS.md § Key Conventions § CLI and every relevant agent prompt forbid 
 3. Append a row to AGENTS.md § Agent System table.
 4. Bake reasoning depth into the prompt body — `effortLevel:` is ignored.
 
-### 10.2 Add a new slash command
+### 10.2 Add a new slash command (and the matching skill mirror)
 
-1. Write `.claude/commands/<name>.md` with frontmatter (`description`, `argument-hint`).
-2. Body: numbered orchestration steps. Spawn agents via Task; describe how outputs feed back.
-3. Append to AGENT_OPS.md § 4 commands reference table.
+Naavik's orchestration surface is **dual**: the user-typed `/<name>` slash command AND an agent-invocable `Skill: <name>` mirror. Both exist; both point at the same underlying procedure. The pattern is codified by `/build` (canonical example shipped 2026-05-17).
+
+**Two files, complementary roles:**
+
+| File | Role | Triggered by |
+|---|---|---|
+| `.claude/commands/<name>.md` | The procedural body — numbered orchestration steps, Task dispatches, AskUserQuestion gates. Authoritative source for "what the command does." | User typing `/<name>` in the chat. |
+| `.claude/skills/<name>/SKILL.md` | The agent-invocable mirror — thin frontmatter (`description` with rich trigger phrases, `allowed-tools`), short body that points at the command file as the procedure source, plus auto-trigger conditions, "when NOT to invoke," and "forbidden during invocation." | Any agent calling `Skill: <name>`, or the harness ambient-triggering on the description's trigger phrases (e.g. "kick off the loop" → `Skill: build`). |
+
+**Authoring sequence:**
+
+1. Write `.claude/commands/<name>.md` with frontmatter (`description`, `argument-hint`) and the full numbered procedure (Task dispatches + AskUserQuestion gates + trace bookkeeping).
+2. Write `.claude/skills/<name>/SKILL.md` with frontmatter (`description` containing canonical-purpose sentence + trigger phrases; `allowed-tools` listing the read/write surfaces the skill needs) and a thin body:
+   - `## When to invoke` — the user-phrase triggers + the manager-operating-loop step it serves.
+   - `## What this skill does` — high-level shape (3–8 bullets), then "**Read `.claude/commands/<name>.md` as the procedure source**" so callers know where the full step list lives. Do NOT duplicate the procedural body — drift between the two files is the failure mode this convention is designed to prevent.
+   - `## Canonical references` — pointers to the command file, the relevant agent prompt, AGENT_OPS sections, AGENTS.md sections.
+   - `## When NOT to invoke` — conditions where the skill should be skipped (wrong context, system not bootstrapped, already mid-flight).
+   - `## Forbidden during invocation` — the hard rules (CLI/vault sunset, single-writer rule, manual-merge gate, etc.).
+3. Append a row to AGENT_OPS.md § 4 commands reference table noting both surfaces.
+4. Bump "Last updated" if the new command/skill changes a phase deliverable or the agent-system contract.
+
+**Why the dual surface:** the slash command is what the user types; the skill is what the agent (or the harness, ambient-triggered) invokes. Without the skill mirror, the manager can only invoke `/<name>`-flavored behavior by reproducing the command's body in its operating loop — invisible to other agents and brittle to drift. With the skill mirror, any agent (or a fresh session's ambient trigger on a user phrase) can call the same canonical procedure. The command file stays authoritative for the steps; the skill file is the discoverable entry point.
+
+**Don't duplicate the procedural body.** The skill body should describe *when* and *why* to invoke + the high-level shape; the *how* lives in the command file. If you find yourself copying the full numbered step list into the skill, stop — the procedure has one home (the command file), and that home is what callers Read.
+
+**Existing slash commands without skill mirrors (as of 2026-05-17):** `bootstrap`, `standup`, `groom`, `sync-roadmap`, `budget`, `runs`, `plan`, `discuss`, `triage-bug`, `review-pr`, `threat-model`, `design-screen`. These work today because Claude Code's harness auto-exposes slash commands as skills implicitly, but the canonical SKILL.md artifact doesn't exist. Author them on demand using the `build` skill as the template; the auto-exposed entry is harmlessly superseded by the explicit one.
 
 ### 10.3 Add a new trace event format
 

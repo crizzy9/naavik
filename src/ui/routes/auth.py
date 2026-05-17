@@ -24,6 +24,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.session import get_session
 from models import Settings, User
+from services.auth import get_current_user
 from ui.auth_stub import FAKE_SESSION_VALUE, SESSION_COOKIE
 from ui.templates_setup import templates
 
@@ -105,6 +106,33 @@ async def get_onboarding(request: Request, step: Annotated[int, Query(ge=1, le=3
             "active_sidebar": None,
             "active_template_path": "/onboarding",
             "current_step": step,
+        },
+    )
+
+
+@router.get(
+    "/auth/change-password",
+    response_class=HTMLResponse,
+    name="change_password_page",
+)
+async def get_change_password(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """Plan 18 (PC.6, 2026-05-17): forced-rotation page. Reached when the
+    user's `must_change_password` flag is True. The page also renders when
+    the flag is False (voluntary password change); the must-change banner
+    only appears when flagged. Uses bare `get_current_user` (not
+    `require_password_complete`) so a flagged user can actually reach it.
+    """
+    return templates.TemplateResponse(
+        request,
+        "pages/change_password.html",
+        {
+            "active_sidebar": None,
+            "active_template_path": "/auth/change-password",
+            "must_change": user.must_change_password,
+            "email": user.email,
         },
     )
 

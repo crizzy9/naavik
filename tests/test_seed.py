@@ -231,3 +231,65 @@ async def test_seed_skips_dev_credentials_when_password_from_env(monkeypatch, tm
         f"{creds_path} must NOT be written when NAAVIK_DEV_PASSWORD is set "
         "(env-supplied creds are operator-owned)"
     )
+
+
+# ── Plan 18 (PC.6) — must-change flag on generated dev password ─────────
+
+
+async def test_seed_sets_must_change_password_when_generated(monkeypatch, tmp_path):
+    """When `dev_password_source == "generated"`, the seeded User row gets
+    `must_change_password=True`. Plan 18 (PC.6, 2026-05-17).
+    """
+    from sqlalchemy import text
+
+    from config import settings as app_settings
+    from db import seed as seed_mod
+
+    monkeypatch.setattr(app_settings, "data_dir", str(tmp_path))
+    monkeypatch.setattr(app_settings, "debug", True)
+    monkeypatch.delenv("NAAVIK_DEV_PASSWORD", raising=False)
+
+    sm, engine = _fresh_session()
+    async with sm() as session:
+        await session.execute(text('TRUNCATE TABLE "user" RESTART IDENTITY CASCADE'))
+        await session.commit()
+    await engine.dispose()
+
+    await seed_mod.seed()
+
+    sm2, engine2 = _fresh_session()
+    async with sm2() as session:
+        user = (await session.scalars(select(User).where(User.id == 1))).first()
+        assert user is not None
+        assert user.must_change_password is True
+    await engine2.dispose()
+
+
+async def test_seed_leaves_must_change_unset_when_env_supplied(monkeypatch, tmp_path):
+    """When `NAAVIK_DEV_PASSWORD` is exported, the seeded User row gets
+    `must_change_password=False` (env-supplied creds are operator-owned).
+    Plan 18 (PC.6, 2026-05-17).
+    """
+    from sqlalchemy import text
+
+    from config import settings as app_settings
+    from db import seed as seed_mod
+
+    monkeypatch.setattr(app_settings, "data_dir", str(tmp_path))
+    monkeypatch.setattr(app_settings, "debug", True)
+    monkeypatch.setenv("NAAVIK_DEV_PASSWORD", "OperatorPicked1234")
+
+    sm, engine = _fresh_session()
+    async with sm() as session:
+        await session.execute(text('TRUNCATE TABLE "user" RESTART IDENTITY CASCADE'))
+        await session.commit()
+    await engine.dispose()
+
+    await seed_mod.seed()
+
+    sm2, engine2 = _fresh_session()
+    async with sm2() as session:
+        user = (await session.scalars(select(User).where(User.id == 1))).first()
+        assert user is not None
+        assert user.must_change_password is False
+    await engine2.dispose()
