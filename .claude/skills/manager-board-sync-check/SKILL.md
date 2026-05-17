@@ -59,6 +59,12 @@ The persistent issue-map cache (`.claude/github-issue-map.json`) is the single-w
 
    Milestone drift:
      - milestones.<name> → #<N>  (renamed or deleted)
+
+   Status options (post-A.28): the board carries 4 Status options — Todo /
+   In Progress / Done / Backlog. .claude/github-project.json should have
+   .status_options.backlog populated; if missing, run `scripts/gh-project.sh
+   add-status Backlog --color GRAY` then re-run init. Backlog is asymmetric
+   with ROADMAP (ROADMAP `[ ]` maps to Todo OR Backlog).
    ```
 
 5. **Recommend action.**

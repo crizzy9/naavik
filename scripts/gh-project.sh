@@ -5,18 +5,28 @@
 #   init                            Prompt for repo + project number; cache IDs + option IDs.
 #   bootstrap [--apply] [--phase=X] Parse ROADMAP.md, create Milestones + Epics + Issues + Project items.
 #   sync [--apply]                  Diff ROADMAP vs Project; --apply pushes ROADMAP -> Project.
+#                                   Preserves Backlog status (Backlog → Todo is not a drift; promote explicitly).
 #   milestone-status [name]         JSON of items grouped by Status for a milestone.
 #   add-item <issue-url>            Add an issue or PR to the Project. Returns project item id.
 #   create-issue <id> <title> [--priority P] [--effort E] [--milestone M] [--parent N] [--body "..."]
 #                                   Create one Issue + add to Project + set fields. For /plan.
 #   create-epic <phase> [--priority P] [--effort E] [--body "..."]
 #                                   Create the `[Epic] <phase>` issue + add to Project + set Status=In Progress.
+#   create-milestone <name> [--description "..."]
+#                                   Idempotent milestone create. Returns milestone number on stdout.
 #   add-subissue <parent-num> <child-num>
 #                                   Link child issue under parent epic via GraphQL addSubIssue.
-#   set-status <item-id> <status>   Move item. Status: Todo | In Progress | Done.
+#   item-id <issue-num>             Resolve Issue # → Project item id (reverse of add-item).
+#   set-status <item-id> <status>   Move item. Status: Todo | In Progress | Done | Backlog.
+#                                   Backlog = deferred-from-current-cycle; next-unblocked skips it.
 #   set-priority <item-id> <pri>    Set Priority. Values: CRITICAL | HIGH | MEDIUM | LOW.
 #   set-effort <item-id> <effort>   Set Effort. Values: XS | S | M | L | XL.
-#   next-unblocked                  Next open Todo item, sorted by Priority. Skips 'blocked' label.
+#   add-status <name> [--color C] [--description "..."]
+#                                   Add new option to the Status single-select field. Idempotent.
+#                                   Refreshes the cache inline. Colors: GRAY|RED|ORANGE|YELLOW|GREEN|BLUE|PURPLE|PINK.
+#   next-unblocked                  Next open Todo item, sorted by Priority. Skips 'blocked' label + Backlog.
+#   backlog-by-epic [--top N]       Backlog items grouped by parent epic, epics ordered by Priority.
+#                                   Auto-promote primitive used by manager-backlog-promote skill.
 #   runs [count]                    Show last N entries from traces/runs.log (default 10).
 #   refresh-map                     Rebuild .claude/github-issue-map.json from authoritative GitHub state.
 #                                   Run after any manual GitHub UI edit (rename, close, delete) so the
@@ -61,6 +71,7 @@ load_cache() {
   STATUS_TODO_ID="$(jq -r '.status_options.todo' "$CACHE")"
   STATUS_INPROG_ID="$(jq -r '.status_options.in_progress' "$CACHE")"
   STATUS_DONE_ID="$(jq -r '.status_options.done' "$CACHE")"
+  STATUS_BACKLOG_ID="$(jq -r '.status_options.backlog // empty' "$CACHE")"
   PRIORITY_CRITICAL_ID="$(jq -r '.priority_options.critical // empty' "$CACHE")"
   PRIORITY_HIGH_ID="$(jq -r '.priority_options.high // empty' "$CACHE")"
   PRIORITY_MEDIUM_ID="$(jq -r '.priority_options.medium // empty' "$CACHE")"
@@ -219,10 +230,11 @@ cmd_init() {
     PROJECT_JSON="$(gh api graphql -f query="${QUERY//__TYPE__/$SCOPE}" -F owner="$OWNER" -F number="$PROJECT_NUMBER")"
   fi
 
-  local STATUS_TODO_ID STATUS_INPROG_ID STATUS_DONE_ID
+  local STATUS_TODO_ID STATUS_INPROG_ID STATUS_DONE_ID STATUS_BACKLOG_ID
   STATUS_TODO_ID="$(echo "$PROJECT_JSON" | jq -r "${FIELDS_PATH}[] | select(.name==\"Status\") | .options[]? | select(.name==\"Todo\" or .name==\"To do\") | .id" | head -n1)"
   STATUS_INPROG_ID="$(echo "$PROJECT_JSON" | jq -r "${FIELDS_PATH}[] | select(.name==\"Status\") | .options[]? | select(.name==\"In Progress\" or .name==\"In progress\") | .id" | head -n1)"
   STATUS_DONE_ID="$(echo "$PROJECT_JSON" | jq -r "${FIELDS_PATH}[] | select(.name==\"Status\") | .options[]? | select(.name==\"Done\") | .id" | head -n1)"
+  STATUS_BACKLOG_ID="$(echo "$PROJECT_JSON" | jq -r "${FIELDS_PATH}[] | select(.name==\"Status\") | .options[]? | select(.name==\"Backlog\") | .id // empty" | head -n1)"
 
   local PCRIT PHIGH PMED PLOW
   PCRIT="$(echo "$PROJECT_JSON" | jq -r "${FIELDS_PATH}[] | select(.name==\"Priority\") | .options[]? | select(.name|ascii_downcase==\"critical\") | .id" | head -n1)"
@@ -248,7 +260,7 @@ cmd_init() {
   "status_field_id": "$STATUS_FIELD_ID",
   "priority_field_id": "$PRIORITY_FIELD_ID",
   "effort_field_id": "$EFFORT_FIELD_ID",
-  "status_options": { "todo": "$STATUS_TODO_ID", "in_progress": "$STATUS_INPROG_ID", "done": "$STATUS_DONE_ID" },
+  "status_options": { "todo": "$STATUS_TODO_ID", "in_progress": "$STATUS_INPROG_ID", "done": "$STATUS_DONE_ID", "backlog": "$STATUS_BACKLOG_ID" },
   "priority_options": { "critical": "$PCRIT", "high": "$PHIGH", "medium": "$PMED", "low": "$PLOW" },
   "effort_options": { "xs": "$EXS", "s": "$ES", "m": "$EM", "l": "$EL", "xl": "$EXL" }
 }
@@ -409,7 +421,10 @@ cmd_set_status() {
     Todo|todo|"To do") OPT_ID="$STATUS_TODO_ID" ;;
     "In Progress"|in_progress|"in progress") OPT_ID="$STATUS_INPROG_ID" ;;
     Done|done) OPT_ID="$STATUS_DONE_ID" ;;
-    *) echo "error: unknown status '$STATUS' (expected: Todo, In Progress, Done)" >&2; exit 1 ;;
+    Backlog|backlog)
+      OPT_ID="$STATUS_BACKLOG_ID"
+      [[ -n "$OPT_ID" ]] || { echo "error: Backlog status option not found in cache — run 'scripts/gh-project.sh add-status Backlog --color GRAY' then 'init' to refresh" >&2; exit 1; } ;;
+    *) echo "error: unknown status '$STATUS' (expected: Todo, In Progress, Done, Backlog)" >&2; exit 1 ;;
   esac
   set_select "$ITEM_ID" "$STATUS_FIELD_ID" "$OPT_ID"
   echo "status set: $STATUS"
@@ -448,6 +463,92 @@ cmd_set_effort() {
   [[ -n "$EFFORT_FIELD_ID" ]] || { echo "warning: Effort field not configured — skipping" >&2; return 0; }
   set_select "$ITEM_ID" "$EFFORT_FIELD_ID" "$OPT_ID"
   echo "effort set: ${EFF^^}"
+}
+
+# ===========================================================================
+# add-status — add a new option to the Status single-select field
+# ===========================================================================
+#
+# Per the GitHub Projects v2 GraphQL schema, `updateProjectV2Field.singleSelectOptions`
+# is a REPLACE operation, not APPEND. We must read the current options, append the
+# new one, and write all options back. Idempotent: skip if NAME already exists.
+# Refreshes the .claude/github-project.json cache inline so subsequent set-status
+# calls find the new option_id without a separate `init` re-run.
+
+cmd_add_status() {
+  require_gh; load_cache
+  local NAME="${1:?usage: add-status <option-name> [--color GRAY|RED|ORANGE|YELLOW|GREEN|BLUE|PURPLE|PINK]}"
+  shift
+  local COLOR="GRAY"
+  local DESCRIPTION="Deferred — not in current cycle"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --color) COLOR="${2^^}"; shift 2 ;;
+      --description) DESCRIPTION="$2"; shift 2 ;;
+      *) echo "error: unknown arg '$1'" >&2; exit 1 ;;
+    esac
+  done
+
+  case "$COLOR" in
+    GRAY|RED|ORANGE|YELLOW|GREEN|BLUE|PURPLE|PINK) ;;
+    *) echo "error: unknown color '$COLOR' (expected: GRAY, RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, PINK)" >&2; exit 1 ;;
+  esac
+
+  # Read the current Status field options.
+  local STATUS_JSON CURRENT_OPTS
+  STATUS_JSON="$(gh api graphql -f query='
+    query($p:ID!) { node(id:$p) { ... on ProjectV2 {
+      field(name:"Status") { ... on ProjectV2SingleSelectField {
+        id options { id name color description }
+      }}
+    }}}' -F p="$PROJECT_ID")"
+  CURRENT_OPTS="$(echo "$STATUS_JSON" | jq -c '.data.node.field.options // []')"
+
+  # Idempotency: skip if NAME already exists.
+  local EXISTING_ID
+  EXISTING_ID="$(echo "$CURRENT_OPTS" | jq -r --arg n "$NAME" '.[] | select(.name == $n) | .id // empty' | head -n1)"
+  if [[ -n "$EXISTING_ID" ]]; then
+    echo "status option '$NAME' already exists (id=$EXISTING_ID)"
+  else
+    # Append the new option to the existing list. `updateProjectV2Field.singleSelectOptions`
+    # REPLACES the option list, so we send all options back.
+    # gh api graphql can't pass complex JSON arrays via -f/-F flags, so build the full
+    # query+variables JSON body and pipe to gh via stdin.
+    local NEW_OPTS_JSON
+    NEW_OPTS_JSON="$(echo "$CURRENT_OPTS" | jq -c --arg n "$NAME" --arg c "$COLOR" --arg d "$DESCRIPTION" \
+      '[.[] | {name, color, description: (.description // "")}] + [{name:$n, color:$c, description:$d}]')"
+    local MUTATION_BODY
+    MUTATION_BODY="$(jq -n --arg q '
+      mutation($f:ID!, $opts:[ProjectV2SingleSelectFieldOptionInput!]!) {
+        updateProjectV2Field(input:{
+          fieldId:$f,
+          singleSelectOptions:$opts
+        }) { projectV2Field { ... on ProjectV2SingleSelectField { id options { id name } } } }
+      }' --arg f "$STATUS_FIELD_ID" --argjson opts "$NEW_OPTS_JSON" \
+      '{query: $q, variables: {f: $f, opts: $opts}}')"
+    echo "$MUTATION_BODY" | gh api graphql --input - >/dev/null
+    echo "added status option: $NAME (color=$COLOR)"
+  fi
+
+  # Refresh the .claude/github-project.json cache so subsequent set-status finds the new id.
+  # Re-query the field options after the mutation.
+  local REFRESHED_OPTS
+  REFRESHED_OPTS="$(gh api graphql -f query='
+    query($p:ID!) { node(id:$p) { ... on ProjectV2 {
+      field(name:"Status") { ... on ProjectV2SingleSelectField { options { id name } } }
+    }}}' -F p="$PROJECT_ID" | jq -c '.data.node.field.options')"
+  local NEW_TODO NEW_INPROG NEW_DONE NEW_BACKLOG
+  NEW_TODO="$(echo "$REFRESHED_OPTS" | jq -r '.[] | select(.name == "Todo" or .name == "To do") | .id' | head -n1)"
+  NEW_INPROG="$(echo "$REFRESHED_OPTS" | jq -r '.[] | select(.name == "In Progress" or .name == "In progress") | .id' | head -n1)"
+  NEW_DONE="$(echo "$REFRESHED_OPTS" | jq -r '.[] | select(.name == "Done") | .id' | head -n1)"
+  NEW_BACKLOG="$(echo "$REFRESHED_OPTS" | jq -r '.[] | select(.name == "Backlog") | .id // empty' | head -n1)"
+
+  local TMP="$CACHE.tmp.$$"
+  jq --arg todo "$NEW_TODO" --arg inprog "$NEW_INPROG" --arg done "$NEW_DONE" --arg backlog "$NEW_BACKLOG" \
+    '.status_options = {todo: $todo, in_progress: $inprog, done: $done, backlog: $backlog}' \
+    "$CACHE" > "$TMP"
+  mv "$TMP" "$CACHE"
+  echo "cache refreshed at $CACHE"
 }
 
 # ===========================================================================
@@ -657,6 +758,56 @@ cmd_add_subissue() {
 }
 
 # ===========================================================================
+# create-milestone — operator-facing wrapper around ensure_milestone
+# ===========================================================================
+#
+# Migration runbooks need to create milestones without invoking `bootstrap`
+# (which would create dozens of unwanted Issues). Wraps ensure_milestone so the
+# single-writer rule + map-cache backfill is preserved. Returns the milestone
+# number on stdout for the runbook to capture.
+
+cmd_create_milestone() {
+  require_gh; load_cache
+  local NAME="${1:?usage: create-milestone <name> [--description \"...\"]}"
+  shift
+  local DESCRIPTION="Mirrored from ROADMAP.md § $NAME"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --description) DESCRIPTION="$2"; shift 2 ;;
+      *) echo "error: unknown arg '$1'" >&2; exit 1 ;;
+    esac
+  done
+  ensure_milestone "$NAME" "$DESCRIPTION"
+}
+
+# ===========================================================================
+# item-id — resolve Issue # → Project item id
+# ===========================================================================
+#
+# Migration runbooks need to flip Status on items they know by Issue # but not
+# Project item id. Reverse of `add-item` which goes from URL → item id.
+
+cmd_item_id() {
+  require_gh; load_cache
+  local ISSUE_NUM="${1:?usage: item-id <issue-num>}"
+  local ITEM_ID
+  ITEM_ID="$(gh api graphql -f query="
+    query(\$owner:String!, \$repo:String!, \$num:Int!) {
+      repository(owner:\$owner, name:\$repo) {
+        issue(number:\$num) {
+          projectItems(first:10) {
+            nodes { id project { id } }
+          }
+        }
+      }
+    }" -F owner="$OWNER" -F repo="$REPO" -F num="$ISSUE_NUM" \
+    | jq -r --arg p "$PROJECT_ID" '.data.repository.issue.projectItems.nodes[]? | select(.project.id == $p) | .id // empty' \
+    | head -n1)"
+  [[ -n "$ITEM_ID" ]] || { echo "error: Issue #$ISSUE_NUM not in Project $PROJECT_NUMBER" >&2; exit 1; }
+  echo "$ITEM_ID"
+}
+
+# ===========================================================================
 # milestone-status
 # ===========================================================================
 
@@ -707,8 +858,15 @@ cmd_milestone_status() {
 }
 
 # ===========================================================================
-# next-unblocked
+# next-unblocked — highest-priority unblocked Todo item
 # ===========================================================================
+#
+# Filters status_of == "Todo" only. Backlog items are deferred from the current
+# cycle and intentionally skipped. To promote a Backlog item, run
+# `set-status <item-id> Todo` first; only then will next-unblocked pick it up.
+# Within Backlog, items are unprioritized at the item level — only the EPICS
+# carry priority via the Priority field on the epic Issue. Use `backlog-by-epic`
+# to surface deferred work grouped by parent epic + ordered by epic priority.
 
 cmd_next_unblocked() {
   require_gh; load_cache
@@ -756,6 +914,108 @@ cmd_next_unblocked() {
         })
       | sort_by(.priority as $p | ["CRITICAL","HIGH","MEDIUM","LOW"] | index($p) // 99)
       | (.[0] // null)'
+}
+
+# ===========================================================================
+# backlog-by-epic — auto-promote workflow primitive
+# ===========================================================================
+#
+# Reads Project items where Status=Backlog, groups by parent epic (via parent
+# Issue / sub-issue link from .claude/github-issue-map.json fallback), orders
+# epics by their Priority field (CRITICAL > HIGH > MEDIUM > LOW > unset),
+# returns JSON to stdout. Default --top 5 = top 5 items per epic.
+#
+# Used by the manager-backlog-promote skill when Todo is empty: the skill picks
+# the top epic + its top items, surfaces via AskUserQuestion, and applies the
+# user's picks via per-item `set-status <id> Todo`. Read-only — no mutations.
+
+cmd_backlog_by_epic() {
+  require_gh; load_cache
+  local TOP=5
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --top) TOP="$2"; shift 2 ;;
+      *) echo "error: unknown arg '$1'" >&2; exit 1 ;;
+    esac
+  done
+
+  # Pull all Project items + parent Issue (sub-issue parent) + Status/Priority.
+  local ITEMS_JSON
+  ITEMS_JSON="$(gh api graphql -f query="
+    query(\$owner:String!, \$number:Int!) {
+      ${OWNER_PATH}(login:\$owner) {
+        projectV2(number:\$number) {
+          items(first:100) {
+            nodes {
+              id
+              content {
+                __typename
+                ... on Issue {
+                  number title url state
+                  labels(first:10) { nodes { name } }
+                  parent { ... on Issue { number title } }
+                }
+              }
+              fieldValues(first:20) {
+                nodes {
+                  __typename
+                  ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2SingleSelectField { name } } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }" -F owner="$OWNER" -F number="$PROJECT_NUMBER")"
+
+  # Build epic_num -> {priority, title} index from the same payload (the epics
+  # are also Project items with the 'epic' label set; we look up their Priority).
+  local EPIC_INDEX
+  EPIC_INDEX="$(echo "$ITEMS_JSON" | jq '
+    def priority_of: [.fieldValues.nodes[]? | select(.field.name? == "Priority") | .name?] | .[0] // null;
+    def labels_of: [.content.labels.nodes[]?.name?];
+
+    .data | (.organization // .user) | .projectV2.items.nodes
+    | map(select((.content.__typename // "") == "Issue" and ((labels_of | index("epic")) != null)))
+    | map({(.content.number | tostring): {priority: priority_of, title: .content.title}})
+    | add // {}
+  ')"
+
+  # Group Backlog items by parent epic, order epics by Priority. Items without
+  # a parent group under "_unparented" with priority null.
+  echo "$ITEMS_JSON" | jq --argjson top "$TOP" --argjson epics "$EPIC_INDEX" '
+    def status_of: [.fieldValues.nodes[]? | select(.field.name? == "Status") | .name?] | .[0] // "Todo";
+    def labels_of: [.content.labels.nodes[]?.name?];
+    def pri_rank: {"CRITICAL":4, "HIGH":3, "MEDIUM":2, "LOW":1};
+
+    .data | (.organization // .user) | .projectV2.items.nodes
+    | map(select(
+        (.content.__typename // "") == "Issue"
+        and (.content.state // "OPEN") == "OPEN"
+        and (status_of == "Backlog")
+        and ((labels_of | index("epic")) == null)
+      ))
+    | map({
+        issue: .content.number,
+        title: .content.title,
+        url: .content.url,
+        parent_issue: (.content.parent.number // null),
+        parent_title: (.content.parent.title // "_unparented")
+      })
+    | group_by(.parent_issue)
+    | map({
+        epic_issue: (.[0].parent_issue),
+        epic_title: (.[0].parent_title),
+        epic_priority: (
+          if .[0].parent_issue == null
+          then null
+          else ($epics[(.[0].parent_issue | tostring)].priority // null)
+          end
+        ),
+        items: (sort_by(.issue) | .[0:$top] | map({issue, title, url})),
+        total_items: length
+      })
+    | sort_by((.epic_priority as $p | -(pri_rank[$p] // 0)), .epic_title)'
 }
 
 # ===========================================================================
@@ -983,7 +1243,15 @@ cmd_sync() {
       "x") EXPECTED_STATUS="Done" ;;
     esac
 
-    if [[ "$PROJ_STATUS" != "$EXPECTED_STATUS" ]]; then
+    # Backlog is a board-only deferred state with no ROADMAP-checkbox equivalent
+    # (asymmetric mapping per docs/AGENT_OPS.md § 6.3). ROADMAP `[ ]` maps to Todo
+    # OR Backlog — distinguished only by the Project Status column. Sync never
+    # rewrites Backlog → Todo because that would trample a deliberate deferral.
+    # To pull a Backlog item into the current cycle, run set-status <id> Todo
+    # explicitly.
+    if [[ "$PROJ_STATUS" == "Backlog" && "$EXPECTED_STATUS" == "Todo" ]]; then
+      :  # respected Backlog deferral; no drift
+    elif [[ "$PROJ_STATUS" != "$EXPECTED_STATUS" ]]; then
       DIFFS=$((DIFFS+1))
       echo "  [$TASK_ID] STATUS drift: project=$PROJ_STATUS roadmap=$EXPECTED_STATUS"
       if $APPLY; then
@@ -1057,7 +1325,7 @@ cmd_refresh_map() {
   #    Falls back to ltrimstr-derived key for any [Epic] not in the known list
   #    (e.g. ad-hoc phases someone added manually).
   local KNOWN_PHASES_JSON
-  KNOWN_PHASES_JSON='["Pre-Phase-2 paper cuts","Phase A","Phase 2","Phase 1 deferred items"]'
+  KNOWN_PHASES_JSON='["Pre-Phase-2 paper cuts","Phase A","Phase 2","Phase 2.5","Phase 1 deferred items"]'
 
   local EPICS_JSON
   EPICS_JSON="$(echo "$ALL_ISSUES" | jq --argjson known "$KNOWN_PHASES_JSON" '
@@ -1139,10 +1407,14 @@ case "${1:-}" in
   add-subissue) shift; cmd_add_subissue "$@" ;;
   create-issue) shift; cmd_create_issue "$@" ;;
   create-epic) shift; cmd_create_epic "$@" ;;
+  create-milestone) shift; cmd_create_milestone "$@" ;;
+  item-id) shift; cmd_item_id "$@" ;;
   set-status) shift; cmd_set_status "$@" ;;
   set-priority) shift; cmd_set_priority "$@" ;;
   set-effort) shift; cmd_set_effort "$@" ;;
+  add-status) shift; cmd_add_status "$@" ;;
   next-unblocked) shift; cmd_next_unblocked "$@" ;;
+  backlog-by-epic) shift; cmd_backlog_by_epic "$@" ;;
   runs) shift; cmd_runs "$@" ;;
   refresh-map) shift; cmd_refresh_map "$@" ;;
   ""|-h|--help|help)
@@ -1159,16 +1431,28 @@ Subcommands:
   refresh-map                         Rebuild .claude/github-issue-map.json from authoritative GitHub state.
                                       Run after any manual UI edit (rename/close/delete) that bypasses
                                       this script. Open issues win over closed ones on prefix collisions.
-  sync [--apply]                      Diff ROADMAP vs Project; --apply pushes ROADMAP → Project.
+  sync [--apply]                      Diff ROADMAP vs Project; --apply pushes ROADMAP → Project. Backlog
+                                      Status is preserved (Backlog → Todo is not a drift). Promote a
+                                      Backlog item with set-status <id> Todo explicitly.
   milestone-status [name]             JSON of items grouped by Status.
   add-item <issue-url>                Add issue/PR to Project. Returns item id.
   add-subissue <parent-num> <child>   Link child under parent epic via GraphQL addSubIssue.
   create-issue <id> <title> [...]     Create issue + add to Project + set Status/Priority/Effort (+ --parent N).
   create-epic <phase> [...]           Create [Epic] <phase> + add to Project (Status=In Progress, default HIGH/L).
-  set-status <item-id> <Todo|In Progress|Done>
+  create-milestone <name> [--description "..."]
+                                      Create a Milestone (idempotent). Returns the milestone number on stdout.
+  item-id <issue-num>                 Resolve Issue # → Project item id (reverse of add-item).
+  add-status <name> [--color GRAY|RED|...] [--description "..."]
+                                      Add a new option to the Status single-select. Idempotent. Refreshes
+                                      .claude/github-project.json cache inline.
+  set-status <item-id> <Todo|In Progress|Done|Backlog>
+                                      Backlog is the deferred-from-current-cycle state. next-unblocked
+                                      skips Backlog; to promote, set-status <id> Todo explicitly.
   set-priority <item-id> <CRITICAL|HIGH|MEDIUM|LOW>
   set-effort <item-id> <XS|S|M|L|XL>
-  next-unblocked                      Next open Todo item (skips 'blocked' + 'epic' labels), sorted by Priority.
+  next-unblocked                      Next open Todo item (skips 'blocked' + 'epic' labels + Backlog), sorted by Priority.
+  backlog-by-epic [--top N]           JSON: Backlog items grouped by parent epic, epics ordered by Priority.
+                                      Read-only auto-promote primitive for the manager-backlog-promote skill.
   runs [count]                        Tail last N entries from traces/runs.log (default 10).
 
 State:

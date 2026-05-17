@@ -3,7 +3,7 @@
 > **Strict if-then decision tree the manager consults at the start of every user message.**
 > Every task fits one of the 9 categories below. **No improvisation. No judgment calls at category boundaries.** If a task doesn't fit, halt and ask.
 >
-> **Last updated:** 2026-05-17 (codified after commit `aa2f6a0` workflow miss — see `ROADMAP.md` § Phase A row A.14).
+> **Last updated:** 2026-05-17 (board status convention (post-A.28) section added; 4-status Todo/In Progress/Done/Backlog convention codified; CANCEL → Todo / BLOCK → Backlog rule documented).
 
 ---
 
@@ -94,7 +94,7 @@ HALT.
 **IF** category = C **AND** user said **CANCEL** **THEN:**
 
 1. Append GATE event with `outcome=cancel`.
-2. Mirror the task back to Todo on the Project board via `scripts/gh-project.sh set-status <item-id> Todo`.
+2. Mirror the task back to Todo on the Project board via `scripts/gh-project.sh set-status <item-id> Todo`. Cancellation puts the work back in the current cycle pool (NOT Backlog — that's "deferred from current cycle," which is a different intent than "user changed mind, redo").
 3. Flip ROADMAP row from `[~]` back to `[ ]` (this is BOOKKEEPING — execute per § I).
 4. Surface cancellation summary. HALT.
 
@@ -125,7 +125,7 @@ HALT.
 
 1. Append GATE event with `outcome=block reason='<verbatim>'`.
 2. `gh pr close <N> --comment "<reason>"`. Branch stays (for archive / forensics).
-3. Mirror task back to Todo or to a follow-up row on the Project board.
+3. Mirror task back to Todo or to a follow-up row on the Project board. If the block reflects "user defers this scope until later," use `set-status <id> Backlog` instead (per post-A.28 4-status convention).
 4. File any new ROADMAP rows for re-scoped work (BOOKKEEPING).
 5. Surface block summary + token-waste note. HALT.
 
@@ -150,7 +150,7 @@ HALT.
 **IF** category = F **THEN:**
 
 1. `Skill: naavik-cold-start` if not loaded.
-2. `Skill: manager-pick-next` if the user didn't specify the task; otherwise use the user-named task.
+2. `Skill: manager-pick-next` if the user didn't specify the task; otherwise use the user-named task. If `next-unblocked` returns null (Todo empty), invoke `Skill: manager-backlog-promote` for the auto-promote workflow (4-status convention per post-A.28).
 3. Mirror PC.X / 2.X / etc. → In Progress on Project board: `scripts/gh-project.sh set-status <item-id> "In Progress"`.
 4. Check `docs/plans/`:
    - If `<NN>-<slug>.md` exists with `Status: APPROVED` → jump to step 7.
@@ -295,6 +295,16 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 Non-exhaustive examples that fall under "everything else" (CONTRACT_CHANGE — PR required): `src/**`, `tests/**`, `migrations/**`, `scripts/**`, `.claude/**` (agents, skills, commands, hooks, settings), `AGENTS.md`, `CLAUDE.md`, `docs/AGENT_OPS.md`, `docs/PLAYBOOK.md` (this file), `docs/RUNBOOK.md`, `docs/DEPLOYMENT.md`, `docs/ARCHITECTURE.md`, `DESIGN.md`, `docs/design/**` (except mockups, which are gitignored), `docs/plans/<NN>-<slug>.md` (active — bundles with the implementation PR), `docs/prompts/<NN>-<slug>.md` (active), `pyproject.toml`, `uv.lock`, `flake.nix`, `flake.lock`, `nix/**`, `Dockerfile`, `docker-compose.yml`, `alembic.ini`, `.env.example`, `.envrc`, `.gitignore`, `.github/**`, `LICENSE`, `app.py`, `README.md` § Configuration / Operations / any non-"Last updated" edit.
 
 **If a single commit would touch BOTH categories** (e.g. archiving plan 18 to `docs/plans/archive/` AND ALSO updating an agent prompt), split into two commits / two PRs / one PR + one bookkeeping commit. Don't mix categories in one push.
+
+---
+
+## Board status convention (post-A.28)
+
+The GitHub Project v2 board uses **four** single-select Status options: `Todo` / `In Progress` / `Done` / **`Backlog`**. Backlog is the parking spot for items deferred from the current cycle — they stay open Issues, retain their ROADMAP rows, but `scripts/gh-project.sh next-unblocked` skips them. To pull a Backlog item into the current cycle, run `scripts/gh-project.sh set-status <item-id> Todo` explicitly (or invoke the manager-backlog-promote skill for the consent-gated auto-promote workflow).
+
+ROADMAP checkboxes don't distinguish Todo vs Backlog (both are `[ ]`); the **Project Status column is the single source of truth for "is this in the current cycle."** `/sync-roadmap --apply` preserves Backlog (Backlog → Todo is not a drift); the asymmetric mapping is codified in `docs/AGENT_OPS.md § 6.3`. Within Backlog, items are unprioritized at the item level — only the EPICS within Backlog carry priority via their own Priority field. Promotion ordering uses epic priority, not individual item priority.
+
+CANCEL still mirrors to `Todo` (cancelled work returns to current cycle pool, not Backlog — that's "user changed mind, redo," not "deferred"). BLOCK at PR_REVIEW_GATE may mirror to `Backlog` if the user defers the scope.
 
 ---
 

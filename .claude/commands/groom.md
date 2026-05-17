@@ -26,3 +26,8 @@ Milestone: $ARGUMENTS (default: current open milestone)
    - Adds new items via `gh issue create` + `scripts/gh-project.sh add-item`.
 
 5. **Manager reports** the final board state with a one-paragraph summary + any drift items still open (user must resolve).
+
+**Backlog awareness (post-A.28):** the board has 4 Status options — Todo / In Progress / Done / Backlog. While grooming, also surface:
+   - **Todo → Backlog candidates:** items in Todo for the current milestone that look deferred (LOW priority, no plan, not on the user's current Tier 1/Tier 2 list). Propose moving them to Backlog via `scripts/gh-project.sh set-status <id> Backlog`.
+   - **Backlog → Todo candidates:** items in Backlog whose parent epic is the highest-priority Backlog epic AND user explicitly named in current scope. Defer the actual move to the `manager-backlog-promote` skill — `/groom` flags candidates but the user-consent gate is the promote skill's surface.
+   - **Empty-epic Backlogs:** Project epics with zero open Backlog AND zero open Todo items — surface as candidates for closure.

@@ -22,7 +22,13 @@ Manager owns the standup format. This skill captures the canonical shape so ever
    ```bash
    scripts/gh-project.sh milestone-status "<current-milestone>"
    ```
-   Parse the JSON output: items grouped by Status (`Todo` / `In Progress` / `Done`). Count each.
+   Parse the JSON output: items grouped by Status (`Todo` / `In Progress` / `Done` / `Backlog`). Count each. Backlog items are deferred from the current cycle (per A.28 4-status convention) — surface them in a separate "Backlog by epic" line so the operator sees deferred work at a glance.
+
+2b. **Pull Backlog by epic** (post-A.28).
+   ```bash
+   scripts/gh-project.sh backlog-by-epic --top 3
+   ```
+   Returns JSON: epics ordered by Priority, each with up to 3 items. Use the top epic as the standup's "Backlog top epic" line. If empty, omit the section.
 
 3. **Pull drift signal.**
    ```bash

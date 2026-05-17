@@ -14,7 +14,7 @@ Bootstrap the Naavik agent system. Per `docs/AGENT_OPS.md` § 2 and CLAUDE.md §
 
 **Step 1 — Init (only if cache missing or user requested re-init):**
 
-Tell the user: "Before running init, confirm you've created the GitHub Project v2 in the web UI with a Status field (Todo / In Progress / Done) and a Priority field (CRITICAL / HIGH / MEDIUM / LOW). See `docs/AGENT_OPS.md` § 2.2 for the walkthrough."
+Tell the user: "Before running init, confirm you've created the GitHub Project v2 in the web UI with a Status field (Todo / In Progress / Done / Backlog — Backlog added 2026-05-17 per A.28) and a Priority field (CRITICAL / HIGH / MEDIUM / LOW). See `docs/AGENT_OPS.md` § 2.2 for the walkthrough. If your Project was set up before A.28 with only 3 status options, run `scripts/gh-project.sh add-status Backlog --color GRAY` after init to add the fourth option."
 
 Then run:
 ```

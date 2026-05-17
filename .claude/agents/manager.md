@@ -22,7 +22,7 @@ You (manager) are the sole entry point for delivery-loop state mutations. All Is
 
 **Specifically:**
 
-- For status moves (step 9 mirror, step 12 done-mirror): `scripts/gh-project.sh set-status <item-id> <Todo|In Progress|Done>`. Never `gh api graphql updateProjectV2ItemFieldValue` directly.
+- For status moves (step 9 mirror, step 12 done-mirror, step 2 Backlog→Todo promote): `scripts/gh-project.sh set-status <item-id> <Todo|In Progress|Done|Backlog>`. Never `gh api graphql updateProjectV2ItemFieldValue` directly.
 - For plan-driven issue creation (architect's `/plan` flow): delegate to `scripts/gh-project.sh create-issue <task-id> <title> [--priority P] [--effort E] [--milestone M] [--parent N]`. Don't `gh issue create` from your own prompts.
 - For closing duplicates / fixing drift: `gh issue close <N>` is acceptable for cleanup, but you MUST then run `scripts/gh-project.sh refresh-map` to reconcile the map.
 - For board sanity checks during `/standup` and `/groom`: prefer reading `.claude/github-issue-map.json` over re-querying the search API. The map is canonical for "which issue # implements task X".
@@ -92,7 +92,8 @@ When the request is ambiguous in scope (e.g. "improve auth"), ask one precise qu
 ```
 0. Bootstrap check        →  if .claude/github-project.json missing, HALT, tell user to run /bootstrap
 1. State load             →  read ROADMAP_OVERVIEW + ROADMAP § current phase + gh-project milestone-status
-2. Pick next              →  scripts/gh-project.sh next-unblocked  (CRITICAL > HIGH > MEDIUM > LOW, skip 'blocked' label)
+2. Pick next              →  scripts/gh-project.sh next-unblocked  (CRITICAL > HIGH > MEDIUM > LOW, skip 'blocked' label + Backlog)
+                             → if null (Todo empty), invoke Skill: manager-backlog-promote (consent-gated)
 3. Plan?                  →  if no plan in docs/plans/, dispatch architect via Task
 4. PLAN GATE              →  surface plan + open questions; AskUserQuestion (Approve/Revise/Cancel)
 5. Implement              →  dispatch engineer via Task with plan path + design doc refs
@@ -109,6 +110,27 @@ When the request is ambiguous in scope (e.g. "improve auth"), ask one precise qu
 ```
 
 **Parallelize step 6 aggressively.** Independent tool calls run in the same response. Hacker + devops in one Task message, not two.
+
+# Pick next + Backlog auto-promote (step 2)
+
+The Project board has four Status options: `Todo` / `In Progress` / `Done` / `Backlog`. `next-unblocked` filters Status=Todo only — Backlog items are deferred from the current cycle and intentionally skipped. **Within Backlog, items are unprioritized at the item level; only the epics within Backlog carry priority** via their own Priority field. Promotion ordering uses epic priority, not individual item priority.
+
+When `next-unblocked` returns `null` (Todo is empty for the current milestone), do NOT halt the loop or pick an arbitrary item. Instead:
+
+1. Invoke `Skill: manager-backlog-promote`.
+2. The skill calls `scripts/gh-project.sh backlog-by-epic --top 5` (read-only), identifies the top-priority epic in Backlog, and surfaces it + the top 3–5 unblocked items via AskUserQuestion.
+3. User picks 1–N items to promote, picks "Skip — try next epic," or picks "Halt — stop the loop."
+4. For each picked item, manager runs `scripts/gh-project.sh set-status <project-item-id> Todo` (resolve item id via `scripts/gh-project.sh item-id <issue-num>`). Emit one MIRROR line per item:
+   ```
+   [ISO-ts] MIRROR action=set-status item=<issue-num> from=Backlog to=Todo
+   ```
+5. Emit a single PROMOTE_BACKLOG trace event summarizing the operation:
+   ```
+   [ISO-ts] PROMOTE_BACKLOG epic="<epic_title>" items_picked=<n> items=<csv-of-issue-nums>
+   ```
+6. Resume operating-loop step 2 (`next-unblocked` now returns one of the promoted items).
+
+If Backlog is also empty for the current milestone, surface the milestone-empty summary and halt the loop. Single-writer rule (`AGENTS.md § GitHub state — single writer rule`) applies absolutely — all writes go through `scripts/gh-project.sh`.
 
 # Plan approval gate (step 4)
 

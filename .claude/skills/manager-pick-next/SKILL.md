@@ -5,7 +5,7 @@ allowed-tools: Read, Bash(scripts/gh-project.sh:*), Bash(jq:*)
 
 # manager-pick-next
 
-Manager's operating loop step 2 is "Pick next" — find the highest-priority unblocked Todo issue on the GitHub Project board for the current milestone. This skill wraps the canonical helper (`scripts/gh-project.sh next-unblocked`) and emits a single-line summary so the loop can hand off to architect or engineer cleanly. Single-writer rule applies: only the helper script reads/writes Project state.
+Manager's operating loop step 2 is "Pick next" — find the highest-priority unblocked **Todo** issue on the GitHub Project board for the current milestone. **Backlog items are deferred from the current cycle and skipped by `next-unblocked`. Within Backlog, items are unprioritized at the item level — only the EPICS within Backlog carry priority via their own Priority field.** When Todo is empty (`next-unblocked` returns null), invoke `Skill: manager-backlog-promote` to surface the next-priority epic in Backlog + its top unblocked items for user pick via AskUserQuestion. Manager applies the picks via `scripts/gh-project.sh set-status <id> Todo` (one MIRROR per item) then resumes the loop. This skill wraps the canonical helper (`scripts/gh-project.sh next-unblocked`) and emits a single-line summary so the loop can hand off to architect or engineer cleanly. Single-writer rule applies: only the helper script reads/writes Project state.
 
 ## When to invoke
 
@@ -23,6 +23,8 @@ Manager's operating loop step 2 is "Pick next" — find the highest-priority unb
 
 2. **Parse the JSON output.** Extract `number`, `title`, `url`, `priority`, `labels`.
 
+   Backlog items never appear here (`next-unblocked` filters Status=Todo only). Within Backlog, items are unprioritized at the item level — only the EPICS within Backlog carry priority via their own Priority field. `backlog-by-epic` is the read primitive for the auto-promote workflow; this skill is for the active-cycle Todo column only.
+
 3. **Cross-reference the persistent issue map** for additional context:
    ```bash
    jq --arg t "<title>" '.issues | to_entries[] | select(.value == <issue-num>)' .claude/github-issue-map.json
@@ -38,9 +40,9 @@ Manager's operating loop step 2 is "Pick next" — find the highest-priority unb
 
    Example: `Next: [PC.5] SECRET_KEY boot-time enforcement (priority: MEDIUM, milestone: Pre-Phase-2 paper cuts, issue: #7, estimate: ~1h)`.
 
-6. **If `next-unblocked` returns `null`,** the milestone has no open Todo items. Emit:
+6. **If `next-unblocked` returns `null`,** the Todo column is empty for this milestone. **Invoke `Skill: manager-backlog-promote`** to surface the next-priority epic in Backlog + its top unblocked items for user pick via AskUserQuestion. Manager applies the picks via `scripts/gh-project.sh set-status <id> Todo` (one MIRROR per item) and resumes this skill from step 1. Do not auto-promote without user consent. If the promote skill also returns "Backlog empty," the milestone is fully cleared — emit:
    ```
-   Next: <none> — milestone <name> empty. Recommend `/standup` to review state or pick a different milestone.
+   Next: <none> — milestone <name> empty (Todo + Backlog). Recommend `/standup` or pick a different milestone.
    ```
 
 ## Canonical references
