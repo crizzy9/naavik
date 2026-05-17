@@ -10,10 +10,14 @@
 
 ```
 1. Read this file (AGENTS.md)
-2. Read ROADMAP.md — understand current phase and what's already done
-3. Read DESIGN.md — if you're doing any UI work (root-level design system reference)
-4. Read docs/design/WORKFLOW.md — for the full design → implementation pipeline
-5. Start work. Update ROADMAP.md as you go.
+2. Read docs/PLAYBOOK.md — the strict task-classification + procedure tree the manager
+   consults on EVERY user message (codified after the aa2f6a0 workflow miss; ROADMAP § Phase A row A.14).
+   9 categories: STATUS / INSPECT / 3 gate responses / PRODUCT_WORK / BUG_TRIAGE / CONTRACT_CHANGE / BOOKKEEPING.
+   CONTRACT_CHANGE = PR; BOOKKEEPING = direct push to main. Never mix.
+3. Read ROADMAP.md — understand current phase and what's already done
+4. Read DESIGN.md — if you're doing any UI work (root-level design system reference)
+5. Read docs/design/WORKFLOW.md — for the full design → implementation pipeline
+6. Start work. Update ROADMAP.md as you go.
 ```
 
 ---

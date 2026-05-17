@@ -167,6 +167,8 @@ can file standalone.
 
 ## 3. Daily workflow
 
+**Manager's task router:** `docs/PLAYBOOK.md` — strict if-then classification of every user message into one of 9 categories (STATUS / INSPECT / PLAN_GATE / PR_REVIEW_GATE / MILESTONE_GATE / PRODUCT_WORK / BUG_TRIAGE / CONTRACT_CHANGE / BOOKKEEPING) with the canonical procedure for each. Codified after the `aa2f6a0` workflow miss (ROADMAP § Phase A row A.14). **Manager consults the playbook before every action.** Read it once per session via the cold-start skill; reference it whenever a task surface is ambiguous between "this is bookkeeping" and "this needs a PR."
+
 Once bootstrapped, your day with the agent system looks like:
 
 ```

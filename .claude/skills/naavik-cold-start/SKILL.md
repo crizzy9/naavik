@@ -14,8 +14,9 @@ This skill is the deterministic cold-start: it loads the same files, in the same
 For every agent, regardless of role:
 
 1. `AGENTS.md` § Quick Start + § Workflow (steps 2 + 4 + 5 + 7) + § Key Conventions § CLI + § Single-doc-tracking + § GitHub state — single writer rule
-2. `docs/ROADMAP_OVERVIEW.md` (130 lines — full)
-3. `docs/AGENT_OPS.md` § 1–7
+2. `docs/PLAYBOOK.md` (full — strict if-then task classification; consult FIRST on every user message; codified after `aa2f6a0` workflow miss per ROADMAP § Phase A row A.14)
+3. `docs/ROADMAP_OVERVIEW.md` (130 lines — full)
+4. `docs/AGENT_OPS.md` § 1–7
 
 ## Step 2 — Read the agent-specific cold-start list
 
