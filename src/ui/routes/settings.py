@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from db import sample_data as sd
+from models import User
+from services.auth import require_password_complete
 from ui.templates_setup import templates
 
 router = APIRouter()
@@ -412,7 +414,12 @@ async def put_account(request: Request):
 async def put_account_password(
     request: Request,
     fail: Annotated[str | None, Query()] = None,
+    _user: User = Depends(require_password_complete),
 ):
+    # Phase 1 stub: real password mutation happens via
+    # `POST /api/v1/auth/change-password` in `src/api/auth.py`. Gated with
+    # `require_password_complete` so a flagged user can't bypass the must-
+    # change flow + complexity check via the Settings · Account form.
     if fail:
         return HTMLResponse(
             '<span class="text-rose-300">Current password incorrect.</span>',

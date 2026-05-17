@@ -337,3 +337,90 @@ def test_hash_password_with_complexity_check_accepts_strong() -> None:
 
     h = hash_password_with_complexity_check("StrongPass123")
     assert h.startswith("$2b$")
+
+
+def test_change_password_rejects_missing_csrf_token() -> None:
+    """Plan 18 (PC.6) re-loop (hacker Finding 2, MEDIUM): the change-password
+    endpoint is gated by `Depends(require_csrf)`. A POST without the
+    matching `X-CSRF-Token` header (or with mismatched cookie/header) gets
+    403, not 422/204 — even with a valid JWT cookie + complexity-passing new
+    password. The HTMX form on `pages/change_password.html` carries the
+    header via the global `base.html` `hx-headers` attribute, so this gate
+    is invisible to honest UI clients.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.auth import router as api_auth_router
+    from models import User
+    from services.auth import get_current_user
+
+    app = FastAPI()
+    app.include_router(api_auth_router)
+
+    def _fake_user():
+        return User(
+            id=1,
+            email="dev@local",
+            password_hash="$2b$04$placeholder.hash.for.test.only",
+            is_active=True,
+            is_admin=True,
+            must_change_password=True,
+        )
+
+    app.dependency_overrides[get_current_user] = _fake_user
+    client = TestClient(app)
+
+    # Mismatched cookie + header — validate_csrf returns False.
+    r = client.post(
+        "/api/v1/auth/change-password",
+        data={"current_password": "anything", "new_password": "StrongerThanThat1"},
+        cookies={"naavik_csrf": "cookie-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+        headers={"X-CSRF-Token": "header-token-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    )
+    assert r.status_code == 403
+    assert "CSRF" in r.text or "csrf" in r.text
+
+
+def test_change_password_accepts_matching_csrf_token() -> None:
+    """Confirm the CSRF gate does NOT reject a legitimate request — cookie +
+    header carrying the same token pass through to the complexity check.
+    Uses a deliberately-weak new password so we stop at the 422 complexity
+    rejection without needing a live DB to flip the flag. The point is
+    proving `require_csrf` is not a false-positive on the matching path.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.auth import router as api_auth_router
+    from models import User
+    from services.auth import get_current_user
+
+    app = FastAPI()
+    app.include_router(api_auth_router)
+
+    def _fake_user():
+        return User(
+            id=1,
+            email="dev@local",
+            password_hash="$2b$04$placeholder.hash.for.test.only",
+            is_active=True,
+            is_admin=True,
+            must_change_password=True,
+        )
+
+    app.dependency_overrides[get_current_user] = _fake_user
+    client = TestClient(app)
+
+    matching = "matching-token-cccccccccccccccccccccccccccccccccc"
+    r = client.post(
+        "/api/v1/auth/change-password",
+        data={"current_password": "anything", "new_password": "short"},
+        cookies={"naavik_csrf": matching},
+        headers={"X-CSRF-Token": matching},
+    )
+    # CSRF passes (would be 403 otherwise); flow continues to verify_password,
+    # which fails on the placeholder hash → 422 "Current password is
+    # incorrect." The status proves require_csrf accepted matching tokens.
+    assert r.status_code == 422
+    assert "Current password" in r.text

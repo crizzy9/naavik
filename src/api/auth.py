@@ -268,6 +268,18 @@ async def post_signup(
     return response
 
 
+def require_csrf(
+    request: Request,
+    naavik_csrf: str | None = Cookie(default=None, alias=CSRF_COOKIE),
+    x_csrf_token: Annotated[str | None, Header()] = None,
+) -> None:
+    """Reusable dependency for state-changing routes — validates double-submit."""
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return
+    if not validate_csrf(naavik_csrf, x_csrf_token):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token invalid")
+
+
 @router.post("/change-password", name="api_auth_change_password")
 async def post_change_password(
     request: Request,
@@ -275,6 +287,7 @@ async def post_change_password(
     new_password: Annotated[str, Form()],
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    _csrf: None = Depends(require_csrf),
 ):
     """Change-password endpoint. Re-verifies current password (defense in
     depth — even though `get_current_user` validated the JWT, this pins the
@@ -373,18 +386,6 @@ async def get_csrf(
             path="/",
         )
     return response
-
-
-def require_csrf(
-    request: Request,
-    naavik_csrf: str | None = Cookie(default=None, alias=CSRF_COOKIE),
-    x_csrf_token: Annotated[str | None, Header()] = None,
-) -> None:
-    """Reusable dependency for state-changing routes — validates double-submit."""
-    if request.method in {"GET", "HEAD", "OPTIONS"}:
-        return
-    if not validate_csrf(naavik_csrf, x_csrf_token):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token invalid")
 
 
 def _now():

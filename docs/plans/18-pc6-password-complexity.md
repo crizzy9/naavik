@@ -779,3 +779,104 @@ The plan is mostly self-resolving via the § B option matrices, but the followin
 - [ ] **Error-message strategy:** first-violation-only message in `validate_password_complexity` (per Open question Q5)
 - [ ] **Test surface:** 7 unit tests in `tests/test_auth.py` + 2 page tests in `tests/test_pages.py` + 2 live-DB tests in `tests/test_seed.py` (per § C.10–C.12); existing tests preserved (no regression — engineer verifies via full-suite run)
 - [ ] **Find-replace audit:** post-replace `grep -rn "Depends(get_current_user)" src/` returns EXACTLY the 4 exempt-route matches in § C.8; engineer commits grep output to PR description
+
+## Deviations from plan
+
+PR #50 shipped on `feat/PC.6-password-complexity` with three named deviations, one
+observation, and a Path-C re-loop after hacker (HIGH) + devops (FAIL_RECOVERABLE)
+review. All four are listed below per `AGENTS.md § Workflow step 7` (what / why /
+impact / surface).
+
+- **Find-replace scope reduction (§ C.8: ~25 routes → 5 routes).** what: Only
+  `src/api/applications.py` (5 sites) carried `Depends(get_current_user)`; the rest
+  of the routes the plan named — `src/api/profile.py`, `src/api/settings.py`, every
+  `src/ui/routes/*.py` — still use the plan-09 fake-session stub
+  (`ui/auth_stub.is_authenticated`, cookie `naavik_session=fake-1`) and have no
+  FastAPI auth dep at all. The swap therefore landed only where a real dep already
+  existed. why: Wave 6 of plan 10 migrated only `api/applications` off the stub; the
+  broader migration is queued behind whatever plan rolls real auth across
+  `api/profile` + `api/settings` + UI routes (likely sequenced near 2.12 vault sunset
+  or as a follow-up Phase 2 ergonomics paper cut). impact: PC.6's redirect intent
+  fires only on `api/applications/*` mutations + the `GET /auth/change-password` page
+  itself. A flagged user can still see UI page chrome until they touch any
+  mutation-bearing API. Filed as ROADMAP § Pre-Phase-2 paper cuts row **PC.6a**
+  (2026-05-17): "Broader `require_password_complete` gate — extend to api/profile +
+  api/settings + ui/routes once those routes gain real auth deps." ~1–2 h once the
+  auth deps exist. surface: ROADMAP row PC.6a (new tracking row, no code/operator
+  surface yet).
+
+- **Branch name uppercase enforcement (`feat/PC.6-...`).** what: Implementation
+  branch shipped as `feat/PC.6-password-complexity` instead of the original prompt's
+  lowercase `pc.6-...` framing. why: `.claude/hooks/git/prepare-commit-msg` regex
+  matches `PC\.[0-9]+` (and `[A-Z]+\.[0-9]+[a-z]?` for the generic shape)
+  case-sensitively; lowercase silently no-ops the `Closes #N` append. impact: This
+  PR's commits all carry `Closes #8` correctly. Future authors must use UPPERCASE
+  task-id in branch names. surface: `docs/AGENT_OPS.md` § 2.8 gained a one-paragraph
+  "Branch task-id case is enforced uppercase" note in the re-loop (this PR). The
+  hook itself is unchanged — flipping its regex to case-insensitive is a separate
+  paper cut someone can file standalone if recurrence pain warrants.
+
+- **Exempt-route count is 3 routes + 1 internal wrapper, not 4 routes.** what:
+  Plan § C.8 listed `post_logout` as the 4th exempt route. In reality
+  `post_logout` doesn't take an auth dep — its signature is
+  `async def post_logout(request: Request)` — so the find-replace grep
+  `Depends(get_current_user)` doesn't surface it. The grep result the PR commits is
+  honest about 4 matches whose composition is 3 routes (`get_change_password` page,
+  `post_change_password` endpoint, `get_me`) + 1 internal definition
+  (`require_password_complete` wrapper signature in `services/auth.py:274`). why:
+  Plan-author drafting error; intent was unaffected. impact: Behavior identical to
+  plan intent — logout works while flagged because no auth dep blocks it. Semantic
+  fix to the plan's § C.8 wording, nothing else. surface: none.
+
+- **Pre-existing live-DB failures (11 on main, unrelated to PC.6).** what:
+  `NAAVIK_LIVE_DB=1 uv run pytest` shows 11 failures (`test_pages.py` signup-form
+  rendering, `test_draft_lifecycle.py` lazy CTA, `test_stub_endpoints.py` bullets
+  CRUD, etc.). These are state-pollution / memory-persistence artifacts of running
+  the suite under live DB. why: Verified on main via `git stash` of the PC.6 diff +
+  re-run — identical set of failures persists. Not introduced by PC.6. impact: Live-
+  DB suite is unreliable as a green gate today; selective `pytest tests/test_seed.py`
+  + `pytest tests/test_auth.py` works cleanly and is what the build-gates skill runs
+  in this context. Broader live-DB stability is the kind of thing PC.5 / PC.7 paper-
+  cut work was supposed to be addressing; current state has it as an ambient nuisance
+  rather than a blocking gate. surface: none (no new code or operator surface — just
+  a pinned expectation that live-DB selective runs are the trustworthy signal).
+
+- **Hacker Finding 3 deferred to Phase 1.x — JWT denylist on password rotation.**
+  what: `POST /api/v1/auth/change-password` issues a fresh JWT but does not
+  invalidate the OLD one — a stolen pre-rotation JWT remains valid for its natural
+  TTL (24h default / 30d keep-signed-in). The auth module docstring's "Rotated on
+  auth events" is half-delivered. why: Server-side denylist (or per-user signing-key
+  prefix rotation) is a deeper change than PC.6's scope — own service + own DB table
+  + cron to expire entries. Refresh-token rotation is already queued in Phase 1.x
+  deferred items; this row is narrower scope and deserves its own line. impact: A
+  defense-in-depth gap, not a behavioral break. Filed as ROADMAP § Phase 1.x deferred
+  items row (2026-05-17): "JWT denylist on password rotation (PR #50 hacker
+  Finding 3)." Phase 1.x; ships with whatever broader auth ergonomics plan picks it
+  up. surface: ROADMAP row in Phase 1.x deferred items (new tracking row, no code or
+  operator surface yet).
+
+- **Path-C re-loop after hacker REQUEST_CHANGES (HIGH).** what: After the initial
+  PC.6 commit `baad10c3`, hacker raised 3 findings (1 HIGH, 2 MEDIUM). User
+  selected Path C ("address findings in this PR with new commits, do not amend").
+  The re-loop added: (a) `Depends(require_password_complete)` to the Phase-1 stub at
+  `src/ui/routes/settings.py:411` so flagged users can't bypass the must-change flow
+  + complexity check via the Settings · Account form (Finding 1, HIGH); (b)
+  `Depends(require_csrf)` to `POST /api/v1/auth/change-password` so credential-
+  mutation routes carry the same double-submit defense as the rest of the auth
+  surface (Finding 2, MEDIUM); (c) `require_csrf` definition relocated above
+  `post_change_password` in the same file (function ordering); (d) test coverage —
+  one redirect-when-flagged test on the gated stub + two CSRF tests (missing-token
+  rejection + matching-token pass-through) on the change-password endpoint; (e)
+  AGENT_OPS § 2.8 hook-regex case-sensitivity note (deviation row 2 above); (f) this
+  Deviations section (the row you are reading now). The HTMX form on
+  `pages/change_password.html` already carries `X-CSRF-Token` via the global
+  `base.html` `hx-headers` attribute, so the CSRF dep is invisible to honest clients
+  — verified via manual QA smoke 8d. why: Hacker review surfaced a complexity-bypass
+  surface that the original find-replace scope reduction had unintentionally left
+  open. Path C kept the merge surface tight (one branch, narrow commits) instead of
+  re-opening the plan. impact: Resolves Finding 1 + Finding 2 cleanly without
+  broadening scope; Finding 3 deferred (above). PR commits all carry `Closes #8`
+  thanks to the uppercase branch convention. surface: existing stub gated (not
+  removed) — the Phase-1 mock response shape preserved for the unflagged path so the
+  Settings · Account UI doesn't regress; flagged users get 303 + HX-Redirect to
+  `/auth/change-password` (the canonical mutation surface).
