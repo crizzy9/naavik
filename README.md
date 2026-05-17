@@ -8,7 +8,7 @@
 
 ## What is Naavik?
 
-Naavik is a self-hosted career automation platform that handles the full job search lifecycle:
+Naavik is an open-source career automation platform that handles the full job search lifecycle:
 
 - **Profile Intake** — Upload your resume, AI extracts your profile, you refine it
 - **Job Discovery** — Automated scraping from LinkedIn, Workday, Greenhouse, Lever, and more
@@ -19,23 +19,39 @@ Naavik is a self-hosted career automation platform that handles the full job sea
 - **Portfolio Integration** — Keeps your portfolio website's CV page in sync automatically
 - **Auto-Apply** — Optional automated applications for high-match jobs (with human approval toggle)
 
-All running on your own infrastructure. Free forever.
+### Self-hosted first, cloud available
+
+The default path is self-hosted — any developer can deploy Naavik for free via Docker Compose or NixOS. Your data stays on your infrastructure. A managed cloud tier ($15/month, bring-your-own AI credits or local model) exists for those who prefer not to self-host, but it is functionally identical — never treated as "premium."
+
+This positioning shapes the product: dark-mode developer aesthetic, no SaaS bloat, no upsell pressure, data-dense tool feel.
 
 ## Why Naavik?
 
-Commercial tools like Sprout ($100/mo), Teal ($29/mo), or Jobsolv ($149/mo) charge significant monthly fees and lock your data in their cloud. Naavik gives you the same capabilities — and more — on your own hardware.
+No commercial platform is self-hostable. Naavik fills a real gap — and even open-source alternatives don't offer the full stack.
 
-|                            | Naavik                      | Commercial Tools |
-| -------------------------- | --------------------------- | ---------------- |
-| Cost                       | Free                        | $20-150/mo       |
-| Self-hosted                | Yes                         | No               |
-| Open source                | Yes (AGPL-3.0)              | No               |
-| LLM choice                 | Claude, GPT, Ollama (local) | Proprietary      |
-| Per-job resume tailoring   | Yes                         | Some             |
-| Portfolio integration      | Yes                         | No               |
-| Visa/sponsorship filtering | Yes                         | Rare             |
-| Multi-user                 | Yes                         | N/A              |
-| Your data                  | Yours                       | Theirs           |
+| What exists | Gap Naavik fills |
+|---|---|
+| **Sprout** ($20-100/mo) — closest to our vision. Swipe-to-apply, per-job resume tailoring, mobile-first | Not self-hosted, not open source, no visa filtering, no portfolio integration, no LLM choice, no outreach |
+| **Teal** ($29/mo) — best job tracker + resume analyzer | No auto-apply, no generation, proprietary, no outreach |
+| **Jobsolv** ($79-149/mo) — per-job tailoring + auto-apply via credits | Expensive, niche ($100K+ remote only), proprietary, no outreach |
+| **LoopCV** (EUR 10-30/mo) — set-and-forget automation | No resume tailoring, generic form-filling, no outreach |
+| **Sonara** ($6-24/mo) — background auto-apply | No resume tailoring, submits generic resume, no outreach |
+| **AIHawk** (OSS, 29.7K stars) — LinkedIn auto-apply bot | Archived, LinkedIn-only, no profile system, no email monitoring, no outreach tracking |
+| **JobSync** (OSS, 528 stars) — self-hosted tracker | No scraping, no auto-apply, no resume generation, no outreach |
+| **JobNavigator** (OSS, new) — multi-source scraping + scoring | No cover letter gen, no auto-apply, no email monitoring, no outreach |
+
+### Why Naavik wins
+
+| Dimension | Naavik | Commercial tools | Other OSS |
+|---|---|---|---|
+| **Cost** | Free (self-hosted) or $15/mo (cloud) | $20-150/mo | Free |
+| **Self-hosted** | Default path | No | Some |
+| **Open source** | AGPL-3.0 | No | Mixed |
+| **LLM choice** | Claude, GPT, Ollama (local) | Proprietary or locked | Usually one |
+| **Data ownership** | Yours | Theirs | Yours |
+| **Full pipeline** | Profile → scrape → score → generate → apply → track → outreach | Fragmented | Usually partial |
+| **Visa filtering** | Yes | Rare | No |
+| **Portfolio integration** | Yes | No | No |
 
 ## Features
 
@@ -96,6 +112,15 @@ Commercial tools like Sprout ($100/mo), Teal ($29/mo), or Jobsolv ($149/mo) char
 | Deployment     | Docker Compose · NixOS module · Nix flake          |
 
 ## Quick Start
+
+Four deployment paths — the codebase is identical across all of them. **Full deployment reference:** `docs/DEPLOYMENT.md`.
+
+| Path | When | Cost | Setup |
+|---|---|---|---|
+| **NixOS module** (`nix/module.nix`) | Homelab / Lumino-pattern hosts | Free | ~15 min — see `docs/DEPLOYMENT.md` § 1 |
+| **Docker Compose** | Any Linux / macOS host | Free | ~5 min — see below |
+| **Managed cloud** at jobs.crypticsoul.dev | Don't want to self-host | $15/mo | ~2 min — bring your own LLM key |
+| **Bare-metal dev** (`nix run .#dev`) | Local development | Free | ~3 min — see below |
 
 ### Self-host with Docker Compose
 
@@ -489,6 +514,46 @@ This project uses:
 - `uv` for dependency management
 - `ruff` for linting and formatting
 - `pytest` for testing
+
+## Agent System
+
+Naavik ships with 6 specialized Claude Code subagents and 13 slash commands at `.claude/`. They deliver milestones end-to-end against a GitHub Project v2 board mirrored from `ROADMAP.md`.
+
+**Read `docs/AGENT_OPS.md` first — it's the single operational guide** (setup, daily workflow, GitHub Mirror conventions, troubleshooting, extension). It links to the four canonical guides each agent loads on demand:
+
+- **`docs/ROADMAP_OVERVIEW.md`** — one-page roadmap digest
+- **`docs/ARCHITECTURE.md`** — layer responsibilities + cross-cutting concerns + pattern catalog
+- **`DESIGN.md`** (root, the visual contract) + **`docs/design/WORKFLOW.md`** (UI sub-process — skill routing, per-screen checklist, accessibility, common patterns)
+- **`docs/RUNBOOK.md`** — devops runbook with known failure modes + diagnostic recipes + recovery procedures
+
+### First-time setup (once per fork)
+
+```bash
+gh auth login                                # authenticate gh CLI
+# Create a GitHub Project v2 with Status + Priority fields (see AGENT_OPS.md § 2.2)
+scripts/gh-project.sh init                   # cache project IDs at .claude/github-project.json
+scripts/gh-project.sh bootstrap --apply      # create Milestones + Issues from ROADMAP.md
+claude /standup                              # confirm system is live
+```
+
+### Daily
+
+```bash
+claude /build "next"                         # deliver next milestone (halts at gates)
+claude /plan <scope>                         # architect drafts a plan + opens GH Issue
+claude /triage-bug <bug>                     # devops repros, engineer fixes
+claude /review-pr <PR#>                      # engineer + hacker review
+claude /standup                              # current state + drift + budget
+```
+
+Commands: `/build`, `/plan`, `/discuss`, `/triage-bug`, `/review-pr`, `/threat-model`, `/design-screen`, `/groom`, `/standup`, `/bootstrap`, `/sync-roadmap`, `/budget`, `/runs`.
+
+- **Tracing:** `./traces/<run-id>/` per agent + `traces/watch.sh` for tmux pane view + `/runs` for history.
+- **Budget:** `.claude/budget.json` caps daily token spend; manager updates `.claude/budget-ledger.json` per run; `/budget` to inspect.
+- **GitHub Projects v2 helper:** `scripts/gh-project.sh` with `init`, `bootstrap`, `sync`, `create-issue`, `milestone-status`, `add-item`, `set-status`, `next-unblocked`, `runs`.
+- **ROADMAP is authoritative;** the Project board is a one-way operational mirror.
+
+See `docs/AGENT_OPS.md` for the full reference, `AGENTS.md` § Agent System for the workflow integration, `.claude/agents/` for full agent prompts.
 
 ## License
 

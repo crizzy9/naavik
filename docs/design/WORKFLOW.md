@@ -1,10 +1,29 @@
 # Design → Implementation Workflow (UI sub-process)
 
-> **Last updated:** 2026-05-01
+> **Last updated:** 2026-05-16 (absorbed the agent-facing process content that was briefly split into `docs/DESIGN_GUIDE.md` — now deleted. WORKFLOW.md is the single process doc; `DESIGN.md` is the single contract doc.)
 >
 > **This is the UI sub-process.** The master workflow — plan → review → design doc → prompt → implement → archive — lives in `AGENTS.md` § Workflow. That's the lifecycle every non-trivial change goes through. WORKFLOW.md describes the screen-design pipeline (mockup → component derivation → page implementation) that runs *inside* the master workflow's "implement" step for UI tasks.
 >
-> Companion: `docs/plans/README.md` for plan-file conventions.
+> **Companion docs:**
+> - `DESIGN.md` (root) — visual contract (tokens, type, icons, voice). Frozen.
+> - `docs/design/SCREENS.md` — per-screen functional contract.
+> - `docs/design/COMPONENTS.md` — 85-component catalog.
+> - `docs/design/INTERACTIONS.md` — HTMX patterns.
+> - `docs/plans/README.md` — plan-file conventions.
+
+---
+
+## Read order before any UI work
+
+Always, in this order:
+
+1. **`DESIGN.md`** — the visual contract. Tokens, fonts, icons, voice. Frozen.
+2. **`docs/design/SCREENS.md`** § your target screen — functional contract: what this screen does, what data it shows, what the user can do.
+3. **`docs/design/mockups/{n}-{slug}-desktop.png`** + `{slug}-mobile.png` — visual reference. **Never implement a screen without a mockup.**
+4. **`docs/design/COMPONENTS.md`** — 85-component catalog. **Never invent a component if one exists here.**
+5. **`docs/design/INTERACTIONS.md`** § the HTMX patterns this screen uses (autosave / SSE / modal / drag-drop / etc.).
+6. **`src/ui/templates/components/`** — confirm the partials you intend to use exist + how they're invoked.
+7. **`src/ui/templates/pages/`** — recent pages for code-style coherence (HTMX attribute order, Jinja macro patterns).
 
 ---
 
@@ -291,3 +310,115 @@ The wave order is **08 → 09 → 10 W3 → 10 W6** (Scenario A). Plan 09 ships 
 **Visual contract evolution.** The **bundle JSX** (`docs/design/mockups/naavik-handoff/project/screens/<ScreenName>.jsx`) is the canonical visual reference until plan 09 ships. Once Wave 3 lands its **Playwright snapshot baseline** at `tests/visual/screenshots/<screen>-{desktop,mobile}.png`, those committed snapshots become the canonical visual contract — bundle JSX stays as the design-intent reference, but parity drift between snapshot and bundle is judged in the snapshot's favor (since it reflects the implemented system).
 
 **Design principle throughout:** Self-hosted first. The UI should feel like a developer tool you run in your homelab — dark mode, data-dense, no SaaS bloat. The cloud tier ($15/mo, bring-your-own AI credits) is mentioned in Settings as a deployment option, never as a premium upsell.
+
+---
+
+## Agent-facing process reference
+
+The sections below codify what the **designer** agent (and **engineer** doing UI handoffs) does day-to-day. Companion: `.claude/agents/designer.md`.
+
+### Skill routing (which Skill tool for which job)
+
+The designer agent has access to pre-installed skills via the `Skill` tool. Pick by intent:
+
+| Intent | Skill | When |
+|---|---|---|
+| **Bold / distinctive page or hero** | `frontend-design` or `huashu-design` | Net-new screen with original art direction; landing page; hero block |
+| **Component library / token system** | `design-system` or `ui-styling` | Codifying tokens; building a reusable component spec; design-system extension |
+| **Polish / hierarchy critique** | `impeccable` or `ui-ux-pro-max` | Existing screen that "looks fine but feels off"; accessibility pass; spacing/alignment cleanup |
+| **Banner / social asset / mockup screenshot** | `banner-design` or `design` | One-off visual asset; promotional banner; mockup PNG generation |
+| **Slides / presentations** | `slides` | Internal decks; demo presentations |
+| **Brand voice / messaging** | `brand` | Copy review; tone audit; cross-page voice consistency |
+
+**Default for ambiguous tasks:** `impeccable` for review work, `huashu-design` for prototyping work — both surface critique + variants you can pick from.
+
+### Per-screen implementation checklist
+
+When designer hands off to engineer (or engineer implements directly from a mockup):
+
+```
+[ ] Read DESIGN.md § color + type + iconography
+[ ] Read SCREENS.md § <this screen>
+[ ] Open the mockup PNG (desktop + mobile)
+[ ] Confirm all needed components exist in COMPONENTS.md / src/ui/templates/components/
+[ ] If a new variant is needed: extend existing partial via macro args (don't fork)
+[ ] Identify the HTMX patterns used (INTERACTIONS.md § J § <screen>)
+[ ] Build the page template in src/ui/templates/pages/<slug>.html
+[ ] Add route handler in src/ui/routes/<area>.py
+[ ] If new data needed: add accessor to src/db/sample_data.py (matches BACKEND.md shape exactly, async from day one)
+[ ] Run uv run ruff check . + uv run ruff format --check .
+[ ] Capture Playwright screenshots (desktop + mobile)
+[ ] Diff against the mockup PNG — < 1% pixel delta per screen target
+[ ] Update SCREENS.md: Impl [ ] → [x]
+[ ] Update ROADMAP wave row if applicable
+```
+
+### Accessibility checklist
+
+Run mentally on every screen before declaring done:
+
+```
+[ ] Keyboard nav reaches every interactive element (Tab + Shift+Tab)
+[ ] Focus rings visible (Tailwind: focus:ring-2 focus:ring-indigo-500)
+[ ] Color contrast meets WCAG AA on dark BG (https://webaim.org/resources/contrastchecker/)
+[ ] Form inputs have associated <label> with `for=`
+[ ] Icon-only buttons have aria-label
+[ ] Drag-drop has keyboard alternative (Sortable.js supports it; expose it)
+[ ] SSE streams have a screen-reader-visible fallback
+[ ] Modals trap focus + restore focus on close
+[ ] Mobile tap targets ≥ 44 × 44 px
+[ ] No flashing > 3 Hz
+```
+
+### Common UI patterns (with file pointers)
+
+When implementing a pattern that already exists, **read the existing usage first** — don't redesign.
+
+| Pattern | First instance | Notes |
+|---|---|---|
+| Per-field autosave with indicator | `src/ui/templates/pages/profile_edit.html` + `autosave_indicator` component | `hx-put` + `hx-trigger="change delay:300ms"` |
+| HTMX modal that closes on save | `src/ui/routes/fragments.py:bullet_editor_modal` | Server returns `HX-Trigger: closeModal` header |
+| SSE for long-running AI op | `src/ui/routes/auth.py:get_onboarding` (extraction) | 5 progress + 6 field + done + stepReady events |
+| Drag-drop reorder via Sortable.js | `bullet_row` on `/profile/edit`; `tracking_card` on `/tracking` | Fires `hx-post` to a reorder endpoint |
+| Optimistic UI with rollback | `src/ui/static/base.js` (htmx:responseError listener) | Pairs `hx-swap` + `hx-swap-oob` |
+| Form with success/error inline | `src/ui/templates/components/editor_card.html` | Returns the form with new state |
+| Toast notification | `toast` component + `base.js` auto-dismiss listener | Use `HX-Trigger: {"showToast": {"message": "...", "intent": "success"}}` |
+| Keyboard shortcut handler | `src/ui/static/keys.js` (Discover screen ← ↑ →) | Idempotent script guard (plan 09a) |
+| Empty state | `empty_state` component | Always provide one — never blank tables |
+| Skeleton loading | `*_skeleton` components | Use during HTMX swap-in for perceived performance |
+
+### Anti-patterns (do NOT do these)
+
+- **Mix icon sets.** Lucide only (stroke 1.5). Adding Font Awesome / Material / emoji is an instant reject.
+- **Override the stroke width.** Always 1.5.
+- **Use light-mode tokens.** Light mode is Phase 6.
+- **Add a `<script>` block to a page template.** All client JS lives in `src/ui/static/base.js` or `src/ui/static/keys.js`. Page templates declare behavior via HTMX attributes.
+- **Use inline styles.** Tailwind classes only. Exception: dynamic per-row colors via Jinja conditionals (`class="{{ 'bg-rose-500/10' if status == 'failed' else '' }}"`).
+- **Reinvent a component.** If `card` exists, use `card` — even when a variant is needed.
+- **Use SaaS copy.** "Upgrade", "Premium", "Pro tip", upsell pressure. Cloud tier is a convenience, not a premium.
+- **Hide errors.** A failed HTMX swap that just stays silent is worse than a visible error.
+- **Skip the mobile mockup.** All MVP screens have both desktop + mobile. Build mobile-first when possible.
+- **Land a screen without comparing to the mockup.** Even "small" changes drift. Run `tests/visual/capture.py` and eyeball the diff.
+- **Add a new font.** Inter + JetBrains Mono is the entire type system.
+
+### Workflow integration
+
+The design pipeline (mockup → component → page) is a **sub-process inside** `AGENTS.md` § Workflow step 6 (Implement). For UI work:
+
+```
+Plan + Design doc (architect)        ← AGENTS.md § Workflow steps 2 + 4
+   ↓
+Mockup (designer or Claude Design)   ← /design-screen command
+   ↓
+Implementation prompt (architect)    ← AGENTS.md § Workflow step 5
+   ↓
+Implementation (engineer)            ← AGENTS.md § Workflow step 6 (with WORKFLOW.md loaded)
+   ↓
+Visual QA (engineer with Playwright) ← § Capturing a new visual baseline above
+   ↓
+Deviations memo (engineer)           ← AGENTS.md § Workflow step 7
+   ↓
+Archive + ROADMAP update             ← AGENTS.md § Workflow steps 8 + 9
+```
+
+**Rule:** every UI deviation from the mockup goes into the plan's `## Deviations from plan` section before archive. Common deviations: component reuse forced a slight layout change; HTMX timing required a debounce that changed the perceived animation; accessibility fix moved a button.
