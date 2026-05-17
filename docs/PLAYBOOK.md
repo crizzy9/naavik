@@ -279,37 +279,20 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 
 ## File classification quick reference
 
-For fast lookup when you're about to edit a file:
+**Default = CONTRACT_CHANGE. BOOKKEEPING is allow-list only.** If a file isn't explicitly listed in the BOOKKEEPING allow-list below, it requires PR review. This default-deny direction is fail-safe — accidentally PR-reviewing a bookkeeping change is harmless; accidentally direct-pushing a contract change is the failure mode `aa2f6a0` demonstrated.
 
-| Path glob | Default category | Push path |
+**Canonical allow-list lives in § I "Allowed files for BOOKKEEPING".** The table below mirrors it for fast lookup; in case of drift, § I wins.
+
+| Path | Category | Push path |
 |---|---|---|
-| `src/**` | H — CONTRACT_CHANGE | PR |
-| `tests/**` | H — CONTRACT_CHANGE | PR |
-| `migrations/**` | H — CONTRACT_CHANGE | PR |
-| `scripts/**` | H — CONTRACT_CHANGE | PR |
-| `.claude/agents/**` | H — CONTRACT_CHANGE | PR |
-| `.claude/skills/**` | H — CONTRACT_CHANGE | PR |
-| `.claude/commands/**` | H — CONTRACT_CHANGE | PR |
-| `.claude/hooks/**` | H — CONTRACT_CHANGE | PR |
-| `.claude/settings*.json` | H — CONTRACT_CHANGE | PR |
-| `AGENTS.md` | H — CONTRACT_CHANGE | PR |
-| `CLAUDE.md` | H — CONTRACT_CHANGE | PR |
-| `docs/AGENT_OPS.md` | H — CONTRACT_CHANGE | PR |
-| `docs/PLAYBOOK.md` (this file) | H — CONTRACT_CHANGE | PR |
-| `docs/ARCHITECTURE.md` | H — CONTRACT_CHANGE | PR |
-| `docs/RUNBOOK.md` | H — CONTRACT_CHANGE | PR |
-| `docs/DEPLOYMENT.md` | H — CONTRACT_CHANGE | PR |
-| `DESIGN.md` | H — CONTRACT_CHANGE | PR |
-| `docs/design/**` (not mockups) | H — CONTRACT_CHANGE | PR |
-| `docs/plans/<NN>-<slug>.md` (active) | H — CONTRACT_CHANGE | PR (bundles with the implementation PR) |
-| `docs/prompts/<NN>-<slug>.md` (active) | H — CONTRACT_CHANGE | PR |
-| `docs/plans/archive/**` | I — BOOKKEEPING | direct push (at archive time) |
-| `docs/prompts/archive/**` | I — BOOKKEEPING | direct push (at archive time) |
-| `ROADMAP.md` | I — BOOKKEEPING | direct push |
-| `README.md` § Configuration / Operations | H — CONTRACT_CHANGE | PR |
-| `README.md` "Last updated" only | I — BOOKKEEPING | direct push |
-| `traces/**` | n/a (gitignored) | n/a |
-| `docs/design/mockups/**` | n/a (gitignored) | n/a |
+| `ROADMAP.md` (state flips, "Last updated" bumps, new follow-up rows, Notes column updates) | I — BOOKKEEPING | direct push |
+| `docs/plans/archive/**` (archive moves + frontmatter Status / Shipped / Deviations appends) | I — BOOKKEEPING | direct push |
+| `docs/prompts/archive/**` (kickoff prompt archive moves) | I — BOOKKEEPING | direct push |
+| `traces/**` (gitignored — MANIFEST refresh, runs.log append, per-agent log append) | I — BOOKKEEPING | n/a (gitignored) |
+| `README.md` "Last updated" line only | I — BOOKKEEPING | direct push |
+| **Everything else** | H — CONTRACT_CHANGE | PR |
+
+Non-exhaustive examples that fall under "everything else" (CONTRACT_CHANGE — PR required): `src/**`, `tests/**`, `migrations/**`, `scripts/**`, `.claude/**` (agents, skills, commands, hooks, settings), `AGENTS.md`, `CLAUDE.md`, `docs/AGENT_OPS.md`, `docs/PLAYBOOK.md` (this file), `docs/RUNBOOK.md`, `docs/DEPLOYMENT.md`, `docs/ARCHITECTURE.md`, `DESIGN.md`, `docs/design/**` (except mockups, which are gitignored), `docs/plans/<NN>-<slug>.md` (active — bundles with the implementation PR), `docs/prompts/<NN>-<slug>.md` (active), `pyproject.toml`, `uv.lock`, `flake.nix`, `flake.lock`, `nix/**`, `Dockerfile`, `docker-compose.yml`, `alembic.ini`, `.env.example`, `.envrc`, `.gitignore`, `.github/**`, `LICENSE`, `app.py`, `README.md` § Configuration / Operations / any non-"Last updated" edit.
 
 **If a single commit would touch BOTH categories** (e.g. archiving plan 18 to `docs/plans/archive/` AND ALSO updating an agent prompt), split into two commits / two PRs / one PR + one bookkeeping commit. Don't mix categories in one push.
 
