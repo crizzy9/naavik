@@ -1,4 +1,4 @@
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,12 +34,13 @@ class Settings(BaseSettings):
 
     # Plan 10c (10c.3, 2026-05-11): boot-time debug flag used by the seed-time
     # `dev-credentials` file write + the FastAPI lifespan credential echo.
-    # Read from either `NAAVIK_DEBUG` (consolidates with the legacy gate in
-    # `ui/routes/design.py`) or plain `DEBUG`. Production (`docker compose up`
-    # / NixOS module) leaves it unset → no dev-credentials artifacts.
+    # Read from `NAAVIK_DEBUG` only (no generic `DEBUG` alias per PR #49 hacker
+    # review — `DEBUG=1` is shared by Flask/Django/many frameworks and would
+    # silently disable PC.5's SECRET_KEY validator). Production (`docker compose
+    # up` / NixOS module) leaves it unset → no dev-credentials artifacts.
     debug: bool = Field(
         default=False,
-        validation_alias=AliasChoices("NAAVIK_DEBUG", "DEBUG"),
+        validation_alias="NAAVIK_DEBUG",
     )
 
     # Plan 17 (PC.5, 2026-05-16): boot-time enforcement of SECRET_KEY rules.
@@ -54,14 +55,14 @@ class Settings(BaseSettings):
             raise ValueError(
                 "SECRET_KEY is set to the shipped default 'change-me-in-production'. "
                 "Set it to a random 32+ byte string before running outside of dev. "
-                "To run with the default in dev, set NAAVIK_DEBUG=1 (or DEBUG=1)."
+                "To run with the default in dev, set NAAVIK_DEBUG=1."
             )
         if len(self.secret_key.encode("utf-8")) < 32:
             raise ValueError(
                 "SECRET_KEY is shorter than 32 bytes. Generate a strong key with "
                 "`python -c 'import secrets; print(secrets.token_urlsafe(48))'` "
                 "and set it via the SECRET_KEY env var. "
-                "To bypass in dev, set NAAVIK_DEBUG=1 (or DEBUG=1)."
+                "To bypass in dev, set NAAVIK_DEBUG=1."
             )
         return self
 
