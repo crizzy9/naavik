@@ -1,11 +1,12 @@
 ---
-Status: APPROVED
+Status: EXECUTED
 Type: design
 Authored: 2026-05-17
 Last updated: 2026-05-17
 Approved: 2026-05-17 — all 7 Q decisions locked per architect recommendation; 12-item approval checklist accepted; ROADMAP A.15 filed
+Shipped: 2026-05-17 — PR #53 squash a63b774; closes #52; ROADMAP § Phase A row A.15 marked [x]. Run: 2026-05-17T08-40-13_4abef2.
 Depends on: 16-agent-system-v2 (archived 2026-05-17 — EXECUTED) — provides the skill + hook + trace substrate this plan builds on top of
-GitHub: A.15 (Phase A milestone) — Issue # to be filed by engineer on PR open via scripts/gh-project.sh create-issue
+GitHub: A.15 → Issue #52 (CLOSED on merge). Follow-ups filed pre-merge: A.17 (#54), DEF-24 (#55), DEF-25 (#56); A.11 (#48) drift reconciled inline.
 ---
 
 ## Approval decisions (locked 2026-05-17)
@@ -429,3 +430,55 @@ When Wave 1 archives:
 - [ ] Skill bodies stay under 1,536 chars in the description field (per spec); use rich trigger phrases.
 - [ ] No CLI extension to `src/cli/` and no vault extension. Memory + learning lives entirely in `.claude/memory/` + `scripts/agent-memory.sh`.
 - [ ] On Wave 1 ship, README + CLAUDE + AGENTS + AGENT_OPS § 14 + ROADMAP all propagate the new operational surface (`.claude/memory/`, `/memory`, `naavik-memory-lookup`, `naavik-discussion-capture`).
+
+## Deviations from plan
+
+Captured at archive per AGENTS.md § Workflow step 7. Promoted from PR #53 body + `traces/2026-05-17T08-40-13_4abef2/pr-review-gate.md`.
+
+### Architectural / scope deviations
+
+- **3-Wave-in-one-PR instead of 3 phased PRs with HALTs between.** Plan § D recommended HALT between Waves 1/2/3 to keep PR diffs small. User locked the override 2026-05-17 ("ship all 3 Waves in one PR"). **Impact:** PR #53 carried Wave 1 (substrate) + Wave 2 (analytics: `/learn` + `analyze-run` + `mine-patterns`) + Wave 3 (promotion: `promote-lesson` + alias mining) together. Reviewers (hacker + devops) handled the larger diff in one gate. No follow-up plan needed; all 3 Waves are EXECUTED via this single PR.
+- **Gitignore narrow-exempt approach.** Plan § E left a choice between (a) broad `.claude/memory/` ignore + `git add -f` for seeds vs (b) narrower ignore tracking `knowledge/*.md` + `.keep`. Shipped (b): `.claude/memory/*` ignored EXCEPT `!.claude/memory/.keep` + `!.claude/memory/knowledge/` + `!.claude/memory/knowledge/*.md`. **Impact:** seed knowledge entries + future committed knowledge files ship in git for cross-contributor reference without per-fork `add -f` ceremony.
+- **`scripts/agent-memory.sh seed` subcommand added beyond plan.** Inventory helper that lists the 5 committed knowledge seeds. Read-only; doesn't write to any store. **Impact:** discoverability — operators run `bash scripts/agent-memory.sh seed` to see what's bundled.
+- **`scripts/agent-memory.sh update-index` subcommand + auto-call from `record-knowledge` added post-review-gate.** Filed by user during PR_REVIEW_GATE ("i see we didn't index our knowledge base properly"). Maintains `.claude/memory/knowledge/INDEX.md` (topic / confidence / aliases / first / last captured) automatically on every `record-knowledge` invocation; standalone subcommand for forced refresh. Single-writer rule preserved. 5 new test assertions cover it (smoke total 45→50 PASS). **Impact:** static index file shippable in PR diff (vs only dynamic `list knowledge` output); navigable on GitHub web UI.
+- **Follow-up Issues filed pre-merge, not post-merge.** Plan implicitly assumed follow-ups would be filed after merge. User directive 2026-05-17 at PR_REVIEW_GATE wrapped them into the same PR cycle: `A.17` #54 (hacker findings — `agent-memory.sh` hardening), `DEF-24` #55 (pre-existing ruff cleanup), `DEF-25` #56 (DB-test gating gap). `A.11` (#48) Project board drift reconciled inline via `gh issue close` (workflow rule auto-moved Todo→Done; no new ROADMAP row).
+
+### Quality-gate deviations
+
+- **Pre-existing failures NOT blocking.** PR #53's `bash tests/test_agent_memory.sh` shipped 50/50 PASS on the A.15-introduced surface, but `uv run ruff check .` showed 10 errors (in `migrations/versions/0001_initial.py`, `migrations/versions/0002_settings_multi_users.py`, `scripts/roadmap_parser.py`) + `uv run pytest -x` halted on `tests/test_application_qs_form.py::test_app_questions_render_as_selects` (asyncpg auth on `localhost:5432`). Devops verified BOTH are pre-existing on `origin/main` via the stash technique. Filed as `DEF-24` + `DEF-25`. **Impact:** none on A.15 — confirms A.15 didn't introduce regressions.
+- **PR body initially understated pytest pre-existing scope.** Body cited "1 pre-existing failure" via `pytest -x` halt-first behavior. Devops scope-correction: actual is **65 failures across 11 test files** (test_application_qs_form, test_discover_redesign, test_settings_llm_form, test_stub_endpoints, test_swipe_handler, test_draft_lifecycle, test_inplace_expand, test_mobile_layouts, test_mobile_sidebar, test_pages, test_persistence_swap, test_sample_data, test_scroll_spy). PR body addendum + DEF-25 carry the corrected scope. **Impact:** when DEF-25 ships, the canonical fix pattern is `_skip_if_no_db()` at `tests/test_settings_llm_form.py:17-25` — propagate to remaining 11 files.
+
+### Security-review deviations
+
+- **Hacker verdict APPROVE_WITH_NOTES (medium) — 5 findings deferred to A.17.** None block per hacker gating logic (0 critical/high). 2 medium worth pre-merge fix in theory, but user merged with follow-up:
+  1. `append_jsonl:49-57` lost-update race (medium) — 30 parallel writes drop ~17; needs `flock` around read-modify-write.
+  2. `query:376` jq env() exfil (medium) — user expr unescaped to `jq`; env.* filter reads process secrets to stdout; needs allowlist regex.
+  3. `for run in $RUNS:506,573` unquoted word-split (low) — defense-in-depth.
+  4. `--aliases` front-matter newline injection (low) — needs kebab regex validation.
+  5. `MANIFEST.json` verbatim echo into markdown (low) — needs `printf %q`.
+  **Impact:** A.17 (#54, HIGH, ~2h) carries all 5 hardening fixes. Race + jq exfil are real but small-blast-radius (single-operator local tool, no untrusted network input).
+
+### Workflow / process deviations
+
+- **Engineer dispatch bypassed; manager absorbed commit + push + PR role.** Plan assumed normal flow: manager → architect plan → user approval → engineer implements. Reality: when manager ran `/build A.15`, the work was already complete on the `feat/A.15-agent-memory` branch (user implemented directly during the same session window). Manager dispatch of engineer rejected; manager pivoted to verify + commit + push + PR + dispatch reviewers. Logged as `ERROR step=engineer-dispatch kind=skip` in `traces/2026-05-17T08-40-13_4abef2/manager.log`. **Impact:** future plans may see similar shapes when the user is also actively coding — manager should pivot gracefully (don't redo work, verify + ship).
+- **Hacker self-approval pivot.** GitHub blocked the hacker (same identity as PR author `crizzy9`) from APPROVE-ing the PR. Hacker posted review as `event=COMMENT` with the verdict line at the top of the body. Pattern captured in `.claude/memory/knowledge/hacker-self-approval.md`. **Impact:** future PR review flows on operator-author PRs hit the same pattern; the captured knowledge entry is the canonical workaround.
+- **PR review gate report archived to `traces/<run-id>/pr-review-gate.md`.** New convention introduced this run per user directive ("store this report in an archive"). Future runs should write the gate report to the same path; canonical template lives at `traces/2026-05-17T08-40-13_4abef2/pr-review-gate.md` § 9 convention note. **Impact:** establishes a tracing-system pattern; consider promoting to `docs/AGENT_OPS.md § 7` in a follow-up doc PR.
+
+### New operational surface (propagated per AGENTS.md § Workflow step 7)
+
+All cross-walks landed in PR #53 diff:
+
+- `.claude/memory/` — agent memory stores (gitignored per-fork EXCEPT `.keep` + `knowledge/*.md` + `knowledge/INDEX.md`). Documented in `README.md § Operations`, `CLAUDE.md "Last updated"`, `AGENTS.md § Agent System` infrastructure table, `docs/AGENT_OPS.md § 14`.
+- `scripts/agent-memory.sh` — single writer for `.claude/memory/`. Hacker `secrets-audit` skill enforces (`hacker-secrets-audit/SKILL.md` updated).
+- `/memory list <store>` + `/memory query <store> '<jq>'` + `/memory knowledge <topic>` — read-only slash commands.
+- `/learn [N]` — manual retrospective.
+- `.claude/memory/knowledge/INDEX.md` — static auto-generated knowledge index.
+- Read-only integration with `~/.claude/projects/.../memory/MEMORY.md` — no programmatic write per locked Q6.
+
+### Test count delta
+
+- Plan § G Wave 1 tests: 7 assertions specified.
+- Plan § G Wave 2 tests: 3 assertions specified.
+- Plan § G Wave 3 tests: 2 assertions specified.
+- Plan § G total spec'd: 12.
+- **Shipped: 50** (additive — includes substrate edge cases, idempotency, supersede semantics, list/query coverage, INDEX maintenance). All PASS at merge. **Impact:** confidence is higher than spec; future regressions surface fast.
