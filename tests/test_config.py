@@ -3,7 +3,8 @@
 Each test constructs Settings() with explicit kwargs to isolate from the
 ambient process env (which under `nix develop` has NAAVIK_DEBUG=1 set,
 and tests run with whatever .env supplies). _env_isolated() further clears
-NAAVIK_DEBUG / DEBUG / SECRET_KEY so the validator sees only the kwargs.
+NAAVIK_DEBUG / SECRET_KEY so the validator sees only the kwargs. Settings
+sets populate_by_name=True so kwargs flow through despite the validation_alias.
 """
 
 import os
@@ -18,7 +19,7 @@ from config import Settings
 @contextmanager
 def _env_isolated():
     """Strip env vars that pydantic-settings would otherwise read."""
-    keys = ("NAAVIK_DEBUG", "DEBUG", "SECRET_KEY")
+    keys = ("NAAVIK_DEBUG", "SECRET_KEY")
     saved = {k: os.environ.pop(k, None) for k in keys}
     try:
         yield
@@ -54,11 +55,7 @@ def test_valid_secret_key_passes_when_not_debug():
 
 
 def test_default_secret_key_allowed_in_debug():
-    # Settings.debug uses validation_alias=AliasChoices("NAAVIK_DEBUG","DEBUG")
-    # without populate_by_name=True, so kwarg debug=True is dropped (extra="ignore").
-    # Set the alias env var inside isolation instead.
     with _env_isolated():
-        os.environ["NAAVIK_DEBUG"] = "1"
-        s = Settings(secret_key="change-me-in-production")
+        s = Settings(secret_key="change-me-in-production", debug=True)
     assert s.debug is True
     assert s.secret_key == "change-me-in-production"
