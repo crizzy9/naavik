@@ -1,6 +1,6 @@
 # Naavik · Roadmap Overview
 
-> **Last updated:** 2026-05-16
+> **Last updated:** 2026-05-17 (A.28 board restructure in flight — § 3 Priority Queue refreshed to mirror new ROADMAP § Priority Queue (rank 1–7+); A.9 + A.10 + A.18–A.27 relocated to new `### Phase 2.5: Agent-system follow-ups` section in ROADMAP; PC.6a relocated to Phase 2 milestone).
 > **Companion:** `ROADMAP.md` — the canonical 800-line ledger. THIS doc is the one-page executive digest agents load instead of the full ROADMAP when they only need state, not detail.
 
 ---
@@ -26,19 +26,21 @@ Phase 1 (MVP — 11 screens + backend substrate) ✅ shipped 2026-05-03; Phase A
 
 ---
 
-## 3. Active work (next 5 items, highest priority first)
+## 3. Priority Queue (mirrors `ROADMAP.md § Priority Queue`)
 
-Per ROADMAP § Pre-Phase-2 paper cuts + § Phase A:
+Per the post-A.28 ROADMAP § Priority Queue. **A.28 ships first** (this PR — board restructure + Phase 2.5 milestone + 4-status convention). After A.28 merges, the build order is locked: A.17 → A.16 → PC.6a → 2.12 → 2.11. Phase 2 scrapers (2.1–2.10) defer to Backlog status until the Tier-2 wave clears.
 
-| Task ID | Title | Priority | Estimate | Notes |
-|---|---|---|---|---|
-| **A.8** | First end-to-end `/build` shipping a real paper cut | HIGH | ~1 h | Validates the full agent loop end-to-end. Recommended target: PC.5 (1h). |
-| **PC.5** | `SECRET_KEY` boot-time enforcement (refuse `change-me-in-production` or < 32 bytes outside DEBUG) | MEDIUM | ~1 h | `src/config.py` validator + clear error message. |
-| **PC.6** | Password complexity rules (min 12 chars, digit + letter) + must-change-on-first-login flag for env-injected dev creds | MEDIUM | ~2 h | `src/services/auth.py:hash_password` + tests. |
-| **2.12** | Vault deprecation → env-only secrets (delete vault + AES-GCM + audit log; alembic 0003 drops fingerprint cols; UI flips to "configured via env" indicators) | HIGH | ~2–3 d | Sequence BEFORE 2.11. Touches ~15 files; mostly deletions. |
-| **2.11** | CLI sunset (after 2.12: delete `src/cli/`, drop `[project.scripts]`, collapse server entrypoint) | HIGH | < 1 d | Independent of scrapers (2.1–2.10). |
+| Rank | Task ID | Title | Priority | Milestone | Issue |
+|---|---|---|---|---|---|
+| 1 | **A.28** | Board restructure — add Backlog status + Phase 2.5 milestone | HIGH | Phase A | #60 |
+| 2 | **A.17** | `agent-memory.sh` hardening | HIGH | Phase A | #54 |
+| 3 | **A.16** | Machine-readable wording rewrite of agent-system files | HIGH | Phase A | #61 |
+| 4 | **PC.6a** | Broader `require_password_complete` gate | MEDIUM | Phase 2 | #62 |
+| 5 | **2.12** | Vault deprecation → env-only secrets | HIGH | Phase 2 | #20 |
+| 6 | **2.11** | CLI sunset | HIGH | Phase 2 | #21 |
+| 7+ | (Phase 2 scrapers 2.1–2.10) | (deferred to Backlog status until 2.12/2.11 ship) | CRITICAL | Phase 2 | #10–19 |
 
-After these clear, Phase 2 proper (2.1–2.10 scrapers) begins.
+Hand-maintained; manager refreshes at every gate transition (PLAN_GATE / PR_REVIEW_GATE / MILESTONE_GATE). Canonical source is the per-phase tables in `ROADMAP.md`; this overview is a derived view.
 
 ---
 

@@ -17,8 +17,9 @@ argument-hint:
    - **Done since last standup** — list with PR links (cross-reference against `./traces/runs.log` since last `/standup` invocation, or last 24h if none).
    - **In-flight** — items marked `[~]` in ROADMAP or "In Progress" on the board; for each, name the responsible agent (per the run log).
    - **Blocked** — items flagged blocked + the blocker (open question, dep on external API, awaiting user input).
-   - **Next 3 items** — manager's recommended next items from the ROADMAP ledger (unblocked, highest priority).
-   - **Drift** — output of `scripts/gh-project.sh sync` (drift count + diffs). If > 0, recommend `/sync-roadmap --apply` to reconcile (ROADMAP wins).
+   - **Backlog by epic** (post-A.28) — top epic in Backlog by Priority + item count. Use `scripts/gh-project.sh backlog-by-epic --top 3`. Surface deferred work at a glance so the operator can decide whether to promote.
+   - **Next 3 items** — manager's recommended next items from the ROADMAP ledger (unblocked, highest priority, Status=Todo). Backlog items are excluded (they're deferred from the current cycle).
+   - **Drift** — output of `scripts/gh-project.sh sync` (drift count + diffs). If > 0, recommend `/sync-roadmap --apply` to reconcile (ROADMAP wins). Note: `sync` preserves Backlog (Backlog → Todo is not a drift).
    - **Token budget** — today's `total_today` + % of `daily_token_ceiling`. If > 80%, flag.
 
 3. **Print** the standup to stdout AND **append** to `./traces/standups.log` (one entry per `/standup`, timestamped):

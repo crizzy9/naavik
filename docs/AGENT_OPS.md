@@ -1,6 +1,7 @@
 # Naavik Agent System — Operations Guide
 
-> **Last updated:** 2026-05-17 (A.15 SHIPPED — § 14 added: agent memory + learning system. `.claude/memory/` + `scripts/agent-memory.sh` + `naavik-memory-lookup` + `naavik-discussion-capture` + `naavik-learn` + `manager-promote-lesson` skills + `/memory` + `/learn` commands. Manager § PR review gate + § Milestone boundary gate updated to invoke `Skill: naavik-discussion-capture`. Plan: `docs/plans/19-agent-memory-and-learning.md`; design doc: `docs/design/AGENT_MEMORY.md`.)
+> **Last updated:** 2026-05-17 (A.28 — board restructure. § 6.3 extended to 4-row status table + asymmetric Backlog convention; § 2.2 fields list adds Backlog + Phase 2.5 milestone. New shared skill `manager-backlog-promote` for auto-promote workflow when Todo empties. `scripts/gh-project.sh` gains `add-status` / `create-milestone` / `item-id` / `backlog-by-epic` subcommands; `set-status` accepts `Backlog`; `cmd_sync` preserves Backlog. PLAYBOOK gains "Board status convention (post-A.28)" section.)
+> Earlier line: 2026-05-17 (A.15 SHIPPED — § 14 added: agent memory + learning system. `.claude/memory/` + `scripts/agent-memory.sh` + `naavik-memory-lookup` + `naavik-discussion-capture` + `naavik-learn` + `manager-promote-lesson` skills + `/memory` + `/learn` commands. Manager § PR review gate + § Milestone boundary gate updated to invoke `Skill: naavik-discussion-capture`. Plan: `docs/plans/19-agent-memory-and-learning.md`; design doc: `docs/design/AGENT_MEMORY.md`.)
 > Earlier line: 2026-05-16 (plan 16 Phase 1 EXECUTED — § 2.7 + § 2.8 added: GitHub Projects v2 workflow rules + git commit-message hook install)
 > **Status:** Active. This is THE single doc for using the agent-driven delivery system. Read it once; reference as needed.
 > **Companion docs:** `AGENTS.md` (workflow + conventions), `ROADMAP.md` § Agent System (task ledger), `.claude/agents/` (full agent prompts), `.claude/commands/` (slash commands).
@@ -39,9 +40,9 @@ Run these ONCE per fork. After bootstrap, you `/build`, `/plan`, `/standup` from
 2. Click **New project** → **Board** layout.
 3. Name it `naavik` (or whatever you prefer; you'll feed the number to `init`).
 4. **Add three single-select custom fields** (Project settings → Fields → "+ New field"):
-   - **Status** (already exists by default) — options: `Todo`, `In Progress`, `Done`. If your project came with `Backlog`/`Ready`/etc., either rename or add `Todo`/`In Progress`/`Done` — the helper looks for those names.
+   - **Status** (already exists by default) — options: `Todo`, `In Progress`, `Done`, **`Backlog`** (added 2026-05-17 per A.28; deferred-from-current-cycle state — see § 6.3). If your project came with only the first 3, run `scripts/gh-project.sh add-status Backlog --color GRAY` after `init` to add the fourth.
    - **Priority** — options: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`.
-   - **Milestone** — options created as you bootstrap (`Phase 0`, `Phase 1`, …, `Phase A`, `Pre-Phase-2 paper cuts`). You can pre-create or let `bootstrap` add them.
+   - **Milestone** — options created as you bootstrap (`Phase 0`, `Phase 1`, …, `Phase A`, `Pre-Phase-2 paper cuts`, `Phase 2.5`). You can pre-create or let `bootstrap` add them.
 5. Note the project number from the URL (`.../projects/<N>`).
 
 ### 2.3 Cache the Project IDs
@@ -296,11 +297,22 @@ Auto-managed by `scripts/gh-project.sh`. ROADMAP.md is authoritative.
 
 ### 6.3 Status checkboxes → Project Status field
 
+The board carries **four** Status options (post-A.28, 2026-05-17). Three of them map symmetrically to ROADMAP checkboxes; the fourth (`Backlog`) is asymmetric.
+
 | ROADMAP | Project Status |
 |---|---|
 | `[ ]` | `Todo` |
 | `[~]` | `In Progress` |
 | `[x]` | `Done` (Issue also closed) |
+| (no ROADMAP-checkbox equivalent) | `Backlog` — Project-only status for items deferred from current cycle |
+
+**Asymmetric `Backlog` semantics.** ROADMAP rows for Backlog items stay `[ ]` (they're not "in progress" or "done"); the `Backlog` status lives only on the Project. The mapping is asymmetric: `[ ]` can mean Todo OR Backlog, distinguished by the Project Status column. Sync direction stays ROADMAP → Project; `/sync-roadmap --apply` does NOT touch Backlog status (it only flips `[ ]/[~]/[x]` → Todo/In Progress/Done; it never knows what to do with Backlog because Backlog is a board-only decision). To move a Project item from Todo → Backlog, use `scripts/gh-project.sh set-status <item-id> Backlog` directly; the change is board-only and ROADMAP doesn't reflect it. To promote a Backlog item back into the current cycle, run `set-status <item-id> Todo` explicitly (or invoke the `manager-backlog-promote` skill for the consent-gated auto-promote flow).
+
+Within Backlog, items are unprioritized at the item level — only the **epics** within Backlog carry priority via their own Priority field on the epic Issue. Promotion ordering uses epic priority, not individual item priority. Use `scripts/gh-project.sh backlog-by-epic --top N` to surface deferred work grouped by parent epic, ordered by epic priority.
+
+**`next-unblocked` skips Backlog.** Operating-loop step 2 ignores Backlog items. When Todo is empty mid-loop, manager invokes `Skill: manager-backlog-promote` for the user-consent gate (per A.28 PLAN_GATE Q3 lock).
+
+**`bootstrap` is idempotent on Backlog.** When `bootstrap` re-runs against an existing Issue, it `continue`s without touching Status (handled by the existing `EXISTING && SKIP` branch). Backlog status is never overwritten by re-bootstrap. `cmd_sync` was hardened post-A.28 to preserve Backlog: ROADMAP `[ ]` maps to Todo OR Backlog, and Backlog → Todo is not flagged as drift.
 
 ### 6.4 Priority column → Project Priority field
 
