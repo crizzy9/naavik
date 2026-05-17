@@ -1,6 +1,14 @@
 # Naavik Development Roadmap
 
-> Last updated: 2026-05-12 (Plan 10c **EXECUTED** — first-time setup ergonomics paper cut shipped. `nix develop` shellHook exports `NAAVIK_PERSISTENCE=db` for orchestrator parity (10c.1); `/login` promotes the "Create account" CTA out of the footer to a prominent affordance below the Sign-in button, and `/login?mode=signup` renders an amber `lock` banner ("This instance already has an account.") instead of a form against a seeded single-user DB (10c.2); seeded dev credential now persists to `~/.naavik/dev-credentials` (mode 0600, gated on `NAAVIK_DEBUG` + generated-password + `Settings.deployment_mode==SELF_HOSTED`) AND is re-echoed by the FastAPI lifespan ~750 ms after startup so it survives the orchestrator's interleaved scrollback (10c.3). Retrieval is plain `cat ~/.naavik/dev-credentials`; **no new CLI subcommand** (CLI sunset per Phase 2 task 2.11). New config field: `Settings.debug` on `src/config.py` reads `NAAVIK_DEBUG` / `DEBUG` via pydantic-settings alias. 478 tests pass (3 new vs the 475 baseline; 2 additional live-DB seed tests under `NAAVIK_LIVE_DB=1`). New baseline snapshot: `tests/visual/baseline/login-signup-banner-desktop.png`. Doc cross-walk: README § "First-time setup", § Dev/test env vars, § Configuration § DATA_DIR comment, § Operations § `naavik` CLI sunset note; CLAUDE.md "Last updated"; POST_PHASE_1.md § "Phase 1 done" step 2.)
+> Last updated: 2026-05-16 (**Plan 16 AUTHORED** — `docs/plans/16-agent-system-v2.md` DRAFT for ROADMAP row A.11 (Agent System v2). Four phases: (1) cold-start hook + `naavik-cold-start` skill + `Skill` tool on all 6 agents + git `prepare-commit-msg` hook + Project v2 automation guide; (2) ~28-skill per-agent suite under `.claude/skills/<name>/SKILL.md` (manager 4 / architect 4 / engineer 5 / designer 5 / hacker 3 / devops 3 + 4 shared `naavik-*`); (3) first real `/build` shipping PC.5 (satisfies A.8); (4) second `/build` shipping PC.6. Halts after Phase 1 + Phase 2 for user review. All 6 kickoff Open questions resolved in the plan (skill naming = `<agent>-<verb>` + `naavik-<verb>`; cold-start = hook + skill; `SubagentStart` NOT used per anthropics/claude-code#27755; branch regex `^(feat|fix|chore|docs|refactor)/<task-id>-<slug>$`). Plan estimates ~2.1M–2.9M total tokens across all 4 phases. Awaiting PLAN GATE.)
+>
+> Earlier line: 2026-05-16 (**A.11 added + A.12 marked done.** A.12 (map cache + single-writer governance): `scripts/gh-project.sh` `find_issue_by_prefix` + `ensure_milestone` now consult `.claude/github-issue-map.json` first (eliminates the search-API race that produced duplicate epics #46 dup #6 + #47 dup #7); new `refresh-map` subcommand reconciles from authoritative GitHub state; dry-run reports `exists`/`PLAN` for milestones + epics correctly; bootstrap is fully idempotent (`would create=0 skipped=40`). "GitHub state — single writer" rule codified in `CLAUDE.md` / `AGENTS.md` / `.claude/agents/manager.md` / `.claude/commands/bootstrap.md` / `docs/AGENT_OPS.md`. A.11 (Agent System v2): 4-phase plan kicked off via `docs/prompts/agent-system-v2.md` — cold-start hook + skill + per-agent skill suite under `.claude/skills/<name>/SKILL.md` + git `prepare-commit-msg` hook for auto `Closes #N` linkage from branch name + Project v2 automation guide. Phase 3 of A.11 = A.8 deliverable (first end-to-end `/build`); architect to author `docs/plans/16-agent-system-v2.md` in next session. New file: `docs/prompts/README.md` documents the prompts directory convention (kickoff prompts archive alongside plans).)
+>
+> Earlier line: 2026-05-16 (**ROADMAP carved to tracking-only.** 807 → 436 lines (-46%). Vision + Competitive Context moved to `README.md`; Architecture diagram + Tech Stack table + Design decisions + Repository Structure + Data Model sketches removed (canonical homes: `docs/ARCHITECTURE.md` + `docs/design/DATA_MODEL.md`); Deployment (4 paths) moved to new `docs/DEPLOYMENT.md`; n8n migration + Portfolio integration narratives moved to `docs/ARCHITECTURE.md` § 4.7 External integrations; UI Screens narrative deleted (canonical was always `docs/design/SCREENS.md`). Pointer table in § Maintenance lists where each section landed. **GitHub Project #4 mirror live** (https://github.com/users/crizzy9/projects/4): 4 epics (#1 Phase A, #6 Pre-Phase-2 paper cuts, #9 Phase 2, #22 Phase 1.x deferred) + 45 Issues + 4 milestones + Status/Priority/Effort single-select fields + `[Epic] <phase>` parent issues + sub-issue linkage via Parent issue field + 13 labels. `scripts/gh-project.sh` extended with `create-epic`, `--parent` on `create-issue`, `set-priority`, `set-effort`; bootstrap creates Milestone + Epic + sub-issues per phase. Cache at `.claude/github-project.json` (gitignored, per fork).)
+>
+> Earlier line: 2026-05-16 (**Phase A: Agent System bootstrapped** — 6 specialized Claude Code subagents under `.claude/agents/` + 13 slash commands under `.claude/commands/` + `scripts/gh-project.sh` (Projects v2 helper) + token budget config + trace system + 3 `.github/ISSUE_TEMPLATE/` forms + PR template. `docs/AGENT_OPS.md` is the canonical operational guide. Phase A is meta (the dev process), tracked separately from product phases 0-6. Fork bootstrap: `gh auth login → scripts/gh-project.sh init → scripts/gh-project.sh bootstrap --apply → claude /standup → claude /build "next"`. A.1-A.7 shipped; A.8 (first end-to-end `/build` against PC.5) is the validation step.)
+>
+> Earlier line: 2026-05-12 (Plan 10c **EXECUTED** — first-time setup ergonomics paper cut shipped. `nix develop` shellHook exports `NAAVIK_PERSISTENCE=db` for orchestrator parity (10c.1); `/login` promotes the "Create account" CTA out of the footer to a prominent affordance below the Sign-in button, and `/login?mode=signup` renders an amber `lock` banner ("This instance already has an account.") instead of a form against a seeded single-user DB (10c.2); seeded dev credential now persists to `~/.naavik/dev-credentials` (mode 0600, gated on `NAAVIK_DEBUG` + generated-password + `Settings.deployment_mode==SELF_HOSTED`) AND is re-echoed by the FastAPI lifespan ~750 ms after startup so it survives the orchestrator's interleaved scrollback (10c.3). Retrieval is plain `cat ~/.naavik/dev-credentials`; **no new CLI subcommand** (CLI sunset per Phase 2 task 2.11). New config field: `Settings.debug` on `src/config.py` reads `NAAVIK_DEBUG` / `DEBUG` via pydantic-settings alias. 478 tests pass (3 new vs the 475 baseline; 2 additional live-DB seed tests under `NAAVIK_LIVE_DB=1`). New baseline snapshot: `tests/visual/baseline/login-signup-banner-desktop.png`. Doc cross-walk: README § "First-time setup", § Dev/test env vars, § Configuration § DATA_DIR comment, § Operations § `naavik` CLI sunset note; CLAUDE.md "Last updated"; POST_PHASE_1.md § "Phase 1 done" step 2.)
 >
 > Earlier line: 2026-05-10 (Plan 10c **APPROVED** — kickoff prompt at `docs/prompts/10c-first-time-setup.md` ready to paste into a fresh implementation session. Locked decisions: Q1 `signup_disabled` server-side gate, Q2 `app_settings.data_dir / dev-credentials` path, Q3 750 ms lifespan-echo delay, Q4 Wave-4 partial-swap cleanup stays separate, NO CLI extension (CLI sunset per Phase 2 task 2.11) and NO vault changes (vault deprecation per Phase 2 task 2.12). PC.7 stays `[ ]` until implementer flips to `[~]` on start.)
 >
@@ -24,278 +32,25 @@
 
 ## Maintenance
 
-**This roadmap is the single source of truth for project progress.** Always keep it updated:
+This doc is **tracking-only** (per AGENTS.md § Single-doc-tracking). The maintenance rules live in **`AGENTS.md` § Roadmap Maintenance Rules** — read once, follow always. Quick summary:
 
-- When a task is **started**: change its status from `[ ]` to `[~]` (in progress)
-- When a task is **completed**: change its status to `[x]` and add a brief note about the deliverable
-- When a phase is **completed**: update the phase status header and bump the "Last updated" date
-- When **scope changes**: edit the relevant phase table directly — do not bury changes in commits
-- When **new tasks emerge** mid-phase: insert them in the phase table with appropriate priority
-- When **architecture decisions change**: update the relevant section (Tech Stack, Key Design Decisions, Architecture diagram)
+- `[ ]` → `[~]` on start. `[~]` → `[x]` + deliverable note on completion.
+- Edit the table directly when scope changes — don't bury in commits.
+- Bump "Last updated" on every meaningful edit.
+- **GitHub Project mirror:** the agent system mirrors this onto GitHub Project #4. See § Agent System (mirror conventions) below. Sync via `scripts/gh-project.sh sync --apply` after ROADMAP edits.
 
-The "Last updated" date at the top should reflect the most recent meaningful edit.
+Pointers for content that USED to be in this doc (carved 2026-05-16 to keep ROADMAP tracking-only):
 
-## Vision
-
-An open-source career automation platform that navigates the job market end-to-end: profile intake, job discovery, intelligent matching, resume/cover letter tailoring, application tracking, and interview pipeline management.
-
-**Self-hosted first, cloud available.**
-
-The default path is self-hosted — any developer can deploy Naavik for free via Docker Compose or NixOS. Your data stays on your infrastructure. A managed cloud tier ($15/month, bring-your-own AI credits or local model) exists for those who prefer not to self-host, but it is functionally identical — never treated as "premium."
-
-This positioning shapes the product: dark-mode developer aesthetic, no SaaS bloat, no upsell pressure, data-dense tool feel.
-
----
-
-## Competitive Context
-
-No commercial platform is self-hostable. Naavik fills a real gap — and even open-source alternatives don't offer the full stack.
-
-| What exists | Gap Naavik fills |
+| Was here | Now lives in |
 |---|---|
-| **Sprout** ($20-100/mo) — Closest to our vision. Swipe-to-apply, per-job resume tailoring, mobile-first | Not self-hosted, not open source, no visa filtering, no portfolio integration, no LLM choice, no outreach |
-| **Teal** ($29/mo) — Best job tracker and resume analyzer, no auto-apply | No auto-apply, no generation, proprietary, no outreach |
-| **Jobsolv** ($79-149/mo) — Per-job tailoring + auto-apply via credits | Expensive, niche ($100K+ remote only), proprietary, no outreach |
-| **LoopCV** (EUR 10-30/mo) — Set-and-forget automation | No resume tailoring, generic form-filling, no outreach |
-| **Sonara** ($6-24/mo) — Background auto-apply | No resume tailoring, submits generic resume, no outreach |
-| **AIHawk** (open source, 29.7K stars) — LinkedIn auto-apply bot | Archived, LinkedIn-only, no profile system, no email monitoring, no outreach tracking |
-| **JobSync** (open source, 528 stars) — Self-hosted job tracker | No scraping, no auto-apply, no resume generation, no outreach |
-| **JobNavigator** (open source, new) — Multi-source scraping + scoring | No cover letter gen, no auto-apply, no email monitoring, no outreach |
-
-### Why Naavik wins
-
-| Dimension | Naavik | Commercial tools | Other OSS |
-|---|---|---|---|
-| **Cost** | Free (self-hosted) or $15/mo (cloud) | $20-150/mo | Free |
-| **Self-hosted** | Default path | No | Some |
-| **Open source** | AGPL-3.0 | No | Mixed |
-| **LLM choice** | Claude, GPT, Ollama (local) | Proprietary or locked | Usually one |
-| **Data ownership** | Yours | Theirs | Yours |
-| **Full pipeline** | Profile → scrape → score → generate → apply → track → outreach | Fragmented | Usually partial |
-| **Visa filtering** | Yes | Rare | No |
-| **Portfolio integration** | Yes | No | No |
-
----
-
-## Architecture
-
-```
-┌──────────────────┐
-│  Reverse Proxy   │
-│  (Caddy/Nginx)   │
-└────────┬─────────┘
-         │
-┌────────▼────────┐     ┌─────────────────┐
-│    FastAPI       │     │   Authelia       │
-│  + Jinja2/HTMX  │     │  (optional SSO)  │
-│  + APScheduler  │     └─────────────────┘
-└────────┬────────┘
-         │
-   ┌─────┼─────┬──────────┐
-   │     │     │          │
-┌──▼──┐┌─▼───┐┌▼─────┐┌──▼────┐
-│Pg+  ││Crawl││Typst ││ LLM   │
-│pgvec││4AI+ ││      ││Claude/│
-│tor  ││Playw││      ││GPT/   │
-│     ││right││      ││Ollama │
-└─────┘└─────┘└──────┘└───────┘
-```
-
-### Tech Stack
-
-| Layer | Choice | Alternatives considered |
-|---|---|---|
-| **Dev Environment** | Nix flake + devShell | venv (not reproducible), Docker-only (slow iteration) |
-| **Backend** | FastAPI + SQLModel | Django (too heavy), Flask (no async), Litestar (small ecosystem) |
-| **Frontend** | HTMX + Jinja2 + Tailwind + DaisyUI | React (too complex), Svelte (two codebases), Streamlit (not production) |
-| **Database** | PostgreSQL + pgvector | SQLite (no concurrency), Supabase (15+ containers overkill) |
-| **Scraping** | Crawl4AI + Playwright | Firecrawl (self-hosted lacks Fire-engine anti-bot), Scrapy (no JS rendering) |
-| **AI/LLM** | Direct SDK (Anthropic/OpenAI/Ollama) | LangChain (over-abstracted for our single-prompt use cases) |
-| **PDF** | Typst (primary), LaTeX (future compat) | LaTeX alone (slow, 4GB TexLive, macro arcana) |
-| **Scheduling** | APScheduler (pg job store) | Celery (needs broker), Dramatiq (needs Redis) |
-| **Auth** | JWT + Google OAuth | Authentik (too heavy), Keycloak (enterprise) |
-| **Deployment** | Docker Compose + NixOS service module | Docker-only (misses NixOS homelab users) |
-| **Packaging** | Nix flake output (package + module + devShell) | pip/wheel only (not reproducible) |
-
-### Key Design Decisions
-
-1. **Profile in DB, not YAML** — Users manage profiles via UI (resume upload + manual editing). API serves data. No config files to maintain.
-
-2. **Single long-form bullets** — Every experience bullet is a single canonical text (the long, full version, no length cap). At apply time, AI trims each selected bullet to a single resume line while preserving numbers and verbs. Selection per job is driven by tag relevance + JD signals; users can pin via per-bullet `selection_override` (`always_include` / `never_include` / `null` = AI auto-decides). The prior `oneline` / `detailed` split, `default_include` toggle, and metric fields (revenue / percentage / team_size) were removed in 2026-04 — see `docs/design/SCREENS.md` § Section 6.
-
-3. **Typst over LaTeX** — 10-100x faster PDF compilation, clean programmatic data ingestion, single binary. LaTeX compatibility is a future roadmap item.
-
-4. **Direct LLM SDKs, no LangChain** — Our LLM use cases are single-prompt structured output tasks. Both Anthropic and OpenAI SDKs support Pydantic-based structured output natively. No abstraction layer needed.
-
-5. **Auto-apply as user setting** — Default off. When enabled, high-scoring jobs get documents generated and applications submitted automatically. Users can toggle this per their comfort level.
-
-6. **Cloud + Local LLM support** — Every AI feature offers both cloud (Claude/GPT) and local (Ollama) options. User chooses in settings. Prompts are provider-agnostic.
-
----
-
-## Data Model
-
-### Profile (Single Source of Truth)
-
-```
-Profile
-├── meta (name, email, phone, location, portfolio, github, linkedin)
-├── application_questions (US-only Phase 1):
-│     work_authorization, visa_sponsorship_needed, willing_to_relocate,
-│     notice_period, salary_expectation, earliest_start,
-│     veteran_status, disability_status, race_ethnicity (EEOC), gender (EEOC)
-├── summary (full + short versions)
-├── education[]
-│   └── institution, school, location, degree, dates, gpa, courses[]
-├── experience[]
-│   ├── company, team, title, location, dates
-│   └── bullets[]
-│       ├── id (stable identifier)
-│       ├── text (single long-form, no length cap — AI trims at apply time)
-│       ├── tags[] (9-tag vocab: ai-ml, backend, frontend, devops, data-eng,
-│       │           genai, leadership, platform, product)
-│       └── selection_override (always_include / never_include / null = AI auto-decides per JD)
-├── skills[] → (category, items[])
-├── projects[] → (title, date, text, tags[], portfolio_slug)
-├── certifications[] → (title, issuer, date, description)
-├── open_source[] → (title, date, description)
-└── cover_letter_base → (template paragraphs with placeholders)
-```
-
-**Authoritative reference:** `docs/design/DATA_MODEL.md` (graduated from `docs/plans/05-data-model.md`). The diagram above is a sketch; all enum tables, indexes, validation rules, and relationships live in DATA_MODEL.md once that doc lands.
-
-### Job + Application (multi-axis state, see plan 05)
-
-```
-Job (pre-application: a discovered or manually-added opportunity)
-├── id, source (AUTOMATED/MANUAL), url, url_type
-├── company, position, team, location
-├── dates (posted, found)
-├── description, criteria, skills_required
-├── visa_restrictions, salary_range
-├── compatibility_score (0-1), score_explanation
-└── queue_state (unswiped / saved / skipped / queued_for_auto_apply / applied)
-   ↑ flips to `applied` when an Application row is created from this Job
-
-Application (one row per submitted job; carries multi-axis post-submission state)
-├── id, job_id, applied_at, board (greenhouse / workday / lever / ashby / manual)
-├── status (APPLIED · RECRUITER_SCREEN · ONSITE_LOOP · OFFER · CLOSED)
-├── closed_reason (rejected_by_them / withdrawn_by_me / ghosted / accepted_other; required when status=CLOSED)
-├── docs_state (none / generating / ready / stale / failed) — drives doc-readiness UI
-├── referral_state (none / requested / in_flight / provided / declined) — drives warm-intro pill
-├── recruiter_state (none / engaged / responded / silent / stalled) — drives "silent N days" urgency
-├── outreach_engagement (computed view: cold / active / awaiting_reply / referred / converted)
-├── status_history[] (timeline events; see AppEvent)
-├── generated_documents[] → GeneratedDocument (resume PDF + cover letter PDF/text)
-└── notes
-```
-
-**Lifecycle is multi-axis, not a flat enum.** The five `Application.status` values are the post-submission pipeline. Document generation, referral status, recruiter engagement, and outreach engagement are tracked as **orthogonal sub-states**, not as additional pipeline stages. A single application can be `RECRUITER_SCREEN` + `referral_state=provided` + `docs_state=ready` simultaneously. See `docs/design/DATA_MODEL.md` (graduated from plan 05) for the full multi-axis state model, transitions per axis, and timeline event taxonomy. The flat `FOUND → SCORED → APPROVED → DOCS_GENERATED → INTERVIEWING → REJECTED → WITHDRAWN` enumeration was removed in 2026-04 — those concerns now live on dedicated axes.
-
-### Outreach & Contacts
-
-```
-Contact
-├── id, type (RECRUITER/EMPLOYEE/HR/HIRING_MANAGER)
-├── name, title, company, linkedin_url, linkedin_id
-├── email, notes
-├── relationship (warm/cold), source (scraped/manual/outreach)
-└── outreach_history[]
-
-OutreachMessage
-├── id, contact_id, job_id
-├── template_type (INTRO, REFERRAL_REQUEST, FOLLOW_UP, THANK_YOU, CHECK_IN)
-├── subject, body
-├── linkedin_message_id (if sent via LinkedIn)
-├── sent_at, responded_at
-├── response_summary, status (PENDING/SENT/OPENED/RESPONDED/ACCEPTED/DECLINED)
-└── ai_generated, human_edited
-
-EmailThread
-├── id, job_id, contact_id
-├── subject, messages[]
-│   ├── sender, recipient, body, timestamp
-│   ├── direction (INBOUND/OUTBOUND)
-│   └── classification (INTERVIEW_REQUEST, REJECTION, OFFER, ASSESSMENT, FOLLOW_UP, OTHER)
-├── latest_message_at
-└── auto_classified, manually_verified
-```
-
----
-
-## Repository Structure
-
-```
-naavik/
-├── src/
-│   ├── main.py                    # FastAPI entrypoint
-│   ├── config.py                  # pydantic-settings
-│   ├── api/                       # REST routes
-│   │   ├── profile.py             # CRUD + resume upload + AI extraction
-│   │   ├── jobs.py                # Job listing, scoring, tracking
-│   │   ├── generator.py           # Resume/cover letter generation
-│   │   ├── portfolio.py           # Public API for portfolio site
-│   │   └── auth.py                # Login, OAuth, JWT
-│   ├── ui/                        # HTMX views
-│   │   ├── templates/             # Jinja2 (base, dashboard, profile, jobs, generator, settings)
-│   │   ├── partials/              # HTMX fragments (job_row, bullet_editor, score_card)
-│   │   └── static/                # htmx.min.js, styles
-│   ├── models/                    # SQLModel models
-│   │   ├── profile.py             # Profile, Experience, Bullet, Skill
-│   │   ├── job.py                 # Job, StatusHistory
-│   │   ├── user.py                # User, Settings
-│   │   └── schemas.py             # API request/response schemas
-│   ├── services/                  # Business logic
-│   │   ├── profile_intake.py      # Resume upload → AI extraction → DB
-│   │   ├── job_scraper.py         # Crawl4AI + Playwright scraping
-│   │   ├── job_scorer.py          # AI scoring + tag matching
-│   │   ├── resume_generator.py    # Profile + job → bullet selection → Typst → PDF
-│   │   ├── cover_letter_gen.py    # Job desc → personalized letter → PDF
-│   │   ├── portfolio_sync.py      # Serve profile via API for portfolio site
-│   │   ├── notifications.py       # Discord, Telegram
-│   │   ├── email_monitor.py       # Gmail/IMAP email monitoring
-│   │   ├── email_classifier.py    # AI email classification
-│   │   ├── contact_tracker.py     # Recruiter/employee contact management
-│   │   └── outreach_generator.py # AI outreach message generation + LinkedIn
-│   ├── llm/                       # LLM abstraction
-│   │   ├── base.py                # Abstract interface
-│   │   ├── anthropic.py           # Claude SDK
-│   │   ├── openai.py              # OpenAI SDK
-│   │   ├── ollama.py              # Local models
-│   │   └── prompts/               # Prompt templates (Python modules)
-│   ├── scraper/                   # Per-site scrapers
-│   │   ├── base.py
-│   │   ├── linkedin.py
-│   │   ├── workday.py
-│   │   ├── greenhouse.py
-│   │   ├── lever.py
-│   │   ├── ashby.py
-│   │   └── generic.py
-│   ├── typst/
-│   │   ├── templates/             # onepage.typ, fullprofile.typ, cover_letter.typ
-│   │   ├── compiler.py            # Typst CLI wrapper
-│   │   └── validator.py           # Oneline length validation
-│   ├── scheduler/
-│   │   └── jobs.py                # APScheduler definitions
-│   └── db/
-│       ├── session.py             # Async session management
-│       └── seed.py                # Initial data seeding
-├── migrations/                    # Alembic
-├── tests/
-├── legacy/                        # n8n workflow exports (reference)
-├── docs/
-├── generated/                     # gitignored — output PDFs
-├── docker-compose.yml
-├── Dockerfile
-├── pyproject.toml
-├── flake.nix                  # Nix flake: devShell + package + NixOS module
-├── flake.lock
-├── nix/
-│   ├── package.nix            # Nix derivation for naavik
-│   ├── module.nix             # NixOS service module (Lumino-compatible)
-│   └── devshell.nix           # Dev shell with all deps (python, uv, typst, postgresql, ruff)
-└── .env.example
-```
+| Vision + Competitive Context | `README.md` § What is Naavik? + § Why Naavik? |
+| Architecture diagram + Tech Stack table + Design decisions | `docs/ARCHITECTURE.md` |
+| Data Model sketches | `docs/design/DATA_MODEL.md` (canonical) |
+| Repository Structure tree | `docs/ARCHITECTURE.md` § 3 layer responsibilities |
+| Deployment (4 paths) | `docs/DEPLOYMENT.md` |
+| n8n Migration Strategy | `docs/ARCHITECTURE.md` § 4.7 External integrations |
+| Portfolio Integration | `docs/ARCHITECTURE.md` § 4.7 External integrations |
+| UI Screens & Design narrative | `docs/design/SCREENS.md` + `DESIGN.md` + `docs/design/WORKFLOW.md` |
 
 ---
 
@@ -503,7 +258,7 @@ These are dev-experience fixes carried over from Wave 2/3 + Wave 5. Ship as smal
 | PC.2 | `uv run fastapi dev` (no path) should just work | [x] | **Plan 10a (2026-05-02):** 2-line `app.py` shim at repo root re-exports `src.main:app`. README "Manual local development setup" step 2 trimmed to `uv run fastapi dev`. `pyproject.toml` `[tool.setuptools] py-modules` extended with `"app"` so `pip install .` ships the shim. |
 | PC.3 | Playwright local capture on NixOS | [x] | **Plan 10a (2026-05-02):** dev shell adds `nodejs_22` + `PLAYWRIGHT_NODEJS_PATH` env var so pip-installed playwright python uses Nix-built node (the bundled prebuilt fails NixOS' non-FHS layout). Playwright pinned to `>=1.58.0,<1.59` to match `pkgs.playwright-driver.browsers`'s chromium-1208. `tests/visual/capture.py --baseline` captures 20 desktop PNGs to `tests/visual/baseline/` (committed); `tests/visual/screenshots/` gitignored for ad-hoc work. WORKFLOW.md § Capturing a new visual baseline documents the recipe. |
 | PC.4 | Phase-1 finalization — orchestrator greenlet/libstdc++ + NAAVIK_PERSISTENCE=db default + working dev credential + signup endpoint + `naavik` CLI subcommands (init / vault rotate-key / vault status) + Settings · LLM Provider form-wiring + Settings · Deployment vault-locked banner + README rewrite + ROADMAP wave-numbering cleanup | [x] | **Plan 10b EXECUTED 2026-05-03** (`docs/plans/archive/10b-phase-1-finalization.md` + `docs/prompts/archive/10b-phase-1-finalization.md`). 9 paper cuts shipped: `flake.nix` exports `LD_LIBRARY_PATH` + `NAAVIK_PERSISTENCE=db`; `db/seed.py` injects real bcrypt hash via `NAAVIK_DEV_PASSWORD` env or random; `POST /api/v1/auth/signup` w/ single-user gate via new `Settings.allow_multiple_users` (Alembic 0002); `naavik` CLI dispatcher (serve / init / vault status / vault rotate-key); Settings · LLM Provider form-wrap + 2 fragment endpoints; Settings · Deployment vault-locked banner; README first-time-setup + signup + troubleshooting rewrite; CLAUDE.md "Last updated" wave-cross-walk. 475 tests pass (~12 new); ruff clean. Live smoke: `nix run .#dev` boots clean (greenlet fix verified), seed prints credential message, signup gate returns 403 on seeded DB, login returns 204+JWT, PUT /api/v1/settings/llm via form persists Anthropic↔Ollama swap, `naavik vault status` + `rotate-key` round-trip + locked-state detection all green. Deviations documented in archived plan; key items: shorter migration revision id (alembic varchar(32)), scalar select for `Settings.allow_multiple_users` to dodge live-worker ORM-mapping quirk, sqlmodel.select replacing sqlalchemy.select in auth path. |
-| PC.5 | `SECRET_KEY` boot-time enforcement — refuse to start when value is `change-me-in-production` or <32 bytes outside DEBUG | [ ] | Tiny: `config.py` validator + clear error. Belongs after PC.4 ships. ~1 hour. |
+| PC.5 | `SECRET_KEY` boot-time enforcement — refuse to start when value is `change-me-in-production` or <32 bytes outside DEBUG | [~] | Tiny: `config.py` validator + clear error. Belongs after PC.4 ships. ~1 hour. |
 | PC.6 | Password complexity rules (min 12 chars, must contain digit + letter) + must-change-on-first-login flag for env-injected dev creds | [ ] | Lives in `services/auth.py:hash_password`. ~2 hours including tests. |
 | PC.7 | First-time setup ergonomics — `nix develop` `NAAVIK_PERSISTENCE=db` parity + login signup-link promotion + signup-disabled banner (server-gated on `users_exist AND not Settings.allow_multiple_users`) + persisted `~/.naavik/dev-credentials` (mode 0600, debug + SELF_HOSTED gated) + lifespan credential echo so the dev credential is the last visible line on `nix run .#dev` startup OR retrievable via plain `cat` | [x] | **Plan 10c EXECUTED 2026-05-12** (`docs/plans/archive/10c-first-time-setup.md` + `docs/prompts/archive/10c-first-time-setup.md`). Three sub-items shipped: (10c.1) `nix/devshell.nix:shellHook` exports `NAAVIK_PERSISTENCE=db`; (10c.2) `src/ui/templates/pages/login.html` promotes the "Create account" CTA out of the footer to a prominent below-submit affordance + renders an amber `lock` banner when `signup_disabled=True` (server-side gate in `src/ui/routes/auth.py:_compute_signup_disabled` mirrors `POST /api/v1/auth/signup`'s 403 condition); (10c.3) `src/db/seed.py` writes `~/.naavik/dev-credentials` (mode 0600) when `app_settings.debug + dev_password_source == "generated" + Settings.deployment_mode == SELF_HOSTED`, and `src/main.py` lifespan spawns a fire-and-forget task that echoes the file ~750 ms after startup via stdlib `logging`. **No new CLI subcommand** (per CLI sunset policy in AGENTS.md § Key Conventions § CLI). 478 tests pass (3 new pages tests + 2 new live-DB seed tests vs the 475 baseline). New config field `Settings.debug` on `src/config.py` (reads `NAAVIK_DEBUG` / `DEBUG` via pydantic-settings alias); `flake.nix:devEnv` exports `NAAVIK_DEBUG=1` so the orchestrator unlocks the file write + lifespan echo. Deviations documented in the archived plan; key items: added the new `Settings.debug` config field (plan referenced `app_settings.debug` without saying to add it), kept `nix/devshell.nix` without `NAAVIK_DEBUG=1` (preserves `test_design_components_route::test_fixture_404_without_debug`), `_compute_signup_disabled` fails-open to form-render on DB errors, updated `tests/visual/baseline/login-desktop.png` in addition to adding `login-signup-banner-desktop.png`. |
 
@@ -624,184 +379,67 @@ These are dev-experience fixes carried over from Wave 2/3 + Wave 5. Ship as smal
 
 ---
 
-## Deployment
+### Phase A: Agent System
+> **Goal:** A reproducible agent-driven delivery system mirrored from this ROADMAP onto a GitHub Project v2 board. 6 specialized subagents + 13 slash commands + tracing + token budget + bootstrap tooling. Tracked separately from product phases — this is meta (the dev process), not the product.
+> **Plan:** `docs/AGENT_OPS.md` (operational guide — single source for setup, daily workflow, troubleshooting).
+> **Status:** 🚧 Active (bootstrap shipped 2026-05-16). Run `scripts/gh-project.sh init && scripts/gh-project.sh bootstrap --apply` once per fork to mirror this phase's tasks onto the Project board.
+> **Mirror milestone:** `Phase A`.
 
-### Four deployment paths
+| # | Task | Status | Priority | Notes |
+|---|---|---|---|---|
+| A.1 | Author 6 subagent prompts under `.claude/agents/{manager,architect,engineer,devops,hacker,designer}.md` | [x] | CRITICAL | Frontmatter (name/description/tools/model/color) + body (principles, operating loop, tracing format, escalation). Models: manager+architect+hacker on opus-4-7; engineer+devops+designer on sonnet-4-6 with `ESCALATE: opus` pattern. |
+| A.2 | Author 13 slash commands under `.claude/commands/` | [x] | CRITICAL | `/build`, `/plan`, `/discuss`, `/triage-bug`, `/review-pr`, `/threat-model`, `/design-screen`, `/groom`, `/standup`, `/bootstrap`, `/sync-roadmap`, `/budget`, `/runs`. Each wraps a multi-agent flow. |
+| A.3 | `scripts/gh-project.sh` — Projects v2 helper | [x] | CRITICAL | `init`, `bootstrap`, `sync`, `milestone-status`, `add-item`, `create-issue`, `set-status`, `next-unblocked`, `runs`. Idempotent; user-or-org auto-detected. Cache at `.claude/github-project.json` (gitignored). |
+| A.4 | Token budget config + ledger | [x] | HIGH | `.claude/budget.json` (caps) + `.claude/budget-ledger.json` (manager-managed, gitignored). Halt at projected-spend-exceeds-cap; `/budget` to inspect. |
+| A.5 | Trace system: `traces/<run-id>/` + `watch.sh` (tmux) + `runs.log` index + `MANIFEST.json` per run | [x] | HIGH | Run-id format `YYYY-MM-DDTHH-MM-SS_<6hash>`. Per-agent log format frozen in each agent's prompt. `/runs` to list history. |
+| A.6 | `docs/AGENT_OPS.md` — single operational guide | [x] | CRITICAL | Bootstrap → daily workflow → commands reference → agent reference → GitHub Mirror conventions → tracing → budget → troubleshooting → extending the system. Linked from README, AGENTS.md, CLAUDE.md. |
+| A.7 | `.github/` templates: 3 Issue forms (bug / feature / plan-execution) + PR template | [x] | MEDIUM | PR template aligns with AGENTS.md § Workflow step 7 (deviations summary required). |
+| A.8 | First end-to-end `/build` shipping a real paper cut | [ ] | HIGH | Validates the full loop: manager → architect → engineer → hacker → devops → ROADMAP update → Issue close → Project advance → run manifest. Recommended first target: PC.5 (SECRET_KEY boot-time enforcement, ~1h). Blocked by A.11 (needs the cold-start infra + per-agent skills + git automation to be a meaningful validation rather than a dry run of the old loop). |
+| A.9 | Cap retention on `traces/` (auto-delete runs > N days) | [ ] | LOW | Today: manual delete. Add a `traces/.cleanup.sh` cron-style helper once accumulation gets noisy (>50 runs). |
+| A.10 | Visual run dashboard (web UI for `traces/runs.log`) | [ ] | LOW | Nice-to-have. Current state: `claude /runs` + `./traces/watch.sh` cover the inspection use cases. |
+| A.11 | **Agent system v2 — cold-start infra + per-agent skill suite + git commit automation** | [ ] | HIGH | Four-phase build. (1) `.claude/hooks/cold-start.sh` SessionStart hook + `.claude/skills/naavik-cold-start/SKILL.md` auto-trigger skill + `Skill` tool added to all 6 agents + `.claude/hooks/git/prepare-commit-msg` that auto-appends `Closes #N` from branch name using `.claude/github-issue-map.json` + Project v2 automation guide (one-time UI setup). (2) Per-agent skill suite under `.claude/skills/<name>/SKILL.md`: ~28 skills total — manager 4 / architect 4 / engineer 5 / designer 5 / hacker 3 / devops 3 + shared 4 (`naavik-cold-start` / `naavik-roadmap-status` / `naavik-deviations-check` / `naavik-vault-sunset-guard`). (3) First real `/build` (PC.5) — this satisfies A.8. (4) Second `/build` (PC.6) for muscle memory. Kickoff prompt: `docs/prompts/agent-system-v2.md`. **Plan: `docs/plans/16-agent-system-v2.md`** (DRAFT 2026-05-16). Halts at Phase 1 + Phase 2 boundaries for user review. |
+| A.12 | Map cache + single-writer governance (gh-project.sh hardening) | [x] | HIGH | Shipped 2026-05-16. `scripts/gh-project.sh` `find_issue_by_prefix` + `ensure_milestone` consult `.claude/github-issue-map.json` first (eliminates search-API race); new `refresh-map` subcommand reconciles from authoritative GitHub state (prefers open + lowest-#); dry-run now correctly reports `exists`/`PLAN` for milestones + epics (was lying with "would create if missing"); duplicate epics #46/#47 closed; "GitHub state — single writer" rule codified in CLAUDE.md / AGENTS.md / manager.md / bootstrap.md / AGENT_OPS.md. Bootstrap is now fully idempotent (`would create=0`). |
 
-#### 1. Self-hosted: Nix Flake (NixOS — recommended for homelab)
-
-```bash
-# Add to your NixOS flake inputs
-inputs.naavik.url = "github:crizzy9/naavik";
-
-# In your host's services.yml (Lumino pattern)
-apps:
-  tools:
-    naavik:
-      enable: true
-      subdomain: "jobs"           # → jobs.crypticsoul.dev
-      port: 8000
-      settings:
-        llm_provider: "anthropic"  # or "openai" or "ollama"
-        auto_apply: false
-        portfolio_webhook: "https://api.netlify.com/build_hooks/..."
-```
-
-The NixOS module (`nix/module.nix`) follows Lumino's service patterns:
-- Reads config from `settings.servicesConfig.apps.tools.naavik`
-- Creates systemd service with hardening
-- SOPS secrets for API keys (`naavik_env`)
-- Traefik routing via `services.traefik.dynamicConfigOptions.http`
-- PostgreSQL provisioned as dependency
-- `services` group membership for shared storage
-- Data directory at `${appdata}/naavik`
-
-#### 2. Self-hosted: Docker Compose (any Linux/macOS)
-
-```bash
-git clone https://github.com/crizzy9/naavik.git && cd naavik
-cp .env.example .env  # edit with your API keys
-docker compose up -d
-```
-
-#### 3. Managed Cloud ($15/month)
-
-For users who prefer not to self-host. Functionally identical to self-hosted — you bring your own AI credits (Anthropic/OpenAI API keys) or connect a local Ollama instance. Naavik handles the server, you handle the AI.
-
-- Sign up at `jobs.crypticsoul.dev` (or self-branded instance)
-- Enter your API key in Settings → LLM Provider
-- Everything else works the same
-
-#### 4. Development (bare metal)
-
-```bash
-nix develop          # drops into shell with python, uv, typst, postgresql, ruff
-uv sync              # install Python deps
-uv run alembic upgrade head
-uv run fastapi dev src/main.py
-```
-
-### Nix Flake Outputs
-
-```nix
-{
-  packages.x86_64-linux.default   # naavik Python package
-  packages.x86_64-linux.naavik    # alias
-
-  nixosModules.default             # NixOS service module
-  nixosModules.naavik              # alias
-
-  devShells.x86_64-linux.default   # dev environment (python, uv, typst, pg, ruff)
-}
-```
-
-### Cloud vs Self-hosted: Same Codebase
-
-Naavik is a single codebase. The only differences between self-hosted and cloud:
-
-| | Self-hosted | Cloud |
-|---|---|---|
-| **Server** | Your infrastructure | Managed by Naavik |
-| **Cost** | Free | $15/month |
-| **AI credits** | You provide API keys | You provide API keys |
-| **Data** | On your servers | Encrypted at rest |
-| **Code** | Identical | Identical |
-| **Features** | All | All |
-
-There is no "cloud-only" feature. The cloud tier is purely a convenience layer.
-
-This is reflected in the design: Settings has a "Deployment" tab that shows your current mode, but there's no premium upsell anywhere in the core experience.
+**Deliverable (Phase A):** A fork-able agent system. `gh auth login → scripts/gh-project.sh init → scripts/gh-project.sh bootstrap --apply → claude /standup → claude /build "next"` works end-to-end. New contributors onboard via `docs/AGENT_OPS.md`.
 
 ---
 
-## n8n Migration Strategy
+## Agent System (mirror conventions)
 
-| n8n Component | Naavik Equivalent | When |
-|---|---|---|
-| Main Workflow (Lw1uK5APIhIeUeem) | `scheduler/` + `services/job_scraper.py` | Phase 2 |
-| Manual Logger (xSIGv47G2Porc0S9) | `api/applications.py` + `ui/templates/pages/discover.html` (`+ Add by URL`) and `ui/templates/pages/tracking.html` (`+ Add manually`) | Phase 4 |
-| Job Page Parser (PQAGv5qUajzBP5wm) | `scraper/*.py` | Phase 2 |
-| DataTable (Job Applications) | PostgreSQL `jobs` table | Phase 2 |
-| Google Sheets sync | Optional sync in Phase 4 | Phase 4 |
-| Discord notifications | `services/notifications.py` | Phase 2 |
-| OpenAI extraction | `llm/` (multi-provider) | Phase 0 |
-| Browserless | Crawl4AI + Playwright | Phase 2 |
-| RSShub feed | Keep as-is | Phase 2 |
+> **Companion docs:** `docs/AGENT_OPS.md` (single operational guide), `AGENTS.md` § Agent System (workflow integration), `.claude/agents/` (full agent prompts), `.claude/commands/` (slash commands).
+>
+> **Reference guides loaded by agents on cold start:**
+> - `docs/ROADMAP_OVERVIEW.md` — one-page roadmap digest (faster than this 800-line doc)
+> - `docs/ARCHITECTURE.md` — layer responsibilities + cross-cutting concerns + pattern catalog
+> - `DESIGN.md` (root) — visual contract (tokens, type, icons, voice; frozen) + `docs/design/WORKFLOW.md` — UI sub-process (skill routing, per-screen checklist, accessibility, common patterns, anti-patterns)
+> - `docs/DEPLOYMENT.md` — 4 deployment paths + config + ops checklist
+> - `docs/RUNBOOK.md` — devops runbook (known failure modes + diagnostic recipes + recovery)
+> - `docs/plans/POST_PHASE_1.md` — testing playbook + monitoring + "when something goes wrong"
 
-**Migration order:**
-1. Export n8n workflows → `legacy/`
-2. Build profile system (Phase 0-1) independently
-3. Build scrapers (Phase 2) → validate pipeline works → disable n8n Main Workflow
-4. Build tracking (Phase 4) → disable n8n Manual Logger
-5. Fully decommission n8n after Phase 4
+This ROADMAP is mirrored onto a GitHub Project v2 board for queryability and assignability. **ROADMAP is authoritative** (per AGENTS.md § Single-doc-tracking); the Project is a one-way operational mirror. The mapping is mechanical:
 
----
-
-## Portfolio Integration
-
-Naavik serves profile data to the portfolio website (crypticsoul.dev):
-
-```
-Naavik DB ──► GET /api/portfolio/cv ──► cryptic-soul cv.astro (build-time fetch)
-         ──► GET /api/portfolio/resume.pdf ──► Download link on CV page
-```
-
-- Profile updates in Naavik → optionally trigger Netlify rebuild webhook
-- CV page always in sync — no manual HTML duplication
-- Resume PDF always current — no manual copy
-
----
-
-## UI Screens & Design
-
-### Design Documents
-
-Canonical anchors and directory layout live in `AGENTS.md` § Documentation locations. The lifecycle that produces design contracts is `AGENTS.md` § Workflow. Always-present design docs: `DESIGN.md` (visual contract), `docs/design/SCREENS.md` (screen catalog), `docs/design/WORKFLOW.md` (UI sub-process). Mockups (visual reference, gitignored) at `docs/design/mockups/` — see `docs/design/mockups/README.md`.
-
-### Design Workflow
-
-```
-PHASE A (Claude Design):
-  Point Claude Design at GitHub repo (or upload DESIGN.md) → "Set up design system"
-  → Extract tokens → Validate → Publish
-
-PHASE B (Claude Design):
-  Create Prototype (High fidelity) → Paste CLAUDE_DESIGN_PROMPT.md
-  → Generate screens → Iterate → Export PNGs → Commit to mockups/
-
-PHASE C (Claude Code):
-  Read mockups + DESIGN.md
-  → Build component library (templates/components/)
-  → Implement pages (templates/pages/)
-```
-ROADMAP + SCREENS.md → paste prompt → Claude Design → mockups committed
-                                         ↓
-                         Claude Code reads mockups + DESIGN.md
-                                         ↓
-                         Component library built (templates/components/)
-                                         ↓
-                         Pages implemented (templates/pages/) + HTMX routes
-```
-
-### Screen Index
-
-**Canonical screen index lives in [`docs/design/SCREENS.md`](docs/design/SCREENS.md).** That document tracks per-screen mockup status (`Mockup [ ]` / `[~]` / `[x]`) and impl status (`Impl [ ]` / `[~]` / `[x]`). ROADMAP.md tracks phase progress; SCREENS.md tracks per-screen progress. Maintaining two parallel tables produces drift — they were drifting badly until 2026-04-30 — so the table that used to live here has been removed.
-
-**Phase 1 (MVP) at a glance:** 11 screens — Login · Onboarding · Overview · Profile · Profile editor · Bullet editor (modal) · Discover · Discover · review & apply · Tracking · Outreach · Settings. Mockups for all 11 are committed in `docs/design/mockups/`.
-
-**Deferred / Phase 2+ screens** (Manual job entry modal, Application detail slide-over, etc.) are listed in `docs/design/SCREENS.md` § Phase mapping > Deferred.
-
-### Design System (Summary)
-
-| Token | Value |
+| ROADMAP element | GitHub Project equivalent |
 |---|---|
-| Page BG | `#020617` (slate-950) |
-| Surface | `#0F172A` (slate-900) |
-| Elevated | `#1E293B` (slate-800) |
-| Brand primary | `#6366F1` (indigo-500) |
-| Accent (AI) | `#22D3EE` (cyan-400) |
-| Sans font | Inter (weights 400–700) |
-| Mono font | JetBrains Mono |
-| Icons | Lucide Icons (stroke 1.5) |
+| `### Phase N: <Name>` header | Milestone `Phase N` (description = `**Goal:**` line) |
+| Task row in a phase table | Issue titled `[<task-id>] <description>`, body links back to ROADMAP |
+| `[ ]` / `[~]` / `[x]` status | Project Status field: `Todo` / `In Progress` / `Done` |
+| Priority column (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`) | Project Priority single-select |
+| Phase header | Project Milestone single-select (`Phase 0`–`Phase 6`, `Phase A`, `Pre-Phase-2 paper cuts`, `Phase 1.x deferred`) |
+| Notes column | Issue body |
+| `Plan:` reference (e.g., `docs/plans/11-…`) | Label `plan:<NN>` on the Issue |
+| `[~]` row that takes >1 day | Optionally split into sub-Issues via `/groom` |
 
-Full spec in `DESIGN.md`.
+**Sync flow:** always ROADMAP → Project. Manager updates ROADMAP first (mark `[~]` on start, `[x]` on done), then runs `scripts/gh-project.sh set-status` to push to Project. `/sync-roadmap --apply` is the bulk reconcile. If the Project drifts from ROADMAP, the Project is wrong — never edit ROADMAP to match a stale board.
+
+**Bootstrap:** `scripts/gh-project.sh bootstrap [--apply]` parses ROADMAP's task tables and creates Milestones + Issues + Project items for the active phases (defaults to Pre-Phase-2 paper cuts + Phase A + Phase 2 + Phase 1.x deferred — completed Phase 0/1 rows are skipped). See `docs/AGENT_OPS.md` § 2 for the full setup walkthrough.
+
+**What to do as a plan / task author:**
+1. Write the task row in ROADMAP first (status `[ ]`, with Priority).
+2. Run `/plan <task-id>` — architect drafts the plan, opens the GH Issue (via `scripts/gh-project.sh create-issue`), adds to Project, links back to ROADMAP.
+3. Run `/build <milestone>` (or `/build "next"`) when ready to implement.
+
+**What to do as an implementer:**
+1. Mark the ROADMAP row `[~]` when starting.
+2. Reference the Issue in commits: `Closes #<N>` in the last commit triggers GH's auto-close on merge.
+3. Mark the ROADMAP row `[x]` + add a one-line deliverable note when done.
+4. `/build` handles steps 1 + 3 automatically; manual implementers do them by hand.
