@@ -2,9 +2,9 @@
 
 > **For Claude Code sessions.**
 > **Canonical guide:** `AGENTS.md` — always read that first.
-> **Last updated:** 2026-05-12 (Plan 10c EXECUTED — first-time-setup ergonomics paper cut. New operational surface: `~/.naavik/dev-credentials` (mode 0600, written only when `NAAVIK_DEBUG` is set AND `NAAVIK_DEV_PASSWORD` is unset AND the seeded `Settings.deployment_mode == SELF_HOSTED`). Plain `cat ~/.naavik/dev-credentials` is the canonical retrieval path — **NOT** a new CLI subcommand: `AGENTS.md` § Key Conventions § CLI codifies the "do not extend" rule (CLI sunset per ROADMAP § Phase 2 task 2.11; vault deprecation per task 2.12). `nix develop` shellHook also exports `NAAVIK_PERSISTENCE=db` for parity with the orchestrator, and `flake.nix:devEnv` exports `NAAVIK_DEBUG=1` so the lifespan credential echo + on-disk file fire under `nix run .#dev`. New config field `Settings.debug` (config.py) reads `NAAVIK_DEBUG` / `DEBUG` via pydantic-settings alias.)
+> **Last updated:** 2026-05-16 (Plan 16 Phase 1 EXECUTED — cold-start hook + naavik-cold-start skill + Skill tool added to all 6 agents + git prepare-commit-msg hook for auto-`Closes #N`. Remaining: Phase 2 per-agent skill suite, Phase 3+4 validation builds.)
 >
-> Earlier line: 2026-05-03 (Wave 5 / plan 10 § C EXECUTED + plan 10b EXECUTED — operational paths under `~/.naavik/data/documents/{<app_id>,portfolio}/` + `~/.naavik/data/snapshots/` + `~/.naavik/secrets.enc` + `~/.naavik/key.bin` + APScheduler crons + new deps `apscheduler` + `pypdf`. ROADMAP's canonical Wave numbers are 4 (plan 10 § B) and 5 (plan 10 § C); the plan body's "Wave 3 / Wave 6" labels are aliases. New env vars: `NAAVIK_DEV_PASSWORD` (seeded credential override), `NAAVIK_PERSISTENCE` (now defaults to `db` under the orchestrator).)
+> Earlier line: 2026-05-12 (Plan 10c EXECUTED — first-time-setup ergonomics paper cut. New operational surface: `~/.naavik/dev-credentials` (mode 0600, written only when `NAAVIK_DEBUG` is set AND `NAAVIK_DEV_PASSWORD` is unset AND the seeded `Settings.deployment_mode == SELF_HOSTED`). Plain `cat ~/.naavik/dev-credentials` is the canonical retrieval path — **NOT** a new CLI subcommand: `AGENTS.md` § Key Conventions § CLI codifies the "do not extend" rule (CLI sunset per ROADMAP § Phase 2 task 2.11; vault deprecation per task 2.12). `nix develop` shellHook also exports `NAAVIK_PERSISTENCE=db` for parity with the orchestrator, and `flake.nix:devEnv` exports `NAAVIK_DEBUG=1` so the lifespan credential echo + on-disk file fire under `nix run .#dev`. New config field `Settings.debug` (config.py) reads `NAAVIK_DEBUG` / `DEBUG` via pydantic-settings alias.)
 
 This file provides Claude Code-specific guidance. For general project conventions, architecture, and the design workflow, see `AGENTS.md`.
 
@@ -13,10 +13,42 @@ This file provides Claude Code-specific guidance. For general project convention
 ```
 1. Read AGENTS.md
 2. Read ROADMAP.md
-3. If doing UI work: read docs/design/WORKFLOW.md + DESIGN.md
-4. Start work. Update ROADMAP.md as you go.
-5. Before archiving any plan, write its `## Deviations from plan` section. (AGENTS.md § Workflow step 7.)
+3. If using the agent system: read docs/AGENT_OPS.md (single operational guide)
+4. If doing UI work: read docs/design/WORKFLOW.md + DESIGN.md
+5. Start work. Update ROADMAP.md as you go.
+6. Before archiving any plan, write its `## Deviations from plan` section. (AGENTS.md § Workflow step 7.)
 ```
+
+**Cold-start invariant (post-A.11):** every agent's first action MUST be
+`Skill: naavik-cold-start`. The `.claude/hooks/cold-start.sh` SessionStart hook
+reminds the parent session of this; the agent prompts enforce it on subagent
+dispatches. Do not read individual canonical files (AGENTS.md, ROADMAP, etc.)
+before the skill has run — that path is what plan 16 fixed.
+
+**Agent system entry points:**
+- `docs/AGENT_OPS.md` — first-time bootstrap, daily workflow, troubleshooting. **This links to the four canonical guides:**
+  - `docs/ROADMAP_OVERVIEW.md` — phase state at a glance
+  - `docs/ARCHITECTURE.md` — layer responsibilities + cross-cutting concerns + pattern catalog
+  - `DESIGN.md` (root, visual contract) + `docs/design/WORKFLOW.md` (UI sub-process — skill routing, checklists, common patterns) — UI work
+  - `docs/DEPLOYMENT.md` — 4 deployment paths + config + ops checklist (deployment / install work)
+  - `docs/RUNBOOK.md` — known failure modes + diagnostic recipes (devops work)
+- `ROADMAP.md` — full task ledger. Phase A: Agent System and § Agent System (mirror conventions) are the agent-system-specific rows.
+- `.claude/agents/` — full agent prompts (manager, architect, engineer, devops, hacker, designer).
+- `.claude/commands/` — slash commands (`/build`, `/plan`, `/discuss`, `/triage-bug`, `/review-pr`, `/threat-model`, `/design-screen`, `/groom`, `/standup`, `/bootstrap`, `/sync-roadmap`, `/budget`, `/runs`).
+- `.claude/skills/` — project-level auto-trigger skills, one directory per skill (`<name>/SKILL.md`). **Planned by Phase A.11** (`docs/prompts/agent-system-v2.md`); currently empty. Per-agent suites (manager / architect / engineer / designer / hacker / devops) plus shared cross-agent skills (cold-start, roadmap-status, deviations-check, vault-sunset-guard).
+- `.claude/hooks/` — Claude Code SessionStart hook + git hooks. **Planned by Phase A.11**; currently empty. Will hold `cold-start.sh` (SessionStart, injects required-reading context) and `git/prepare-commit-msg` (auto-appends `Closes #N` from branch name using `.claude/github-issue-map.json`).
+- `.claude/settings.json` — Claude Code config (hooks registration, permissions, env vars). Edits managed via the `update-config` skill.
+- `.claude/github-project.json` — Project ID + field option IDs cache (gitignored, per-fork; `gh-project.sh init` writes).
+- `.claude/github-issue-map.json` — Persistent {phase → epic#, task_id → issue#, phase → milestone#} association cache (gitignored, per-fork; `gh-project.sh` is the sole writer; `refresh-map` reconciles). See § GitHub state — single writer rule.
+- `.claude/budget.json` — Daily token ceiling + per-agent caps.
+- `.claude/budget-ledger.json` — Manager-managed running spend (gitignored).
+- `docs/prompts/` — Session-kickoff prompts (the markdown briefings you paste into a fresh `claude --agent <name>` session). See `docs/prompts/README.md` for the convention. Archived alongside plans when the work ships.
+- `docs/plans/` — Implementation plans (`NN-name.md`). Archived to `docs/plans/archive/` when shipped (with `## Deviations from plan` section).
+- `docs/design/` — Visual contract + design docs + mockups + componentization specs.
+- `scripts/gh-project.sh` — GitHub Projects v2 helper (sole writer for Issue/Milestone/Project state per the single-writer rule).
+- `scripts/roadmap_parser.py` — ROADMAP.md → JSONL parser (used by bootstrap + sync).
+- `traces/<run-id>/` — Per-run agent logs + `MANIFEST.json`. Run-id format `YYYY-MM-DDTHH-MM-SS_<6hex>`.
+- `traces/runs.log` — Append-only index of all runs.
 
 ## Deviations workflow — non-negotiable before archive
 
@@ -32,6 +64,20 @@ Anything new and operational ALSO propagates to user-facing docs in the same cha
 If the deviation only matters to maintainers, document it in the plan's `## Deviations from plan` section and stop — no doc propagation needed.
 
 **Plans without a Deviations section may not be archived.** Use "no material deviations" if the plan really shipped exactly as spec'd, but that's rare; reviewers should be skeptical when they see it.
+
+## GitHub state — single writer rule (codified 2026-05-16)
+
+**All mutations to GitHub Issues, Milestones, and the Project v2 board** (create, close, label change, status field, priority field, sub-issue link) MUST go through `scripts/gh-project.sh` subcommands. The script is the **sole writer** to `.claude/github-issue-map.json` — the persistent `{phase → epic#, task_id → issue#, phase → milestone#}` cache that gives bootstrap + plan-driven creates deterministic, instant idempotency.
+
+Never bypass this:
+
+- Don't run `gh issue create` / `gh issue close` / raw `gh api graphql` mutations against issues, milestones, or Project items from agent prompts. Use `scripts/gh-project.sh create-issue` / `set-status` / `add-subissue` / `create-epic`.
+- Don't hand-edit `.claude/github-issue-map.json`. It's machine-managed.
+- If state drifts (someone renames/closes an issue in the GitHub web UI, or a stale process bypassed the helper), run `scripts/gh-project.sh refresh-map` to reconcile from authoritative GitHub state. The reconciler prefers open + lowest issue number on title-prefix collisions.
+
+**Why this exists.** Before 2026-05-16, the script's idempotency check (`find_issue_by_prefix`) relied on `gh api search/issues`, which is eventually consistent (~30s–2min indexing lag) and rate-limited. Re-running bootstrap shortly after the first apply caused the search API to miss freshly-created issues, producing duplicate issues (`#46` dup of `#6` for `[Epic] Pre-Phase-2 paper cuts`; `#47` dup of `#7` for `[PC.5]`). The map cache eliminates that race because every successful create writes to the map immediately, and every existence check reads the map first.
+
+**Skill delegation.** `/bootstrap`, `/groom`, `/sync-roadmap`, `/standup`, and the `manager` agent all delegate state writes to `scripts/gh-project.sh`. Other agents may READ the map (e.g. for a quick "what issue # is task `2.1`?") but must never write it directly. If a workflow needs new write semantics, extend the script, not the callers.
 
 ## Claude Code Specific Notes
 
