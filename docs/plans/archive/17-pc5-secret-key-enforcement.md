@@ -1,10 +1,10 @@
 ---
-Status: IN_PROGRESS
+Status: EXECUTED
 Type: execution
 Authored: 2026-05-16
 Last updated: 2026-05-16
 Depends on: none
-GitHub: #7
+GitHub: #7 (closed via PR #49 squash `ceca24b`)
 ---
 
 # 17 · PC.5 — SECRET_KEY boot-time enforcement
@@ -262,9 +262,9 @@ None. The four decisions in § B are resolved with rationale; the user signs off
 - [ ] Test surface: 4 cases in new `tests/test_config.py` per § C; existing tests verified clean (no regression)
 - [ ] Error message wording: per § A, includes the rule violated AND the `NAAVIK_DEBUG` escape hatch AND the `secrets.token_urlsafe(48)` recipe for the length case
 
-## Deviations from plan (in progress — finalized at archive)
+## Deviations from plan
 
-Three findings from the PR #49 hacker review (2026-05-16) were folded into this PR rather than deferred to follow-up paper cuts (PC.8/9/10 would otherwise have been filed). Each became its own commit on `feat/PC.5-secret-key-enforcement` after the rebased base SHA `b5a7f84`:
+Three findings from the PR #49 hacker review (2026-05-16) were folded into the same PR rather than deferred to follow-up paper cuts (PC.8/9/10 would otherwise have been filed). Each became its own commit on `feat/PC.5-secret-key-enforcement` after the rebased base SHA `b5a7f84`; all 7 commits squash-merged into main as `ceca24b`.
 
 - **What:** Narrowed `Settings.debug` validation_alias from `AliasChoices("NAAVIK_DEBUG", "DEBUG")` to plain `"NAAVIK_DEBUG"`; dropped `AliasChoices` import; refined both validator error messages (no "(or DEBUG=1)" parenthetical); updated README env-var table + dev-credentials note. (Commit `1260e01`.) **Why:** Hacker finding 1 — generic `DEBUG=1` is shared by Flask/Django/many web frameworks; a self-hoster with `DEBUG=1` exported from a sibling app would silently disable the PC.5 validator. Naavik owns its env-var namespace explicitly. **Impact:** § B.4's "Bypass gate: reuse existing `Settings.debug` (NAAVIK_DEBUG / DEBUG)" now reads as "`NAAVIK_DEBUG` only." PC.8 follow-up not needed. No code outside `src/config.py` relied on the `DEBUG` alias (verified: `src/ui/routes/design.py:_legacy_env_gate` reads only `NAAVIK_DEBUG`; the only bare `DEBUG=` in operational config files is an archived plan reference at `docs/plans/archive/10-backend-impl.md:144` that doesn't bind anything).
 - **What:** `docker-compose.yml:53` flipped from `${SECRET_KEY:-change-me-in-production}` to strict-require `${SECRET_KEY:?...}` so compose-render fails before the container starts; `.env.example` `SECRET_KEY=` placeholder dropped (now empty + a generation recipe comment); `.env.example` leading note flipped to declare SECRET_KEY required. (Commit `464dd0a`.) **Why:** Hacker finding 2 — the compose default was training operators to expect the dev default works in production; with the validator in place this just delays the failure to module-import time with a less-obvious error path. Fail at the earliest opportunity. **Impact:** PC.9 follow-up not needed. Self-hoster bootstrap experience now matches the validator's expectations end-to-end: copy `.env.example` to `.env`, populate `SECRET_KEY` via the recipe, `docker compose up`.
