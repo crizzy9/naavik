@@ -3,8 +3,15 @@
 Each test constructs Settings() with explicit kwargs to isolate from the
 ambient process env (which under `nix develop` has NAAVIK_DEBUG=1 set,
 and tests run with whatever .env supplies). _env_isolated() further clears
-NAAVIK_DEBUG / SECRET_KEY so the validator sees only the kwargs. Settings
-sets populate_by_name=True so kwargs flow through despite the validation_alias.
+NAAVIK_DEBUG / SECRET_KEY so the validator sees only the kwargs.
+
+NB: Settings does NOT set populate_by_name=True — the alias `NAAVIK_DEBUG`
+is the only env-var key honored for Settings.debug. The bypass-case test
+routes through that env var; using kwarg `debug=True` would be silently
+ignored under extra="ignore" + validation_alias. See plan 17 deviations
+for the regression discovered when populate_by_name=True was tried in
+the PR #49 hacker-finding fold-in (it also revived the `DEBUG` env-var
+read, defeating finding 1).
 """
 
 import os
@@ -55,7 +62,11 @@ def test_valid_secret_key_passes_when_not_debug():
 
 
 def test_default_secret_key_allowed_in_debug():
+    # Routes through NAAVIK_DEBUG env var rather than kwarg debug=True because
+    # Settings does not set populate_by_name=True (see module docstring + plan 17
+    # deviations).
     with _env_isolated():
-        s = Settings(secret_key="change-me-in-production", debug=True)
+        os.environ["NAAVIK_DEBUG"] = "1"
+        s = Settings(secret_key="change-me-in-production")
     assert s.debug is True
     assert s.secret_key == "change-me-in-production"
