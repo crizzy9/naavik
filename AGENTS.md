@@ -388,6 +388,20 @@ When you implement a plan:
 
 The plan stays rich; ROADMAP stays current.
 
+### GitHub state — single writer rule (codified 2026-05-16)
+
+`ROADMAP.md` is the authoritative ledger; the GitHub Project v2 board mirrors it. To keep the mirror deterministic, the script `scripts/gh-project.sh` is the **sole writer** to GitHub Issues, Milestones, Project items, and `.claude/github-issue-map.json` (the persistent `{phase → epic#, task_id → issue#, phase → milestone#}` association cache).
+
+**Why this exists.** The GitHub search API is eventually consistent (~30s–2min indexing lag) and rate-limited. Pre-2026-05-16 the script's idempotency check (`find_issue_by_prefix`) queried that API and silently treated indexing-lag misses as "doesn't exist," producing duplicate issues (e.g. `#46` dup `#6` for `[Epic] Pre-Phase-2 paper cuts`, `#47` dup `#7` for `[PC.5]`). The map cache eliminates the race: every create writes to the map, every existence check reads it first.
+
+**Operational rules:**
+
+- All `gh issue create` / `gh issue close` / Project field writes go through `scripts/gh-project.sh` subcommands (`create-issue`, `create-epic`, `set-status`, `set-priority`, `set-effort`, `add-subissue`). Never call `gh` or `gh api graphql` for those operations from agent prompts or scripts.
+- Never hand-edit `.claude/github-issue-map.json`. It's machine-managed.
+- If manual UI edits drift the map (someone renames/closes/deletes an issue in github.com), run `scripts/gh-project.sh refresh-map` to reconcile from authoritative GitHub state. Collisions on title prefix resolve to (open, lowest-#).
+- The `manager` agent is the sole entry point for delivery-loop state mutations. Other agents (architect, engineer, hacker, devops, designer) may invoke `scripts/gh-project.sh create-issue` for plan-driven issue creation, but must not write the Project board's Status column directly — that's manager's job during step 9 (mirror) of the workflow.
+- This rule supersedes the older AGENT_OPS.md § 9.5 "bootstrap created duplicates" guidance, which assumed dupes were a rename problem. They're almost always a search-API consistency problem; run `refresh-map`, close the duplicate by hand, document in the relevant plan's deviations section.
+
 ---
 
 ## Design pipeline (sub-process within step 6 of the workflow)
@@ -451,6 +465,80 @@ UI work plugs into the broader workflow above. The design pipeline (`docs/design
 | 2026-04-25 | Lucide Icons exclusively | No mixing icon sets |
 | 2026-04-25 | Inter + JetBrains Mono typography | Paired for readability and data density |
 | 2026-04-25 | Indigo/cyan brand palette | AI sophistication + navigator water theme |
+
+---
+
+## Agent System
+
+Naavik uses 6 specialized Claude Code subagents and 13 slash commands at project scope.
+
+> **Operational guide:** `docs/AGENT_OPS.md` — single source for first-time setup, daily workflow, GitHub Mirror conventions, troubleshooting, extending the system. Read once; reference as needed.
+> **Reference guides loaded by agents on cold start:**
+> - `docs/ROADMAP_OVERVIEW.md` — phase state at a glance
+> - `docs/ARCHITECTURE.md` — layer responsibilities + cross-cutting concerns + pattern catalog
+> - `DESIGN.md` (root) — visual contract (tokens, type, icons, voice; frozen)
+> - `docs/design/WORKFLOW.md` — UI sub-process (skill routing, per-screen checklist, accessibility, common patterns, anti-patterns)
+> - `docs/DEPLOYMENT.md` — 4 deployment paths (NixOS / Docker / Cloud / Dev) + config + ops checklist
+> - `docs/RUNBOOK.md` — known failure modes + diagnostic recipes + recovery procedures
+> - `docs/plans/POST_PHASE_1.md` — testing playbook + monitoring + "when something goes wrong"
+>
+> **Mirror tracking:** `ROADMAP.md` § Phase A: Agent System (task ledger A.1–A.10) and § Agent System (mirror conventions).
+> **Full prompts:** `.claude/agents/<name>.md`. Slash commands: `.claude/commands/<name>.md`.
+
+| Agent | Color | Model | Role |
+|---|---|---|---|
+| manager | pink | opus-4-7 | Orchestrator, GitHub Projects + ROADMAP owner |
+| architect | blue | opus-4-7 | Planner, design docs, technology research |
+| engineer | green | sonnet-4-6 | Implementer (escalates to opus on tagged tasks) |
+| devops | orange | sonnet-4-6 | Debugger, log diver, quality gates |
+| hacker | red | opus-4-7 | Security reviews, threat modeling |
+| designer | yellow | sonnet-4-6 | UI/UX, mockups, DESIGN.md guardian |
+
+**Operational invariant** (codifies § Single-doc-tracking): `ROADMAP.md` is authoritative; the GitHub Project board is a one-way operational mirror. Manager syncs FROM ROADMAP TO Projects, never the reverse. If they drift, the Project board is wrong — run `/sync-roadmap --apply` to reconcile.
+
+### Slash commands
+
+| Command | Purpose |
+|---|---|
+| `/build` | Autonomous milestone delivery loop. |
+| `/plan` | Architect drafts a plan + opens GH Issue. |
+| `/discuss` | Multi-agent debate. |
+| `/triage-bug` | Devops repros, engineer fixes. |
+| `/review-pr` | Engineer + hacker review in parallel. |
+| `/threat-model` | Hacker produces STRIDE for a feature / doc. |
+| `/design-screen` | Designer mocks a screen. |
+| `/groom` | Manager grooms the Project board. |
+| `/standup` | Current state + drift + budget snapshot. |
+| `/bootstrap` | First-time setup wrapper. |
+| `/sync-roadmap` | Diff ROADMAP vs Project; --apply pushes ROADMAP → Project. |
+| `/budget` | Token spend ledger vs caps. |
+| `/runs` | Trace history. |
+
+### Infrastructure
+
+- `scripts/gh-project.sh` — GitHub Projects v2 helper (init / bootstrap / refresh-map / sync / create-issue / create-epic / milestone-status / add-item / set-status / set-priority / set-effort / next-unblocked / runs). **Sole writer for Issue / Milestone / Project state** per § GitHub state — single writer rule.
+- `scripts/roadmap_parser.py` — parses ROADMAP.md task tables to JSONL (used by bootstrap + sync).
+- `traces/<run-id>/` — per-run agent logs + MANIFEST.json. Run-id format: `YYYY-MM-DDTHH-MM-SS_<6hex>`.
+- `traces/watch.sh` — tmux session, one pane per agent log.
+- `traces/runs.log` — append-only run index.
+- `.claude/agents/` — 6 subagent prompts (manager, architect, engineer, devops, hacker, designer).
+- `.claude/commands/` — 13 slash command prompts (/build, /plan, /discuss, /triage-bug, /review-pr, /threat-model, /design-screen, /groom, /standup, /bootstrap, /sync-roadmap, /budget, /runs).
+- `.claude/skills/` — project-level auto-trigger skills, one directory per skill (`<name>/SKILL.md`). **Shipped by Phase A.11 Phase 1** (`naavik-cold-start`) + Phase 2 (per-agent suites). One directory per skill (`<name>/SKILL.md`). Six agent prefixes (`manager-*`, `architect-*`, etc.) + shared `naavik-*` prefix for cross-agent skills.
+- `.claude/hooks/` — Claude Code SessionStart hook + git hooks. **Shipped by Phase A.11 Phase 1.** Holds `cold-start.sh` (SessionStart, injects required-reading context) and `git/prepare-commit-msg` (auto-appends `Closes #N` from branch name using `.claude/github-issue-map.json`). Git hook installed via symlink (see `docs/AGENT_OPS.md` § 2.8).
+- `.claude/settings.json` — Claude Code config (hooks registration, permissions, env vars).
+- `.claude/budget.json` — daily ceiling + per-agent caps.
+- `.claude/budget-ledger.json` — manager-managed daily spend ledger (gitignored).
+- `.claude/github-project.json` — Project ID + field IDs cache (gitignored).
+- `.claude/github-issue-map.json` — persistent {phase → epic#, task_id → issue#, phase → milestone#} association cache (gitignored, per-fork). Sole writer: `scripts/gh-project.sh`. Reconcile with `refresh-map`.
+- `docs/prompts/` — session-kickoff prompts (`docs/prompts/README.md` for the convention). Architect-authored for plan-execution prompts; archives alongside plans.
+- `docs/plans/` — implementation plans (archived to `docs/plans/archive/` when shipped + deviations section written).
+- `docs/design/` — visual contract + design docs + mockups + componentization specs.
+- `.github/ISSUE_TEMPLATE/` — bug / feature / plan-execution forms.
+- `.github/pull_request_template.md` — PR template enforcing the deviations + security review checklists.
+
+### Phase A vs product phases
+
+Phase A (Agent System) is tracked separately from product phases 0–6 because it's the dev process, not the product. Phase A's task ledger lives in ROADMAP.md § Phase A; its milestone on the Project board is named `Phase A`. Plan / design-doc / prompt artifacts for Phase A live where everything else does (`docs/plans/`, `docs/design/`, `docs/prompts/`) but are typically small + inline-executed.
 
 ---
 
