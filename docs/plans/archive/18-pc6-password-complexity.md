@@ -1,10 +1,11 @@
 ---
-Status: DRAFT
+Status: EXECUTED
 Type: execution
 Authored: 2026-05-17
 Last updated: 2026-05-17
 Depends on: plan 10b (signup endpoint), plan 10c (env-injected dev credential + signup-link UX), plan 17 (PC.5 — boot-time validator pattern)
-GitHub: (to be filed on approval)
+GitHub: #8 (closed 2026-05-17 via PR #50)
+Shipped: 2026-05-17 — PR #50 squash `7c7e12a` (initial `baad10c` + path-C re-loop `78c6d20`)
 ---
 
 # 18 · PC.6 — Password complexity + must-change-on-first-login

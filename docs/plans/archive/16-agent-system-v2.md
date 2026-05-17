@@ -1,10 +1,11 @@
 ---
-Status: DRAFT
+Status: EXECUTED
 Type: execution
 Authored: 2026-05-16
-Last updated: 2026-05-16
+Last updated: 2026-05-17
 Depends on: none
-GitHub: #48
+GitHub: #48 (closed 2026-05-17 — A.11 complete after PC.6 PR #50 merge)
+Shipped: 2026-05-17 — across 4 phases. Phase 1 (cold-start hook + naavik-cold-start skill + Skill tool on 6 agents + prepare-commit-msg hook + Project v2 automation guide); Phase 2 (per-agent skill suite, 28 → 29 skills with mid-flight `build` skill addition); Phase 3 (first end-to-end /build = PC.5 / plan 17 / PR #49 squash `ceca24b`, satisfied A.8); Phase 4 (second end-to-end /build = PC.6 / plan 18 / PR #50 squash `7c7e12a`).
 ---
 
 # 16 · Agent System v2 — cold-start infra + per-agent skill suite + git automation
@@ -702,3 +703,63 @@ Manager pre-flights the budget before each phase dispatch per `.claude/agents/ma
 - [ ] Token budget: ~2.1M–2.9M total across 4 phases, well under 5M daily ceiling; Phase 2 is the heaviest at ~900k worst-case (§ H token budget table)
 - [ ] ROADMAP row A.11 wording landed correctly (verified during architect's mirror duty)
 - [ ] All agents stay on `claude-opus-4-7[1m]`; no Sonnet downgrade in scope; legacy `ESCALATE: opus` pattern flagged for Phase 2 cleanup as tangential
+
+---
+
+## Deviations from plan
+
+Per `AGENTS.md` § Workflow step 7. Plan 16 shipped across four phases between 2026-05-16 and 2026-05-17. Material deviations from the plan body:
+
+1. **Skill count: 28 spec'd → 29 shipped.**
+   - **What:** Plan § E enumerated 28 skills (manager 4 / architect 4 / engineer 5 / designer 5 / hacker 3 / devops 3 + shared 4). Shipped count is 29 — `.claude/skills/build/SKILL.md` was authored 2026-05-17 mid-Phase-4 in response to user request ("build should be defined as a skill as well so manager can access it").
+   - **Why:** The 13 existing `.claude/commands/<name>.md` slash commands are auto-exposed as skills by the Claude Code harness, but no canonical `SKILL.md` artifact existed for any of them. Authoring `build` codified the **dual-surface convention** (slash command for user-typed invocation + skill mirror for agent-invocable + ambient-trigger).
+   - **Impact:** Plan 16's scope expanded by one skill. Pattern documented in `docs/AGENT_OPS.md` § 10.2 so future commands follow it.
+   - **Surface:** `.claude/skills/build/SKILL.md` (new file); `docs/AGENT_OPS.md` § 4 (Commands reference now flags `✓ explicit` vs `auto` for skill mirror status) + § 10.2 (Add a new slash command — rewritten to document dual-surface).
+
+2. **LinkedIn MCP option-matrix research doc — out-of-plan side artifact.**
+   - **What:** `docs/design/research/LINKEDIN_SCRAPING.md` (214 lines, 5-option × 10-dimension matrix) shipped 2026-05-17 in parallel with Phase 4's PC.6 engineer dispatch. User request mid-flight.
+   - **Why:** User asked whether LinkedIn MCP servers had been considered for Phase 2 task 2.2 (site scrapers). Architect option matrix pre-stages the decision rather than letting it surface ad-hoc when plan 11a is authored.
+   - **Impact:** Phase 2 task 2.2 + Phase 5 task 5.12 now reference the research doc. Task 2.2's LinkedIn cell wording shifted from "RSS via RSShub + guest API" → "guest API + Crawl4AI stealth; RSShub opt-in fallback" pending plan 11a's revisit-checklist pass. Task 5.12 flags stickerdaniel MCP as front-runner for outreach (authenticated session needed).
+   - **Surface:** `docs/design/research/LINKEDIN_SCRAPING.md` (new file with `Decision gate:` frontmatter); `ROADMAP.md` rows 2.2 + 5.12 (pointers added).
+
+3. **Phase 4 PC.6 needed a Path-C re-loop after hacker REQUEST_CHANGES (HIGH).**
+   - **What:** Plan 16 Phase 4 was "second `/build` shipping PC.6 to prove the loop is reliable." First PR_REVIEW gate on PR #50 (commit `baad10c`) surfaced hacker `REQUEST_CHANGES` on Finding 1 (alternate password stub at `src/ui/routes/settings.py:411` bypasses complexity rules) + Finding 2 (missing CSRF dep on `post_change_password`). User selected Path C; engineer landed `78c6d20` resolving both findings. Second PR_REVIEW gate cleared green.
+   - **Why:** Plan 18's § C.8 find-replace audit predicted ~25 `Depends(get_current_user)` swap sites but only 5 exist (`api/applications.py`); rest of the authed-by-intent surface (`api/profile.py`, `api/settings.py`, `ui/routes/*`) is on a plan-09 fake-session stub. Hacker correctly identified the alternate stub-password path as the most-confusing exposure.
+   - **Impact:** **PC.6a follow-up paper cut filed** (ROADMAP § Pre-Phase-2 paper cuts) to extend `require_password_complete` to the rest once those routes gain real auth deps. **JWT denylist on password rotation** filed in Phase 1.x deferred items (hacker Finding 3, defense-in-depth). Validates the agent-system v2 loop's REQUEST_CHANGES → engineer-re-loop → re-review → approve path end-to-end.
+   - **Surface:** ROADMAP rows PC.6a + Phase 1.x JWT denylist (new); plan 18 archived with rich deviations section pointing forward.
+
+4. **Branch name uppercase enforcement — Phase 1 hook regex gotcha.**
+   - **What:** `.claude/hooks/git/prepare-commit-msg` regex (Phase 1 deliverable) is case-sensitive: `PC\.[0-9]+|DEF-[0-9]+|A\.[0-9]+`. Lowercase task-id in branch names like `feat/pc.6-foo` silently no-ops the `Closes #N` append.
+   - **Why:** Engineer's first PC.6 dispatch chose `feat/PC.6-password-complexity` (uppercase, hook-compatible) — confirmed during testing. Documented as a known invariant rather than fixing the regex.
+   - **Impact:** Phase 4 surfaced this for all future `PC.N` / `DEF-N` / `A.N` task-id dispatches. Optional follow-up paper cut: make regex case-insensitive (`[Pp][Cc]\.[0-9]+|...`); not blocking.
+   - **Surface:** `docs/AGENT_OPS.md` § 2.8 paragraph (engineer-shipped during PC.6 path-C re-loop).
+
+5. **Phase 3 PC.5 folded 3 hacker findings into the same PR.**
+   - **What:** Plan 16's Phase 3 spec said "first real `/build` shipping PC.5 — this satisfies A.8." Architect-authored plan 17 went through PR #49 with 3 hacker findings folded into the same squash commit (`Settings.debug` alias narrowed; `docker-compose.yml` SECRET_KEY requirement; `populate_by_name=True` attempted + reverted). PR #49 squash `ceca24b`.
+   - **Why:** Hacker findings on initial review were tightly coupled to the validator logic; merging-then-fixing would have left a window of insecurity. Engineer folded all 3 into the same commit per user direction.
+   - **Impact:** Phase 3 validates that the agent-system v2 loop can handle multi-finding reviews atomically. No new follow-up filed; PC.5 closed cleanly.
+   - **Surface:** PR #49 squash `ceca24b` archived in plan 17.
+
+6. **No tracking-table duplication.**
+   - **What:** Plan 16 stayed thin on cross-plan tracking per `AGENTS.md` § Single-doc-tracking principle. ROADMAP § Phase A row A.11 + § Pre-Phase-2 paper cuts (PC.5, PC.6, PC.6a) record completion. Plan body describes intent + design decisions; ROADMAP records the `[ ]` / `[~]` / `[x]` ledger.
+   - **Why:** Drift between plan-internal tracking and ROADMAP is the failure mode the single-doc rule prevents.
+   - **Impact:** Audit-trail readers go to ROADMAP for "is A.11 done?" and to the archived plan 16 for "what shipped + why."
+   - **Surface:** none — convention preserved.
+
+**Operational artifacts introduced by plan 16 that propagated:**
+
+- `.claude/skills/<name>/SKILL.md` (29 directories) — project-level auto-trigger skills, one per skill.
+- `.claude/hooks/cold-start.sh` (SessionStart hook) — injects required-reading context on every fresh session.
+- `.claude/hooks/git/prepare-commit-msg` — auto-appends `Closes #N` from branch name using `.claude/github-issue-map.json`. Symlinked from `.git/hooks/prepare-commit-msg` per `docs/AGENT_OPS.md` § 2.8.
+- `Skill` tool added to all 6 agents' `tools:` frontmatter list.
+- `docs/AGENT_OPS.md` § 10.2 — dual-surface convention (slash command + skill mirror).
+- `docs/AGENT_OPS.md` § 4 — Commands reference table now flags skill-mirror status.
+
+**Forward pointers:**
+
+- ROADMAP § Phase A row A.11 → `[x]` 2026-05-17 (this plan's completion).
+- ROADMAP § Pre-Phase-2 paper cuts row PC.6 → `[x]` 2026-05-17.
+- ROADMAP § Pre-Phase-2 paper cuts row PC.6a → `[ ]` (follow-up for broader gate).
+- ROADMAP § Phase 1.x deferred items row "JWT denylist on password rotation" → filed 2026-05-17.
+- `docs/design/research/LINKEDIN_SCRAPING.md` → revisit when authoring `docs/plans/NN-phase-2-scrapers.md`.
+- Optional follow-up: case-insensitive hook regex paper cut (separately fileable).
