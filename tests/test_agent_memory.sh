@@ -106,6 +106,15 @@ grep -q "^Aliases: phrase a, phrase b$" "$TMP_MEM/knowledge/test-topic.md"; asse
 grep -q "^Confidence: high$" "$TMP_MEM/knowledge/test-topic.md"; assert "front-matter Confidence correct" $?
 grep -q "test body content" "$TMP_MEM/knowledge/test-topic.md"; assert "body content preserved" $?
 
+# 6a. record-knowledge auto-regenerates INDEX.md (single-writer for knowledge dir).
+test -f "$TMP_MEM/knowledge/INDEX.md"; assert "record-knowledge auto-creates INDEX.md" $?
+grep -q "^| \`test-topic\` |" "$TMP_MEM/knowledge/INDEX.md"; assert "INDEX.md lists test-topic" $?
+grep -q "AUTO-GENERATED" "$TMP_MEM/knowledge/INDEX.md"; assert "INDEX.md has auto-gen marker" $?
+
+# 6b. update-index standalone subcommand is idempotent.
+"$SCRIPT" update-index >/dev/null; assert "update-index subcommand exits 0" $?
+test -f "$TMP_MEM/knowledge/INDEX.md"; assert "update-index keeps INDEX.md present" $?
+
 # 7. record-knowledge refuses overwrite without --overwrite.
 echo "second body" | "$SCRIPT" record-knowledge test-topic - --confidence low 2>/dev/null
 RC=$?
