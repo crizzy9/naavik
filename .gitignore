@@ -46,7 +46,7 @@ TODO.md
 # IDE / agent state
 .idea/
 .vscode/
-.claude/
+*.local.json
 *.swp
 *.swo
 *~
@@ -80,3 +80,12 @@ result-*
 
 # Visual QA — local capture output (baseline/ is committed; screenshots/ is ad-hoc)
 tests/visual/screenshots/
+
+# Agent trace logs — per-run directories under traces/; keep .gitkeep so the dir is discoverable
+traces/*
+!traces/.gitkeep
+
+# Agent system per-fork caches — every fork runs `scripts/gh-project.sh init` + `refresh-map` once
+.claude/github-project.json
+.claude/github-issue-map.json
+.claude/budget-ledger.json
