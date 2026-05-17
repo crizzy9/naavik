@@ -1,4 +1,4 @@
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,6 +41,29 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("NAAVIK_DEBUG", "DEBUG"),
     )
+
+    # Plan 17 (PC.5, 2026-05-16): boot-time enforcement of SECRET_KEY rules.
+    # Refuse the shipped default + reject keys shorter than 32 bytes UNLESS
+    # Settings.debug is True (i.e. NAAVIK_DEBUG=1). 32 bytes ≈ 256 bits of
+    # entropy, matches OWASP guidance for HS256 JWT signing keys.
+    @model_validator(mode="after")
+    def _enforce_secret_key(self) -> "Settings":
+        if self.debug:
+            return self
+        if self.secret_key == "change-me-in-production":
+            raise ValueError(
+                "SECRET_KEY is set to the shipped default 'change-me-in-production'. "
+                "Set it to a random 32+ byte string before running outside of dev. "
+                "To run with the default in dev, set NAAVIK_DEBUG=1 (or DEBUG=1)."
+            )
+        if len(self.secret_key.encode("utf-8")) < 32:
+            raise ValueError(
+                "SECRET_KEY is shorter than 32 bytes. Generate a strong key with "
+                "`python -c 'import secrets; print(secrets.token_urlsafe(48))'` "
+                "and set it via the SECRET_KEY env var. "
+                "To bypass in dev, set NAAVIK_DEBUG=1 (or DEBUG=1)."
+            )
+        return self
 
 
 settings = Settings()
