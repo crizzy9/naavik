@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# .claude/hooks/git/prepare-commit-msg
+# Auto-appends `Closes #<N>` to commit messages on branches named
+# <type>/<task-id>-<slug> when the task-id is in .claude/github-issue-map.json.
+#
+# Install:
+#   ln -sf ../../.claude/hooks/git/prepare-commit-msg .git/hooks/prepare-commit-msg
+#
+# Args:
+#   $1 = path to commit message file (mandatory; passed by git)
+#   $2 = commit source (message | template | merge | squash | commit)
+#   $3 = SHA-1 (only set on amends)
+#
+# Bails out silently when:
+#   - $2 is merge | squash | commit (don't munge those messages)
+#   - branch name doesn't match the regex
+#   - .claude/github-issue-map.json is missing or doesn't have the task-id
+#   - the commit message already contains "Closes #" or "Fixes #" or "Resolves #"
+
+set -euo pipefail
+
+MSG_FILE="${1:?usage: prepare-commit-msg <msg-file> [source] [sha]}"
+SOURCE="${2:-}"
+
+# Skip merge / squash / amends — those messages are not authored by the operator
+# (they're git-generated or pre-filled), and we don't want to munge them.
+case "$SOURCE" in
+  merge|squash|commit) exit 0 ;;
+esac
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
+[[ -n "$REPO_ROOT" ]] || exit 0
+
+ISSUE_MAP="$REPO_ROOT/.claude/github-issue-map.json"
+[[ -f "$ISSUE_MAP" ]] || { echo "prepare-commit-msg: no issue map; skipping" >&2; exit 0; }
+
+BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+[[ -n "$BRANCH" && "$BRANCH" != "HEAD" ]] || exit 0
+
+# Regex: <type>/<task-id>-<slug>
+# task-id ∈ { A.11, 2.11, 2.12a, PC.5, DEF-03 }
+REGEX='^(feat|fix|chore|docs|refactor)/([A-Z]+\.[0-9]+[a-z]?|PC\.[0-9]+|DEF-[0-9]+|A\.[0-9]+)-[a-z0-9-]+$'
+
+if [[ ! "$BRANCH" =~ $REGEX ]]; then
+  echo "prepare-commit-msg: branch '$BRANCH' does not match task-id pattern; skipping Closes-N append" >&2
+  exit 0
+fi
+
+TASK_ID="${BASH_REMATCH[2]}"
+
+ISSUE_NUM="$(jq -r --arg k "$TASK_ID" '.issues[$k] // empty' "$ISSUE_MAP" 2>/dev/null || true)"
+if [[ -z "$ISSUE_NUM" ]]; then
+  echo "prepare-commit-msg: task-id '$TASK_ID' not in issue map; skipping" >&2
+  exit 0
+fi
+
+# Bail if any closing reference already present (case-insensitive).
+if grep -qiE '^(closes|fixes|resolves) #[0-9]+' "$MSG_FILE"; then
+  exit 0
+fi
+
+# Append a blank line + the Closes-N trailer before any existing trailers.
+# Simple approach: append to end of file. Trailers convention is "last block";
+# `git commit` will reflow it.
+{
+  echo ""
+  echo "Closes #$ISSUE_NUM"
+} >> "$MSG_FILE"
+
+exit 0
