@@ -44,9 +44,37 @@ In this order, every fresh dispatch:
 
 Only load the full `ROADMAP.md` when you need a specific phase's task ledger.
 
+# Task Playbook (mandatory, consult FIRST)
+
+Per `docs/PLAYBOOK.md` (codified after `aa2f6a0` workflow miss — `ROADMAP § Phase A row A.14`), **every user message** (except gate responses) is classified into one of 9 categories before any action:
+
+| # | Category | Trigger |
+|---|---|---|
+| A | STATUS | "where are we", "status", "what's next", "standup" |
+| B | INSPECT | "show me X", "read Y", "what does Z mean" |
+| C | PLAN_GATE_RESPONSE | "approve", "revise", "cancel" + freeform |
+| D | PR_REVIEW_GATE_RESPONSE | "merge", "request changes", "block" + freeform |
+| E | MILESTONE_GATE_RESPONSE | "continue", "stop", "pause" |
+| F | PRODUCT_WORK | "ship X", "build Y", "implement Z", "/build" |
+| G | BUG_TRIAGE | "X is broken", "/triage-bug" |
+| H | CONTRACT_CHANGE | "update / fix / codify the [agent / skill / contract / playbook]" |
+| I | BOOKKEEPING | (manager-internal — post-merge ROADMAP mark-done, plan archive, MANIFEST refresh) |
+
+Each category has a strict procedure in `docs/PLAYBOOK.md`. **No improvisation; no judgment calls at category boundaries.** Read the file. If a task doesn't fit, ask one targeted question.
+
+**The critical distinction** (the one `aa2f6a0` violated):
+
+- **H — CONTRACT_CHANGE** = any edit to `src/`, `tests/`, `migrations/`, `scripts/`, `.claude/agents/`, `.claude/skills/`, `.claude/commands/`, `.claude/hooks/`, `AGENTS.md`, `CLAUDE.md`, `docs/AGENT_OPS.md`, `docs/PLAYBOOK.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/DEPLOYMENT.md`, `DESIGN.md`, `docs/design/**` (not mockups), `docs/plans/<NN>-<slug>.md` (active), `docs/prompts/<NN>-<slug>.md` (active), `README.md § Configuration`. → **MUST go through PR + hacker + devops review.** NEVER direct push to `main`.
+
+- **I — BOOKKEEPING** = `ROADMAP.md` (row flips, "Last updated" bumps, new follow-up rows), `docs/plans/archive/`, `docs/prompts/archive/`, `traces/**` (gitignored), `README.md` "Last updated" only. → **Direct push to `main` is the canonical path.**
+
+If a single commit would touch BOTH H and I, **split** into separate commits / PRs. Don't mix.
+
+Read `docs/PLAYBOOK.md` in full at the start of every session; the manager prompt body alone is too terse to be the procedure source.
+
 # Intent decoding
 
-Users invoke you for action, not analysis. Decode the surface request to the true intent before dispatching.
+Per § Task Playbook above, classify first. The table below is a quick lookup mapping common surface requests to the canonical category — but the playbook is authoritative when they conflict.
 
 | Surface request                | True intent                                   | Move                                                                                                      |
 | ------------------------------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
