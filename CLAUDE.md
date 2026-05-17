@@ -2,7 +2,9 @@
 
 > **For Claude Code sessions.**
 > **Canonical guide:** `AGENTS.md` — always read that first.
-> **Last updated:** 2026-05-16 (Plan 16 Phase 1 EXECUTED — cold-start hook + naavik-cold-start skill + Skill tool added to all 6 agents + git prepare-commit-msg hook for auto-`Closes #N`. Remaining: Phase 2 per-agent skill suite, Phase 3+4 validation builds.)
+> **Last updated:** 2026-05-17 (Plan 19 / A.15 EXECUTED — agent memory + learning system. `.claude/memory/` substrate (6 stores: decisions / discussions / lessons / knowledge / recurring-patterns / runs-analysis) + single-writer `scripts/agent-memory.sh` + 4 memory-aware skills (`naavik-memory-lookup`, `naavik-discussion-capture`, `naavik-learn`, `manager-promote-lesson`) + 2 slash commands (`/memory`, `/learn`). Manager auto-invokes `Skill: naavik-discussion-capture` at PR_REVIEW_GATE + MILESTONE_GATE to surface deferred items. Design doc: `docs/design/AGENT_MEMORY.md`. Daily workflow: `docs/AGENT_OPS.md § 14`. New on-disk path: `.claude/memory/` (gitignored per-fork EXCEPT `.keep` + `knowledge/*.md`).)
+>
+> Earlier line: 2026-05-16 (Plan 16 Phase 1 EXECUTED — cold-start hook + naavik-cold-start skill + Skill tool added to all 6 agents + git prepare-commit-msg hook for auto-`Closes #N`. Remaining: Phase 2 per-agent skill suite, Phase 3+4 validation builds.)
 >
 > Earlier line: 2026-05-12 (Plan 10c EXECUTED — first-time-setup ergonomics paper cut. New operational surface: `~/.naavik/dev-credentials` (mode 0600, written only when `NAAVIK_DEBUG` is set AND `NAAVIK_DEV_PASSWORD` is unset AND the seeded `Settings.deployment_mode == SELF_HOSTED`). Plain `cat ~/.naavik/dev-credentials` is the canonical retrieval path — **NOT** a new CLI subcommand: `AGENTS.md` § Key Conventions § CLI codifies the "do not extend" rule (CLI sunset per ROADMAP § Phase 2 task 2.11; vault deprecation per task 2.12). `nix develop` shellHook also exports `NAAVIK_PERSISTENCE=db` for parity with the orchestrator, and `flake.nix:devEnv` exports `NAAVIK_DEBUG=1` so the lifespan credential echo + on-disk file fire under `nix run .#dev`. New config field `Settings.debug` (config.py) reads `NAAVIK_DEBUG` / `DEBUG` via pydantic-settings alias.)
 
@@ -80,6 +82,8 @@ Never bypass this:
 **Skill delegation.** `/bootstrap`, `/groom`, `/sync-roadmap`, `/standup`, and the `manager` agent all delegate state writes to `scripts/gh-project.sh`. Other agents may READ the map (e.g. for a quick "what issue # is task `2.1`?") but must never write it directly. If a workflow needs new write semantics, extend the script, not the callers.
 
 ## Claude Code Specific Notes
+
+**Agent memory + learning** (Phase A row A.15, shipped 2026-05-17). `.claude/memory/` holds JSONL + markdown stores (decisions, discussions, lessons, knowledge, recurring-patterns, runs-analysis) owned by single-writer `scripts/agent-memory.sh`. Read via `/memory list <store>` / `/memory query <store> '<jq-expr>'` / `/memory knowledge <slug>`. Manual retrospective via `/learn [N]`. Manager auto-invokes `Skill: naavik-discussion-capture` at PR_REVIEW_GATE + MILESTONE_GATE. `~/.claude/projects/<...>/memory/MEMORY.md` is **read-only** from this system. Architecture: `docs/design/AGENT_MEMORY.md`. Daily workflow: `docs/AGENT_OPS.md § 14`.
 
 ### Development Commands (Nix-first)
 

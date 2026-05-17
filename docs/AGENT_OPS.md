@@ -1,6 +1,7 @@
 # Naavik Agent System — Operations Guide
 
-> **Last updated:** 2026-05-16 (plan 16 Phase 1 EXECUTED — § 2.7 + § 2.8 added: GitHub Projects v2 workflow rules + git commit-message hook install)
+> **Last updated:** 2026-05-17 (A.15 SHIPPED — § 14 added: agent memory + learning system. `.claude/memory/` + `scripts/agent-memory.sh` + `naavik-memory-lookup` + `naavik-discussion-capture` + `naavik-learn` + `manager-promote-lesson` skills + `/memory` + `/learn` commands. Manager § PR review gate + § Milestone boundary gate updated to invoke `Skill: naavik-discussion-capture`. Plan: `docs/plans/19-agent-memory-and-learning.md`; design doc: `docs/design/AGENT_MEMORY.md`.)
+> Earlier line: 2026-05-16 (plan 16 Phase 1 EXECUTED — § 2.7 + § 2.8 added: GitHub Projects v2 workflow rules + git commit-message hook install)
 > **Status:** Active. This is THE single doc for using the agent-driven delivery system. Read it once; reference as needed.
 > **Companion docs:** `AGENTS.md` (workflow + conventions), `ROADMAP.md` § Agent System (task ledger), `.claude/agents/` (full agent prompts), `.claude/commands/` (slash commands).
 
@@ -216,6 +217,8 @@ Each row is a **slash command** the user can type. The **Skill mirror** column l
 | `/sync-roadmap` | auto | Diff ROADMAP vs Projects; with `--apply` pushes ROADMAP → Project. | `[--apply]` |
 | `/budget` | auto | Token spend ledger vs caps; today + week. | — |
 | `/runs` | auto | Recent runs from `traces/runs.log` with outcomes + trace links. | `[count]` |
+| `/memory` | auto | Read-only inspection of `.claude/memory/` stores (decisions / discussions / lessons / patterns / knowledge / runs-analysis). | `<list\|query\|knowledge> [args]` |
+| `/learn` | ✓ explicit | Manual retrospective. Analyzes last N runs, mines patterns, surfaces promotion + ROADMAP candidates. | `[N]` (default 10) |
 
 Each command spawns the relevant agent(s) via the Task tool. You see the agent's output, you approve at each gate.
 
@@ -692,3 +695,91 @@ claude /runs 20                                 # review run history
 ```
 
 That's the system. Read AGENTS.md once for the workflow; reference this doc for operations.
+
+---
+
+## 14. Memory + learning system
+
+Phase A row A.15 (shipped 2026-05-17 via `feat/A.15-agent-memory`) added the agent system's memory layer. Six stores under `.claude/memory/`, a single writer script, discovery via skills, and a manual `/learn` retrospective command. Complements Claude's native primitives (CLAUDE.md, MEMORY.md, Skills) without duplicating them.
+
+**Canonical design doc:** `docs/design/AGENT_MEMORY.md` (full architecture + schemas + extension guide).
+
+### 14.1 The map
+
+```
+.claude/memory/                                ← gitignored per-fork EXCEPT .keep + knowledge/*.md
+├── decisions.jsonl                            ← locked architectural decisions w/ rationale + supersede
+├── discussions.jsonl                          ← deferred items captured at gate boundaries
+├── lessons.jsonl                              ← promoted recurring patterns (threshold 5)
+├── recurring-patterns.jsonl                   ← auto-aggregated ERROR-event patterns
+├── knowledge/<topic>.md                       ← long-form markdown corpus (5 seeded; committed)
+└── runs-analysis/<run-id>.md                  ← per-run summary written by /learn
+
+scripts/agent-memory.sh                        ← single writer (subcommands: init, record-*, list, query, analyze-run, mine-patterns, promote-lesson)
+
+.claude/skills/                                ← 4 memory-aware skills
+├── naavik-memory-lookup/SKILL.md              ← "have we hit this before?" → check knowledge/<topic>.md
+├── naavik-discussion-capture/SKILL.md         ← manager fires at PR_REVIEW_GATE + MILESTONE_GATE
+├── naavik-learn/SKILL.md                      ← skill mirror of /learn
+└── manager-promote-lesson/SKILL.md            ← consent-gated promote-lesson wrapper (threshold 5)
+
+.claude/commands/                              ← 2 slash commands
+├── memory.md                                  ← /memory list|query|knowledge — read-only
+└── learn.md                                   ← /learn [N] — analyze last N runs, surface candidates
+```
+
+### 14.2 Invariants
+
+- **Single writer.** `scripts/agent-memory.sh` is the sole writer to `.claude/memory/`. Mirror of `scripts/gh-project.sh` for GitHub state. No `Edit` / `Write` against memory store paths — `hacker-secrets-audit` enforces.
+- **Append-only JSONL.** Duplicate ids rejected. `--supersedes <old-id>` is the upgrade path; deletion forbidden.
+- **Atomic writes.** Every write uses `mktemp` + `mv`. Partial files never visible to readers.
+- **Markdown knowledge entries** carry machine-parseable front-matter (`Topic`, `Aliases`, `First captured`, `Last referenced`, `Supersedes`, `Confidence`). Body is free-form prose.
+- **Gitignored per-fork** except `.keep` + `knowledge/*.md`. Knowledge files are committed as shared cross-contributor reference; structured stores stay per-fork.
+- **`MEMORY.md` integration is read-only.** Never write to `~/.claude/projects/<...>/memory/MEMORY.md` programmatically. If a lesson should graduate there, system surfaces a suggestion at the next milestone gate.
+
+### 14.3 Daily workflow integration
+
+```
+during /build:
+  manager step 10 (PR_REVIEW_GATE follow-up)   → Skill: naavik-discussion-capture
+  manager step 15 (MILESTONE_GATE)             → Skill: naavik-discussion-capture
+                                                  + suggest /learn if runs-since-last-analysis >= 5
+
+ad-hoc:
+  /memory list knowledge                       → see the corpus
+  /memory query decisions '.state == "active"' → list active decisions
+  /memory knowledge linkedin-scraping          → read a specific entry
+  /learn 10                                    → analyze last 10 runs; interactive promotion candidates
+```
+
+### 14.4 Relationship to existing primitives
+
+| Surface | Owner | What it holds | Memory system relation |
+|---|---|---|---|
+| `CLAUDE.md` | repo, hand-edit | project invariants Claude Code reads on every cold start | read-only; never writes |
+| `AGENTS.md` | repo, hand-edit | canonical workflow contract | read-only; never writes |
+| `~/.claude/projects/<...>/memory/MEMORY.md` | Claude Code, auto-managed | per-user personal preferences | read-only; never writes (locked Q6 per plan 19) |
+| `.claude/skills/<name>/SKILL.md` | repo, hand-edit | procedural memory (auto-trigger on phrase) | extends — adds memory-aware skills for situational memory |
+| `.claude/budget-ledger.json` | manager, auto-managed | daily token spend | unaffected |
+| `.claude/github-issue-map.json` | `scripts/gh-project.sh`, auto-managed | persistent `{task → issue#}` cache | unaffected |
+| `.claude/memory/**` | `scripts/agent-memory.sh`, auto-managed | decisions / discussions / lessons / knowledge / patterns / runs-analysis | **the new layer** |
+
+### 14.5 Wave 2 analytics surfaces
+
+`/learn [N]` (default N=10) produces an interactive markdown report covering:
+
+- **Failure patterns** — top 5 ERROR kinds across last N runs.
+- **Drift signals** — plans whose deviation count exceeded 4.
+- **Token-spend hotspots** — agents over their cap on N runs out of last 10.
+- **Skill activation stats** — invocation count per skill across N runs.
+- **Knowledge promotion candidates** — patterns with `occurrence_count >= 5` and no `knowledge/` entry yet.
+- **ROADMAP candidates** — discussions in `discussions.jsonl` without `filed_as: #N`.
+
+Each section ends with an AskUserQuestion (promote pattern / file discussion / accept / skip). Backed by `scripts/agent-memory.sh analyze-run <run-id>` + `scripts/agent-memory.sh mine-patterns --lookback N`.
+
+### 14.6 Wave 3 promotion + alias mining
+
+- **Lesson promotion.** Patterns with `occurrence_count >= 5` are promotable via `scripts/agent-memory.sh promote-lesson <pattern_id>`. Creates a `lessons.jsonl` row + a `knowledge/<auto-slug>.md` stub from the pattern's `proposed_action`. Manager surfaces consent via `Skill: manager-promote-lesson` before invoking.
+- **Alias mining.** `scripts/agent-memory.sh mine-patterns --aliases` scans `manager.log` for `MEMORY_MISS topic=<X> phrase=<Y>` events. Surfaces alias proposals via AskUserQuestion before mutating front-matter on `knowledge/<X>.md`.
+- **Decision supersession.** `scripts/agent-memory.sh record-decision <new-id> ... --supersedes <old-id>` marks the old row as `state: "superseded"` + `superseded_by: <new-id>`. `/memory query decisions` defaults to `state == "active"` filter.
+
