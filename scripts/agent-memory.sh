@@ -116,9 +116,9 @@ validate_aliases() {
     echo "error: --aliases must not contain front-matter fence '---'." >&2
     return 1
   fi
-  local ALIASES_RE='^[a-z0-9 .,/_-]*$'
+  local ALIASES_RE='^[a-zA-Z0-9 .,/_#-]*$'
   if [[ ! "$ALIASES" =~ $ALIASES_RE ]]; then
-    echo "error: --aliases must be comma-separated lowercase tokens. Allowed chars: [a-z0-9 .,/_-]. Got: '$ALIASES'" >&2
+    echo "error: --aliases must be comma-separated tokens. Allowed chars: [a-zA-Z0-9 .,/_#-]. Got: '$ALIASES'" >&2
     return 1
   fi
   return 0

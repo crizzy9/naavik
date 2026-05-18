@@ -9,19 +9,19 @@ Procedure:
 
 ### 1. Pre-flight
 
-- Read `traces/runs.log` tail $N to identify the run-ids in scope.
-- Read `.claude/budget-ledger.json` to compute today's spend (a `/learn` dispatch is ~50k–150k tokens). Halt with one-line cap warning if projected spend would breach `daily_token_ceiling - total_today`.
-- If `.claude/memory/.keep` is missing, halt with `error: run scripts/agent-memory.sh init first`.
+- Read `traces/runs.log` tail $N to identify run-ids in scope.
+- Read `.claude/budget-ledger.json` to compute today's spend (`/learn` dispatch is ~50k–150k tokens). Halt with one-line cap warning if projected spend would breach `daily_token_ceiling - total_today`.
+- `.claude/memory/.keep` missing → halt with `error: run scripts/agent-memory.sh init first`.
 
 ### 2. Per-run analysis
 
-For each of the last $N run-ids:
+Per each of last $N run-ids:
 
 ```bash
 scripts/agent-memory.sh analyze-run <run-id>
 ```
 
-Each run produces `.claude/memory/runs-analysis/<run-id>.md` (idempotent — overwrites). Skip the per-run analysis if the file already exists AND its mtime is newer than the run dir's youngest log file.
+Each run produces `.claude/memory/runs-analysis/<run-id>.md` (idempotent — overwrites). Skip per-run analysis if file already exists AND its mtime is newer than run dir's youngest log file.
 
 ### 3. Pattern mining
 
@@ -29,18 +29,18 @@ Each run produces `.claude/memory/runs-analysis/<run-id>.md` (idempotent — ove
 scripts/agent-memory.sh mine-patterns --lookback $N
 ```
 
-Aggregates `ERROR step=<X> kind=<Y>` across the N runs; writes/updates `recurring-patterns.jsonl`. Patterns with `occurrence_count >= 2` are recorded; threshold for promotion is 5.
+Aggregates `ERROR step=<X> kind=<Y>` across N runs; writes/updates `recurring-patterns.jsonl`. Patterns with `occurrence_count >= 2` are recorded; threshold for promotion is 5.
 
-### 4. Compose the interactive report
+### 4. Compose interactive report
 
-Render a markdown report in chat with these sections. Each section ends with an AskUserQuestion gate for actionable items.
+Render markdown report in chat w/ these sections. Each section ends w/ AskUserQuestion gate for actionable items.
 
 #### Section A — Failure patterns
 
-Top 5 ERROR kinds across the N runs. Group by `kind` (pivot / retry / halt / skip), show count + example run-ids. For each pattern with `occurrence_count >= 5` and no knowledge entry yet:
+Top 5 ERROR kinds across N runs. Group by `kind` (pivot / retry / halt / skip), show count + example run-ids. Per each pattern w/ `occurrence_count >= 5` + no knowledge entry yet:
 
 ```
-AskUserQuestion: Promote pattern <pattern_id> (count=N) to a lesson + knowledge stub?
+AskUserQuestion: Promote pattern <pattern_id> (count=N) to lesson + knowledge stub?
   - Yes → `scripts/agent-memory.sh promote-lesson <pattern_id>` (Wave 3 path)
   - No → skip; pattern stays in recurring-patterns.jsonl
   - Defer → ask again next /learn
@@ -56,18 +56,18 @@ Per-agent average over N runs; flag agents above their cap on N runs out of last
 
 #### Section D — Skill activation stats
 
-For each `.claude/skills/<name>/SKILL.md`, count invocations across N runs (parse `manager.log` DISPATCH events + per-agent log invocation lines). Flag skills with 0 invocations (potentially mistargeted trigger phrases).
+Per each `.claude/skills/<name>/SKILL.md`, count invocations across N runs (parse `manager.log` DISPATCH events + per-agent log invocation lines). Flag skills w/ 0 invocations (potentially mistargeted trigger phrases).
 
 #### Section E — Knowledge promotion candidates
 
-Patterns in `recurring-patterns.jsonl` with `occurrence_count >= 5` and no `.claude/memory/knowledge/<slug>.md` entry. AskUserQuestion per candidate (same shape as Section A).
+Patterns in `recurring-patterns.jsonl` w/ `occurrence_count >= 5` + no `.claude/memory/knowledge/<slug>.md` entry. AskUserQuestion per candidate (same shape as Section A).
 
 #### Section F — ROADMAP candidates
 
-Discussions in `.claude/memory/discussions.jsonl` without a `filed_as: #N` link AND with `priority >= MEDIUM`. AskUserQuestion per candidate:
+Discussions in `.claude/memory/discussions.jsonl` without `filed_as: #N` link AND with `priority >= MEDIUM`. AskUserQuestion per candidate:
 
 ```
-AskUserQuestion: File discussion <id> ("<topic>") as a new ROADMAP row?
+AskUserQuestion: File discussion <id> ("<topic>") as new ROADMAP row?
   - Yes → manager edits ROADMAP.md (BOOKKEEPING) + scripts/gh-project.sh create-issue
   - No → record-discussion ... --filed-as skipped (explicit dismiss)
   - Defer → ask again next /learn
@@ -79,11 +79,11 @@ AskUserQuestion: File discussion <id> ("<topic>") as a new ROADMAP row?
 scripts/agent-memory.sh mine-patterns --aliases --lookback $N
 ```
 
-Surfaces MEMORY_MISS events from manager.log. AskUserQuestion per candidate: add `<phrase>` as an alias on `.claude/memory/knowledge/<topic>.md`?
+Surfaces MEMORY_MISS events from manager.log. AskUserQuestion per candidate: add `<phrase>` as alias on `.claude/memory/knowledge/<topic>.md`?
 
 ### 5. Apply dispositions
 
-For each user-accepted response, manager (single writer per its scope) invokes the matching write:
+Per each user-accepted response, manager (single writer per its scope) invokes matching write:
 
 - `scripts/agent-memory.sh promote-lesson <pattern_id>` for Section A/E.
 - `scripts/agent-memory.sh record-discussion ... --filed-as skipped` or ROADMAP edit + `scripts/gh-project.sh create-issue ...` for Section F.
@@ -91,7 +91,7 @@ For each user-accepted response, manager (single writer per its scope) invokes t
 
 ### 6. Trace bookkeeping
 
-Append to `traces/<run-id>/manager.log` (current run, not the analyzed runs):
+Append to `traces/<run-id>/manager.log` (current run, not analyzed runs):
 
 ```
 [ISO-timestamp] LEARN runs_analyzed=N patterns_mined=M promoted=K filed=L aliases=P
@@ -101,7 +101,7 @@ Append to `traces/<run-id>/manager.log` (current run, not the analyzed runs):
 
 - Do NOT auto-promote patterns. User consent required per pattern (locked Q3 per plan 19).
 - Do NOT modify `~/.claude/projects/<...>/memory/MEMORY.md` from `/learn`. That file is Claude Code's auto-managed memory.
-- Do NOT bypass `scripts/agent-memory.sh`. All writes to `.claude/memory/` go through the single writer.
+- Do NOT bypass `scripts/agent-memory.sh`. All writes to `.claude/memory/` go through single writer.
 - Do NOT bypass `scripts/gh-project.sh` for ROADMAP-mirror Issue creation. Per single-writer rule.
 
 ### Canonical references

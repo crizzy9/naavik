@@ -3,7 +3,7 @@ description: Show today's token spend per agent + total vs daily ceiling. Reads 
 argument-hint:
 ---
 
-Inspect the agent system's token budget. Per `docs/AGENT_OPS.md` § 8.
+Inspect agent system's token budget. Per `docs/AGENT_OPS.md` § 8.
 
 **Step 1 — Load files:**
 
@@ -11,7 +11,7 @@ Read `.claude/budget.json` for caps. Read `.claude/budget-ledger.json` for curre
 
 **Step 2 — Display report:**
 
-Print a table:
+Print table:
 
 ```
 Token budget — <today's date>
@@ -28,11 +28,11 @@ Token budget — <today's date>
 | TOTAL     |   1,705,000 |  5,000,000 |  34.1% |       |
 ```
 
-Format numbers with thousands separators. Highlight any agent or total >80% with a `⚠ near cap` note in the Notes column; >100% with `🛑 OVER CAP`.
+Format numbers w/ thousands separators. Highlight any agent or total >80% w/ `WARN near cap` note in Notes column; >100% w/ `OVER CAP`.
 
 **Step 3 — History (last 7 days):**
 
-If `.claude/budget-ledger.json` has a `history` array, print a brief summary:
+`.claude/budget-ledger.json` has `history` array → print brief summary:
 
 ```
 Last 7 days (totals):
@@ -43,6 +43,6 @@ Last 7 days (totals):
 
 **Step 4 — Halt action reminder:**
 
-Print the `halt_action` value from `.claude/budget.json` (default `ask_user`). Explain: when projected spend exceeds the daily ceiling mid-`/build`, the manager halts and asks for one-time override / cap raise / stop-for-the-day.
+Print `halt_action` value from `.claude/budget.json` (default `ask_user`). Explain: when projected spend exceeds daily ceiling mid-`/build`, manager halts + asks for one-time override / cap raise / stop-for-the-day.
 
-**If `.claude/budget-ledger.json` doesn't exist:** print "Ledger empty — no runs have been logged yet. Run `/build` to start accruing spend." and stop.
+**`.claude/budget-ledger.json` doesn't exist:** print "Ledger empty — no runs have been logged yet. Run `/build` to start accruing spend." + stop.
