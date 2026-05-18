@@ -53,6 +53,8 @@ These complement Claude's native primitives without duplicating them:
 - Schema validation runs on every write (malformed input rejected at the boundary).
 - Atomic writes via `mktemp` + `mv` — partial files never visible.
 - Append-only invariant on JSONL stores. Updates go through `--supersedes <old-id>`; deletion is forbidden.
+- **Concurrent writes serialized via subshell-scoped `flock` on `.claude/memory/.lock`** (codified in A.17 / plan 21 to fix the lost-update race the hacker found at the PR_REVIEW_GATE).
+- **`jq` queries to memory stores are sandboxed** via regex allowlist + identifier deny-list (`env`, `input*`, `getpath`, `path*`, `setpath`, `delpaths`, `debug`, `stderr`, `$ENV`) — blocks `env.*` exfil through `cmd_query` (A.17). `--aliases` is validated to forbid newlines + `---` front-matter fences.
 
 ### Reading model
 

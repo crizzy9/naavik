@@ -45,7 +45,8 @@ today_iso() {
   date -u +%Y-%m-%d
 }
 
-# Atomic JSONL append: lock-free; reader sees pre or post, never mid-line.
+# Atomic JSONL append. MUST be invoked under `with_lock` (concurrent-writer-safe).
+# Direct callers without the lock can lose rows under parallel writes.
 append_jsonl() {
   local FILE="$1" LINE="$2"
   mkdir -p "$(dirname "$FILE")"
@@ -54,6 +55,73 @@ append_jsonl() {
   cat "$FILE" > "$TMP"
   printf '%s\n' "$LINE" >> "$TMP"
   mv "$TMP" "$FILE"
+}
+
+# Global lock file for the memory dir. Serializes ALL writers across stores.
+LOCK_FILE="$MEMORY_DIR/.lock"
+
+# Ensure the lock file exists (idempotent). Called by with_lock.
+ensure_lock() {
+  mkdir -p "$MEMORY_DIR"
+  [[ -f "$LOCK_FILE" ]] || : > "$LOCK_FILE"
+}
+
+# Run a command under an exclusive flock on $LOCK_FILE. Subshell-scoped so the
+# lock auto-releases on exit; non-reentrant (callers must NOT nest with_lock).
+with_lock() {
+  ensure_lock
+  ( flock -x 200; "$@" ) 200>"$LOCK_FILE"
+}
+
+# Validate a jq filter expression against a char allowlist + identifier deny-list.
+# Blocks env.*, getpath, input* etc. that would exfiltrate process environment
+# or filesystem state through `cmd_query`. Fail-closed.
+validate_jq_expr() {
+  local EXPR="$1"
+  # Char allowlist: letters, digits, underscores, common jq punctuation. Note
+  # that '<' and '>' must not be the last char of the character class (parsed
+  # as bash redirection inside [[ =~ ]] otherwise). Build the regex in a var.
+  local ALLOWED_RE='^[][a-zA-Z0-9 _.,:;|&!=<>()/?@$"'\''-]+$'
+  if [[ ! "$EXPR" =~ $ALLOWED_RE ]]; then
+    echo "error: jq expression contains disallowed character. See docs/AGENT_OPS.md § 14 for the safe-jq vocabulary." >&2
+    return 1
+  fi
+  local BAD WORD_RE
+  for BAD in env input inputs input_filename getpath path paths setpath delpaths debug stderr; do
+    WORD_RE="(^|[^a-zA-Z0-9_])${BAD}([^a-zA-Z0-9_]|\$)"
+    if [[ "$EXPR" =~ $WORD_RE ]]; then
+      echo "error: jq expression contains disallowed identifier '$BAD'. See docs/AGENT_OPS.md § 14." >&2
+      return 1
+    fi
+  done
+  if [[ "$EXPR" == *'$ENV'* ]]; then
+    echo "error: jq expression references '\$ENV'. See docs/AGENT_OPS.md § 14." >&2
+    return 1
+  fi
+  return 0
+}
+
+# Validate --aliases against a comma-separated token list. Blocks newlines + the
+# Markdown front-matter fence ('---') so a malicious caller can't inject a second
+# front-matter block via knowledge file write. Allows spaces, dots, slashes, and
+# underscores inside tokens to match the existing seeded corpus.
+validate_aliases() {
+  local ALIASES="$1"
+  [[ -z "$ALIASES" ]] && return 0
+  if [[ "$ALIASES" == *$'\n'* || "$ALIASES" == *$'\r'* ]]; then
+    echo "error: --aliases must not contain newlines." >&2
+    return 1
+  fi
+  if [[ "$ALIASES" == *"---"* ]]; then
+    echo "error: --aliases must not contain front-matter fence '---'." >&2
+    return 1
+  fi
+  local ALIASES_RE='^[a-z0-9 .,/_-]*$'
+  if [[ ! "$ALIASES" =~ $ALIASES_RE ]]; then
+    echo "error: --aliases must be comma-separated lowercase tokens. Allowed chars: [a-z0-9 .,/_-]. Got: '$ALIASES'" >&2
+    return 1
+  fi
+  return 0
 }
 
 # Validate JSONL line via jq before append. Refuses malformed input.
@@ -134,11 +202,13 @@ cmd_record_decision() {
 
   validate_json "$LINE"
 
-  if [[ -n "$SUPERSEDES" ]]; then
-    mark_superseded "$DECISIONS" "$SUPERSEDES" "$ID"
-  fi
-
-  append_jsonl "$DECISIONS" "$LINE"
+  _record_decision_locked() {
+    if [[ -n "$SUPERSEDES" ]]; then
+      mark_superseded "$DECISIONS" "$SUPERSEDES" "$ID"
+    fi
+    append_jsonl "$DECISIONS" "$LINE"
+  }
+  with_lock _record_decision_locked
   echo "decision: $ID"
 }
 
@@ -180,7 +250,11 @@ cmd_record_discussion() {
      | if $run != "" then . + {run_id: $run} else . end')"
 
   validate_json "$LINE"
-  append_jsonl "$DISCUSSIONS" "$LINE"
+
+  _record_discussion_locked() {
+    append_jsonl "$DISCUSSIONS" "$LINE"
+  }
+  with_lock _record_discussion_locked
   echo "discussion: $ID"
 }
 
@@ -213,6 +287,7 @@ cmd_record_knowledge() {
 
   case "$CONFIDENCE" in high|medium|low) ;; *) echo "error: confidence must be high|medium|low" >&2; exit 1 ;; esac
   [[ "$SLUG" =~ ^[a-z0-9-]+$ ]] || { echo "error: slug must be kebab-case [a-z0-9-]" >&2; exit 1; }
+  validate_aliases "$ALIASES" || exit 1
 
   local OUT="$KNOWLEDGE_DIR/$SLUG.md"
   if [[ -f "$OUT" && "$OVERWRITE" == false ]]; then
@@ -232,8 +307,9 @@ cmd_record_knowledge() {
   TODAY="$(today_iso)"
   [[ -n "$RUN_ID" ]] && RUN_LINE=" (run $RUN_ID)"
 
-  local TMP="$OUT.tmp.$$"
-  cat > "$TMP" <<EOF
+  _record_knowledge_locked() {
+    local TMP="$OUT.tmp.$$"
+    cat > "$TMP" <<EOF
 ---
 Topic: $SLUG
 Aliases: $ALIASES
@@ -245,8 +321,10 @@ Confidence: $CONFIDENCE
 
 $BODY
 EOF
-  mv "$TMP" "$OUT"
-  cmd_update_index >/dev/null
+    mv "$TMP" "$OUT"
+    _update_index_inline >/dev/null
+  }
+  with_lock _record_knowledge_locked
   echo "knowledge: $OUT"
 }
 
@@ -255,8 +333,10 @@ EOF
 # of all knowledge entries. Single writer (this script); idempotent.
 # ===========================================================================
 
-cmd_update_index() {
-  cmd_init >/dev/null
+# Inline body of update-index — does the work without acquiring the lock.
+# Callers that already hold the lock (e.g. _record_knowledge_locked) MUST use
+# this; standalone callers go through cmd_update_index which wraps with_lock.
+_update_index_inline() {
   local INDEX="$KNOWLEDGE_DIR/INDEX.md"
   local TMP="$INDEX.tmp.$$"
   local COUNT=0
@@ -292,6 +372,11 @@ cmd_update_index() {
   } > "$TMP"
   mv "$TMP" "$INDEX"
   echo "index: $INDEX ($COUNT entries)"
+}
+
+cmd_update_index() {
+  cmd_init >/dev/null
+  with_lock _update_index_inline
 }
 
 # ===========================================================================
@@ -338,11 +423,13 @@ cmd_record_lesson() {
 
   validate_json "$LINE"
 
-  if [[ -n "$SUPERSEDES" ]]; then
-    mark_superseded "$LESSONS" "$SUPERSEDES" "$ID"
-  fi
-
-  append_jsonl "$LESSONS" "$LINE"
+  _record_lesson_locked() {
+    if [[ -n "$SUPERSEDES" ]]; then
+      mark_superseded "$LESSONS" "$SUPERSEDES" "$ID"
+    fi
+    append_jsonl "$LESSONS" "$LINE"
+  }
+  with_lock _record_lesson_locked
   echo "lesson: $ID"
 }
 
@@ -409,6 +496,7 @@ cmd_query() {
   require_jq
   local STORE="${1:?usage: query <decisions|discussions|lessons|patterns> '<jq-expr>'}"
   local EXPR="${2:?usage: query <store> '<jq-expr>'}"
+  validate_jq_expr "$EXPR" || exit 1
   local FILE
   case "$STORE" in
     decisions) FILE="$DECISIONS" ;;
@@ -471,7 +559,10 @@ cmd_analyze_run() {
     echo "## Per-agent token spend"
     echo
     if [[ -f "$TRACE_DIR/MANIFEST.json" ]]; then
-      jq -r '.tokens_spent | to_entries[] | "- \(.key): \(.value)"' "$TRACE_DIR/MANIFEST.json"
+      # Fenced code block blocks Markdown injection via MANIFEST.json values.
+      echo '```'
+      jq -r '.tokens_spent | to_entries[] | "\(.key): \(.value)"' "$TRACE_DIR/MANIFEST.json"
+      echo '```'
     else
       echo "(no manifest)"
     fi
@@ -501,7 +592,10 @@ cmd_analyze_run() {
     echo "## Files touched"
     echo
     if [[ -f "$TRACE_DIR/MANIFEST.json" ]]; then
-      jq -r '.files_touched[]? | "- \(.)"' "$TRACE_DIR/MANIFEST.json"
+      # Fenced code block blocks Markdown injection via MANIFEST.json values.
+      echo '```'
+      jq -r '.files_touched[]?' "$TRACE_DIR/MANIFEST.json"
+      echo '```'
     fi
     echo
     echo "## Deviations recorded"
@@ -540,15 +634,16 @@ cmd_mine_patterns() {
   local TRACES_ROOT="$REPO_ROOT/traces"
   [[ -d "$TRACES_ROOT" ]] || { echo "(no traces/)"; return 0; }
 
-  # Recent runs by mtime, capped at LOOKBACK.
-  local RUNS
-  RUNS=$(find "$TRACES_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20*' -printf '%T@\t%f\n' 2>/dev/null \
-         | sort -rn | head -n "$LOOKBACK" | cut -f2)
+  # Recent runs by mtime, capped at LOOKBACK. mapfile + quoted iteration prevents
+  # word-split on any run-id that ever contains whitespace.
+  local -a RUNS=()
+  mapfile -t RUNS < <(find "$TRACES_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20*' -printf '%T@\t%f\n' 2>/dev/null \
+                      | sort -rn | head -n "$LOOKBACK" | cut -f2)
 
   # Collect every ERROR step across the recent runs, keyed by step+kind.
   local TMP_AGG
   TMP_AGG="$(mktemp)"
-  for run in $RUNS; do
+  for run in "${RUNS[@]}"; do
     for log in "$TRACES_ROOT/$run"/*.log; do
       [[ -f "$log" ]] || continue
       { grep -hE "^\[.*\] ERROR step=" "$log" 2>/dev/null || true; } | while IFS= read -r line; do
@@ -582,13 +677,16 @@ cmd_mine_patterns() {
       '{pattern_id: $pid, step: $step, kind: $kind, occurrence_count: $c,
         runs: $runs, first_seen: $first, last_seen: $last,
         proposed_action: ""}')"
-    # Remove any prior row for this pattern_id (simple supersede).
-    if [[ -n "$EXISTING" ]]; then
-      local TMP="$PATTERNS.tmp.$$"
-      jq -c --arg p "$PATTERN_ID" 'select(.pattern_id != $p)' "$PATTERNS" > "$TMP"
-      mv "$TMP" "$PATTERNS"
-    fi
-    append_jsonl "$PATTERNS" "$LINE"
+    _mine_patterns_write_row() {
+      # Remove any prior row for this pattern_id (simple supersede).
+      if [[ -n "$EXISTING" ]]; then
+        local TMP="$PATTERNS.tmp.$$"
+        jq -c --arg p "$PATTERN_ID" 'select(.pattern_id != $p)' "$PATTERNS" > "$TMP"
+        mv "$TMP" "$PATTERNS"
+      fi
+      append_jsonl "$PATTERNS" "$LINE"
+    }
+    with_lock _mine_patterns_write_row
     NEW=$((NEW + 1))
   done < <(awk -F'\t' '{
     key=$1"\t"$2
@@ -610,12 +708,12 @@ cmd_mine_aliases() {
   local LOOKBACK="${1:-10}"
   local TRACES_ROOT="$REPO_ROOT/traces"
   [[ -d "$TRACES_ROOT" ]] || { echo "(no traces/)"; return 0; }
-  local RUNS
-  RUNS=$(find "$TRACES_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20*' -printf '%T@\t%f\n' 2>/dev/null \
-         | sort -rn | head -n "$LOOKBACK" | cut -f2)
+  local -a RUNS=()
+  mapfile -t RUNS < <(find "$TRACES_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20*' -printf '%T@\t%f\n' 2>/dev/null \
+                      | sort -rn | head -n "$LOOKBACK" | cut -f2)
   echo "mine-patterns --aliases: scanning last $LOOKBACK runs for MEMORY_MISS events..."
   local FOUND=0
-  for run in $RUNS; do
+  for run in "${RUNS[@]}"; do
     [[ -f "$TRACES_ROOT/$run/manager.log" ]] || continue
     while IFS= read -r line; do
       local topic phrase
