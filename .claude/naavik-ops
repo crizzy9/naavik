@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""naavik-ops — agent-system operations dispatcher.
+
+Routes <group> <command> [args] to subcommand modules in `.claude/naavik_ops/`.
+
+Groups: task / release / deps / gh / memory
+
+During the A.29 transition, the `gh` and `memory` groups are subprocess wrappers
+around `scripts/gh-project.sh` + `scripts/agent-memory.sh`. A.30 (0.1.1) inlines
+them to native Python. See `docs/design/PHASE_NUMBERING.md § 6 + § 9 + § 10`.
+
+Single-writer rule: `.claude/naavik-ops` is the canonical entry point for all
+GitHub Project + memory state mutations from agent contexts.
+"""
+
+import sys
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+from naavik_ops.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
