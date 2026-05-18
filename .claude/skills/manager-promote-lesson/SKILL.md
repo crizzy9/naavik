@@ -5,32 +5,32 @@ allowed-tools: Read, Bash(scripts/agent-memory.sh:*), Bash(jq:*), AskUserQuestio
 
 # manager-promote-lesson
 
-Wave 3 promotion wrapper. Patterns crossing `occurrence_count >= 5` are candidates for `lessons.jsonl` + a `knowledge/<auto-slug>.md` stub. This skill is the consent-gated path manager invokes from inside `/learn` Section A / E.
+Wave 3 promotion wrapper. Patterns crossing `occurrence_count >= 5` are candidates for `lessons.jsonl` + `knowledge/<auto-slug>.md` stub. Consent-gated path manager invokes from `/learn` Section A / E.
 
 ## When to invoke
 
-- `/learn` surfaces a "promote pattern X (count=N >= 5)?" candidate AND the user replied "Yes" to the AskUserQuestion.
-- Manager wants to manually promote a specific pattern after reviewing `.claude/memory/recurring-patterns.jsonl`.
-- User types or says "promote pattern <id>" / "make this a lesson" / "this gotcha is permanent now".
+- `/learn` surfaces "promote pattern X (count=N >= 5)?" AND user replied "Yes".
+- Manager manually promotes specific pattern after reviewing `.claude/memory/recurring-patterns.jsonl`.
+- User: "promote pattern <id>" / "make this a lesson" / "this gotcha is permanent now".
 
-## What this skill does
+## Steps
 
-### Step 1 — Verify the pattern qualifies
+### 1 — Verify pattern qualifies
 
 ```bash
 scripts/agent-memory.sh query patterns ".pattern_id == \"<pattern_id>\""
 ```
 
 Confirm:
-- The pattern exists.
+- Pattern exists.
 - `occurrence_count >= 5`.
 - No existing `lessons.jsonl` row with id `lesson-<pattern_id_with_underscores_to_hyphens>`.
 
-If `occurrence_count < 5`, halt with `error: pattern has count=<N>; threshold is 5`. No override.
+`occurrence_count < 5` → halt: `error: pattern has count=<N>; threshold is 5`. No override.
 
-### Step 2 — Auto-slug the knowledge stub
+### 2 — Auto-slug knowledge stub
 
-`pattern_id` has shape `<step>__<kind>` (e.g. `find-replace__pivot`). Slug derivation:
+`pattern_id` shape: `<step>__<kind>`. Slug derivation:
 
 ```
 slug = pattern_id.split("__")[0].lower().replace(/[^a-z0-9-]/g, '-')
@@ -41,56 +41,54 @@ Examples:
 - `pytest-x-flaked__retry` → `pytest-x-flaked`
 - `gh-pr-create__halt` → `gh-pr-create`
 
-If `.claude/memory/knowledge/<slug>.md` already exists, the `promote-lesson` invocation leaves it as-is (operator owns the existing file). No conflict.
+`.claude/memory/knowledge/<slug>.md` already exists → `promote-lesson` leaves it as-is (operator owns file). No conflict.
 
-### Step 3 — Surface consent
+### 3 — Surface consent
 
-If invoked outside `/learn`'s flow (where consent was already collected), surface an AskUserQuestion:
+Outside `/learn` flow → AskUserQuestion:
 
 ```
-AskUserQuestion: Promote pattern '<pattern_id>' (count=<N>) to lesson '<lesson_id>' + knowledge stub '<slug>.md'?
-  - Yes → run the promotion
+Promote pattern '<pattern_id>' (count=<N>) to lesson '<lesson_id>' + knowledge stub '<slug>.md'?
+  - Yes → run promotion
   - No → halt
-  - Inspect → output the pattern's full row + last 3 example runs, then re-ask
+  - Inspect → output pattern full row + last 3 example runs, re-ask
 ```
 
-### Step 4 — Run the promotion
+### 4 — Run promotion
 
 ```bash
 scripts/agent-memory.sh promote-lesson <pattern_id>
 ```
 
-This creates the `lessons.jsonl` row AND the `knowledge/<slug>.md` stub from the pattern's `proposed_action`. Outputs:
+Creates `lessons.jsonl` row + `knowledge/<slug>.md` stub from `proposed_action`. Output:
 
 ```
 lesson: lesson-<pattern_id-with-hyphens>
 promote-lesson: lesson <lesson-id> + knowledge stub <path>
 ```
 
-### Step 5 — Surface the result
-
-Print the new files to the user:
+### 5 — Surface result
 
 ```
 Promoted:
   - .claude/memory/lessons.jsonl row: <lesson_id>
-  - .claude/memory/knowledge/<slug>.md (stub — operator should expand the Resolution + Related sections)
+  - .claude/memory/knowledge/<slug>.md (stub — operator should expand Resolution + Related)
 ```
 
-### Step 6 — Optional follow-up
+### 6 — Optional follow-up
 
-Suggest the operator expand the auto-generated stub by editing the `## Resolution / pattern` and `## Related` sections via:
+Operator expands auto-generated stub via:
 
 ```bash
 scripts/agent-memory.sh record-knowledge <slug> <body-file> \
   --aliases "<merged-list>" --confidence high --overwrite
 ```
 
-This is opt-in — the stub is functional out of the box.
+Opt-in — stub is functional out of box.
 
 ## Knowledge-stub template
 
-The `promote-lesson` subcommand auto-generates this shape:
+`promote-lesson` auto-generates:
 
 ```markdown
 ---
@@ -115,7 +113,7 @@ Promoted from recurring pattern `<pattern_id>` after <N> occurrences across runs
 
 ## Proposed action
 
-<proposed_action from the pattern row, or "(none captured — update via record-knowledge --overwrite)">
+<proposed_action from pattern row, or "(none captured — update via record-knowledge --overwrite)">
 
 ## Related
 
@@ -124,26 +122,26 @@ Promoted from recurring pattern `<pattern_id>` after <N> occurrences across runs
 - runs: <comma-separated run-ids>
 ```
 
-Operator's job after promotion: replace the auto-generated `## Context` and `## Pattern` sections with prose; merge useful `Aliases` from the user's vocabulary; bump `Confidence: medium → high` once the resolution is verified.
+Operator job after: replace `## Context` + `## Pattern` w/ prose; merge useful `Aliases`; bump `Confidence: medium → high` once resolution verified.
 
 ## Canonical references
 
-- `scripts/agent-memory.sh promote-lesson <pattern_id>` — the underlying write.
-- `.claude/commands/learn.md` § Section A + § Section E — the consent-collection surface this skill closes.
-- `docs/design/AGENT_MEMORY.md § 6.4` — extension guide for promotion.
+- `scripts/agent-memory.sh promote-lesson <pattern_id>` — underlying write.
+- `.claude/commands/learn.md` § Section A + § Section E — consent-collection surface.
+- `docs/design/AGENT_MEMORY.md § 6.4` — promotion extension guide.
 - `docs/AGENT_OPS.md § 14.6` — Wave 3 surface documentation.
 
 ## When NOT to invoke
 
-- The pattern's `occurrence_count < 5`. Threshold is hard.
-- A `knowledge/<slug>.md` already exists AND its content is non-stub (i.e. operator has already written prose). Leave operator's work alone.
-- Outside a `/learn` flow AND the user hasn't explicitly named the pattern to promote.
+- `occurrence_count < 5`. Hard threshold.
+- `knowledge/<slug>.md` exists AND content is non-stub (operator wrote prose). Leave alone.
+- Outside `/learn` flow AND user hasn't explicitly named pattern to promote.
 - Compaction events.
 
 ## Forbidden during invocation
 
-- Do NOT override the threshold-5 gate. `scripts/agent-memory.sh promote-lesson` enforces; this skill doesn't bypass.
-- Do NOT auto-promote without user consent. The whole point of the wrapper is the AskUserQuestion gate (or the prior `/learn` consent).
-- Do NOT bypass the auto-slug rule. The slug derivation is deterministic so promotion is idempotent across re-runs.
-- Do NOT bulk-promote. One pattern per invocation. `/learn` calls this skill repeatedly with consent per pattern.
-- Do NOT write directly to `lessons.jsonl` / `knowledge/`. Single-writer rule applies — the script does the writes.
+- Do NOT override threshold-5 gate. `scripts/agent-memory.sh promote-lesson` enforces.
+- Do NOT auto-promote without user consent. AskUserQuestion gate is the point.
+- Do NOT bypass auto-slug rule. Deterministic slug → promotion idempotent across re-runs.
+- Do NOT bulk-promote. One pattern per invocation.
+- Do NOT write directly to `lessons.jsonl` / `knowledge/`. Single-writer rule.

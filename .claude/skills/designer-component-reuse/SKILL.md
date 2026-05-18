@@ -4,18 +4,18 @@ description: Check `docs/design/COMPONENTS.md` (85-partial catalog) before desig
 
 # designer-component-reuse
 
-The component catalog at `docs/design/COMPONENTS.md` enumerates **85 partials across 12 groups** — every reusable UI unit Naavik composes from. The catalog is closed by default. New components require a documented extension to `COMPONENTS.md`; reinventing one is the most expensive design anti-pattern (drift accumulates, props drift, visual inconsistency follows). This skill is the lookup + the "did this already ship?" check.
+Catalog at `docs/design/COMPONENTS.md` enumerates **85 partials across 12 groups** — every reusable UI unit. Catalog is closed by default. New components require documented `COMPONENTS.md` extension; reinventing is most expensive anti-pattern (drift accumulates, props drift, visual inconsistency follows). Lookup + "did this already ship?" check.
 
 ## When to invoke
 
-- Designer about to mock a screen that needs a new visual unit (card variant, banner, modal, input type).
-- Engineer about to create a new `src/ui/templates/components/<name>.html`.
-- Reviewer evaluating a UI PR for unnecessary new components.
+- Designer about to mock screen needing new visual unit (card variant, banner, modal, input type).
+- Engineer about to create new `src/ui/templates/components/<name>.html`.
+- Reviewer evaluating UI PR for unnecessary new components.
 - User asks "is there a component for X?" / "do we have a card that does Y?".
 
-## What this skill does
+## Steps
 
-1. **Identify the visual need.** What is this thing — a button, a card, a row, a banner, a chip, a modal, a skeleton? Use the catalog's 12-group taxonomy as a starting lens:
+1. **Identify visual need.** Button, card, row, banner, chip, modal, skeleton? Use 12-group taxonomy:
 
    | Group | Count | Examples |
    |---|---|---|
@@ -32,13 +32,13 @@ The component catalog at `docs/design/COMPONENTS.md` enumerates **85 partials ac
    | Settings | 7 | `settings_tabs`, `provider_card`, `cost_card`, `deployment_status_card`, `log_tail`, `on_disk_card`, `connection_status_card` |
    | Skeletons | 5 | `swipe_card_skeleton`, `tracking_card_skeleton`, etc. |
 
-2. **Grep the catalog.**
+2. **Grep catalog.**
    ```bash
    Grep "<noun>" docs/design/COMPONENTS.md
    ```
-   Common nouns to try: `card`, `banner`, `chip`, `row`, `modal`, `input`, `badge`, `picker`, `column`.
+   Common nouns: `card`, `banner`, `chip`, `row`, `modal`, `input`, `badge`, `picker`, `column`.
 
-3. **Read the component's spec.** Each entry follows the template at `docs/design/COMPONENTS.md § B`:
+3. **Read component spec.** Each entry follows template at `docs/design/COMPONENTS.md § B`:
    - Purpose (one-line)
    - Used by (cross-ref to SCREENS.md sections)
    - API table (variable / type / required / default / description)
@@ -50,23 +50,23 @@ The component catalog at `docs/design/COMPONENTS.md` enumerates **85 partials ac
 
 4. **Decide:**
 
-   **Option A — Reuse exactly.** Use the existing partial via `{% include "components/<name>.html" with {...} %}` or the macro pattern (for atomics like `tag_chip`, `score_circle`, `status_dot`, `kbd`, `meta_item`, `chip`, `log_line`). Done.
+   **Option A — Reuse exactly.** Use existing partial via `{% include "components/<name>.html" with {...} %}` or macro pattern (atomics like `tag_chip`, `score_circle`, `status_dot`, `kbd`, `meta_item`, `chip`, `log_line`). Done.
 
-   **Option B — Extend via macro args.** The component already exists; you need a new variant. Add the variant to the partial via an additional macro arg + a Jinja conditional. Update `COMPONENTS.md` § the component's "Variants / states" row. This is the canonical path for "I need a card that's slightly different" — almost always the right answer.
+   **Option B — Extend via macro args.** Component exists; new variant needed. Add variant via additional macro arg + Jinja conditional. Update `COMPONENTS.md` § component's "Variants / states" row. Canonical path for "I need a card that's slightly different" — almost always right answer.
 
-   **Option C — Genuinely new component.** Only if the visual unit is not expressible as a variant of an existing partial. Process:
+   **Option C — Genuinely new component.** Only if visual unit not expressible as variant of existing partial. Process:
    1. Propose extension to `docs/design/COMPONENTS.md` (new row + spec table).
-   2. Document under the right group (Atomics if reusable across screens, screen-specific group if not).
-   3. Add the partial at `src/ui/templates/components/<name>.html`.
-   4. Cross-ref the new entry from any SCREENS.md section that uses it.
+   2. Document under right group (Atomics if reusable across screens, screen-specific group if not).
+   3. Add partial at `src/ui/templates/components/<name>.html`.
+   4. Cross-ref new entry from any SCREENS.md section using it.
 
-   **Option D — Macro vs include?** Use the catalog's rule at `COMPONENTS.md § C`:
-   - Macro: called many times in the same template, few args (≤4), no nested HTMX hooks.
+   **Option D — Macro vs include?** Use catalog rule at `COMPONENTS.md § C`:
+   - Macro: called many times in same template, few args (≤4), no nested HTMX hooks.
    - Include: larger composite, structured data input (job dict, contact dict), has own `hx-*` attributes.
 
 ## Macros — already shipped
 
-Quick reference for the macros that live in `src/ui/templates/components/_macros.html`:
+Quick reference for macros in `src/ui/templates/components/_macros.html`:
 
 ```jinja
 {% from "components/_macros.html" import tag_chip, score_circle, status_dot, kbd, meta_item, chip, log_line %}
@@ -77,35 +77,35 @@ Quick reference for the macros that live in `src/ui/templates/components/_macros
 - `status_dot(status)` — pipeline dot (color by status)
 - `kbd(key)` — keyboard hint chip
 - `meta_item(label, value)` — caption + value pair
-- `chip(label, intent='neutral')` — generic chip with tint variants
+- `chip(label, intent='neutral')` — generic chip w/ tint variants
 - `log_line(line)` — mono log entry row
 
-## Cross-cutting decisions to honor (from COMPONENTS.md § D)
+## Cross-cutting decisions (from COMPONENTS.md § D)
 
-1. **Tokens** — Tailwind classes that map to DESIGN.md tokens. No arbitrary hex.
+1. **Tokens** — Tailwind classes mapping to DESIGN.md tokens. No arbitrary hex.
 2. **Icons** — Lucide only, stroke 1.5.
-3. **Naming** — `snake_case.html` matching the spec name in SCREENS.md.
+3. **Naming** — `snake_case.html` matching spec name in SCREENS.md.
 4. **No JS** in component files. Wire from `base.html` or page templates.
 5. **Accessibility baseline** — `focus:ring-2 focus:ring-indigo-500/40` on every interactive element. `aria-label` on icon-only buttons. Native `<dialog>` for modals.
 6. **Variants follow DESIGN.md naming** — `selected` / `unselected`, `default` / `hover` / `disabled` / `loading`, `info` / `success` / `warning` / `danger`.
 
 ## Canonical references
 
-- `docs/design/COMPONENTS.md` — the canonical 85-partial catalog (graduated from plan 03).
-- `DESIGN.md` (root) — visual contract the components consume.
+- `docs/design/COMPONENTS.md` — canonical 85-partial catalog (graduated from plan 03).
+- `DESIGN.md` (root) — visual contract components consume.
 - `docs/design/SCREENS.md` — which screens use which components.
-- `docs/design/WORKFLOW.md` § Read order — COMPONENTS.md is step 4 in the UI read-order.
+- `docs/design/WORKFLOW.md` § Read order — COMPONENTS.md is step 4 in UI read-order.
 - `.claude/agents/designer.md` § "Component reuse (mandatory)".
 
 ## When NOT to invoke
 
-- The component already loaded in your context this turn.
+- Component already loaded in your context this turn.
 - Pure backend work, no template changes.
 - Compaction events.
 
 ## Forbidden during invocation
 
-- Do NOT add a new file at `src/ui/templates/components/<name>.html` without a corresponding `COMPONENTS.md` entry. The catalog is the contract; orphans rot.
-- Do NOT fork a component to "tweak it slightly". Extend via macro args + document the variant. Forking is the most common drift source.
-- Do NOT skip the catalog check because "this is obvious". The catalog has 85 entries; many things are already there.
-- Do NOT add a font / icon set / styling library to satisfy a "new" component need. The stack is closed.
+- Do NOT add new file at `src/ui/templates/components/<name>.html` without corresponding `COMPONENTS.md` entry. Catalog is contract; orphans rot.
+- Do NOT fork component to "tweak it slightly". Extend via macro args + document variant. Forking is most common drift source.
+- Do NOT skip catalog check because "this is obvious". Catalog has 85 entries; many things already there.
+- Do NOT add font / icon set / styling library to satisfy "new" component need. Stack is closed.

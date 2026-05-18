@@ -305,6 +305,12 @@ echo "body" | "$SCRIPT" record-knowledge alias-fence-test - --aliases "good, ---
 RC=$?
 [[ $RC -ne 0 ]]; assert "Finding 4 (negative) — bare '---' fence in --aliases rejected" $?
 
+# 22c. A.17a — uppercase + '#' admit via widened ALIASES_RE (^[a-zA-Z0-9 .,/_#-]*$).
+# Existing seeded knowledge entries contain tokens like 'TestClient', 'MCP', 'Closes #N'.
+echo "smoke body" | "$SCRIPT" record-knowledge alias-uppercase-hash-test - \
+  --aliases "TestClient, BOOKKEEPING, Closes #N" >/dev/null 2>&1
+assert "A.17a (positive) — uppercase + '#' aliases accepted (TestClient, BOOKKEEPING, Closes #N)" $?
+
 # 23. Finding 5 — MANIFEST.json values land inside fenced code blocks
 # (no Markdown link / inline code rendering).
 SYN_RUN5="2099-12-31T05-00-00_test05"

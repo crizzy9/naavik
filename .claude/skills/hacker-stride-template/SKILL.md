@@ -4,25 +4,25 @@ description: STRIDE threat-model scaffold — attack tree + STRIDE table + top-3
 
 # hacker-stride-template
 
-STRIDE is the threat-modeling rubric Naavik uses for any new feature with non-trivial attack surface. Output is a structured doc at `docs/design/THREAT_MODEL-<slug>.md` that future engineers + the hacker agent re-reference. This skill is the template + the workflow.
+STRIDE = threat-modeling rubric Naavik uses for any new feature w/ non-trivial attack surface. Output = structured doc at `docs/design/THREAT_MODEL-<slug>.md` future engineers + hacker re-reference. Template + workflow.
 
 ## When to invoke
 
 - User invokes `/threat-model <target>`.
-- Hacker dispatched on a design doc / plan that touches auth, secrets, untrusted input, deserialization, OAuth flows, scraping, ATS adapters, or any externally-controlled input path.
-- Before ANY feature ships that crosses an authentication boundary or persists secrets.
-- Architect requests pre-implementation threat model as part of a `Type: design` plan.
+- Hacker dispatched on design doc / plan touching auth, secrets, untrusted input, deserialization, OAuth flows, scraping, ATS adapters, or any externally-controlled input path.
+- Before ANY feature ships crossing authentication boundary or persisting secrets.
+- Architect requests pre-implementation threat model as part of `Type: design` plan.
 
-## What this skill does
+## Steps
 
-### 1. Read the target
+### 1. Read target
 
-- The design doc / plan / feature description you're modeling against.
-- Related existing code (the callers, the auth middleware, the existing CSRF + rate-limit middleware, the vault audit log if applicable).
+- Design doc / plan / feature description you're modeling against.
+- Related existing code (callers, auth middleware, existing CSRF + rate-limit middleware, vault audit log if applicable).
 - `docs/ARCHITECTURE.md` § 4.1 + § 4.2 — auth + secret-handling conventions to compare against.
 - `docs/plans/POST_PHASE_1.md` § Security review — Naavik-specific watchlist.
 
-### 2. Build the attack tree
+### 2. Build attack tree
 
 Top-level attacker goal → sub-goals → concrete attacks. Indent visually. Example shape:
 
@@ -41,11 +41,11 @@ Goal: Extract user's stored LLM API keys via the cloud tier
     └── C2: LLM prompt injection extracts SECRET_KEY from system context
 ```
 
-The tree is deliberately concrete — each leaf is an attack with a specific code path, not "attacker does something bad".
+Tree is deliberately concrete — each leaf = attack w/ specific code path, not "attacker does something bad".
 
 ### 3. STRIDE table
 
-One row per concrete threat from the tree. Map each to a STRIDE category:
+One row per concrete threat from tree. Map each to STRIDE category:
 
 | Category | What it covers |
 |---|---|
@@ -70,7 +70,7 @@ Table shape:
 
 ### 4. Top-3 risks (rank-ordered)
 
-Surface the most-impactful + most-likely as bullets:
+Surface most-impactful + most-likely as bullets:
 
 ```markdown
 ## Top 3 risks (rank-ordered)
@@ -80,7 +80,7 @@ Surface the most-impactful + most-likely as bullets:
 3. ...
 ```
 
-Rank by `severity × likelihood`, where severity uses the calibration from `.claude/agents/hacker.md § Verdict format § Severity calibration`:
+Rank by `severity × likelihood`, where severity uses calibration from `.claude/agents/hacker.md § Verdict format § Severity calibration`:
 
 - **critical** — actively exploitable in production by unauthenticated remote attacker
 - **high** — exploitable by authenticated user against another user's data, OR unauthenticated against system integrity
@@ -89,16 +89,16 @@ Rank by `severity × likelihood`, where severity uses the calibration from `.cla
 
 ### 5. Defensive design recommendations
 
-Changes to the design doc / plan that mitigate threats **before code is written**. This is the highest-leverage section — fixing a flaw at design time costs orders of magnitude less than at PR time.
+Changes to design doc / plan that mitigate threats **before code is written**. Highest-leverage section — fixing flaw at design time costs orders of magnitude less than at PR time.
 
 ```markdown
 ## Defensive design recommendations
 
-- <recommendation 1 — name the file/section the change applies to>
+- <recommendation 1 — name file/section change applies to>
 - <recommendation 2>
 ```
 
-### 6. Write the doc
+### 6. Write doc
 
 Save to `docs/design/THREAT_MODEL-<slug>.md`:
 
@@ -126,9 +126,9 @@ Save to `docs/design/THREAT_MODEL-<slug>.md`:
 <as above>
 ```
 
-### 7. Link from the source
+### 7. Link from source
 
-Edit the source design doc / plan to add a `## Security` section pointing at the threat model:
+Edit source design doc / plan to add `## Security` section pointing at threat model:
 
 ```markdown
 ## Security
@@ -138,8 +138,8 @@ Threat model: `docs/design/THREAT_MODEL-<slug>.md` (top 3 risks summarized inlin
 
 ## Worked-example anchors
 
-- `docs/ARCHITECTURE.md § 4.1` (auth) — patterns the threat model checks against.
-- `.claude/agents/hacker.md § "Naavik-specific watchlist"` — Naavik-specific threats to consider:
+- `docs/ARCHITECTURE.md § 4.1` (auth) — patterns threat model checks against.
+- `.claude/agents/hacker.md § "Naavik-specific watchlist"` — Naavik-specific threats:
   - Vault deprecation track (don't add new vault scopes)
   - CLI sunset (don't add new subcommands)
   - `~/.naavik/dev-credentials` mode 0600 + env-gated triple condition
@@ -151,9 +151,9 @@ Threat model: `docs/design/THREAT_MODEL-<slug>.md` (top 3 risks summarized inlin
 
 ## Canonical references
 
-- `.claude/agents/hacker.md` § "Threat model output" — the canonical doc template.
+- `.claude/agents/hacker.md` § "Threat model output" — canonical doc template.
 - `.claude/agents/hacker.md` § "Operating loop (threat modeling)".
-- `.claude/agents/hacker.md` § "Default attack surfaces" — the 16-item checklist that informs the STRIDE table.
+- `.claude/agents/hacker.md` § "Default attack surfaces" — 16-item checklist informing STRIDE table.
 - `.claude/agents/hacker.md` § "Naavik-specific watchlist".
 - `docs/ARCHITECTURE.md` § 4.1 + § 4.2.
 - `docs/plans/POST_PHASE_1.md` § Security review (full).
@@ -166,7 +166,7 @@ Threat model: `docs/design/THREAT_MODEL-<slug>.md` (top 3 risks summarized inlin
 
 ## Forbidden during invocation
 
-- Do NOT write abstract risks without exploit paths. Every leaf in the attack tree must name a concrete code path or data flow.
-- Do NOT mark a threat `mitigated` without citing the file:line that mitigates it.
-- Do NOT skip the "Defensive design recommendations" section — fixing at design time is the entire point of doing the STRIDE pre-implementation.
+- Do NOT write abstract risks without exploit paths. Every leaf in attack tree must name concrete code path or data flow.
+- Do NOT mark threat `mitigated` without citing file:line that mitigates it.
+- Do NOT skip "Defensive design recommendations" section — fixing at design time is entire point of STRIDE pre-implementation.
 - Do NOT soften severity because someone pushed back. Severity is impact-based, not consensus-based.

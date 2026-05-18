@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
 # .claude/hooks/cold-start.sh
-# Fires on SessionStart (matchers: startup, resume — not compact: ROADMAP already gets
-# re-attached via skill content lifecycle). Injects a pinned "required reading" block +
-# current state snapshot so every fresh session lands oriented.
-#
-# Subagent dispatches DO NOT receive SessionStart (per Claude Code hook spec, 2026-05).
-# The `naavik-cold-start` skill is the subagent equivalent — each agent prompt requires
-# it as the first action. Belt + suspenders.
+# SessionStart hook (startup/resume; skip compact). Injects required-reading pin +
+# state snapshot. Subagent equivalent: `naavik-cold-start` skill (subagents skip SessionStart).
 
 set -euo pipefail
 

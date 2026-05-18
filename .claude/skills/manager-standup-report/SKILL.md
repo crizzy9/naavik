@@ -5,50 +5,50 @@ allowed-tools: Read, Bash(scripts/gh-project.sh:*), Bash(jq:*), Bash(tail:*)
 
 # manager-standup-report
 
-Manager owns the standup format. This skill captures the canonical shape so every `/standup` invocation produces the same structure — current milestone state, recent activity, drift signals, budget snapshot. Reads only; never mutates board state.
+Manager owns standup format. Canonical shape: milestone state + recent activity + drift + budget. Read-only.
 
 ## When to invoke
 
-- User invokes `/standup` (slash command).
+- `/standup` slash command.
 - User asks "what's the status" / "where are we" / "give me a standup" / "what's happening".
-- Manager pre-flight check before `/build` — confirm the system is bootstrapped + no major drift.
-- After a milestone closes — emit a wrap-up standup capturing what shipped.
+- Manager pre-flight before `/build` — confirm bootstrap + no major drift.
+- After milestone closes — wrap-up standup of what shipped.
 
-## What this skill does
+## Steps
 
-1. **Bootstrap check.** Read `.claude/github-project.json`. If missing, halt with: "Agent system not bootstrapped — run `/bootstrap` first (see `docs/AGENT_OPS.md` § 2)." Do not fake a standup against an empty board.
+1. **Bootstrap check.** Read `.claude/github-project.json`. Missing → halt: "Agent system not bootstrapped — run `/bootstrap` first (`docs/AGENT_OPS.md` § 2)." No fake standup against empty board.
 
-2. **Pull milestone state.**
+2. **Milestone state.**
    ```bash
    scripts/gh-project.sh milestone-status "<current-milestone>"
    ```
-   Parse the JSON output: items grouped by Status (`Todo` / `In Progress` / `Done` / `Backlog`). Count each. Backlog items are deferred from the current cycle (per A.28 4-status convention) — surface them in a separate "Backlog by epic" line so the operator sees deferred work at a glance.
+   Parse JSON: items by Status (`Todo`/`In Progress`/`Done`/`Backlog`). Count each. Backlog = deferred (A.28 4-status); surface as separate "Backlog by epic" line.
 
-2b. **Pull Backlog by epic** (post-A.28).
+3. **Backlog by epic** (post-A.28).
    ```bash
    scripts/gh-project.sh backlog-by-epic --top 3
    ```
-   Returns JSON: epics ordered by Priority, each with up to 3 items. Use the top epic as the standup's "Backlog top epic" line. If empty, omit the section.
+   JSON: epics by Priority, ≤3 items each. Top epic → "Backlog top epic" line. Empty → omit.
 
-3. **Pull drift signal.**
+4. **Drift signal.**
    ```bash
    scripts/gh-project.sh sync   # dry-run, no --apply
    ```
-   Count drift lines. If > 0, recommend `/sync-roadmap --apply` (ROADMAP wins).
+   If lines > 0, recommend `/sync-roadmap --apply` (ROADMAP wins).
 
-4. **Pull recent runs.**
+5. **Recent runs.**
    ```bash
    tail -n 5 traces/runs.log 2>/dev/null
    ```
-   Each line: `[ts] run=<id> milestone=<name> outcome=<delivered|halted|failed> issues=<n> prs=<n> tokens=<n>`.
+   Lines: `[ts] run=<id> milestone=<name> outcome=<delivered|halted|failed> issues=<n> prs=<n> tokens=<n>`.
 
-5. **Pull budget snapshot.**
+6. **Budget snapshot.**
    ```bash
    jq -r '"\(.current_day): \(.total_today)"' .claude/budget-ledger.json
    ```
-   Compare against `.claude/budget.json:daily_token_ceiling`. Flag if > 80%.
+   Compare vs `.claude/budget.json:daily_token_ceiling`. Flag if > 80%.
 
-6. **Emit the canonical standup format:**
+7. **Emit format:**
    ```
    STANDUP — <ISO-timestamp>
 
@@ -70,7 +70,7 @@ Manager owns the standup format. This skill captures the canonical shape so ever
      - [<task-id>] <title>  priority=<P>  estimate=<E>
      - ...
 
-   Drift: <N>  (ROADMAP vs Project; <N>=0 means clean. If >0, recommend /sync-roadmap --apply.)
+   Drift: <N>  (ROADMAP vs Project; 0=clean. >0 → recommend /sync-roadmap --apply.)
 
    Budget: <spent>/<cap> (<%>)  — <flag> if >80%
 
@@ -78,26 +78,26 @@ Manager owns the standup format. This skill captures the canonical shape so ever
      <verbatim lines from traces/runs.log tail>
    ```
 
-7. **Append a one-liner to `traces/standups.log`** for the standup history:
+8. **Append to `traces/standups.log`:**
    ```
    [<ISO-timestamp>] STANDUP milestone=<name> done=<n> in_flight=<n> blocked=<n> drift=<n> tokens=<n>
    ```
 
 ## Canonical references
 
-- `.claude/commands/standup.md` — slash-command spec (the steps above are derived from it).
+- `.claude/commands/standup.md` — slash-command spec.
 - `.claude/agents/manager.md` § Identity invariant + § GitHub state — single writer rule.
 - `scripts/gh-project.sh` subcommands `milestone-status`, `sync`, `next-unblocked`.
 - `docs/AGENT_OPS.md` § 8 (Token budget) + § 7.4 (Run index).
 
 ## When NOT to invoke
 
-- Mid-`/build` — the standup format is end-of-loop or pre-loop reporting; don't interrupt step transitions.
-- For task-specific status ("status of PC.5?") — that's a single-issue lookup, not a milestone standup.
-- Compaction events — re-attaches automatically.
+- Mid-`/build` — end-of-loop or pre-loop only; don't interrupt step transitions.
+- Task-specific status ("status of PC.5?") — single-issue lookup, not milestone standup.
+- Compaction events.
 
 ## Forbidden during invocation
 
-- Do NOT mutate Project board state. This is a read-only report.
-- Do NOT skip the drift check — undetected drift is the #1 cause of plan/reality mismatch (codified in `AGENTS.md § Single-doc-tracking`).
-- Do NOT invent in-flight or blocked items — pull them from the live Project state + ROADMAP `[~]` markers, not assumption.
+- Do NOT mutate Project board state. Read-only.
+- Do NOT skip drift check — undetected drift is #1 cause of plan/reality mismatch (per `AGENTS.md § Single-doc-tracking`).
+- Do NOT invent in-flight/blocked items — pull from live Project state + ROADMAP `[~]` markers.

@@ -4,18 +4,18 @@ description: Run the 16-item default-attack-surfaces checklist on every PR — a
 
 # hacker-pr-security-checklist
 
-Every PR review starts with this 16-item canonical surface scan (verbatim from `.claude/agents/hacker.md § Default attack surfaces`). Walk every box in order. Findings flow into the verdict's FINDINGS block. The Naavik-specific watchlist (vault sunset, 10c dev-credentials gate, portfolio allowlist) is layered on top via `hacker-secrets-audit` skill.
+Every PR review starts w/ this 16-item canonical surface scan (verbatim from `.claude/agents/hacker.md § Default attack surfaces`). Walk every box in order. Findings flow into verdict's FINDINGS block. Naavik-specific watchlist (vault sunset, 10c dev-credentials gate, portfolio allowlist) layered on top via `hacker-secrets-audit` skill.
 
 ## When to invoke
 
 - `/review-pr <N>` slash command.
-- Hacker dispatched on a PR that touches auth / secrets / untrusted input / file uploads / scrapers / ATS adapters / external integrations.
-- Pre-merge sanity scan on ANY PR (cheap to run; better than missing a defect).
-- Self-audit before submitting a PR — engineer can run the same checklist against their own diff.
+- Hacker dispatched on PR touching auth / secrets / untrusted input / file uploads / scrapers / ATS adapters / external integrations.
+- Pre-merge sanity scan on ANY PR (cheap to run; better than missing defect).
+- Self-audit before submitting PR — engineer runs same checklist against own diff.
 
-## What this skill does
+## Checklist (16 items)
 
-Walk the 16 items below. Each is a one-line check. Tick `[x]` if confirmed safe, `[!]` if a finding lands. Findings need `file:line + impact + fix` per the verdict format.
+Walk each. Tick `[x]` if confirmed safe, `[!]` if finding lands. Findings need `file:line + impact + fix` per verdict format.
 
 ```
 [ ] 1. Input validation
@@ -30,31 +30,31 @@ Walk the 16 items below. Each is a one-line check. Tick `[x]` if confirmed safe,
        Authz check on every protected route (current_user dependency, role check if scoped)
 
 [ ] 3. Session / JWT
-       HS256 key length ≥ 32 bytes (PC.5 validator enforces this at boot)
+       HS256 key length ≥ 32 bytes (PC.5 validator enforces at boot)
        Token expiry sensible (typically 1-7 days for "remember me")
-       No `algorithm="none"` accepted by the verifier
+       No `algorithm="none"` accepted by verifier
        Rotation policy for multi-tenant cloud (Phase 1.x backlog, not Phase 1)
 
 [ ] 4. Secret storage
        Env vars for new operator secrets (post-2.12 pattern)
-       Vault sunset: any NEW code leaning on `src/services/vault.py` is a violation
+       Vault sunset: any NEW code leaning on `src/services/vault.py` is violation
        `~/.naavik/dev-credentials` triple-gate intact (see `hacker-secrets-audit`)
        No secrets in code / git history / .env (only .env.example)
 
 [ ] 5. SQL injection
        SQLModel `select(Model).where(...)` style, parameterized
-       No f-string SQL anywhere: `f"SELECT * FROM jobs WHERE id={job_id}"` is a reject
+       No f-string SQL anywhere: `f"SELECT * FROM jobs WHERE id={job_id}"` is reject
        Raw `text(...)` only with `bindparams(...)`, never string concat
 
 [ ] 6. XSS in Jinja templates
        autoescape ON (default in FastAPI's Jinja config — confirm in `src/ui/__init__.py`)
-       Every `|safe` filter line audited: is the source trusted?
+       Every `|safe` filter line audited: is source trusted?
        User-supplied content (JD text, bullet text, screener answers) never `|safe` direct
 
 [ ] 7. CSRF on POST routes
        Double-submit token: cookie + body match
        HTMX forms carry `hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'`
-       No POST route exempts CSRF without a documented reason (none should)
+       No POST route exempts CSRF without documented reason (none should)
 
 [ ] 8. File upload paths
        Resume parse: PDF size cap (≤ 10MB), MIME sniff (not just Content-Type header)
@@ -92,7 +92,7 @@ Walk the 16 items below. Each is a one-line check. Tick `[x]` if confirmed safe,
 [ ] 13. Template injection in Typst
        Untrusted JD text → escape via Typst's `box("...")` or text-content node
        No string concatenation of user content into Typst doc body
-       Test: render a JD with `#raw("malicious")` payload + confirm no execution
+       Test: render JD w/ `#raw("malicious")` payload + confirm no execution
 
 [ ] 14. Logging
        No secrets in any log line (passwords / API keys / tokens / SECRET_KEY)
@@ -108,16 +108,16 @@ Walk the 16 items below. Each is a one-line check. Tick `[x]` if confirmed safe,
 
 [ ] 16. LLM prompt injection
        Untrusted user content (JD text, profile bullets, screener answers) flows into prompts
-       Verify structured-output contract holds: the model can't escape JSON schema
+       Verify structured-output contract holds: model can't escape JSON schema
        No `system_prompt + user_content` concatenation where user_content can override system
-       Test: paste a "ignore previous instructions" prompt fragment + confirm structured output still validates
+       Test: paste "ignore previous instructions" prompt fragment + confirm structured output still validates
 ```
 
 ## Naavik-specific layered checks
 
-After the 16 above, layer the Naavik-specific watchlist from `.claude/agents/hacker.md`:
+After 16 above, layer Naavik-specific watchlist from `.claude/agents/hacker.md`:
 
-- Vault deprecation track — flag any new code that leans on `src/services/vault.py` / `src/cli/vault.py` / `src/cli/init.py`
+- Vault deprecation track — flag any new code leaning on `src/services/vault.py` / `src/cli/vault.py` / `src/cli/init.py`
 - CLI sunset — flag new `naavik <subcommand>`
 - `~/.naavik/dev-credentials` triple-gate (NAAVIK_DEBUG + NAAVIK_DEV_PASSWORD unset + SELF_HOSTED + mode 0600)
 - `NAAVIK_DEV_PASSWORD` / `SECRET_KEY` non-leak
@@ -127,11 +127,11 @@ After the 16 above, layer the Naavik-specific watchlist from `.claude/agents/hac
 - Auto-apply cron rate-limit + cost-cap enforcement
 - Scraper anti-detection (per-source backoff, no aggressive parallelization)
 
-See `hacker-secrets-audit` skill for the deep-dive on the secrets-related Naavik items.
+See `hacker-secrets-audit` skill for deep-dive on secrets-related Naavik items.
 
 ## Verdict + posting
 
-Once findings consolidated, post via github MCP:
+Findings consolidated → post via github MCP:
 
 ```
 1. mcp__github__pull_request_review_write(method="create", body=verdict_header)
@@ -155,7 +155,7 @@ Verdict gates (calibrated):
 
 ## Canonical references
 
-- `.claude/agents/hacker.md` § "Default attack surfaces" — the 16-item source.
+- `.claude/agents/hacker.md` § "Default attack surfaces" — 16-item source.
 - `.claude/agents/hacker.md` § "Naavik-specific watchlist".
 - `.claude/agents/hacker.md` § "Verdict format" + § "Severity calibration".
 - `.claude/agents/hacker.md` § "PR review workflow (github MCP)".
@@ -170,8 +170,8 @@ Verdict gates (calibrated):
 
 ## Forbidden during invocation
 
-- Do NOT approve a PR you haven't fully read (diff + at least one upstream caller per touched function). Skipping reads is the #1 cause of missed findings.
+- Do NOT approve PR you haven't fully read (diff + at least one upstream caller per touched function). Skipping reads is #1 cause of missed findings.
 - Do NOT block on style / nit issues. That's engineer's lane. Block on security only.
-- Do NOT approve work that extends the vault or `src/cli/` (sunset track).
-- Do NOT submit a verdict via stand-alone comments — use the github MCP's pending-review workflow so all findings ship as one cohesive review.
-- Do NOT soften a finding's severity because someone pushed back. Severity is fact-based.
+- Do NOT approve work extending vault or `src/cli/` (sunset track).
+- Do NOT submit verdict via stand-alone comments — use github MCP's pending-review workflow so all findings ship as one cohesive review.
+- Do NOT soften finding's severity because someone pushed back. Severity is fact-based.

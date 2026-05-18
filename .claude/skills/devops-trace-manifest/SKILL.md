@@ -5,21 +5,21 @@ allowed-tools: Read, Glob, Write, Bash(jq:*)
 
 # devops-trace-manifest
 
-Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen`) writes a manifest at the end so the run is auditable: what shipped, who touched what, how many tokens. The schema is frozen in `docs/AGENT_OPS.md § 7.3`. This skill enforces the canonical shape + writes the file atomically.
+Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen`) writes a manifest at end so run is auditable: what shipped, who touched what, how many tokens. Schema frozen in `docs/AGENT_OPS.md § 7.3`. Enforces canonical shape + writes file atomically.
 
 ## When to invoke
 
-- End of a `/build` run — manager's final step before MILESTONE GATE.
-- End of a `/triage-bug` run — when the fix is verified + closed.
-- End of a `/threat-model` run — when the threat doc lands.
-- End of a `/design-screen` run — when mockup + handoff memo ship.
-- Anytime devops is invoked to "close out a run".
+- End of `/build` run — manager's final step before MILESTONE GATE.
+- End of `/triage-bug` — fix verified + closed.
+- End of `/threat-model` — threat doc lands.
+- End of `/design-screen` — mockup + handoff memo ship.
+- Devops invoked to "close out a run".
 
-## What this skill does
+## Steps
 
-1. **Confirm RUN_ID.** Every multi-agent run has a RUN_ID format `<YYYY-MM-DDTHH-MM-SS>_<6hex>` (e.g. `2026-05-16T21-00-00_a11v2x`). The trace dir is `traces/<RUN_ID>/`.
+1. **Confirm RUN_ID.** Format `<YYYY-MM-DDTHH-MM-SS>_<6hex>` (e.g. `2026-05-16T21-00-00_a11v2x`). Trace dir = `traces/<RUN_ID>/`.
 
-2. **Gather data from the trace logs:**
+2. **Gather data from trace logs:**
 
    ```bash
    ls traces/<RUN_ID>/
@@ -27,14 +27,10 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
 
    Expect:
    - `manager.log` (orchestration events)
-   - `architect.log` (if architect was dispatched)
-   - `engineer.log` (if engineer was dispatched)
+   - `architect.log`, `engineer.log`, `devops.log`, `hacker.log`, `designer.log` (per dispatch)
    - `engineer-deviations.log` (if any deviations)
-   - `devops.log` (if devops was dispatched)
-   - `hacker.log` (if hacker was dispatched)
-   - `designer.log` (if designer was dispatched)
 
-3. **Parse the canonical schema** from `docs/AGENT_OPS.md § 7.3` (extended 2026-05-17 with `outcome`, `what_built`, `errors_encountered`):
+3. **Canonical schema** from `docs/AGENT_OPS.md § 7.3` (extended 2026-05-17 with `outcome`, `what_built`, `errors_encountered`):
 
    ```json
    {
@@ -58,24 +54,23 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
 
    Fields:
 
-   - **`run_id`** — the RUN_ID string.
+   - **`run_id`** — RUN_ID string.
    - **`started_at`** — first timestamp from `manager.log` line 1, ISO-8601 UTC.
    - **`ended_at`** — last timestamp across all logs, ISO-8601 UTC.
    - **`milestone`** — current milestone name (e.g. `Pre-Phase-2 paper cuts`, `Phase A`).
-   - **`outcome`** — one of `delivered` / `halted` / `failed`. Devops writes `halted` at end of dispatch (PR not yet merged); manager flips to `delivered` at merge or `failed` on three-attempt-exhaustion.
+   - **`outcome`** — `delivered` / `halted` / `failed`. Devops writes `halted` at end of dispatch (PR not yet merged); manager flips to `delivered` at merge or `failed` on three-attempt-exhaustion.
    - **`halt_reason`** — `null` when `outcome=delivered`; else short string (`pr_review_gate` / `plan_review_gate` / `milestone_boundary` / `budget_ceiling` / `three_attempt_exhaustion` / `user_halted` / `hacker_block`).
-   - **`issues_closed`** — numeric list of Issue numbers closed during this run (from `manager.log` MERGE events or PR `Closes #N` trailer detection).
+   - **`issues_closed`** — list of Issue numbers closed (from `manager.log` MERGE events or PR `Closes #N` detection).
    - **`prs_merged`** — URL list of merged PRs (from `manager.log` MERGE events or `gh pr list --state merged --search "<branch>"`).
-   - **`files_touched`** — paths edited, derived from `engineer.log` EDIT events plus `git diff --name-only` over the run window.
-   - **`deviations_recorded`** — list of `docs/plans/<NN-name>.md § Deviations from plan` references (promoted via `manager-deviation-promote` skill).
-   - **`tokens_spent`** — per-agent token spend, from `.claude/budget-ledger.json` delta over the run window.
-   - **`what_built`** — one-paragraph plain-English summary aggregated from every agent's terminal `BUILT` / `REVIEWED` line (the LAST line of each per-agent log). Reader skims this BEFORE drilling into per-agent logs. Format: 2-4 sentences naming the headline deliverable + side artifacts + follow-ups filed. Empty-run case: `"no material changes shipped — investigation only; see <log> for findings"`.
-   - **`errors_encountered`** — list of every `ERROR` event from every per-agent log. Each entry has `agent` (which log it came from), `step` (what failed), `kind` (`retry`/`skip`/`halt`/`pivot`), `reason` (one-line), `attempt` (`n/max`). Empty array if nothing failed.
+   - **`files_touched`** — paths edited, from `engineer.log` EDIT events + `git diff --name-only` over run window.
+   - **`deviations_recorded`** — list of `docs/plans/<NN-name>.md § Deviations from plan` refs (promoted via `manager-deviation-promote`).
+   - **`tokens_spent`** — per-agent spend, from `.claude/budget-ledger.json` delta over run window.
+   - **`what_built`** — one-paragraph plain-English summary aggregated from every agent's terminal `BUILT` / `REVIEWED` line (LAST line of each per-agent log). Reader skims BEFORE drilling per-agent logs. 2-4 sentences: headline deliverable + side artifacts + follow-ups filed. Empty-run case: `"no material changes shipped — investigation only; see <log> for findings"`.
+   - **`errors_encountered`** — list of every `ERROR` event from every per-agent log. Each: `agent` (log it came from), `step`, `kind` (`retry`/`skip`/`halt`/`pivot`), `reason` (one-line), `attempt` (`n/max`). Empty array if nothing failed.
 
-4. **Aggregate `errors_encountered` from per-agent logs:**
+4. **Aggregate `errors_encountered`:**
 
    ```bash
-   # Pull every ERROR line from every per-agent log + parse into the structured form
    for log in traces/$RUN_ID/*.log; do
      agent=$(basename "$log" .log)
      grep -E "^\[.*\] ERROR step=" "$log" | while IFS= read -r line; do
@@ -94,7 +89,6 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
    ```bash
    for log in traces/$RUN_ID/*.log; do
      agent=$(basename "$log" .log)
-     # Last line if it starts with BUILT or REVIEWED
      last=$(tail -1 "$log")
      if echo "$last" | grep -qE "^\[.*\] (BUILT|REVIEWED) "; then
        summary=$(echo "$last" | sed -nE "s/.*summary='([^']+)'.*/\1/p")
@@ -103,7 +97,7 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
    done
    ```
 
-   Stitch into one paragraph for the manifest. Manager populates this string when flipping `outcome` to `delivered` (post-merge); devops can populate a draft at end of dispatch.
+   Stitch into one paragraph. Manager populates when flipping `outcome` → `delivered` (post-merge); devops drafts at end of dispatch.
 
 6. **Write atomically:**
 
@@ -122,17 +116,17 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
      "deviations_recorded": [<refs>],
      "tokens_spent": {<per-agent>},
      "what_built": "<one-paragraph summary>",
-     "errors_encountered": [<aggregated-from-per-agent-logs>]
+     "errors_encountered": [<aggregated>]
    }
    EOF
    ```
 
-   Use `jq` to validate before the move:
+   Validate w/ `jq` before move:
    ```bash
    jq empty traces/<RUN_ID>/MANIFEST.json.tmp && mv traces/<RUN_ID>/MANIFEST.json.tmp traces/<RUN_ID>/MANIFEST.json
    ```
 
-7. **Append a one-liner to the run index:**
+7. **Append one-liner to run index:**
 
    ```bash
    ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -141,14 +135,14 @@ Every multi-agent run (`/build`, `/triage-bug`, `/threat-model`, `/design-screen
 
    Outcome values:
    - `delivered` — `halt_reason == null` AND `issues_closed` non-empty.
-   - `halted` — `halt_reason != null` (budget / user / hacker block / pr-review-gate / plan-review-gate / milestone-boundary).
-   - `failed` — `halt_reason == "three_attempt_exhaustion"` specifically.
+   - `halted` — `halt_reason != null`.
+   - `failed` — `halt_reason == "three_attempt_exhaustion"`.
 
-   **At PR open (devops's dispatch closes):** write `outcome=halted halt_reason=pr_review_gate`. **At merge (manager's COMMIT_PUSH event):** manager re-runs this skill to flip `outcome` → `delivered`, re-aggregate `tokens_spent` from the post-merge ledger, refresh `what_built` from any `BUILT` lines added during the merge-bookkeeping, and append a SECOND line to `runs.log` reflecting the delivered state. Don't rewrite the original `halted` line — append-only convention preserves the audit trail.
+   **At PR open (devops dispatch closes):** write `outcome=halted halt_reason=pr_review_gate`. **At merge (manager COMMIT_PUSH event):** manager re-runs this skill to flip `outcome` → `delivered`, re-aggregate `tokens_spent` from post-merge ledger, refresh `what_built` from any `BUILT` lines added during merge-bookkeeping, append SECOND line to `runs.log` reflecting delivered state. Don't rewrite original `halted` line — append-only preserves audit trail.
 
 ## Worked example
 
-For a `/build` run that delivered PC.5:
+`/build` run that delivered PC.5:
 
 ```json
 {
@@ -186,13 +180,13 @@ Runs.log line:
 
 ## When NOT to invoke
 
-- Single-agent dispatches that didn't create a run-id (one-off bug investigations, ad-hoc skill invocations).
+- Single-agent dispatches without run-id (one-off bug investigations, ad-hoc skill invocations).
 - Compaction events.
 
 ## Forbidden during invocation
 
-- Do NOT skip the manifest at run end. Without it, `claude /runs` shows ghosts.
-- Do NOT invent `tokens_spent` values — pull from `.claude/budget-ledger.json` delta.
-- Do NOT mark `halt_reason: null` when the run actually halted. Honesty here matters for retrospectives.
-- Do NOT write the file non-atomically (without the `.tmp` + `mv` dance). Partial writes corrupt the manifest.
-- Do NOT omit the runs.log append. The trace index is the searchable history.
+- Do NOT skip manifest at run end. `claude /runs` shows ghosts without it.
+- Do NOT invent `tokens_spent` — pull from `.claude/budget-ledger.json` delta.
+- Do NOT mark `halt_reason: null` when run actually halted. Honesty matters for retrospectives.
+- Do NOT write file non-atomically (without `.tmp` + `mv`). Partial writes corrupt manifest.
+- Do NOT omit runs.log append. Trace index is searchable history.

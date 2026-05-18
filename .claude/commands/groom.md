@@ -6,28 +6,28 @@ argument-hint: <optional milestone name>
 Milestone: $ARGUMENTS (default: current open milestone)
 
 1. **Spawn `manager` via Task.** Manager:
-   - Reads `ROADMAP.md` and identifies the current phase + open task ledger.
-   - Queries the GitHub Project via `scripts/gh-project.sh milestone-status [name]`.
-   - **Diffs the two states.** ROADMAP is authoritative (AGENTS.md § Single-doc-tracking). If Projects drifts, the Project board needs the fix — never the other direction.
+   - Reads `ROADMAP.md` + identifies current phase + open task ledger.
+   - Queries GitHub Project via `scripts/gh-project.sh milestone-status [name]`.
+   - **Diffs two states.** ROADMAP is authoritative (AGENTS.md § Single-doc-tracking). Projects drifts → Project board needs fix — never other direction.
 
-2. **Manager proposes a grooming plan**, output as a structured report:
-   - **Split list** — epics that are too large; proposed sub-issues with titles.
-   - **Reorder list** — items whose priority on the board doesn't match ROADMAP's priority signal (CRITICAL / HIGH / MEDIUM / LOW).
-   - **Close list** — items closed in ROADMAP (`[x]`) but still open on the board, OR items whose scope was absorbed elsewhere.
-   - **New-items list** — items present in ROADMAP but missing from the board.
-   - **Drift notes** — any item where ROADMAP and the board describe scope differently; flag for user attention.
+2. **Manager proposes grooming plan**, output as structured report:
+   - **Split list** — epics too large; proposed sub-issues w/ titles.
+   - **Reorder list** — items whose priority on board doesn't match ROADMAP's priority signal (CRITICAL / HIGH / MEDIUM / LOW).
+   - **Close list** — items closed in ROADMAP (`[x]`) but still open on board, OR items whose scope was absorbed elsewhere.
+   - **New-items list** — items present in ROADMAP but missing from board.
+   - **Drift notes** — any item where ROADMAP + board describe scope differently; flag for user attention.
 
-3. **Ask the user for approval on the grooming plan** via AskUserQuestion (Approve all / Approve subset / Cancel + free-form notes). Manager does NOT mutate the board until the user replies.
+3. **Ask user for approval on grooming plan** via AskUserQuestion (Approve all / Approve subset / Cancel + free-form notes). Manager does NOT mutate board until user replies.
 
-4. **On approval**, manager executes the mutations:
+4. **On approval**, manager executes mutations:
    - Splits via `gh issue create` + `scripts/gh-project.sh add-item`.
-   - Reorders via `gh api graphql` setting the Priority field.
+   - Reorders via `gh api graphql` setting Priority field.
    - Closes via `gh issue close --reason completed` + `scripts/gh-project.sh set-status <id> Done`.
    - Adds new items via `gh issue create` + `scripts/gh-project.sh add-item`.
 
-5. **Manager reports** the final board state with a one-paragraph summary + any drift items still open (user must resolve).
+5. **Manager reports** final board state w/ one-paragraph summary + any drift items still open (user must resolve).
 
-**Backlog awareness (post-A.28):** the board has 4 Status options — Todo / In Progress / Done / Backlog. While grooming, also surface:
-   - **Todo → Backlog candidates:** items in Todo for the current milestone that look deferred (LOW priority, no plan, not on the user's current Tier 1/Tier 2 list). Propose moving them to Backlog via `scripts/gh-project.sh set-status <id> Backlog`.
-   - **Backlog → Todo candidates:** items in Backlog whose parent epic is the highest-priority Backlog epic AND user explicitly named in current scope. Defer the actual move to the `manager-backlog-promote` skill — `/groom` flags candidates but the user-consent gate is the promote skill's surface.
-   - **Empty-epic Backlogs:** Project epics with zero open Backlog AND zero open Todo items — surface as candidates for closure.
+**Backlog awareness (post-A.28):** board has 4 Status options — Todo / In Progress / Done / Backlog. While grooming, also surface:
+   - **Todo → Backlog candidates:** items in Todo for current milestone looking deferred (LOW priority, no plan, not on user's current Tier 1/Tier 2 list). Propose moving them to Backlog via `scripts/gh-project.sh set-status <id> Backlog`.
+   - **Backlog → Todo candidates:** items in Backlog whose parent epic is highest-priority Backlog epic AND user explicitly named in current scope. Defer actual move to `manager-backlog-promote` skill — `/groom` flags candidates but user-consent gate is promote skill's surface.
+   - **Empty-epic Backlogs:** Project epics w/ zero open Backlog AND zero open Todo items — surface as candidates for closure.

@@ -4,18 +4,18 @@ description: Wrap every LLM call in `services/llm_tracker.tracked_call(...)` so 
 
 # engineer-llm-tracker-wrap
 
-Every LLM call has to flow through `services/llm_tracker.tracked_call(...)` so `ApiUsage` rows persist for the daily cost cap (`Settings.daily_llm_cost_cap_usd`), the cost telemetry SQL queries in `docs/RUNBOOK.md § 3.2`, and the per-provider failure rate monitor. A bare `await client.messages.create(...)` bypasses all of that — and the auto-apply cron's hard cap relies on every call being counted. This is non-negotiable.
+Every LLM call flows through `services/llm_tracker.tracked_call(...)` so `ApiUsage` rows persist for daily cost cap (`Settings.daily_llm_cost_cap_usd`), cost telemetry SQL (`docs/RUNBOOK.md § 3.2`), and per-provider failure-rate monitor. Bare `await client.messages.create(...)` bypasses all of that — auto-apply cron's hard cap relies on every call being counted. Non-negotiable.
 
 ## When to invoke
 
-- Implementing a service method that talks to any LLM (Anthropic / OpenAI / Ollama / future provider).
-- Touching `src/services/scorer.py`, `src/services/cover_letter.py`, `src/services/resume_tailor.py`, `src/services/extractor.py`, or any service under `src/services/` that uses LLM output.
-- Reviewing a diff that introduces an `await client.<something>(...)` call against an LLM SDK.
-- Adding a new LLM provider via `src/llm/<provider>.py`.
+- Implementing service method talking to any LLM (Anthropic / OpenAI / Ollama / future).
+- Touching `src/services/scorer.py`, `cover_letter.py`, `resume_tailor.py`, `extractor.py`, or any `src/services/` using LLM output.
+- Reviewing diff introducing `await client.<...>(...)` against LLM SDK.
+- Adding new LLM provider via `src/llm/<provider>.py`.
 
-## What this skill does
+## Steps
 
-1. **Identify the LLM call.** Common patterns to find:
+1. **Identify LLM call.** Common patterns:
    ```python
    # Anthropic
    response = await anthropic_client.messages.create(...)
@@ -26,9 +26,9 @@ Every LLM call has to flow through `services/llm_tracker.tracked_call(...)` so `
    # Ollama
    response = await ollama.chat(...)
    ```
-   Search via `Grep "messages.create|chat.completions.create|ollama.chat" --type py`.
+   Search: `Grep "messages.create|chat.completions.create|ollama.chat" --type py`.
 
-2. **Confirm the wrapper exists.** Read `src/services/llm_tracker.py` to verify the current signature. It looks roughly like:
+2. **Confirm wrapper exists.** Read `src/services/llm_tracker.py`. Signature roughly:
    ```python
    async def tracked_call(
        session: AsyncSession,
@@ -42,7 +42,7 @@ Every LLM call has to flow through `services/llm_tracker.tracked_call(...)` so `
        """Wraps an LLM call; persists ApiUsage row (cost_usd, latency_ms, ok, error_code)."""
    ```
 
-3. **Rewrite the call site** to route through the wrapper. Pattern:
+3. **Rewrite call site** to route through wrapper:
    ```python
    # WRONG (bypasses cost tracking)
    response = await anthropic_client.messages.create(
@@ -68,11 +68,11 @@ Every LLM call has to flow through `services/llm_tracker.tracked_call(...)` so `
    )
    ```
 
-4. **Verify the abstract interface.** `src/llm/base.py` is the abstract LLM interface; the concrete `src/llm/{anthropic,openai,ollama}.py` implementations are what `tracked_call` orchestrates. If you're touching `base.py`, ensure the contract still works for tracked_call's signature.
+4. **Verify abstract interface.** `src/llm/base.py` = abstract LLM interface; concrete `src/llm/{anthropic,openai,ollama}.py` impls = what `tracked_call` orchestrates. Touching `base.py` → ensure contract still works for tracked_call signature.
 
-5. **Provider + model + operation arguments.** Keep `provider` to the 3-name vocabulary (`anthropic` / `openai` / `ollama`). Use the EXACT model string the SDK accepts. `operation` is a free-form short string — match existing values via `grep "operation=" src/services/`; the SQL telemetry groups by it.
+5. **Args.** Keep `provider` to 3-name vocabulary (`anthropic` / `openai` / `ollama`). Use EXACT model string SDK accepts. `operation` = free-form short string — match existing via `grep "operation=" src/services/`; SQL telemetry groups by it.
 
-6. **Pydantic structured output.** Both Anthropic + OpenAI support native structured output. Use Pydantic models for the response; pass them through the wrapper's return type. Example:
+6. **Pydantic structured output.** Anthropic + OpenAI both support natively. Pydantic models for response; pass through wrapper's return type:
    ```python
    class ScoreResult(BaseModel):
        overall: int
@@ -90,36 +90,36 @@ Every LLM call has to flow through `services/llm_tracker.tracked_call(...)` so `
    )
    ```
 
-7. **QA gate verification.** After implementation, check the ApiUsage row was written:
+7. **QA gate.** After implementation, check ApiUsage row written:
    ```bash
    psql -h 127.0.0.1 -p 5433 -U naavik -d naavik -c \
      "SELECT provider, model, operation, cost_usd, latency_ms, ok FROM api_usage ORDER BY occurred_at DESC LIMIT 5;"
    ```
-   Expect the just-executed call as the top row. If it's missing, `tracked_call` was bypassed or commit() never fired.
+   Just-executed call as top row expected. Missing → `tracked_call` bypassed or commit() never fired.
 
 ## Cost cap enforcement reminder
 
-`Settings.daily_llm_cost_cap_usd` is HARD, not soft. The auto-apply cron (5min) checks the daily total before each call. If a service bypasses `tracked_call`, that service can drain the user's budget invisibly. This is the operational reason the wrapper is mandatory.
+`Settings.daily_llm_cost_cap_usd` is HARD, not soft. Auto-apply cron (5min) checks daily total before each call. Service bypassing `tracked_call` can drain user budget invisibly. Operational reason wrapper is mandatory.
 
 ## Canonical references
 
 - `src/llm/base.py` — abstract LLM interface.
-- `src/services/llm_tracker.py` — the wrapper implementation + ApiUsage write.
-- `src/models/api_usage.py` — the SQLModel entity persisted.
+- `src/services/llm_tracker.py` — wrapper impl + ApiUsage write.
+- `src/models/api_usage.py` — SQLModel entity persisted.
 - `AGENTS.md` § Key Conventions § LLM Integration.
-- `docs/RUNBOOK.md` § 3.2 — cost telemetry SQL queries.
-- `docs/plans/POST_PHASE_1.md` § Monitoring playbook — daily check 1 (cost in last 24h).
+- `docs/RUNBOOK.md` § 3.2 — cost telemetry SQL.
+- `docs/plans/POST_PHASE_1.md` § Monitoring playbook — daily check 1.
 
 ## When NOT to invoke
 
-- The call is not an LLM call (it's just an HTTP client or a local script).
-- You're DELETING an LLM call (not adding/modifying one).
-- You're working on `tracked_call` itself (don't recursively wrap).
+- Call is not LLM (HTTP client or local script).
+- DELETING LLM call (not adding/modifying).
+- Working on `tracked_call` itself (don't recursively wrap).
 - Compaction events.
 
 ## Forbidden during invocation
 
-- Do NOT bypass `tracked_call` "just for a dev test". The auto-apply cron's cost cap depends on every call counted.
-- Do NOT swallow exceptions inside the `fn=...` lambda. Let `tracked_call` see the failure so it sets `ok=False` + `error_code`.
-- Do NOT hardcode a provider in a service. The user picks via `Settings.llm_provider`; pull at call time.
-- Do NOT skip Pydantic structured output for a one-off LLM call. Structured output reduces re-parse cost and makes failure modes explicit.
+- Do NOT bypass `tracked_call` "just for dev test". Auto-apply cron's cost cap depends on every call counted.
+- Do NOT swallow exceptions inside `fn=...` lambda. Let `tracked_call` see failure so it sets `ok=False` + `error_code`.
+- Do NOT hardcode provider in service. User picks via `Settings.llm_provider`; pull at call time.
+- Do NOT skip Pydantic structured output for one-off LLM call. Structured output reduces re-parse cost + makes failure modes explicit.

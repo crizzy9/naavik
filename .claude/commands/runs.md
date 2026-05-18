@@ -5,19 +5,19 @@ argument-hint: [count | run-id]
 
 Inspect agent system run history. Per `docs/AGENT_OPS.md` § 7.
 
-**If $ARGUMENTS is a run-id** (matches `YYYY-MM-DDTHH-MM-SS_<6hex>`):
+**$ARGUMENTS is run-id** (matches `YYYY-MM-DDTHH-MM-SS_<6hex>`):
 
 1. Read `traces/<run-id>/MANIFEST.json`. Pretty-print it.
-2. List all log files under `traces/<run-id>/` with line counts.
+2. List all log files under `traces/<run-id>/` w/ line counts.
 3. Suggest: `./traces/watch.sh <run-id>` to inspect interactively in tmux panes.
 
-**If $ARGUMENTS is a number** (default: 10): show the last N runs.
+**$ARGUMENTS is number** (default: 10): show last N runs.
 
 ```
 scripts/gh-project.sh runs <count>
 ```
 
-Print one line per run, formatted as a table:
+Print one line per run, formatted as table:
 
 ```
 Last N runs (from traces/runs.log):
@@ -30,15 +30,15 @@ Last N runs (from traces/runs.log):
 
 **Step 3 — Drill-in hint:**
 
-If any run had outcome=`halted` or `failed`, suggest: "Run `/runs <run-id>` to inspect the manifest + per-agent logs."
+Any run had outcome=`halted` or `failed` → suggest: "Run `/runs <run-id>` to inspect manifest + per-agent logs."
 
 **Step 4 — Stats:**
 
-If 5+ runs in the log, print aggregate stats:
+5+ runs in log → print aggregate stats:
 - Total runs.
 - Outcomes: delivered / halted / failed counts.
-- Total tokens spent across the window.
+- Total tokens spent across window.
 - Average tokens per run.
 - Average tokens per delivered run.
 
-**If `traces/runs.log` doesn't exist:** print "No runs yet. Run `/build` to start." and stop.
+**`traces/runs.log` doesn't exist:** print "No runs yet. Run `/build` to start." + stop.
