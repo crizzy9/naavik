@@ -4,18 +4,18 @@ description: Load the current phase status + active work + recently shipped from
 
 # naavik-roadmap-status
 
-`ROADMAP.md` is the authoritative 800-line ledger. `docs/ROADMAP_OVERVIEW.md` is the one-page executive digest agents load when they only need state, not detail. This skill is the cross-agent lookup — manager / architect / engineer / designer / hacker / devops all need to know phase state at some point. Read the overview first; drill into the full ROADMAP only when scope work requires.
+`ROADMAP.md` = authoritative 800-line ledger. `docs/ROADMAP_OVERVIEW.md` = one-page executive digest. Cross-agent lookup — every role needs phase state. Read overview first; drill ROADMAP only when scope work requires.
 
 ## When to invoke
 
-- Start of any dispatch where phase context matters (architect picking scope, manager standup, engineer cold-start).
-- User asks "where are we" / "what's done" / "what's open" / "status of phase X".
-- Pre-dispatch sanity check — "is this scope still queued for the current phase?".
-- Before opening a plan that touches a specific phase's deliverable.
+- Start of any dispatch where phase context matters (architect scope, manager standup, engineer cold-start).
+- User: "where are we" / "what's done" / "what's open" / "status of phase X".
+- Pre-dispatch sanity: "is this scope still queued for current phase?".
+- Before opening plan touching specific phase deliverable.
 
-## What this skill does
+## Steps
 
-### Step 1 — Read the executive digest
+### 1 — Read executive digest
 
 ```
 Read docs/ROADMAP_OVERVIEW.md
@@ -23,45 +23,45 @@ Read docs/ROADMAP_OVERVIEW.md
 
 130 lines, full. Sections:
 
-| Section | Content |
+| § | Content |
 |---|---|
-| § 1 | Where we are (one sentence) |
-| § 2 | Phase status table (all 7 phases — 0/1/2/3/4/5/6 + A — with goal, plan, status) |
-| § 3 | Active work (next 5 items, highest priority first) |
-| § 4 | Recently shipped (last 5 plans) |
-| § 5 | Plan-to-phase mapping |
+| 1 | Where we are (one sentence) |
+| 2 | Phase status table (7 phases: 0/1/2/3/4/5/6 + A — goal, plan, status) |
+| 3 | Active work (next 5 by priority) |
+| 4 | Recently shipped (last 5 plans) |
+| 5 | Plan-to-phase mapping |
 
-This answers 95% of "what's the status" questions in ~3k tokens.
+Answers 95% of status questions in ~3k tokens.
 
-### Step 2 — Drill into ROADMAP.md for per-task detail
+### 2 — Drill `ROADMAP.md` for per-task detail
 
-If you need per-task granularity (the `[ ] / [~] / [x]` ledger for a specific phase):
+For `[ ] / [~] / [x]` ledger of specific phase:
 
 ```bash
-Grep "^### Phase " ROADMAP.md   # find phase headers
+Grep "^### Phase " ROADMAP.md
 ```
 
-Then `Read ROADMAP.md` with offset around the matching line. Per phase you'll find:
+Then `Read ROADMAP.md` with offset around matching line. Per phase:
 
 - Phase header (`### Phase N: <name>`)
-- `**Status:**` (current state)
-- `**Plan:**` (link to the implementing plan(s))
-- `**Goal:**` (what end-state defines "complete")
-- Task table (the `[ ]` / `[~]` / `[x]` ledger — column shape: `# | Task | Status | Priority | Estimate | Notes`)
+- `**Status:**`
+- `**Plan:**` (links)
+- `**Goal:**`
+- Task table (columns: `# | Task | Status | Priority | Estimate | Notes`)
 
-### Step 3 — Cross-reference the GitHub Project board (optional)
+### 3 — Cross-reference live Project board (optional)
 
-If you need to see the live mirror state (Project Status column, current assignments):
+For live mirror state (Project Status column, assignments):
 
 ```bash
 scripts/gh-project.sh milestone-status "<phase-name>"
 ```
 
-This is read-only. Modifications go through `scripts/gh-project.sh` subcommands per the single-writer rule (`AGENTS.md § GitHub state — single writer rule`).
+Read-only. Mods via `scripts/gh-project.sh` per single-writer rule (`AGENTS.md § GitHub state — single writer rule`).
 
-### Step 4 — Read the persistent issue-map for issue numbers
+### 4 — Read issue-map for Issue numbers
 
-If you need the Issue # for a specific task ID:
+For Issue # of specific task ID:
 
 ```bash
 jq -r --arg t "<task-id>" '.issues[$t]' .claude/github-issue-map.json
@@ -69,45 +69,45 @@ jq -r --arg t "<task-id>" '.issues[$t]' .claude/github-issue-map.json
 
 Example: `jq -r '.issues["PC.5"]' .claude/github-issue-map.json` → `7`.
 
-## Current phase state (as of 2026-05-16)
+## Current phase snapshot (as of 2026-05-16)
 
-(This is a snapshot; always trust the live docs over this card.)
+(Snapshot — always trust live docs over this card.)
 
 - **Phase 1** ✅ Complete (2026-05-03): 11 MVP screens + backend substrate.
-- **Phase A** 🟢 Active (2026-05-16): A.1–A.7 done; A.8 (first end-to-end `/build`) open; A.11 = plan 16 (this dispatch).
+- **Phase A** 🟢 Active (2026-05-16): A.1–A.7 done; A.8 (first end-to-end `/build`) open; A.11 = plan 16.
 - **Phase 2** 🟡 Queued: scrapers + vault/CLI sunset. Pre-Phase-2 paper cuts (PC.5, PC.6) still open.
 - **Phase 3** ⚪ Future: scoring + matching.
 - **Phase 4** ⚪ Future: tracking + auto-apply polish.
 - **Phase 5** ⚪ Future: email + outreach.
-- **Phase 6** ⚪ Future: optimization + polish (observability, light mode, LaTeX).
+- **Phase 6** ⚪ Future: observability, light mode, LaTeX.
 
 ## Sunset-track tasks (single-doc-tracking)
 
-These show up in ROADMAP as work to DELETE, not extend:
+Work to DELETE, not extend:
 
 - **Phase 2 task 2.11** — CLI sunset. Delete `src/cli/`.
-- **Phase 2 task 2.12** — Vault deprecation. Delete `src/services/vault.py` + AES-GCM machinery + `~/.naavik/secrets.enc` + `~/.naavik/key.bin`. Sequence BEFORE 2.11.
+- **Phase 2 task 2.12** — Vault deprecation. Delete `src/services/vault.py` + AES-GCM + `~/.naavik/secrets.enc` + `~/.naavik/key.bin`. Sequence BEFORE 2.11.
 
-Any work that proposes to extend either is rejected at architect/manager/hacker review. See `architect-sunset-guard` + `naavik-vault-sunset-guard` skills.
+Proposals to extend either rejected at architect/manager/hacker review. See `architect-sunset-guard` + `naavik-vault-sunset-guard` skills.
 
 ## Canonical references
 
-- `docs/ROADMAP_OVERVIEW.md` — the one-page executive digest.
-- `ROADMAP.md` — the full 800-line ledger (authoritative).
+- `docs/ROADMAP_OVERVIEW.md` — executive digest.
+- `ROADMAP.md` — 800-line authoritative ledger.
 - `AGENTS.md` § Roadmap Maintenance Rules.
 - `AGENTS.md` § Single-doc-tracking principle.
-- `scripts/gh-project.sh milestone-status` — live Project mirror state.
-- `.claude/github-issue-map.json` — persistent `{task_id → issue#}` cache.
+- `scripts/gh-project.sh milestone-status` — live Project mirror.
+- `.claude/github-issue-map.json` — `{task_id → issue#}` cache.
 
 ## When NOT to invoke
 
-- You already loaded ROADMAP_OVERVIEW or ROADMAP in this turn.
-- You only need the task ID for a known scope (use grep + the issue-map directly).
+- Already loaded ROADMAP_OVERVIEW or ROADMAP this turn.
+- Only need task ID for known scope (use grep + issue-map directly).
 - Compaction events.
 
 ## Forbidden during invocation
 
-- Do NOT edit `ROADMAP.md` to match a stale Project board — ROADMAP wins always (codified in `AGENTS.md § Identity invariant` for manager).
-- Do NOT create plan-internal tracking tables that duplicate ROADMAP's `[ ] / [~] / [x]` ledger. § Single-doc-tracking forbids this.
-- Do NOT trust the snapshot in this skill body over the live `ROADMAP.md` — the snapshot drifts; the file is authoritative.
-- Do NOT bypass `scripts/gh-project.sh` for board state lookups. The persistent map cache + the script subcommands are the canonical access path.
+- Do NOT edit `ROADMAP.md` to match stale Project board — ROADMAP wins always (`AGENTS.md § Identity invariant` for manager).
+- Do NOT create plan-internal tracking tables duplicating ROADMAP's `[ ] / [~] / [x]` ledger. § Single-doc-tracking forbids.
+- Do NOT trust this skill's snapshot over live `ROADMAP.md` — snapshot drifts; file is authoritative.
+- Do NOT bypass `scripts/gh-project.sh` for board state lookups.

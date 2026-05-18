@@ -5,65 +5,65 @@ allowed-tools: Read, Edit, Write, Bash(jq:*), Glob
 
 # manager-deviation-promote
 
-`AGENTS.md § Workflow step 7` makes the `## Deviations from plan` section non-negotiable before any plan archives. The engineer writes one-liners into `traces/<run-id>/engineer-deviations.log` while implementing; the manager promotes those into the plan's structured Deviations section, fills the 4 dimensions (what / why / impact / surface), and propagates any new operational surface to user-facing docs. This is the contract that keeps plan archives honest.
+`AGENTS.md § Workflow step 7` makes `## Deviations from plan` non-negotiable before plan archive. Engineer writes one-liners into `traces/<run-id>/engineer-deviations.log`; manager promotes into plan's structured section, fills 4 dimensions (what/why/impact/surface), propagates new operational surface to user-facing docs. This is the contract that keeps archives honest.
 
 ## When to invoke
 
-- Plan is implementation-complete (PR merged, ROADMAP row `[x]`, before moving to `docs/plans/archive/`).
-- User asks to archive a plan / close out a milestone / "promote deviations".
-- Pre-archive review of any plan in `docs/plans/` that doesn't yet have a `## Deviations from plan` section.
+- Plan implementation-complete (PR merged, ROADMAP `[x]`, before `docs/plans/archive/` move).
+- User asks to archive plan / close milestone / "promote deviations".
+- Pre-archive review of any `docs/plans/` plan lacking a `## Deviations from plan` section.
 
-## What this skill does
+## Steps
 
-1. **Read the deviations log.**
+1. **Read deviations log.**
    ```bash
    cat traces/<run-id>/engineer-deviations.log
    ```
-   Each line is the canonical format:
+   Canonical line:
    ```
    [<ISO-timestamp>] DEVIATION plan=<docs/plans/NN-name.md> what=<one-line> why=<one-line> impact=<one-line>
    ```
 
-2. **Group by plan.** A run may touch multiple plans (rare but possible — e.g. a plan execution that uncovers a paper cut and fixes both).
+2. **Group by plan.** Run may touch multiple plans (rare — e.g. plan execution uncovering paper cut).
 
-3. **For each plan,** verify each line has all 4 fields the AGENTS.md § Workflow step 7 contract requires:
+3. **Verify 4 fields per line** (AGENTS.md § Workflow step 7 contract):
    - **What changed** (one-line)
-   - **Why** (root cause / constraint that forced it)
+   - **Why** (root cause / forcing constraint)
    - **Impact** on dependent plans / phases
-   - **Surface** — any new env var / CLI command / on-disk path / port / schedule the implementation introduced (may be `none` if the deviation is internal)
+   - **Surface** — new env var / CLI / on-disk path / port / schedule (`none` if internal-only)
 
-   If a line is missing a dimension, fix it by inferring from engineer.log + the actual diff. Surface a question to the user if inference is ambiguous.
+   Missing dimension → infer from engineer.log + diff. Ambiguous → AskUserQuestion.
 
-4. **Open the plan file** at `docs/plans/NN-name.md`. If it doesn't yet have a `## Deviations from plan` section, append one. If it does, append the new bullets to it (don't overwrite — earlier waves may have already written entries).
+4. **Open `docs/plans/NN-name.md`.** No `## Deviations from plan` section → append. Has one → append new bullets (don't overwrite; earlier waves may have written).
 
-5. **Format each bullet** as:
+5. **Format each bullet:**
    ```markdown
    - **<one-line title>** — what: <what>. why: <why>. impact: <impact>. surface: <surface or "none">.
    ```
 
-   For multi-faceted deviations, use a sub-list:
+   Multi-faceted → sub-list:
    ```markdown
    - **<title>** — what: <what>. why: <why>.
      - impact: <impact on follow-up plans>
      - surface: <new env var / path / etc.>
    ```
 
-6. **Propagate operational surface.** For any deviation with a non-"none" surface field, ensure it lands in the right user-facing doc(s) in the same change:
+6. **Propagate operational surface.** For each non-"none" surface, land in right user-facing doc(s) same change:
 
    | Surface type | Propagate to |
    |---|---|
    | New env var | `README.md` § Configuration + `.env.example` |
-   | New CLI subcommand (fixes only — sunset rule!) | `README.md` § Operations |
+   | New CLI subcommand (fixes only — sunset!) | `README.md` § Operations |
    | New on-disk path / secret-handling rule | `CLAUDE.md` + `docs/plans/POST_PHASE_1.md` |
    | New port / cron schedule / runtime invariant | `CLAUDE.md` + `ROADMAP.md` "Last updated" bump |
 
-   If the surface only matters to maintainers (e.g. NullPool engine choice in plan 10b), document in the plan's Deviations section and stop — no doc propagation.
+   Maintainer-only surface (e.g. NullPool engine choice plan 10b) → plan Deviations only, no propagation.
 
-7. **Verify before archive.** Re-read `## Deviations from plan` in the plan file. If you wrote "no material deviations", confirm that's actually true (rare — be skeptical). If the section is empty or missing, **do not archive**.
+7. **Verify before archive.** Re-read `## Deviations from plan`. "no material deviations" → be skeptical (rare). Empty/missing → **do not archive**.
 
 ## Canonical references
 
-- `AGENTS.md` § Workflow step 7 (the contract).
+- `AGENTS.md` § Workflow step 7 (contract).
 - `AGENTS.md` § "Documenting deviations — what counts, what doesn't".
 - `CLAUDE.md` § "Deviations workflow — non-negotiable before archive".
 - `docs/AGENT_OPS.md` § 7.2 — log format.
@@ -71,12 +71,12 @@ allowed-tools: Read, Edit, Write, Bash(jq:*), Glob
 
 ## When NOT to invoke
 
-- Mid-implementation (engineer is still appending to the log).
-- For trivial commit-level cleanups (variable renames, comment fixes) — those don't count as deviations per the filter in `AGENTS.md § "Not a deviation"`.
+- Mid-implementation (engineer still appending).
+- Trivial commit cleanups (renames, comment fixes) — `AGENTS.md § "Not a deviation"`.
 - Compaction events.
 
 ## Forbidden during invocation
 
-- Do NOT archive a plan without a `## Deviations from plan` section. The check is binary.
-- Do NOT write "no material deviations" if engineer-deviations.log has entries for this plan — that's revisionism.
-- Do NOT bury an operational surface (env var, on-disk path) in the Deviations section only. It MUST also land in the user-facing doc per the table above. Operational drift is the #1 source of self-hoster pain (codified in `AGENTS.md § Documenting deviations`).
+- Do NOT archive plan without `## Deviations from plan` section. Binary check.
+- Do NOT write "no material deviations" if engineer-deviations.log has entries — revisionism.
+- Do NOT bury operational surface (env var, on-disk path) in Deviations only. MUST also land in user-facing doc per table. Operational drift is #1 source of self-hoster pain (`AGENTS.md § Documenting deviations`).

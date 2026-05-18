@@ -4,17 +4,17 @@ description: Quick-reference for DESIGN.md tokens — color palette, typography,
 
 # designer-design-tokens
 
-`DESIGN.md` (root) is the frozen visual contract. This skill is the condensed lookup so you don't re-load the full 450-line file every time. For deep cuts (component-specific classes, motion specs), Read `DESIGN.md` directly — this is the cheat sheet, not the contract.
+`DESIGN.md` (root) = frozen visual contract. Condensed lookup so you don't re-load 450-line file every time. Deep cuts (component-specific classes, motion specs) → Read `DESIGN.md` directly. Cheat sheet, not contract.
 
 ## When to invoke
 
-- Before any mockup generation (the visual contract is the foundation).
-- Before implementing a page / partial in `src/ui/templates/`.
-- Reviewing a UI diff for token violations (arbitrary hex / wrong stroke / wrong font).
+- Before any mockup generation.
+- Before implementing page/partial in `src/ui/templates/`.
+- Reviewing UI diff for token violations (arbitrary hex / wrong stroke / wrong font).
 - Voice / microcopy decision (developer tool, NOT SaaS).
-- Engineer mapping a mockup to Tailwind classes and needing the canonical token names.
+- Engineer mapping mockup to Tailwind classes.
 
-## Color tokens (dark mode primary; light mode = Phase 6)
+## Color tokens (dark mode primary; light = Phase 6)
 
 ### Neutrals (Slate)
 
@@ -39,7 +39,7 @@ description: Quick-reference for DESIGN.md tokens — color palette, typography,
 | `brand-subtle` | rgba(99,102,241,0.1) | `indigo-500/10` | Tinted backgrounds |
 | `brand-ring` | rgba(99,102,241,0.4) | `indigo-500/40` | Focus rings |
 
-### Accent (Cyan — AI ONLY, used sparingly)
+### Accent (Cyan — AI ONLY, sparingly)
 
 | Token | Hex | Tailwind | Use |
 |---|---|---|---|
@@ -135,25 +135,25 @@ Common icons:
 | Prominent | 12px | Modals |
 | Full | 9999px | Avatars, pill chips |
 
-## Tag vocabulary (9, fixed — DO NOT invent additional)
+## Tag vocabulary (9, fixed — DO NOT invent)
 
 `ai-ml` · `backend` · `frontend` · `devops` · `data-eng` · `genai` · `leadership` · `platform` · `product`
 
 ## Voice & tone
 
 - **Direct over cute.** "Generate resume" not "Let's craft your resume!"
-- **Honest about AI.** Label AI-generated content with cyan sparkle + "AI" tag.
+- **Honest about AI.** Label AI-generated content w/ cyan sparkle + "AI" tag.
 - **Quantify.** "12 jobs found this week" not "Several new jobs"
 - **Second person, factual.** "You've applied to 47 jobs this month."
-- **Empty states** — three parts: icon + one-line description + primary CTA.
-- **Error states** — three parts: what went wrong, why, what to do.
+- **Empty states** — 3 parts: icon + one-line description + primary CTA.
+- **Error states** — 3 parts: what went wrong, why, what to do.
 
 ## Voice anti-patterns (do NOT use)
 
-- "Upgrade to Pro" / "Premium" / "Pro tip" — Naavik has no premium tier. Cloud is $15/mo, never an upsell.
-- "Let's craft / let's create" — cute SaaS-flavored phrasing.
+- "Upgrade to Pro" / "Premium" / "Pro tip" — Naavik has no premium tier. Cloud is $15/mo, never upsell.
+- "Let's craft / let's create" — cute SaaS-flavored.
 - Decorative emojis / sparkle on metadata (sparkle ONLY on AI content).
-- "Discover your dream job" — flowery copy. The tool finds jobs; the user picks.
+- "Discover your dream job" — flowery copy. Tool finds jobs; user picks.
 - Vague counts ("several", "many"). Always quantify.
 
 ## Motion
@@ -175,15 +175,15 @@ Common icons:
 
 ## When NOT to invoke
 
-- Token already loaded in this turn (you Read DESIGN.md or invoked this skill).
+- Token already loaded this turn (you Read DESIGN.md or invoked this skill).
 - Pure backend / data work, no UI surface.
 - Compaction events.
 
 ## Forbidden during invocation
 
-- Do NOT introduce arbitrary hex values (`[#abc123]`). Use the token's Tailwind class.
-- Do NOT change Lucide stroke width — it's 1.5, frozen.
-- Do NOT introduce a third font or icon set.
-- Do NOT use light-mode tokens in Phase 1–5 code (Phase 6 unlocks light mode).
-- Do NOT invent a tag outside the 9-tag vocabulary.
-- Do NOT put a sparkle icon on a tag chip / status badge / metadata element.
+- Do NOT introduce arbitrary hex values (`[#abc123]`). Use token's Tailwind class.
+- Do NOT change Lucide stroke width — 1.5, frozen.
+- Do NOT introduce third font or icon set.
+- Do NOT use light-mode tokens in Phase 1–5 code (Phase 6 unlocks).
+- Do NOT invent tag outside 9-tag vocabulary.
+- Do NOT put sparkle icon on tag chip / status badge / metadata element.
