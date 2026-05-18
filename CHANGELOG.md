@@ -6,10 +6,6 @@ All notable changes to Naavik are documented here. Format is based on [Keep a Ch
 
 (work in progress under `[Epic] 0.2.0`)
 
-
-## [0.1.0] - 2026-05-18
-
-Release bundle for 0.1.0. Detailed entries reconstructed from closed Issues post-merge.
 ## [0.1.0] - 2026-05-18
 
 First full bundle: Phase 0 foundation + Phase 1 MVP + Pre-Phase-2 paper cuts + Phase A agent-system bootstrap + this A.29 phase-numbering migration. All work pre-Phase-2 ships as `0.1.0`.
