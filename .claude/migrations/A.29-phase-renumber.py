@@ -144,153 +144,605 @@ PHASE_2_MAP: list[dict] = [
     },
 ]
 
-#: Phase A items A.1–A.29 + paper cuts PC.1–PC.7 + Phase 0 + Phase 1 Waves
-#: all fold into 0.1.0 (single-fold per D.6 REV-3). Architect drafts the
-#: specific position assignments at Wave 2.1; defaults below are
-#: architect-illustrative (user can override at PLAN_GATE per OQ-COSMETIC-1).
-PHASE_A_HISTORICAL_MAP: list[dict] = [
-    # Phase 0 (Foundation) — positions 0.1.0.01–0.1.0.11 (architect-illustrative).
-    # Phase 1 Waves 1–5 — positions 0.1.0.12–0.1.0.16 (D.1 Option B collapse).
-    # PC.1–PC.7 — positions 0.1.0.17–0.1.0.23.
-    # Phase A items — positions 0.1.0.24 onward.
-    # The CSV emitted in step 2 documents the per-row mapping; map cache
-    # `redirects` provides legacy lookups. Architect refines per-row at
-    # Wave 2.1 of migration apply.
-    {"old": "PC.5", "new": "0.1.0.21", "priority": "", "title": "SECRET_KEY boot-time enforcement"},
+#: Phase 0 (Foundation) — positions 0.1.0.01–0.1.0.09. ROADMAP rows 0.1–0.9
+#: collapse 1:1 to positions; all status [x] frozen.
+PHASE_0_HISTORICAL_MAP: list[dict] = [
+    {"old": "0.1", "new": "0.1.0.01", "priority": "", "title": "Nix flake devShell"},
+    {"old": "0.2", "new": "0.1.0.02", "priority": "", "title": "pyproject.toml + uv lockfile"},
+    {"old": "0.3", "new": "0.1.0.03", "priority": "", "title": "Dockerfile (multi-stage)"},
+    {
+        "old": "0.4",
+        "new": "0.1.0.04",
+        "priority": "",
+        "title": "Docker Compose + Postgres pgvector",
+    },
+    {"old": "0.5", "new": "0.1.0.05", "priority": "", "title": "NixOS service module"},
+    {"old": "0.6", "new": "0.1.0.06", "priority": "", "title": "Nix package derivation"},
+    {"old": "0.7", "new": "0.1.0.07", "priority": "", "title": "FastAPI app skeleton"},
+    {"old": "0.8", "new": "0.1.0.08", "priority": "", "title": "Alembic setup"},
+    {"old": "0.9", "new": "0.1.0.09", "priority": "", "title": ".env.example"},
+]
+
+#: Phase 1 (MVP) — 14 deliverable-level positions 0.1.0.10–0.1.0.23 per
+#: D.1 Option B collapse rule. Phase 1 had 5 Waves with ~80 sub-tasks;
+#: 14 major deliverables capture the shipped artifacts; sub-task detail
+#: survives in ROADMAP Notes column prose + `docs/plans/archive/10-backend-impl.md`.
+#:
+#: "old" IDs use the form "Phase 1 Wave N" or "Phase 1 Wave N.X" — these are
+#: ROADMAP-internal labels, not GitHub Issue identifiers. The migration script
+#: handles these via the CSV emitted in step 2 (no GitHub state mutation
+#: required for Phase 1 deliverable-level positions; only Phase A + Phase 2
+#: + DEF + PC items have GitHub Issues to rewrite).
+PHASE_1_HISTORICAL_MAP: list[dict] = [
+    {
+        "old": "Phase 1 Wave 1",
+        "new": "0.1.0.10",
+        "priority": "",
+        "title": "5 design docs graduated",
+    },
+    {
+        "old": "Phase 1 Wave 2",
+        "new": "0.1.0.11",
+        "priority": "",
+        "title": "85-component partial library",
+    },
+    {
+        "old": "Phase 1 Wave 3",
+        "new": "0.1.0.12",
+        "priority": "",
+        "title": "11 page templates + sample_data accessors",
+    },
+    {
+        "old": "Phase 1 Wave 3a",
+        "new": "0.1.0.13",
+        "priority": "",
+        "title": "Stage 3 bugfix + Discover redesign triage",
+    },
+    {
+        "old": "Phase 1 Wave 4 (substrate)",
+        "new": "0.1.0.14",
+        "priority": "",
+        "title": "SQLModel models + Alembic 0001_initial",
+    },
+    {
+        "old": "Phase 1 Wave 4 (auth+vault)",
+        "new": "0.1.0.15",
+        "priority": "",
+        "title": "Auth + Vault + key rotation CLI",
+    },
+    {
+        "old": "Phase 1 Wave 4 (LLM)",
+        "new": "0.1.0.16",
+        "priority": "",
+        "title": "LLM provider abstraction + cost tracker",
+    },
+    {
+        "old": "Phase 1 Wave 4 (services+swap)",
+        "new": "0.1.0.17",
+        "priority": "",
+        "title": "Profile + Settings services + DB-backed accessor swap",
+    },
+    {
+        "old": "Phase 1 Wave 4 (seed)",
+        "new": "0.1.0.18",
+        "priority": "",
+        "title": "db/seed.py + ats_credentials service",
+    },
+    {
+        "old": "Phase 1 Wave 5 (extraction)",
+        "new": "0.1.0.19",
+        "priority": "",
+        "title": "Extraction service (PDF → AI → Profile + SSE)",
+    },
+    {
+        "old": "Phase 1 Wave 5 (doc-gen)",
+        "new": "0.1.0.20",
+        "priority": "",
+        "title": "Document generator + Typst + DRAFT lifecycle",
+    },
+    {
+        "old": "Phase 1 Wave 5 (application)",
+        "new": "0.1.0.21",
+        "priority": "",
+        "title": "Application service (multi-axis state + auto-apply)",
+    },
+    {
+        "old": "Phase 1 Wave 5 (notif+portfolio)",
+        "new": "0.1.0.22",
+        "priority": "",
+        "title": "Notifications + portfolio_sync",
+    },
+    {
+        "old": "Phase 1 Wave 5 (ATS+cron)",
+        "new": "0.1.0.23",
+        "priority": "",
+        "title": "ATS adapters (Greenhouse + Lever + Ashby) + APScheduler cron",
+    },
+]
+
+#: Pre-Phase-2 paper cuts — positions 0.1.0.24–0.1.0.30. PC.1–PC.7 done.
+PC_HISTORICAL_MAP: list[dict] = [
+    {
+        "old": "PC.1",
+        "new": "0.1.0.24",
+        "priority": "",
+        "title": "Process-compose + cold-start reliability",
+    },
+    {
+        "old": "PC.2",
+        "new": "0.1.0.25",
+        "priority": "",
+        "title": "`uv run fastapi dev` (no path) shim",
+    },
+    {
+        "old": "PC.3",
+        "new": "0.1.0.26",
+        "priority": "",
+        "title": "Playwright local capture on NixOS",
+    },
+    {
+        "old": "PC.4",
+        "new": "0.1.0.27",
+        "priority": "",
+        "title": "Phase-1 finalization (plan 10b)",
+    },
+    {
+        "old": "PC.5",
+        "new": "0.1.0.28",
+        "priority": "",
+        "title": "SECRET_KEY boot-time enforcement",
+    },
     {
         "old": "PC.6",
-        "new": "0.1.0.22",
+        "new": "0.1.0.29",
         "priority": "",
         "title": "Password complexity + must-change-on-first-login",
     },
     {
-        "old": "A.6",
-        "new": "0.1.0.24",
+        "old": "PC.7",
+        "new": "0.1.0.30",
         "priority": "",
-        "title": "AGENT_OPS canonical operational guide",
-    },
-    {"old": "A.8", "new": "0.1.0.25", "priority": "", "title": "First end-to-end /build"},
-    {
-        "old": "A.11",
-        "new": "0.1.0.26",
-        "priority": "",
-        "title": "Agent system v2 — cold-start + per-agent skills",
-    },
-    {
-        "old": "A.13",
-        "new": "0.1.0.27",
-        "priority": "",
-        "title": "Tracing contract — ERROR + BUILT events",
-    },
-    {"old": "A.14", "new": "0.1.0.28", "priority": "", "title": "Task Playbook"},
-    {"old": "A.15", "new": "0.1.0.29", "priority": "", "title": "Agent memory + learning system"},
-    {"old": "A.16", "new": "0.1.0.30", "priority": "", "title": "Machine-readable wording rewrite"},
-    {"old": "A.17", "new": "0.1.0.31", "priority": "", "title": "agent-memory.sh hardening"},
-    {
-        "old": "A.17a",
-        "new": "0.1.0.32",
-        "priority": "",
-        "title": "agent-memory.sh aliases regex widening",
-    },
-    {
-        "old": "A.28",
-        "new": "0.1.0.33",
-        "priority": "",
-        "title": "Board restructure — Backlog status + Phase 2.5",
-    },
-    {
-        "old": "A.28a",
-        "new": "0.1.0.34",
-        "priority": "",
-        "title": "A.28 hardening — eval + rollback + apply default",
-    },
-    {
-        "old": "A.29",
-        "new": "0.1.0.50",
-        "priority": "",
-        "title": "Phase numbering system + naavik-ops dispatcher",
+        "title": "First-time setup ergonomics",
     },
 ]
 
-#: A.30 first-patch post-0.1.0 — single-task patch release.
+#: Phase A items A.1–A.29 — positions 0.1.0.31–0.1.0.47 + 0.1.0.50.
+#: A.1–A.8 are bootstrap (Phase A initial 7 items + A.8 first end-to-end build);
+#: A.11–A.17a, A.28 are post-bootstrap done items; A.29 closes 0.1.0 at position
+#: 0.1.0.50 (with 0.1.0.48–0.1.0.49 reserved as buffer slots).
+#:
+#: A.1–A.5, A.7 do NOT have separate GitHub Issues (they were tracked inline
+#: under the `Phase A` epic at bootstrap). Step 6 of the migration runbook
+#: skips per-row Issue rewrite for these rows (issue map lookup returns None);
+#: ROADMAP rewrite via the diff patch handles the position assignment in-doc.
+PHASE_A_HISTORICAL_MAP: list[dict] = [
+    {
+        "old": "A.1",
+        "new": "0.1.0.31",
+        "priority": "",
+        "title": "6 subagent prompts",
+    },
+    {
+        "old": "A.2",
+        "new": "0.1.0.32",
+        "priority": "",
+        "title": "13 slash commands",
+    },
+    {
+        "old": "A.3",
+        "new": "0.1.0.33",
+        "priority": "",
+        "title": "scripts/gh-project.sh Projects v2 helper",
+    },
+    {
+        "old": "A.4",
+        "new": "0.1.0.34",
+        "priority": "",
+        "title": "Token budget config + ledger",
+    },
+    {
+        "old": "A.5",
+        "new": "0.1.0.35",
+        "priority": "",
+        "title": "Trace system + watch.sh + runs.log",
+    },
+    {
+        "old": "A.6",
+        "new": "0.1.0.36",
+        "priority": "",
+        "title": "AGENT_OPS canonical operational guide",
+    },
+    {
+        "old": "A.7",
+        "new": "0.1.0.37",
+        "priority": "",
+        "title": ".github/ Issue + PR templates",
+    },
+    {"old": "A.8", "new": "0.1.0.38", "priority": "", "title": "First end-to-end /build"},
+    {
+        "old": "A.11",
+        "new": "0.1.0.39",
+        "priority": "",
+        "title": "Agent system v2 — cold-start + per-agent skills + git automation",
+    },
+    {
+        "old": "A.12",
+        "new": "0.1.0.40",
+        "priority": "",
+        "title": "Map cache + single-writer governance",
+    },
+    {
+        "old": "A.13",
+        "new": "0.1.0.41",
+        "priority": "",
+        "title": "Tracing contract — ERROR + BUILT/REVIEWED",
+    },
+    {"old": "A.14", "new": "0.1.0.42", "priority": "", "title": "Task Playbook"},
+    {
+        "old": "A.15",
+        "new": "0.1.0.43",
+        "priority": "",
+        "title": "Agent memory + learning system",
+    },
+    {
+        "old": "A.16",
+        "new": "0.1.0.44",
+        "priority": "",
+        "title": "Machine-readable wording rewrite",
+    },
+    {
+        "old": "A.17",
+        "new": "0.1.0.45",
+        "priority": "",
+        "title": "agent-memory.sh hardening",
+    },
+    {
+        "old": "A.17a",
+        "new": "0.1.0.46",
+        "priority": "",
+        "title": "agent-memory.sh alias regex widening",
+    },
+    {
+        "old": "A.28",
+        "new": "0.1.0.47",
+        "priority": "",
+        "title": "Board restructure — Backlog status + Phase 2.5 milestone",
+    },
+    # 0.1.0.48 + 0.1.0.49 reserved (buffer for post-A.29 micro-fixes before tag cut)
+    {
+        "old": "A.29",
+        "new": "0.1.0.50",
+        "priority": "HIGH",
+        "title": "Phase numbering system + naavik-ops dispatcher (0.1.0 release closer)",
+    },
+]
+
+#: A.30 + A.31 fold into 0.1.1 — first patch post-0.1.0, themed as
+#: "legacy script Python rewrite + CHANGELOG markdown sanitization."
+#:
+#: A.30 = 0.1.1.01 (Python rewrite of gh-project.sh + agent-memory.sh +
+#:                   roadmap_parser.py + scripts/A.28-board-restructure.sh
+#:                   relocation; 6 internal sub-waves fold into Notes prose
+#:                   per D.1 Option B).
+#: A.31 = 0.1.1.02 (CHANGELOG.md markdown sanitization — must ship BEFORE
+#:                   A.30 Wave 5 ingests real commit data per hacker LOW
+#:                   finding F3 in PR #73).
 A_30_MAP: list[dict] = [
     {
         "old": "A.30",
         "new": "0.1.1.01",
-        "priority": "",
-        "title": "Python rewrite of legacy bash scripts",
+        "priority": "MEDIUM",
+        "title": "Python rewrite of legacy bash scripts (gh-project.sh + agent-memory.sh + roadmap_parser.py)",
+    },
+    {
+        "old": "A.31",
+        "new": "0.1.1.02",
+        "priority": "LOW",
+        "title": "CHANGELOG.md markdown sanitization (escape commit-msg bodies before .claude/naavik_ops/lib/changelog.py renders)",
     },
 ]
 
-#: DEF-01..DEF-25 → 6 thematic 0.2.X patch-epics per D.9. Per-row classification
-#: is architect-built at Wave 2.1 (OQ-COSMETIC-2 cosmetic). Default split below
-#: is illustrative; user may refine 1-3 rows at PLAN_GATE.
+#: DEF-01..DEF-25 → 6 thematic 0.2.X patch-epics per D.9 architect-built.
+#: A.28a folds into 0.2.6 (tooling/paper-cut theme match per architect
+#: Decision B on Phase 2.5 distribution).
+#:
+#: Theme assignment rationale (per docs/plans/24-A.29-roadmap-diff.patch.README.md):
+#: - 0.2.1 Security: DEF-06 (OIDC), DEF-13 (JWT signing-key rotation), DEF-17 (Argon2id), DEF-26 (JWT denylist, newly DEF#'d from unfiled "JWT denylist on password rotation" row in legacy Phase 1 deferred items table)
+#: - 0.2.2 UI: DEF-18 (light mode), DEF-19 (Lucide CDN), DEF-20 (sidebar mobile), DEF-21 (Discover card max-w)
+#: - 0.2.3 ATS-scraper: DEF-01 (Workday/LinkedIn/Indeed/Generic ATS adapters), DEF-03 (Postmortem screenshot), DEF-15 (LinkedIn proxy)
+#: - 0.2.4 Tracking: DEF-02 (Stale-DRAFT cron), DEF-04 (Manual job entry modal), DEF-05 (Application detail slide-over), DEF-08 (Show drafts filter UI), DEF-10 (Auto-apply immediate dispatch)
+#: - 0.2.5 Observability: DEF-11 (scraper_aggressiveness), DEF-16 (Submission-result obs dashboard), DEF-22 (daily_llm_cost_cap_usd widget)
+#: - 0.2.6 Tooling/paper-cut: DEF-07 (Onboarding offline retry buffer), DEF-09 (ProfileAnswer reuse cache), DEF-12 (Portfolio API versioning), DEF-14 (JobEmbedding pgvector), DEF-23 (NAAVIK_PERSISTENCE env-var removal), DEF-24 (Pre-existing ruff errors), DEF-25 (DB-test gating gap), + A.28a (script hardening)
 DEF_MAP: list[dict] = [
     # 0.2.1 — security cleanup
-    {"old": "DEF-05", "new": "0.2.1.01", "priority": "", "title": "Refresh-token rotation"},
     {
         "old": "DEF-06",
         "new": "0.2.1.02",
         "priority": "",
-        "title": "JWT denylist on password rotation",
+        "title": "OIDC for self-hosted (Authentik / Keycloak / Okta)",
     },
-    {"old": "DEF-07", "new": "0.2.1.03", "priority": "", "title": "Argon2id migration"},
-    # 0.2.2 — UI cleanup
-    {"old": "DEF-13", "new": "0.2.2.01", "priority": "", "title": "Lucide icon restore"},
-    {"old": "DEF-14", "new": "0.2.2.02", "priority": "", "title": "Sidebar mobile polish"},
-    {"old": "DEF-15", "new": "0.2.2.03", "priority": "", "title": "Light mode"},
-    # 0.2.3 — scraper / ATS cleanup
-    {"old": "DEF-01", "new": "0.2.3.01", "priority": "", "title": "Workday adapter"},
-    {"old": "DEF-02", "new": "0.2.3.02", "priority": "", "title": "LinkedIn adapter"},
-    {"old": "DEF-03", "new": "0.2.3.03", "priority": "", "title": "Indeed adapter"},
     {
-        "old": "DEF-04",
-        "new": "0.2.3.04",
+        "old": "DEF-13",
+        "new": "0.2.1.01",
         "priority": "",
-        "title": "Greenhouse / Lever / Ashby adapter",
+        "title": "JWT signing-key rotation (multi-tenant cloud tier)",
     },
-    # 0.2.4 — test infrastructure
-    {"old": "DEF-24", "new": "0.2.4.01", "priority": "", "title": "Ruff cleanup"},
-    {"old": "DEF-25", "new": "0.2.4.02", "priority": "", "title": "DB-test gating"},
-    # 0.2.5 — documentation / DX
-    {"old": "DEF-08", "new": "0.2.5.01", "priority": "", "title": "Runbook expansion"},
-    {"old": "DEF-09", "new": "0.2.5.02", "priority": "", "title": "OIDC plan"},
-    {"old": "DEF-10", "new": "0.2.5.03", "priority": "", "title": "Doc-site stub"},
-    # 0.2.6 — observability
-    {"old": "DEF-11", "new": "0.2.6.01", "priority": "", "title": "Structured logging"},
-    {"old": "DEF-12", "new": "0.2.6.02", "priority": "", "title": "Metrics dashboard"},
+    {
+        "old": "DEF-17",
+        "new": "0.2.1.03",
+        "priority": "",
+        "title": "Argon2id vault upgrade (vs PBKDF2) — moot post-0.2.0.01",
+    },
+    # DEF-26 is a new DEF# for the previously-unfiled "JWT denylist on password
+    # rotation" row from the legacy Phase 1 deferred items table. The migration
+    # script step 6 creates a new GitHub Issue for it via `naavik-ops gh
+    # create-issue 0.2.1.04 "..." --milestone "0.2.1"`.
+    {
+        "old": "DEF-26",
+        "new": "0.2.1.04",
+        "priority": "",
+        "title": "JWT denylist on password rotation (defense-in-depth)",
+    },
+    # 0.2.2 — UI cleanup
+    {"old": "DEF-18", "new": "0.2.2.01", "priority": "", "title": "Light mode"},
+    {"old": "DEF-19", "new": "0.2.2.02", "priority": "", "title": "Restore Lucide via CDN"},
+    {
+        "old": "DEF-20",
+        "new": "0.2.2.03",
+        "priority": "",
+        "title": "Sidebar mobile-toggle reliability",
+    },
+    {
+        "old": "DEF-21",
+        "new": "0.2.2.04",
+        "priority": "",
+        "title": "Discover card max-w cap on ultra-wide screens",
+    },
+    # 0.2.3 — ATS / scraper cleanup
+    {
+        "old": "DEF-01",
+        "new": "0.2.3.01",
+        "priority": "",
+        "title": "Workday / LinkedIn / Indeed / Generic ATS adapters",
+    },
+    {
+        "old": "DEF-03",
+        "new": "0.2.3.02",
+        "priority": "",
+        "title": "Postmortem-on-failure (Playwright screenshot + AI summary)",
+    },
+    {"old": "DEF-15", "new": "0.2.3.03", "priority": "", "title": "LinkedIn proxy support"},
+    # 0.2.4 — tracking cleanup
+    {"old": "DEF-02", "new": "0.2.4.01", "priority": "", "title": "Stale-DRAFT cleanup cron"},
+    {"old": "DEF-04", "new": "0.2.4.02", "priority": "", "title": "Manual job entry modal (full)"},
+    {"old": "DEF-05", "new": "0.2.4.03", "priority": "", "title": "Application detail slide-over"},
+    {
+        "old": "DEF-08",
+        "new": "0.2.4.04",
+        "priority": "",
+        "title": "Show drafts filter UI on Tracking",
+    },
+    {
+        "old": "DEF-10",
+        "new": "0.2.4.05",
+        "priority": "",
+        "title": "Auto-apply immediate dispatch on right-swipe",
+    },
+    # 0.2.5 — observability cleanup
+    {
+        "old": "DEF-11",
+        "new": "0.2.5.01",
+        "priority": "",
+        "title": "Settings.scraper_aggressiveness (rate-limit dial)",
+    },
     {
         "old": "DEF-16",
+        "new": "0.2.5.02",
+        "priority": "",
+        "title": "Submission-result observability dashboard",
+    },
+    {
+        "old": "DEF-22",
+        "new": "0.2.5.03",
+        "priority": "",
+        "title": "Settings.daily_llm_cost_cap_usd dashboard widget",
+    },
+    # 0.2.6 — tooling / paper-cut cleanup
+    {
+        "old": "DEF-07",
+        "new": "0.2.6.01",
+        "priority": "",
+        "title": "Onboarding offline retry buffer for autosave",
+    },
+    {
+        "old": "DEF-09",
+        "new": "0.2.6.02",
+        "priority": "",
+        "title": "ProfileAnswer reuse cache (screener answer memory)",
+    },
+    {
+        "old": "DEF-12",
         "new": "0.2.6.03",
         "priority": "",
-        "title": "Trace-analytics dashboard (A.26 fold-in)",
+        "title": "Portfolio API versioning (/api/portfolio/cv?version=v1)",
     },
-    {"old": "DEF-17", "new": "0.2.6.04", "priority": "", "title": "Run dashboard web UI"},
-    {"old": "DEF-18", "new": "0.2.6.05", "priority": "", "title": "Architect-as-PR-reviewer"},
     {
-        "old": "DEF-19",
-        "new": "0.2.6.06",
+        "old": "DEF-14",
+        "new": "0.2.6.04",
         "priority": "",
-        "title": "Claude-Mythos-style security review",
+        "title": "JobEmbedding semantic match (pgvector)",
     },
-    {"old": "DEF-20", "new": "0.2.6.07", "priority": "", "title": "PR review verdicts in repo"},
-    {"old": "DEF-21", "new": "0.2.6.08", "priority": "", "title": "Progress indicator"},
-    {"old": "DEF-22", "new": "0.2.6.09", "priority": "", "title": "Confusion-gate clause"},
     {
         "old": "DEF-23",
-        "new": "0.2.6.10",
+        "new": "0.2.6.05",
         "priority": "",
-        "title": "State-of-the-art security tooling",
+        "title": "Full NAAVIK_PERSISTENCE env-var removal",
     },
+    {
+        "old": "DEF-24",
+        "new": "0.2.6.06",
+        "priority": "",
+        "title": "Pre-existing ruff errors in migrations/ + scripts/roadmap_parser.py",
+    },
+    {
+        "old": "DEF-25",
+        "new": "0.2.6.07",
+        "priority": "",
+        "title": "DB-test gating gap (11 test files lack _skip_if_no_db())",
+    },
+    {
+        "old": "A.28a",
+        "new": "0.2.6.08",
+        "priority": "",
+        "title": "scripts/A.28-board-restructure.sh hardening (eval + rollback + apply default)",
+    },
+]
+
+#: Phase 2.5 agent-system follow-ups → 0.7.0 separate release per architect
+#: Decision B (preserves user-locked Phase 2.5 separation; doesn't pollute
+#: 0.2.X thematic patches with agent-system meta-work or 0.6.0 product polish).
+#: A.28a EXCLUDED from this map — folded into 0.2.6 (DEF_MAP) per theme match.
+PHASE_2_5_MAP: list[dict] = [
+    {"old": "A.9", "new": "0.7.0.01", "priority": "", "title": "Cap retention on traces/"},
+    {"old": "A.10", "new": "0.7.0.02", "priority": "", "title": "Visual run dashboard (web UI)"},
+    {"old": "A.18", "new": "0.7.0.03", "priority": "", "title": "Architect-as-PR-reviewer"},
+    {
+        "old": "A.19",
+        "new": "0.7.0.04",
+        "priority": "",
+        "title": "Security review bar — Claude-Mythos-style depth",
+    },
+    {
+        "old": "A.20",
+        "new": "0.7.0.05",
+        "priority": "",
+        "title": "PR review verdicts stored in repo",
+    },
+    {
+        "old": "A.21",
+        "new": "0.7.0.06",
+        "priority": "",
+        "title": "Progress indicator (Jenkins-style)",
+    },
+    {
+        "old": "A.22",
+        "new": "0.7.0.07",
+        "priority": "HIGH",
+        "title": "Confusion-gate clause (ambiguity → ask user even in auto mode)",
+    },
+    {
+        "old": "A.23",
+        "new": "0.7.0.08",
+        "priority": "",
+        "title": "State-of-the-art security review tools (Semgrep/CodeQL/Snyk/Trivy/...)",
+    },
+    {
+        "old": "A.24",
+        "new": "0.7.0.09",
+        "priority": "",
+        "title": "State-of-the-art architect tools (Structurizr/Mermaid/PlantUML/...)",
+    },
+    {
+        "old": "A.25",
+        "new": "0.7.0.10",
+        "priority": "",
+        "title": "State-of-the-art designer tools (wire huashu-design)",
+    },
+    {"old": "A.26", "new": "0.7.0.11", "priority": "", "title": "Trace analytics dashboard"},
+    {"old": "A.27", "new": "0.7.0.12", "priority": "", "title": "develop branch workflow"},
+]
+
+#: Phase 3-6 → 0.3.0-0.6.0 (1:1 rename; no collapse).
+PHASE_3_TO_6_MAP: list[dict] = [
+    # Phase 3 → 0.3.0
+    {"old": "3.1", "new": "0.3.0.01", "priority": "", "title": "Tag-based matching"},
+    {"old": "3.2", "new": "0.3.0.02", "priority": "", "title": "AI scoring (structured output)"},
+    {"old": "3.3", "new": "0.3.0.03", "priority": "", "title": "Visa/sponsorship auto-filter"},
+    {"old": "3.4", "new": "0.3.0.04", "priority": "", "title": "Tailored resume preview"},
+    {"old": "3.5", "new": "0.3.0.05", "priority": "", "title": "One-click generation"},
+    {"old": "3.6", "new": "0.3.0.06", "priority": "", "title": "Score history + analytics"},
+    {
+        "old": "3.7",
+        "new": "0.3.0.07",
+        "priority": "",
+        "title": "HTMX UI: score card + match explanation",
+    },
+    # Phase 4 → 0.4.0
+    {
+        "old": "4.1",
+        "new": "0.4.0.01",
+        "priority": "",
+        "title": "Application multi-axis state model",
+    },
+    {"old": "4.2", "new": "0.4.0.02", "priority": "", "title": "Manual application logger"},
+    {"old": "4.3", "new": "0.4.0.03", "priority": "", "title": "Semi-auto flow"},
+    {"old": "4.4", "new": "0.4.0.04", "priority": "", "title": "Auto-apply flow"},
+    {"old": "4.5", "new": "0.4.0.05", "priority": "", "title": "Playwright form filling"},
+    {"old": "4.6", "new": "0.4.0.06", "priority": "", "title": "Google Sheets sync"},
+    {"old": "4.7", "new": "0.4.0.07", "priority": "", "title": "Application analytics dashboard"},
+    # Phase 5 → 0.5.0
+    {"old": "5.1", "new": "0.5.0.01", "priority": "", "title": "Gmail API / IMAP email monitoring"},
+    {"old": "5.2", "new": "0.5.0.02", "priority": "", "title": "AI email classification"},
+    {
+        "old": "5.3",
+        "new": "0.5.0.03",
+        "priority": "",
+        "title": "Auto-update job status from email",
+    },
+    {"old": "5.4", "new": "0.5.0.04", "priority": "", "title": "Priority notifications"},
+    {"old": "5.5", "new": "0.5.0.05", "priority": "", "title": "Email thread tracking"},
+    {"old": "5.6", "new": "0.5.0.06", "priority": "", "title": "AI draft response generation"},
+    {
+        "old": "5.7",
+        "new": "0.5.0.07",
+        "priority": "",
+        "title": "Interview scheduling integration",
+    },
+    {"old": "5.8", "new": "0.5.0.08", "priority": "", "title": "Interview prep"},
+    {"old": "5.9", "new": "0.5.0.09", "priority": "", "title": "LinkedIn connection tracker"},
+    {"old": "5.10", "new": "0.5.0.10", "priority": "", "title": "Outreach template system"},
+    {"old": "5.11", "new": "0.5.0.11", "priority": "", "title": "AI-generated outreach messages"},
+    {"old": "5.12", "new": "0.5.0.12", "priority": "", "title": "LinkedIn automation"},
+    {"old": "5.13", "new": "0.5.0.13", "priority": "", "title": "Outreach history tracking"},
+    {"old": "5.14", "new": "0.5.0.14", "priority": "", "title": "Warm intro finder"},
+    {"old": "5.15", "new": "0.5.0.15", "priority": "", "title": "Interview process accelerator"},
+    # Phase 6 → 0.6.0
+    {"old": "6.1", "new": "0.6.0.01", "priority": "", "title": "Resume A/B testing"},
+    {"old": "6.2", "new": "0.6.0.02", "priority": "", "title": "Semantic job matching (pgvector)"},
+    {"old": "6.3", "new": "0.6.0.03", "priority": "", "title": "Weekly summary reports"},
+    {
+        "old": "6.4",
+        "new": "0.6.0.04",
+        "priority": "",
+        "title": "Performance: caching + batch AI + parallel scraping",
+    },
+    {"old": "6.5", "new": "0.6.0.05", "priority": "", "title": "ML scoring calibration"},
+    {"old": "6.6", "new": "0.6.0.06", "priority": "", "title": "LaTeX template support"},
+    {"old": "6.7", "new": "0.6.0.07", "priority": "", "title": "Additional Typst/LaTeX templates"},
 ]
 
 
 def _full_mapping() -> list[dict]:
-    """Concatenate all per-row mappings into a single ordered list."""
-    return PHASE_2_MAP + PHASE_A_HISTORICAL_MAP + A_30_MAP + DEF_MAP
+    """Concatenate all per-row mappings into a single ordered list.
+
+    Ordering matters only for the CSV audit output + the migration script's
+    step 9 frontmatter rewrite; positions themselves are independent.
+    """
+    return (
+        PHASE_0_HISTORICAL_MAP
+        + PHASE_1_HISTORICAL_MAP
+        + PC_HISTORICAL_MAP
+        + PHASE_A_HISTORICAL_MAP
+        + A_30_MAP
+        + PHASE_2_MAP
+        + DEF_MAP
+        + PHASE_2_5_MAP
+        + PHASE_3_TO_6_MAP
+    )
 
 
-#: New Milestone names per § D.19 REV-3 simplified set.
+#: New Milestone names per § D.19 REV-3 simplified set + 0.7.0 per architect
+#: Decision B (Phase 2.5 → 0.7.0 separate agent-system follow-up release).
 NEW_MILESTONES = [
     "0.1.0",
     "0.1.1",
@@ -305,6 +757,7 @@ NEW_MILESTONES = [
     "0.4.0",
     "0.5.0",
     "0.6.0",
+    "0.7.0",
 ]
 
 #: Old milestones closed at step 8.
@@ -461,24 +914,73 @@ def step_6_renumber_issues(apply: bool, mapping: list[dict]) -> None:
 
 
 def step_7_rewrite_roadmap(apply: bool) -> None:
-    """Rewrite ROADMAP.md sections. Architect-built at Wave 2.1; stubbed here.
+    """Rewrite ROADMAP.md sections via the architect-built unified diff patch.
 
-    The full ROADMAP rewrite touches ~50 sections; the rename map (CSV) is
-    deterministic + safe to apply mechanically. Wave 2.1 architect-built
-    pre-flight produces the final section-by-section diff; this step applies
-    it.
+    The diff patch at `docs/plans/24-A.29-roadmap-diff.patch` (authored in Wave 5
+    by the architect dispatch on run `2026-05-18T14-30-53_de60c4`) captures the
+    full retroactive renumber. Applied via `git apply` for the standard atomic
+    semantics:
+    - All-or-nothing at the file level (`git apply` rejects partial application).
+    - Verifies against current HEAD via `git apply --check` before mutating.
+    - On failure, ROADMAP.md is untouched; re-run the script after resolving
+      the conflict (typically: regenerate the patch against the new HEAD).
+
+    Per architect README at `docs/plans/24-A.29-roadmap-diff.patch.README.md`,
+    the patch rewrites:
+    - Phase 0 + Phase 1 + Pre-Phase-2 paper cuts + Phase A → ONE collapsed
+      `### 0.1.0` section (50 positions).
+    - Phase 1 deferred items table → six thematic patch sections
+      `### 0.2.1` through `### 0.2.6`.
+    - Phase 2 → `### 0.2.0` with vault + Job models marked HIGH.
+    - Phase 2.5 agent-system follow-ups → `### 0.7.0` (separate release).
+    - Phase 3-6 → `### 0.3.0` – `### 0.6.0` (1:1 rename).
+    - A.30 + A.31 → `### 0.1.1`.
+    - `## Priority Queue` → derived-view pointer per D.13 caller rewrite.
+    - `## Agent System (mirror conventions)` table → new release-version
+      milestone names.
     """
-    _emit("INFO", 7, "ROADMAP.md rewrite (per Wave 2.1 architect-built diff)")
-    if not apply:
-        return
-    # Wave 2.1 produces docs/plans/24-A.29-roadmap-diff.patch which step 7 applies.
-    # Stubbed: emit a note; full diff produced at apply time.
-    _emit(
-        "WARN",
-        7,
-        "ROADMAP rewrite not implemented in this PR — Wave 5 produces "
-        "the per-section diff at apply time. See plan § D.12 step 7.",
+    _emit("INFO", 7, "ROADMAP.md rewrite via architect-built unified diff")
+    patch_path = REPO_ROOT / "docs" / "plans" / "24-A.29-roadmap-diff.patch"
+    if not patch_path.exists():
+        raise NaavikOpsError(
+            f"diff patch not found at {patch_path} — architect Wave 5 dispatch did "
+            "not produce it. Authorize the architect dispatch first, then re-run."
+        )
+
+    # Pre-flight: verify the patch applies cleanly. `git apply --check` does
+    # everything `git apply` does EXCEPT mutating the working tree.
+    check_result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "apply", "--check", str(patch_path)],
+        capture_output=True,
+        text=True,
     )
+    if check_result.returncode != 0:
+        raise NaavikOpsError(
+            f"git apply --check failed (exit {check_result.returncode}): "
+            f"{check_result.stderr.strip()}. ROADMAP may have drifted since the "
+            "patch was authored; regenerate via architect dispatch."
+        )
+    _emit("INFO", 7, "git apply --check OK; patch is cleanly applicable")
+
+    if not apply:
+        _emit("INFO", 7, "DRY-RUN — patch applies cleanly but not committed")
+        return
+
+    # Apply for real.
+    apply_result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "apply", str(patch_path)],
+        capture_output=True,
+        text=True,
+    )
+    if apply_result.returncode != 0:
+        # This is unexpected — --check passed but apply failed. Possible race
+        # condition or filesystem issue.
+        raise NaavikOpsError(
+            f"git apply failed after --check passed (exit {apply_result.returncode}): "
+            f"{apply_result.stderr.strip()}. Manual investigation required; "
+            "ROADMAP.md may be in inconsistent state."
+        )
+    _emit("INFO", 7, f"ROADMAP.md rewritten via {patch_path.name}")
 
 
 def step_8_close_superseded_milestones(apply: bool) -> None:

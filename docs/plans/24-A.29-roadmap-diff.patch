@@ -1,0 +1,738 @@
+--- a/ROADMAP.md	2026-05-18 07:22:30.823848924 -0700
++++ b/ROADMAP.md
+@@ -92,416 +92,349 @@
+ | Portfolio Integration | `docs/ARCHITECTURE.md` § 4.7 External integrations |
+ | UI Screens & Design narrative | `docs/design/SCREENS.md` + `DESIGN.md` + `docs/design/WORKFLOW.md` |
+ 
++
+ ---
+ 
+-## Priority Queue
++## Priority Queue (derived view — post-A.29)
+ 
+-**Sorted next 5–10 items, refreshed on every meaningful ROADMAP edit.** This is the operator's "what should I work on" view at a glance. Each row links to the canonical phase row below.
++**Replaced by `.claude/naavik-ops task next-unblocked 0.2.0` derived view** per A.29 D.13 caller-rewrite scope. The canonical "what should I work on next" surface is now release-version-grouped (`0.2.0` is the active release; `0.1.0` shipped; `0.1.1` queued; `0.2.X` thematic patches interleave with `0.2.0`).
+ 
+-| Rank | Task ID | Title | Priority | Milestone | Issue |
+-|---|---|---|---|---|---|
+-| 1 | A.28 | Board restructure — add Backlog status + Phase 2.5 milestone | HIGH | Phase A | #60 |
+-| 2 | A.17 | `agent-memory.sh` hardening | HIGH | Phase A | #54 |
+-| 3 | A.16 | Machine-readable wording rewrite of agent-system files | HIGH | Phase A | #61 |
+-| 4 | PC.6a | Broader `require_password_complete` gate | MEDIUM | Phase 2 | #62 |
+-| 5 | 2.12 | Vault deprecation → env-only secrets | HIGH | Phase 2 | #20 |
+-| 6 | 2.11 | CLI sunset | HIGH | Phase 2 | #21 |
+-| 7+ | (Phase 2 scrapers 2.1–2.10) | (deferred to Backlog status until 2.12/2.11 ship) | CRITICAL | Phase 2 | #10–19 |
++Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → priority DESC (HIGH > MED > LOW > unset) → position ASC**, gated by deps. The two HIGH markers under `0.2.0` are `0.2.0.01` (vault deprecation, Tier-2 wave 1) and `0.2.0.05` (SQLModel Job models, hard dep for every scraper). All other `0.2.0.NN` tasks are equally required for the `0.2.0` cut.
+ 
+-**Maintenance:** This queue is hand-maintained — manager refreshes it at every gate transition (PLAN_GATE / PR_REVIEW_GATE / MILESTONE_GATE). Drift is OK between gates; correct at the next gate. The canonical source is the per-phase tables below — this Priority Queue is a derived view.
++**Maintenance:** drift-free by construction — `naavik-ops task next-unblocked <version>` reads `.claude/github-issue-map.json:issues` + `:priorities` + `:deps` and emits the sorted view on demand. Manager invokes it at every gate transition; `/standup` consumes it. The canonical source remains the per-release tables below.
+ 
+ ---
+ 
+ ## Phases
+ 
+-### Phase 0: Foundation & Infrastructure
+-> **Goal:** Reproducible dev environment, project skeleton, database, and deployment infrastructure.
+-> **Status:** ✅ Complete (2026-04-25)
+-
+-| # | Task | Status | Priority | Notes |
+-|---|---|---|---|---|
+-| 0.1 | Nix flake: devShell with Python 3.12, uv, typst, postgresql, ruff, pre-commit hooks | [x] | CRITICAL | `nix/devshell.nix` — verified all tools available in `nix develop` |
+-| 0.2 | pyproject.toml + uv lockfile with all Python deps | [x] | CRITICAL | 56 packages installed via `uv sync` |
+-| 0.3 | Dockerfile (multi-stage, uv-based, Python 3.12 slim) | [x] | HIGH | Builder + runtime stages, typst in runtime |
+-| 0.4 | Docker Compose: FastAPI app + PostgreSQL (pgvector/pgvector:pg17) | [x] | HIGH | Health check on db, app depends on healthy db |
+-| 0.5 | NixOS service module (`nix/module.nix`) — Lumino-compatible | [x] | HIGH | Reads `settings.servicesConfig.apps.tools.naavik`, full systemd hardening, SOPS, Traefik, PostgreSQL ensure |
+-| 0.6 | Nix package derivation (`nix/package.nix`) | [x] | HIGH | `nix build` produces `result/bin/naavik`, typst wrapped in PATH |
+-| 0.7 | FastAPI app skeleton: main.py, config.py, db/session.py, static files, Jinja2 templates | [x] | CRITICAL | Sidebar drawer layout (Tailwind + DaisyUI + HTMX), dashboard placeholder, 5 nav stubs |
+-| 0.8 | Alembic setup (async, reads DATABASE_URL from settings) | [x] | CRITICAL | `migrations/env.py` uses async_engine_from_config |
+-| 0.9 | .env.example with all env vars documented | [x] | MEDIUM | DATABASE_URL, SECRET_KEY, all LLM keys, OAuth, integrations |
+-
+-**Deliverable:** ✅ `nix develop` drops into a full dev environment. ✅ `nix build` produces a package. ✅ Docker Compose ready. ✅ NixOS module ready for Lumino integration. ✅ Dashboard placeholder visible at localhost:8000 with sidebar layout.
+-
+-**Verification log (2026-04-25):**
+-- `nix develop` → python 3.12.13, uv 0.11.7, typst 0.14.2, ruff 0.15.11, postgresql 17.9, pre-commit 4.5.1
+-- `uv sync` → 56 packages installed
+-- `nix build` → produces `result/bin/naavik` entrypoint
+-- `uv run fastapi dev src/main.py` → server starts on :8000
+-- `GET /api/health` → `{"status":"ok"}`
+-- `GET /` → HTTP 200, dashboard renders with sidebar
+-- `uv run ruff check src/` → all checks passed
++### 0.1.0 — Foundation + MVP + Pre-Phase-2 paper cuts + Phase A bootstrap (legacy Phase 0 + Phase 1 + PC + A.1–A.29)
++> **Goal:** First full Naavik bundle — reproducible dev environment + 11-screen MVP UI + backend substrate + 6-subagent system + this A.29 phase-numbering migration.
++> **Status:** ✅ Complete (cut as `0.1.0` tag during Wave 5 of A.29 PR).
++> **Shipped:** 2026-05-18 (A.29 migration apply; legacy phases shipped 2026-04-25 through 2026-05-18).
++> **Plan archive:** `docs/plans/archive/01-…` through `docs/plans/archive/24-…`.
++> **Position cap rule:** D.1 Option B collapse — Phase 1's 5 Waves fold to 14 deliverable-level positions; sub-task detail preserved in `docs/plans/archive/10-backend-impl.md` and Notes-column prose. 48 of 99 slots used; 2 reserved (0.1.0.48–0.1.0.49) for future micro-fixes before tag cut.
++
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.1.0.01 | Nix flake: devShell with Python 3.12, uv, typst, postgresql, ruff, pre-commit hooks | [x] | — | 0.1 | `nix/devshell.nix` — verified all tools available in `nix develop` |
++| 0.1.0.02 | pyproject.toml + uv lockfile with all Python deps | [x] | — | 0.2 | 56 packages installed via `uv sync` |
++| 0.1.0.03 | Dockerfile (multi-stage, uv-based, Python 3.12 slim) | [x] | — | 0.3 | Builder + runtime stages, typst in runtime |
++| 0.1.0.04 | Docker Compose: FastAPI app + PostgreSQL (pgvector/pgvector:pg17) | [x] | — | 0.4 | Health check on db, app depends on healthy db |
++| 0.1.0.05 | NixOS service module (`nix/module.nix`) — Lumino-compatible | [x] | — | 0.5 | Reads `settings.servicesConfig.apps.tools.naavik`, full systemd hardening, SOPS, Traefik, PostgreSQL ensure |
++| 0.1.0.06 | Nix package derivation (`nix/package.nix`) | [x] | — | 0.6 | `nix build` produces `result/bin/naavik`, typst wrapped in PATH |
++| 0.1.0.07 | FastAPI app skeleton — main.py + config.py + db/session.py + static files + Jinja2 templates | [x] | — | 0.7 | Sidebar drawer layout (Tailwind + DaisyUI + HTMX), dashboard placeholder, 5 nav stubs |
++| 0.1.0.08 | Alembic setup (async, reads DATABASE_URL from settings) | [x] | — | 0.8 | `migrations/env.py` uses async_engine_from_config |
++| 0.1.0.09 | .env.example with all env vars documented | [x] | — | 0.9 | DATABASE_URL, SECRET_KEY, all LLM keys, OAuth, integrations |
++| 0.1.0.10 | Phase 1 Wave 1 — 5 design docs graduated (COMPONENTS + BACKEND + DATA_MODEL + INTERACTIONS + SAMPLE_DATA) | [x] | — | Phase 1 Wave 1 | Plans 03–07 GRADUATED + archived; ~5300 lines of canonical contract; DESIGN.md bumped v1.3 (DRAFT row added) |
++| 0.1.0.11 | Phase 1 Wave 2 — 85-component partial library + base.html + macros + base.js + `/_design/components` fixture page | [x] | — | Phase 1 Wave 2 | All 100 tests pass; `docs/plans/archive/08-stage-2-impl.md` |
++| 0.1.0.12 | Phase 1 Wave 3 — 11 page templates + sample_data accessors + stub fragment/JSON endpoints + Discover keyboard map + Playwright snapshots | [x] | — | Phase 1 Wave 3 | All screens render at desktop + mobile; `docs/plans/archive/09-stage-3-impl.md` |
++| 0.1.0.13 | Phase 1 Wave 3a — Stage 3 bugfix + Discover redesign triage (Lucide diagnostics, sidebar mobile drawer, typed application questions, scroll-spy, native dialog backdrop, touch swipe) | [x] | — | Phase 1 Wave 3a | `docs/plans/archive/09a-stage-3-bugfix.md` |
++| 0.1.0.14 | Phase 1 Wave 4 — 20 SQLModel entities + Alembic 0001_initial + pgvector extension + 25 model tests | [x] | — | Phase 1 Wave 4 (substrate) | `docs/plans/archive/10-backend-impl.md` § B |
++| 0.1.0.15 | Phase 1 Wave 4 — Auth (bcrypt + JWT + CSRF + rate limit) + AES-256-GCM vault + key rotation CLI + Settings · Deployment vault-locked banner | [x] | — | Phase 1 Wave 4 (auth+vault) | 18 auth tests + 22 vault tests; cost=12 prod / cost=4 tests; HS256 JWT; HttpOnly+Secure+SameSite=Strict cookies |
++| 0.1.0.16 | Phase 1 Wave 4 — LLM provider abstraction (Anthropic + OpenAI + Ollama) + structured-output retry policy + 10 prompt skeletons + `ApiUsage` cost tracker | [x] | — | Phase 1 Wave 4 (LLM) | Anthropic tool-use / OpenAI json_schema / Ollama JSON mode; `tracked_call` wraps every provider call; 15 tests |
++| 0.1.0.17 | Phase 1 Wave 4 — Profile + Settings services + per-field autosave + `NAAVIK_PERSISTENCE=db` DB-backed accessor swap (12 high-traffic accessors) | [x] | — | Phase 1 Wave 4 (services+swap) | DB-backed CRUD per tab; PUT /api/v1/settings/llm flows API key through vault |
++| 0.1.0.18 | Phase 1 Wave 4 — `db/seed.py` consuming `db/sample_data.py` (idempotent ON CONFLICT DO NOTHING) + `ats_credentials` service | [x] | — | Phase 1 Wave 4 (seed) | 372 rows seeded across 20 entities; bumps every PK sequence after seed; CLI `uv run python -m db.seed` |
++| 0.1.0.19 | Phase 1 Wave 5 — `extraction` service (PDF → AI → Profile + SSE event emission) | [x] | — | Phase 1 Wave 5 (extraction) | `services/extraction.py` — PDF parse via pypdf + LLM `extract_resume` + SSE generator |
++| 0.1.0.20 | Phase 1 Wave 5 — `document_generator` (bullet selection + AI trim + Typst compile + native page-count validation + DRAFT reuse heuristic) + Typst templates (`onepage.typ`, `cover_letter.typ`) + native page-count validator | [x] | — | Phase 1 Wave 5 (doc-gen) | NEU-style 1-page resume + 4-section letter; both with `<naavik-meta>` page-count label; `typst query <input.typ>` (the spec'd `--emit metadata` flag doesn't exist in 0.14) |
++| 0.1.0.21 | Phase 1 Wave 5 — `application_service` (DRAFT lifecycle + submit/discard + ATS dispatch + `validate_submittable` + `process_auto_apply_queue`) + multi-axis state derivation | [x] | — | Phase 1 Wave 5 (application) | Full DRAFT lifecycle + computed-state ownership + 25 unit tests |
++| 0.1.0.22 | Phase 1 Wave 5 — `notifications` (Discord webhook + Telegram outbound + in-app toast routing) + `portfolio_sync` (public CV API + filtered + debounced regen + Netlify webhook) | [x] | — | Phase 1 Wave 5 (notif+portfolio) | Discord embed + Telegram + toast queue; Allowlist-based portfolio filter + post-condition assert + 30 tests |
++| 0.1.0.23 | Phase 1 Wave 5 — ATS adapters (Greenhouse + Lever + Ashby; Workday / LinkedIn / Indeed / Generic deferred to 0.2.3) + APScheduler cron registration (auto_apply / aggregate_costs / cleanup_stale_docs / daily_db_snapshot / refresh_oauth_tokens) | [x] | — | Phase 1 Wave 5 (ATS+cron) | All 3 adapters with public APIs + factory + 18 mock-HTTP tests; APScheduler with PostgresJobStore lifespan-managed |
++| 0.1.0.24 | Pre-Phase-2 paper cut — Process-compose: confirm app logs + cold-start reliability | [x] | — | PC.1 | **Plan 10a (2026-05-02 + orphan-fix 2026-05-03):** `setsid -w` + `coreutils` + `pkill` cleanup; root cause was TTY/SIGTTIN not alembic async wedge |
++| 0.1.0.25 | Pre-Phase-2 paper cut — `uv run fastapi dev` (no path) should just work | [x] | — | PC.2 | **Plan 10a:** 2-line `app.py` shim at repo root re-exports `src.main:app` |
++| 0.1.0.26 | Pre-Phase-2 paper cut — Playwright local capture on NixOS | [x] | — | PC.3 | **Plan 10a:** `nodejs_22` + `PLAYWRIGHT_NODEJS_PATH`; Playwright pinned `>=1.58.0,<1.59`; 20 baseline PNGs committed |
++| 0.1.0.27 | Pre-Phase-2 paper cut — Phase-1 finalization (orchestrator greenlet/libstdc++ + NAAVIK_PERSISTENCE=db default + working dev credential + signup endpoint + `naavik` CLI subcommands + Settings · LLM Provider form-wiring + README rewrite) | [x] | — | PC.4 | **Plan 10b EXECUTED 2026-05-03** — 9 paper cuts shipped; 475 tests pass (~12 new); ruff clean |
++| 0.1.0.28 | Pre-Phase-2 paper cut — `SECRET_KEY` boot-time enforcement | [x] | — | PC.5 | **Plan 17 EXECUTED 2026-05-16 via PR #49** — `Settings._enforce_secret_key` validator at `src/config.py:45-66` refuses module import when `SECRET_KEY` is shipped default or <32 bytes unless `NAAVIK_DEBUG=1` |
++| 0.1.0.29 | Pre-Phase-2 paper cut — Password complexity (min 12 chars, digit + letter) + must-change-on-first-login flag | [x] | — | PC.6 | **Plan 18 EXECUTED 2026-05-17 via PR #50** — `validate_password_complexity` + `User.must_change_password` (alembic `0003`) + `require_password_complete` dep + `POST /api/v1/auth/change-password` + cookie/CSRF rotation + dev-credential file cleanup on rotation |
++| 0.1.0.30 | Pre-Phase-2 paper cut — First-time setup ergonomics (`NAAVIK_PERSISTENCE=db` parity + login signup-link promotion + signup-disabled banner + persisted `~/.naavik/dev-credentials` + lifespan credential echo) | [x] | — | PC.7 | **Plan 10c EXECUTED 2026-05-12** — three sub-items shipped; 478 tests pass (3 new pages tests + 2 new live-DB seed tests); new config field `Settings.debug` |
++| 0.1.0.31 | Phase A — 6 subagent prompts (`.claude/agents/`) | [x] | — | A.1 | Frontmatter (name/description/tools/model/color) + body (principles, operating loop, tracing format, escalation); models: manager+architect+hacker on opus-4-7; engineer+devops+designer on sonnet-4-6 |
++| 0.1.0.32 | Phase A — 13 slash commands (`.claude/commands/`) | [x] | — | A.2 | `/build`, `/plan`, `/discuss`, `/triage-bug`, `/review-pr`, `/threat-model`, `/design-screen`, `/groom`, `/standup`, `/bootstrap`, `/sync-roadmap`, `/budget`, `/runs` |
++| 0.1.0.33 | Phase A — `scripts/gh-project.sh` Projects v2 helper | [x] | — | A.3 | `init` / `bootstrap` / `sync` / `milestone-status` / `add-item` / `create-issue` / `set-status` / `next-unblocked` / `runs`; idempotent; user-or-org auto-detected |
++| 0.1.0.34 | Phase A — Token budget config + ledger | [x] | — | A.4 | `.claude/budget.json` (caps) + `.claude/budget-ledger.json` (manager-managed); halt at projected-spend-exceeds-cap; `/budget` to inspect |
++| 0.1.0.35 | Phase A — Trace system + `watch.sh` (tmux) + `runs.log` index + `MANIFEST.json` per run | [x] | — | A.5 | Run-id format `YYYY-MM-DDTHH-MM-SS_<6hash>`; per-agent log format frozen in each agent's prompt; `/runs` to list history |
++| 0.1.0.36 | Phase A — `docs/AGENT_OPS.md` — single operational guide | [x] | — | A.6 | Bootstrap → daily workflow → commands reference → agent reference → GitHub Mirror conventions → tracing → budget → troubleshooting → extending |
++| 0.1.0.37 | Phase A — `.github/` templates (3 Issue forms + PR template) | [x] | — | A.7 | PR template aligns with AGENTS.md § Workflow step 7 (deviations summary required) |
++| 0.1.0.38 | Phase A — First end-to-end `/build` shipping a real paper cut (satisfied via PC.5 PR #49) | [x] | — | A.8 | 5 skills invoked; git `prepare-commit-msg` hook auto-appended `Closes #7`; deviations promoted into plan 17; plan archived. Manager → architect → engineer → hacker → devops → ROADMAP update → Issue close → Project advance loop exercised |
++| 0.1.0.39 | Phase A — Agent system v2 (cold-start hook + per-agent skill suite + git commit automation) | [x] | — | A.11 | **Plan 16 EXECUTED 2026-05-17** — `.claude/hooks/cold-start.sh` SessionStart + `.claude/skills/naavik-cold-start/SKILL.md` + Skill tool on all 6 agents + `.claude/hooks/git/prepare-commit-msg` auto-`Closes #N` + 29-skill per-agent suite |
++| 0.1.0.40 | Phase A — Map cache + single-writer governance (gh-project.sh hardening) | [x] | — | A.12 | `find_issue_by_prefix` + `ensure_milestone` consult `.claude/github-issue-map.json` first; new `refresh-map` subcommand reconciles from authoritative GitHub state; duplicate epics #46/#47 closed; "GitHub state — single writer" rule codified |
++| 0.1.0.41 | Phase A — Tracing contract ERROR + BUILT/REVIEWED event family + MANIFEST schema extensions | [x] | — | A.13 | `ERROR step=<what> kind=<retry\|skip\|halt\|pivot> reason='<line>' attempt=<n>/<max>` + `BUILT` / `REVIEWED` last-line summaries; MANIFEST gains `outcome` / `halt_reason` / `what_built` / `errors_encountered` |
++| 0.1.0.42 | Phase A — Task Playbook (`docs/PLAYBOOK.md`) — strict 9-category if-then classification | [x] | — | A.14 | **Shipped 2026-05-17 via PR #51 squash `ab9f2589`** — STATUS / INSPECT / 3 gate responses / PRODUCT_WORK / BUG_TRIAGE / CONTRACT_CHANGE / BOOKKEEPING; default-deny allow-list-only for BOOKKEEPING |
++| 0.1.0.43 | Phase A — Agent memory + learning system | [x] | — | A.15 | **Plan 19 EXECUTED 2026-05-17 via PR #53** — `.claude/memory/` substrate (6 stores) + single-writer `scripts/agent-memory.sh` + 4 memory-aware skills + 2 slash commands (`/memory`, `/learn`); 50/50 smoke pass |
++| 0.1.0.44 | Phase A — Machine-readable wording rewrite of agent-system files | [x] | — | A.16 | **Plan 22 EXECUTED 2026-05-18 via PR #68** — 57 files rewritten; -9.7% / ~-8.5k tokens per ingest cycle |
++| 0.1.0.45 | Phase A — `agent-memory.sh` hardening (flock + jq sandbox + alias regex + manifest escape) | [x] | — | A.17 | **Plan 21 EXECUTED 2026-05-18 via PR #66** — 5 hacker findings closed; 30/30 concurrent writes persist (was 13/30 pre-fix); 14 new test assertions |
++| 0.1.0.46 | Phase A — `agent-memory.sh` alias regex widening to include uppercase tokens | [x] | — | A.17a | **EXECUTED 2026-05-18 via PR #68 (A.16 fold-in)** — `ALIASES_RE` widened at `scripts/agent-memory.sh:119`; uppercase + `#` accepted; newline + `---` injection still blocked |
++| 0.1.0.47 | Phase A — Board restructure (Backlog status + Phase 2.5 milestone + Priority Queue section) | [x] | — | A.28 | **Plan 20 EXECUTED 2026-05-17 via PR #63** — 5 waves; `Backlog` status added to Project v2; `Phase 2.5` milestone + epic created; ROADMAP surgery; `manager-backlog-promote` skill |
++| 0.1.0.48 | (reserved buffer slot) | — | — | — | Reserved for post-A.29 micro-fixes before 0.1.0 tag cut |
++| 0.1.0.49 | (reserved buffer slot) | — | — | — | Reserved for post-A.29 micro-fixes before 0.1.0 tag cut |
++| 0.1.0.50 | Phase numbering system + `.claude/naavik-ops` Python dispatcher — 4-level semver task IDs replace Project Priority field; full retroactive renumber + release ceremony tooling | [x] | HIGH | A.29 | **Plan 24 EXECUTED 2026-05-18 via PR #73 squash `c5ac58f`** — Waves 1-4 shipped; Wave 5 (migration `--apply` + `0.1.0` release cut) runs post-merge per this diff patch + `step_7_rewrite_roadmap()` in `.claude/migrations/A.29-phase-renumber.py`. **This row is the closer for 0.1.0** — running `.claude/naavik-ops release cut 0.1.0` after Wave 5 cuts the first `0.1.0` tag |
++
++**Deliverable (0.1.0):** Reproducible dev environment + 11-screen MVP + 20-SQLModel-entity backend substrate + 3 ATS adapters + Typst PDF generation + 6-subagent system + agent memory substrate + machine-readable rewrite + board restructure + this A.29 phase-numbering migration. Tag cuts in Wave 5 via `.claude/naavik-ops release cut 0.1.0`. Closes `Phase A` + `Pre-Phase-2 paper cuts` + `Phase 1 deferred items` (whose rows distribute into `0.2.X` thematic patches) + `Phase 2.5` (whose rows defer to `0.7.0`) GitHub Milestones.
++
++**Verification log (Wave 5 post-merge):**
++- Migration script applies cleanly: `python .claude/migrations/A.29-phase-renumber.py --apply` exits 0.
++- `.claude/naavik-ops task check` exits 0 (no ROADMAP-vs-Issue-title drift; pyproject.toml + nix/package.nix at `0.1.0`; latest tag `0.1.0`).
++- `git tag --list 0.1.0` returns `0.1.0` (cut via `.claude/naavik-ops release cut 0.1.0`).
++- All 50 ROADMAP-rows-becoming-`0.1.0.NN` have Issue titles rewritten from `[A.X]` / `[PC.X]` to `[0.1.0.NN]` per the migration runbook step 6.
++- `.claude/github-issue-map.json:redirects` populated with every legacy ID → new ID mapping.
++
++---
++
++### 0.1.1 — Legacy bash → Python rewrite + CHANGELOG sanitization (legacy A.30 + A.31)
++> **Goal:** Replace `scripts/gh-project.sh` (1469 LOC bash) + `scripts/agent-memory.sh` (843 LOC bash) + `scripts/roadmap_parser.py` (304 LOC) with native Python under `.claude/naavik_ops/`; relocate `scripts/A.28-board-restructure.sh` to `.claude/migrations/`; harden CHANGELOG.md markdown escaping before A.30 Wave 5 wires real commit ingestion.
++> **Status:** 🟡 Planned (sequencing: after 0.1.0 tag cut; before 0.2.0 cycle starts).
++> **Plan:** `docs/plans/25-0.1.1-bash-to-python.md` (to be authored after 0.1.0 ships).
++
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.1.1.01 | Python rewrite of legacy bash scripts (`gh-project.sh` 1469 LOC + `agent-memory.sh` 843 LOC + `roadmap_parser.py`) into `.claude/naavik_ops/` Python modules + full `scripts/` → `.claude/` migration | [ ] | MEDIUM | A.30 | **Filed 2026-05-18 — A.29 follow-up. Ships as `0.1.1` patch release post-A.29's `0.1.0` cut.** Replaces `subprocess.run` shims (which A.29 ships) with direct Python calls; rolls `scripts/roadmap_parser.py` into `.claude/naavik_ops/lib/roadmap.py`; deletes legacy `scripts/*.sh` after parity tests pass; moves `scripts/A.28-board-restructure.sh` (done one-shot) to `.claude/migrations/`. **Build sequence**: Wave 1 — port `gh.py` from `gh-project.sh` w/ parity tests. Wave 2 — port `memory.py` from `agent-memory.sh` w/ parity (`tests/test_agent_memory.sh`). Wave 3 — caller rewrites + legacy delete + path migration. Wave 4 — post-merge `naavik-ops release 0.1.1 --cut`. ~2-2.5 days engineer. **Depends on**: 0.1.0 EXECUTED (must ship first to establish the `naavik-ops` dispatcher + `.claude/naavik_ops/` package + subprocess shims this plan replaces). |
++| 0.1.1.02 | CHANGELOG.md markdown sanitization — escape commit-msg bodies before `.claude/naavik_ops/lib/changelog.py:62` renders to released artifact | [ ] | LOW | A.31 | **Filed 2026-05-18 via PR #73 hacker review** (hacker Finding 3, LOW latent). `.claude/naavik_ops/lib/changelog.py:62` `ReleaseEntry.text` passes commit-message body to rendered Markdown unsanitized. NOT exploitable today (Wave 5 ingestion not yet wired). When 0.1.1 wires closed-Issue ingestion in A.30 Wave 5, attacker-influenced PR commit-msg bodies could inject markdown into released CHANGELOG.md (header smuggling / link injection; no RCE). **Fix**: escape markdown chars (`#`, `[`, `]`, `(`, `)`, `>`) in `ReleaseEntry.text` at render OR strip newlines + leading `#` from entry text. ~30 min engineer. **Must land BEFORE A.30 Wave 5 ingests real commit data.** |
++
++**Deliverable (0.1.1):** Legacy bash scripts deleted; `.claude/naavik_ops/` becomes the sole agent-system tooling surface; `scripts/` reserved for project-wide use only; CHANGELOG.md safe against markdown injection.
+ 
+ ---
+ 
+-### Phase 1: MVP — UI + backend core
+-> **Goal:** Ship the 11-screen MVP per `docs/design/SCREENS.md` — profile system, resume/cover letter generation, application tracking, outreach.
+-> **Status:** ✅ Complete (2026-05-03)
+-> **Started:** 2026-04-30 · **Shipped:** 2026-05-03
+->
+-> **Prerequisite ✅ done:** all 11 MVP screen mockups committed (Wave 0 + the Claude Design batch). Bundle JSX at `docs/design/mockups/naavik-handoff/project/screens/` (gitignored, locally only).
+->
+-> **Implementation contracts** (graduated 2026-04-30 from plans 03–07):
+-> - `docs/design/COMPONENTS.md` — 85-component library
+-> - `docs/design/BACKEND.md` — routes + services + cron + scrapers + LLM + observability
+-> - `docs/design/DATA_MODEL.md` — 18 SQLModel entities + Settings + DRAFT cascade
+-> - `docs/design/INTERACTIONS.md` — cross-cutting HTMX patterns
+-> - `docs/design/SAMPLE_DATA.md` — Phase 1 hardcoded fixtures
+->
+-> **Workflow:** every wave below is driven by a plan + kickoff prompt at `docs/plans/NN-name.md` + `docs/prompts/NN-name.md`. Implementation happens in fresh sessions kicked off by paste of the prompts. See `AGENTS.md` § Workflow for the canonical lifecycle.
++### 0.2.0 — Job Scraping & Discovery (legacy Phase 2)
++> **Goal:** Automated multi-source job discovery with AI extraction; vault deprecation + CLI sunset.
++> **Status:** 🟡 Queued (post-0.1.0 tag cut).
++> **Plan:** `docs/plans/11-phase-2-scrapers.md` (to be authored after Phase 1 ships). Splits cleanly into 11a (LinkedIn + Greenhouse + Lever + Ashby) and 11b (Workday + Indeed + Generic + n8n migration).
++> **Implementation contract:** `docs/design/BACKEND.md` § J (scraping architecture), § I (cron catalog), § K (auto-apply pipeline). Wave 6 services + Phase 2 sub-prompts of plan 10.
++> **Estimated effort:** 2–3 weeks.
+ 
+-#### Implementation waves
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.2.0.01 | **Vault deprecation → env-only secrets.** Delete `src/services/vault.py` (AES-256-GCM + PBKDF2 + lockfile + audit log) and the encrypted vault entirely. Switch to standard self-hosted-app pattern: secrets via env vars sourced from a gitignored `.env` (loaded by `nix develop:shellHook`, `flake.nix:devEnv`, and Docker Compose `env_file:`). Ship `.env.example` with all secret slots commented. **DB migration:** alembic 0003 drops `Settings.*_configured` booleans + `Settings.*_fingerprint` columns; secret presence becomes runtime-derived from env. **API surface:** `PUT /api/v1/settings/llm` becomes read-only — exposes "Anthropic configured via env: ✓ / ✗" without an input field. **UI:** drop the API-key input from `_settings_llm.html`; drop the vault-locked banner from `_settings_deployment.html`. **Files removed:** `src/services/vault.py`, `src/cli/vault.py`, `src/cli/init.py`, `tests/test_vault.py`, vault sections of `tests/test_cli.py`. **Operational surface gone:** `~/.naavik/secrets.enc{,.lock,.bak.*}`, `~/.naavik/key.bin`, `~/.naavik/logs/vault-audit.log`. **UX regression to flag in changelog:** rotating an LLM API key is now "edit `.env` + restart". | [ ] | HIGH | 2.12 | Sequence BEFORE 0.2.0.02 — most of the CLI's reason-to-exist is the vault. ~2–3 days. Touches ~15 files; mostly deletions. **HIGH because every downstream Settings/env work depends on it.** |
++| 0.2.0.02 | **CLI sunset** — depends on `0.2.0.01`. After vault deprecation ships, the only `naavik` subcommand left is `serve`; `init` / `vault status` / `vault rotate-key` are gone with the vault. Final cleanup: delete `src/cli/`, drop `[project.scripts] naavik = "cli.main:main"` from `pyproject.toml`, collapse the server entrypoint to `python -m main` or the Nix flake's `apps.default` output. Keep `naavik-alembic` (alembic's own CLI surface, not a Naavik feature). | [ ] | — | 2.11 | < 1 day after 0.2.0.01. Independent of scrapers (`0.2.0.06`–`0.2.0.14`). **Policy in AGENTS.md § Key Conventions § CLI:** do NOT extend the CLI in interim plans; new operator features ship in the UI. |
++| 0.2.0.03 | Broader `require_password_complete` gate — extend to `src/api/profile.py` + `src/api/settings.py` + `src/ui/routes/*` | [x] | — | PC.6a | **Plan 23 EXECUTED 2026-05-18 via PR #69 — FROZEN done position.** New `require_authed_session` wrapper in `src/services/auth.py:297-371` applied to **41 mutation routes** across `src/api/profile.py` (7) + `src/api/settings.py` (5) + `src/ui/routes/{settings 9, discover 9, outreach 8, tracking 1, email 1, integrations 2}`. 2 onboarding routes skipped. 13 new tests. Hacker APPROVE_WITH_NOTES (1 MEDIUM onboarding bypass → PC.6b → 0.2.0.04). |
++| 0.2.0.04 | Onboarding bypass — `/api/v1/profile/from-extraction` lets flagged user replace real-JWT with fake-session (close hacker MEDIUM from PR #69) | [ ] | — | PC.6b | **Filed 2026-05-18 via PR #69 hacker review** (Issue #70). Fix = add no-existing-user precondition to `post_profile_from_extraction` (`src/ui/routes/auth.py:223`). Also addresses 3 hacker LOW non-blocking notes. ~20-30 min engineer. Must ship before any multi-user expansion. |
++| 0.2.0.05 | SQLModel: Job, StatusHistory models + migration | [ ] | HIGH | 2.6 | **HIGH because every scraper sub-task (`0.2.0.06`–`0.2.0.10`) hard-depends on it.** |
++| 0.2.0.06 | Crawl4AI setup + generic scraper base class | [ ] | — | 2.1 | Replace Browserless |
++| 0.2.0.07 | Site scrapers: LinkedIn (**guest API + Crawl4AI stealth; RSShub opt-in fallback** per `docs/design/research/LINKEDIN_SCRAPING.md` — revisit § 8 Revisit checklist before locking option into plan 11a), Workday, Greenhouse, Lever, Ashby, Indeed | [ ] | — | 2.2 | Port from n8n. LinkedIn cell wording shifted 2026-05-17 from the original "RSS via RSShub + guest API" after the architect option matrix landed; the matrix recommendation supersedes the original framing on plan 11a authorship. |
++| 0.2.0.08 | AI job extraction: HTML → JobInfo (company, position, location, visa, salary, skills) | [ ] | — | 2.3 | Structured output |
++| 0.2.0.09 | Job deduplication (URL-based + fuzzy title/company) | [ ] | — | 2.4 | |
++| 0.2.0.10 | APScheduler: periodic scraping per source | [ ] | — | 2.5 | PostgreSQL job store |
++| 0.2.0.11 | HTMX UI: job list with filters, job detail view | [ ] | — | 2.7 | |
++| 0.2.0.12 | Discord + Telegram notifications for new jobs | [ ] | — | 2.8 | Port from n8n |
++| 0.2.0.13 | Rate limiting + anti-detection (random delays, throttling) | [ ] | — | 2.9 | |
++| 0.2.0.14 | Migrate existing n8n DataTable + Google Sheets data to PostgreSQL | [ ] | — | 2.10 | Seed script |
++
++**Deliverable (0.2.0):** Jobs scraped on schedule, AI-extracted, deduplicated, shown in dashboard with notifications. Vault deprecated; secrets via `.env`; CLI removed.
+ 
+-Phase 1 ships in **5 sequential waves** (Scenario A). Each wave passes acceptance criteria before the next starts; they do **not** run in parallel. Plan 08 lays the component library, plan 09 composes pages on top with sample-data accessors + stub endpoints, plan 10 Wave 3 lands the data substrate (DB + auth + LLM) and swaps the stubs for real handlers without UI churn, plan 10 Wave 6 completes services + Typst + DRAFT lifecycle + 3 ATS adapters. Interactions per INTERACTIONS.md fold into Wave 3 (no separate Wave 5).
++---
+ 
+-> **Wave-name cross-walk.** Plan 10's body uses "Wave 3" (initial backend) and "Wave 6" (real backend) — labels inherited from `BACKEND.md`'s 6-wave-across-phases scheme. **ROADMAP** uses sequential implementation-wave numbers inside Phase 1: **Wave 4** = plan 10 § B (Wave 3 in plan body); **Wave 5** = plan 10 § C (Wave 6 in plan body). Both views are documented in `docs/plans/archive/10-backend-impl.md` § "Tracking + wave-name cross-walk". When in doubt, ROADMAP's Wave 4/5 labels are canonical.
++### 0.2.1 — Security cleanup (legacy DEF security rows)
++> **Goal:** Defer-bucket cleanup for security-themed paper cuts from Phase 1 (JWT signing-key rotation, OIDC stub, Argon2id, JWT denylist).
++> **Status:** 🟡 Queued (post-0.2.0; can interleave).
++> **Plan:** Per-row plans authored when scheduled.
+ 
+-| Wave | Scope | Plan | Prompt | Status | Done |
+-|---|---|---|---|---|---|
+-| 0 | Doc realignment | `docs/plans/archive/01-docs-realignment.md` | (executed inline) | ✅ EXECUTED | 2026-04-30 |
+-| 1 | Author 5 design docs (COMPONENTS / BACKEND / DATA_MODEL / INTERACTIONS / SAMPLE_DATA) | plans 03–07 (all GRADUATED + archived) | (no separate prompts — design plans graduate inline) | ✅ COMPLETE | 2026-04-30 |
+-| 2 | Stage 2 component library impl (85 partials + base.html refinements + macros + base.js + fixture page) | `docs/plans/archive/08-stage-2-impl.md` | `docs/prompts/archive/08-stage-2-impl.md` | ✅ EXECUTED | 2026-05-01 |
+-| 3 | Stage 3 page templates impl (11 screens, sample_data accessors, stub fragment + JSON endpoints, Discover keyboard map, Playwright snapshots) — folds in interactions per INTERACTIONS.md § J | `docs/plans/archive/09-stage-3-impl.md` | `docs/prompts/archive/09-stage-3-impl.md` | ✅ EXECUTED | 2026-05-02 |
+-| 3a | Stage 3 bugfix + Discover-redesign triage (Lucide diagnostics, sidebar mobile drawer, typed application questions, scroll-spy, native dialog backdrop, mobile pages, touch swipe, button rename, sidebar relabel "Jobs"→"Discover", in-place card expansion) | `docs/plans/archive/09a-stage-3-bugfix.md` | (executed inline; no kickoff prompt — direct user approval) | ✅ EXECUTED | 2026-05-02 |
+-| 4 | Backend Wave 3 — models + auth + LLM abstraction + vault + initial services + db/seed; **swaps plan 09 stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged) | `docs/plans/archive/10-backend-impl.md` § B | `docs/prompts/archive/10-backend-impl.md` (Wave 3 part) | ✅ EXECUTED | 2026-05-02 |
+-| 5 | Backend Wave 6 — all 14 services + Typst document generator + DRAFT lifecycle + Greenhouse / Lever / Ashby ATS adapters + portfolio_sync + auto-apply cron + notifications | `docs/plans/archive/10-backend-impl.md` § C | `docs/prompts/archive/10-backend-impl.md` (Wave 6 part) | ✅ EXECUTED | 2026-05-03 |
+-
+-After Wave 5 ships, **Phase 2–6 work** (scrapers, scoring, email + auto-classification, LinkedIn DMs + outreach, observability + light mode + LaTeX) graduates to plans 11+ as outlined in plan 10 § D.
+-
+-#### Wave 1 completion log (2026-04-30)
+-
+-| Plan | → Design doc | Lines | Notable |
+-|---|---|---|---|
+-| 03 — Component catalog | `docs/design/COMPONENTS.md` | 2111 | 85 components, 12 groups; full specs incl. Tier-1 additions (`bullet_textarea`, `confirm_modal`, `spinner`, `toast`, `empty_state`, `avatar`, `connection_status_card`, `deployment_badge`, 5 skeletons) |
+-| 04 — Backend architecture | `docs/design/BACKEND.md` | ~870 | HTTP routes + 14 services + 7 ATS adapters + cron + scrapers + LLM abstraction + vault boundary + observability |
+-| 05 — Data model | `docs/design/DATA_MODEL.md` | ~1100 | 18 entities + Settings; DRAFT cascade through enum / state machines / KPIs; AppEvent payload schemas |
+-| 06 — Interactions spec | `docs/design/INTERACTIONS.md` | ~620 | HTMX patterns: 6 form patterns, SSE, drag-drop, modals (E.4 confirm modal), keyboard shortcuts, optimistic UI rollback |
+-| 07 — Sample data | `docs/design/SAMPLE_DATA.md` | ~600 | Phase 1 fixtures (1 Profile, 4 Experiences, 14 Bullets, ~20 Jobs, 14 Applications incl. 2 DRAFT, ~20 Contacts, ~40 OutreachMessages, ~20 EmailThreads, ~150 AppEvents, ~30 GeneratedDocuments, ~20 ApplicationScreenerAnswers, 1 Settings) |
+-
+-DESIGN.md bumped to v1.3 (DRAFT row added to Status Pipeline). SCREENS.md DRAFT visibility rule added.
+-
+-#### Wave 2 — Stage 2 component library (plan 08) — ✅ EXECUTED 2026-05-01
+-
+-> Build batches per `docs/design/COMPONENTS.md` § G. Acceptance: 85 component partials exist; every component renders in `/_design/components`; `uv run ruff check` passes; Lucide icons render after fragment swaps. **All 100 tests pass.**
+-
+-| # | Build batch | Components | Status |
+-|---|---|---|---|
+-| 2.1 | Shell + base.html refinements | `auth_shell`, `sidebar`, `version_pill`, `api_status_dot`, `deployment_badge`; `base.html` layout + `base.js` (Lucide reinit, Sortable.js auto-init, modal-close listener, toast auto-dismiss, optimistic rollback, upload progress) | [x] |
+-| 2.2 | Atomics (15) | `button`, `input`, `card`, `tag_chip`, `status_dot`, `status_badge`, `score_circle`, `ai_badge`, `kbd`, `field_label`, `info_card`, `spinner`, `toast`, `empty_state`, `avatar` | [x] |
+-| 2.3 | Forms (5) | `editor_field`, `editor_card`, `autosave_indicator`, `modal`, `confirm_modal` | [x] |
+-| 2.4 | Onboarding (5) | `step_indicator`, `dropzone`, `extraction_checklist`, `extracted_field_row`, `progress_bar` | [x] |
+-| 2.5 | Profile / Bullet (11) | `profile_hero`, `contact_chip`, `experience_card`, `bullet_row`, `section_anchor_nav`, `application_readiness_card`, `application_qs_form`, `bullet_edit_row`, `tag_picker`, `selection_override`, `bullet_textarea` | [x] |
+-| 2.6 | Overview (4) | `kpi_card`, `priority_action_row`, `email_signal_row`, `pipeline_strip` | [x] |
+-| 2.7 | Discover (8) | `swipe_card`, `match_breakdown`, `discover_action_bar`, `swipe_action_btn`, `discover_stats_strip`, `up_next_card`, `tip_card`, `keyboard_hints` | [x] |
+-| 2.8 | Discover · review & apply (6) | `apply_topbar`, `warm_intro_card`, `tailored_bullet_row`, `cover_letter_section`, `screener_question_card`, `apply_action_bar` | [x] |
+-| 2.9 | Tracking (8) | `view_toggle`, `provider_chip`, `integration_card`, `followup_banner`, `stage_column`, `tracking_card`, `tracking_list_row`, `tracking_board` | [x] |
+-| 2.10 | Outreach (6) | `outreach_app_row`, `recommended_move_card`, `outreach_message_card`, `contact_card`, `linkedin_status_chip`, `outreach_timeline` | [x] |
+-| 2.11 | Settings (7) | `settings_tabs`, `provider_card`, `cost_card`, `deployment_status_card`, `log_tail`, `on_disk_card`, `connection_status_card` | [x] |
+-| 2.12 | Skeletons (5) | `swipe_card_skeleton`, `tracking_card_skeleton`, `priority_action_row_skeleton`, `email_signal_row_skeleton`, `bullet_edit_row_skeleton` | [x] |
+-| 2.13 | `/_design/components` fixture page (gated on `NAAVIK_DEBUG=1` env var; plan 10 Wave 3 swap to `Settings.debug`) | — | [x] |
+-
+-#### Wave 3 — Stage 3 page templates (plan 09)
+-
+-> Page handlers in `src/ui/routes/` returning `HTMLResponse`; pages compose only plan-08 partials; data backed by `src/db/sample_data.py` (per SAMPLE_DATA.md); accessors are **async from day one** so Wave 4's swap is body-only. Stub fragment + JSON endpoints match BACKEND.md § C / § D shape exactly. Per-screen interaction patterns from INTERACTIONS.md § J fire end-to-end. Acceptance: every screen renders without error; matches mockup at desktop (1440×900) + mobile (375×812) via Playwright; SCREENS.md per-screen `Impl:` checkbox flips to `[x]`.
+-
+-Build order: simplest first.
+-
+-| # | Screen / artifact | Mockup ref | Page handler | Status |
+-|---|---|---|---|---|
+-| 3.0 | `src/db/sample_data.py` + `sample_data_models.py` (frozen Pydantic per SAMPLE_DATA.md) | — | — | [x] 19 entities + Settings + 30 ApiUsage; 44 round-trip + realism tests |
+-| 3.1 | Login | `screens/Login.jsx` | `src/ui/routes/auth.py:get_login` | [x] auth_shell + form, fake-session-cookie POST /api/v1/auth/login |
+-| 3.2 | Settings (all 6 tabs — full UI scaffolding; Wave 4 wires real persistence) | `screens/Settings.jsx` | `src/ui/routes/settings.py:get_settings` | [x] all 6 tabs (LLM/Deployment/Account/Notif/Auto-Apply/Sources); SSE log tail; cost cards from ApiUsage |
+-| 3.3 | Profile (read-only) | `screens/Profile.jsx` | `src/ui/routes/profile.py:get_profile` | [x] hero + experience + summary + skills + projects + edu + cert + sticky right-rail anchor + readiness card |
+-| 3.4 | Profile editor | `screens/ProfileEdit.jsx` | `src/ui/routes/profile.py:get_edit` | [x] per-field autosave (PUT /profile/{field}); Sortable bullet drag-drop; confirm-modal hooks |
+-| 3.5 | Bullet editor (modal) | `screens/BulletModal.jsx` | `src/ui/routes/fragments.py:bullet_editor_modal` | [x] tag picker + selection_override + Rewrite/Delete; HX-Trigger: closeModal on save |
+-| 3.6 | Onboarding (3-step; SSE done auto-progresses to step 3 via `HX-Trigger`) | `screens/Onboarding.jsx` | `src/ui/routes/auth.py:get_onboarding` | [x] step indicator + dropzone + SSE extraction (5 progress + 6 field + done + stepReady) |
+-| 3.7 | Overview | `screens/Overview.jsx` | `src/ui/routes/overview.py:get_overview` | [x] greeting + KPI×4 + priority actions + email signal + pipeline strip + SSE email-signal stream |
+-| 3.8 | Tracking (board + list) | `src/ui/routes/tracking.py:get_tracking` | [x] board+list views; integrations row; needs-followup banner; Sortable Kanban; DRAFT+CLOSED hidden |
+-| 3.9 | Outreach | `screens/Outreach.jsx` | `src/ui/routes/outreach.py:get_outreach` | [x] 2-pane apps + detail; recommended_move_card; contacts; outreach_timeline |
+-| 3.10 | Discover (incl. `Stuck in queue · {N}` right-rail card via `up_next_card` `state="stuck"`) | `screens/Discover.jsx` | `src/ui/routes/discover.py:get_discover` | [x] swipe queue + 4-button bar + keyboard hints; Up next + Stuck-in-queue + Saved + Tip; +Add by URL modal; keys.js wired |
+-| 3.11 | Discover · review & apply | `screens/DiscoverDetail.jsx` | `src/ui/routes/discover.py:get_review` | [x] 3-column workspace; eager DRAFT auto-create gated on Settings.eager_review_generation; lazy CTA path; failure banner; SSE cover letter; submit/discard with screener gate |
+-| 3.12 | Per-screen interactions per INTERACTIONS.md § J (autosave, drag-drop, modal, SSE, optimistic rollback, keyboard shortcuts) | INTERACTIONS.md § B–H | — | [x] all patterns landed inline with each screen |
+-| 3.13 | Per-screen Playwright snapshot baseline at desktop + mobile | — | `tests/visual/capture.py` | [~] capture script ships; PNG generation pending nix-devshell run (NixOS Chromium needs playwright-driver browsers) |
+-
+-#### Wave 4 — Backend Wave 3 (plan 10 § B) — ✅ EXECUTED 2026-05-02
+-
+-> Initial backend lands the data substrate; **swaps plan 09's stub endpoints + sample-data accessor bodies for DB-backed handlers** (UI unchanged). Acceptance: `uv run alembic upgrade head` succeeds, `db/seed.py` populates from sample data, `tests/test_sample_data.py` round-trip via SQLModel passes, auth path passes `security-review`, vault boundary verified. **All 348 memory-mode tests + live-DB seed/persistence-swap tests pass.**
+-
+-| # | Task | Source contract | Status |
+-|---|---|---|---|
+-| 4.1 | SQLModel models for all 19 entities + Settings (incl. `ApiUsage`) | DATA_MODEL.md § C | [x] 20 tables + Pydantic shadows; relationships stripped (services use FK joins); 25 model tests |
+-| 4.2 | Alembic initial migration (every table + enum + index + CHECK; pgvector extension enabled) | DATA_MODEL.md § H | [x] `0001_initial.py` drives DDL from `SQLModel.metadata`; `alembic upgrade head` clean against dev DB |
+-| 4.3 | Auth — JWT cookie + bcrypt; `/api/v1/auth/login`, `/logout`, `/me`, `/csrf`; brute-force rate limit | BACKEND.md § D.1 | [x] cost=12 prod / cost=4 tests; HS256 JWT; cookie HttpOnly+Secure+SameSite=Strict; CSRF double-submit; 5/15min rate limit; 18 auth tests |
+-| 4.4 | LLM provider abstraction — `llm/base.py` + anthropic + openai + ollama; structured-output retry policy | BACKEND.md § M.1, M.2 | [x] Anthropic tool-use / OpenAI json_schema / Ollama JSON mode; 10 prompt skeletons (score_job real); 15 tests |
+-| 4.5 | LLM cost tracking — `llm_tracker` service + `ApiUsage` table (powers Settings cost cards from day one) | BACKEND.md § M.4 + DATA_MODEL.md § C `ApiUsage` | [x] `tracked_call` wraps every provider call; persists ApiUsage row on success+failure; retries per BACKEND § M.5 |
+-| 4.6 | Vault service — `services/vault.py` (`~/.naavik/secrets.enc`, AES-256-GCM, PBKDF2 from `SECRET_KEY`) + audit log | BACKEND.md § H.1, § L.1 | [x] AES-256-GCM + PBKDF2 100k + key_fingerprint header for mismatch detection; sibling lockfile for concurrent writes; audit log never carries values; 22 tests |
+-| 4.7 | Vault key rotation CLI — `naavik vault rotate-key --old=... --new=...` re-decrypts + re-encrypts | plan 10 § B.5 | [x] `cli/vault.py` rotate-key with `.bak` backup + `--no-backup` flag; round-trip verified end-to-end |
+-| 4.8 | Settings · Deployment UI: warning when `SECRET_KEY` env mismatches the vault's encryption key fingerprint | plan 10 § B.5 | [x] `vault.is_locked()` + `services/settings_service.get_deployment_info()` expose mismatch state; UI banner wiring lands when settings tab consumes the new endpoint |
+-| 4.9 | `ats_credentials` service — DB row metadata + vault-backed credential resolution | BACKEND.md § H.1, § K.5 | [x] DB metadata + vault.get(scope=ats, key=board) resolution |
+-| 4.10 | Profile service partial (CRUD + per-field PUT) | BACKEND.md § H.1 | [x] get/update_field/update_application_questions/add/update/delete/reorder bullets; emits profile_updated AppEvent |
+-| 4.11 | Settings persistence (incl. `eager_review_generation` flag for cost-aware DRAFT generation) | BACKEND.md § D.7 + DATA_MODEL.md § L | [x] DB-backed CRUD per tab; PUT /api/v1/settings/llm flows API key through vault; settings_service.get_deployment_info exposes vault status |
+-| 4.12 | `db/seed.py` consuming `db/sample_data.py` (idempotent ON CONFLICT DO NOTHING) | SAMPLE_DATA.md § A | [x] 372 rows seeded across 20 entities; ON CONFLICT DO NOTHING; bumps every PK sequence after seed; CLI `uv run python -m db.seed` |
+-| 4.13 | `/_design/components` swap from `NAAVIK_DEBUG` env var → persisted `Settings.debug` | plan 08 § H + plan 10 § B.8 | [x] route consults DB-backed Settings.debug; legacy env var still works as test fallback |
+-| 4.14 | Page-handler accessor body swap — sample-data lists → DB queries (signatures already async from Wave 3) | plan 10 § B.10 | [x] partial: 12 high-traffic accessors (Profile/User/Settings/Experience/Bullet/Skill/Education/Project/Cert/Job/Application/discover_queue/applications_visible_in_tracking) gated on `NAAVIK_PERSISTENCE=db`; remaining accessors fall back to memory in DB env (Wave 6 closes the gap) |
+-| 4.15 | Tests — `test_models`, `test_seed`, `test_auth`, `test_llm_provider`, `test_vault` | — | [x] 348 memory-mode tests + 6 live-DB seed tests + persistence-swap test pass; 14 skipped (live-DB gated via `NAAVIK_LIVE_DB=1`) |
+-
+-#### Wave 5 — Backend Wave 6 (plan 10 § C)
+-
+-> Real services, document generation, full DRAFT lifecycle, ATS adapters for boards with public APIs, auto-apply cron, notifications, portfolio sync. Acceptance: all 14 services pass tests; `document_generator` produces real PDFs end-to-end; DRAFT submit / discard / auto-apply queue works; `security-review` on doc-gen + portfolio API + vault audit clean.
+-
+-| # | Service / artifact | Source contract | Status |
+-|---|---|---|---|
+-| 5.1 | `auth` service complete (refresh-token rotation; OIDC scaffolding stub) | BACKEND.md § H.1 | [x] Auth shipped in Wave 3; refresh-token rotation + OIDC scaffolding deferred to Phase 1.x backlog |
+-| 5.2 | `profile_service` (full CRUD + bullet ops + tag inference) | BACKEND.md § H.1 | [x] Wave 3 ships full CRUD + bullet ops; AI tag inference exposed via `extraction.py` (Wave 6) |
+-| 5.3 | `extraction` (PDF → AI → Profile + SSE event emission) | BACKEND.md § H.1 | [x] `services/extraction.py` — PDF parse via pypdf + LLM `extract_resume` + SSE generator |
+-| 5.4 | `document_generator` (bullet selection + AI trim + Typst compile + native page-count validation; `answer_screeners` auto + drafted; **`pre_generate` no-op when `docs_state=READY` and no `Bullet.edited_at > GeneratedDocument.compiled_at` — DRAFT reuse heuristic**) | BACKEND.md § K.4 | [x] All four entry points + reuse heuristic + cost cap + 16 unit tests |
+-| 5.5 | `application_service` (DRAFT lifecycle, submit/discard, ATS dispatch, `validate_submittable`, `process_auto_apply_queue`); orthogonal-state derivation lives here (`Job.queue_state=APPLIED` flip-on-submit; `outreach_engagement` computed) | BACKEND.md § K + DATA_MODEL.md § E, § F | [x] Full DRAFT lifecycle + computed-state ownership + 25 unit tests |
+-| 5.6 | `scorer` Wave-6 visa filter (deterministic: `Profile.visa_sponsorship_needed × Job.visa_restrictions` zero-out; no LLM dep) | BACKEND.md § H.1 | [x] `services/scorer.apply_visa_filter` + 9 unit tests |
+-| 5.7 | `prompts/score_job` skeleton in Wave 4; full tag-matching + gap analysis lives in plan 12 (Phase 3) | BACKEND.md § M.3 | [x] Naive LLM call shipped in Wave 3 — Phase 3 plan 12 layers in tag matching |
+-| 5.8 | `notifications` (Discord webhook + Telegram outbound + in-app toast routing; per-event toggle) | BACKEND.md § L.3, L.4 | [x] `services/notifications.py` — Discord embed + Telegram + toast queue + 15 tests |
+-| 5.9 | `portfolio_sync` (public CV API filtered for EEO/visa/salary; **portfolio resume PDF regen on Profile-update debounced 60s, cached at `~/.naavik/data/documents/portfolio/resume.pdf`**; Netlify webhook) | BACKEND.md § L (Portfolio) | [x] Allowlist-based filter + post-condition assert + debounced regen + 15 tests |
+-| 5.10 | Typst templates (`onepage.typ`, `cover_letter.typ`) | BACKEND.md § K.4 | [x] NEU-style 1-page resume + 4-section letter; both with `<naavik-meta>` page-count label |
+-| 5.11 | Typst compiler + native page-count validator (`typst compile --emit metadata`; **no `pdfinfo`/poppler dep**) | plan 10 § C.2.1 | [x] `typst/compiler.py` uses `typst query <input.typ> "<naavik-meta>"` (the spec'd `--emit metadata` flag doesn't exist in 0.14; same effect, different mechanism — see plan 10 deviations). 7 real-Typst tests pass |
+-| 5.12 | ATS adapters — Greenhouse + Lever + Ashby (Workday / LinkedIn / Indeed / Generic deferred to Phase 1.x sub-prompt) | BACKEND.md § K.5 | [x] All 3 adapters with public APIs + factory + 18 mock-HTTP tests; Workday/LinkedIn/Indeed/Generic return auth_required stub |
+-| 5.13 | Cron registration: `applications.auto_apply` (5min), `admin.aggregate_costs`, `admin.cleanup_stale_docs`, `admin.daily_db_snapshot`, `admin.refresh_oauth_tokens` | BACKEND.md § I.1 | [x] All 5 jobs registered via `scheduler/jobs.py`; APScheduler with PostgresJobStore lifespan-managed |
+-| 5.14 | Stuck-queue surface wiring — failed-DRAFT detection populates Discover right rail (`up_next_card` `state="stuck"`) | plan 10 § C.3 + COMPONENTS.md `up_next_card` | [x] `application_service.stuck_drafts` + `/api/v1/applications/stuck` endpoint; UI wired via existing `discover_ctx` |
+-| 5.15 | Tests — `test_application_service`, `test_document_generator`, `test_typst`, `test_ats_adapters`, `test_notifications`, `test_portfolio_sync` | — | [x] 101 new tests; full suite 448 passed / 19 skipped (3 retired Wave-3 stubs + 14 prior live-DB gating) |
+-
+-#### Phase 1 deferred items (Phase 1.x)
+-
+-Items called out in design docs as "Phase 1.x optional / Phase 2+". This is a quick reference; **the canonical extended backlog lives at `docs/plans/POST_PHASE_1.md` § Tier 3** (suggested plan numbers, effort sizing, slot-in suggestions).
+-
+-| Item | Source | Notes |
+-|---|---|---|
+-| Workday / LinkedIn / Indeed / Generic ATS adapters | plan 10 § C.4 | Need credentials + Playwright + manual review queue. Greenhouse / Lever / Ashby ship in Wave 5 |
+-| Stale-DRAFT cleanup cron (`admin.cleanup_stale_drafts`) | this triage 2026-05-01 | Auto-discard or auto-archive DRAFTs idle >30 days; otherwise queue accumulates |
+-| Postmortem-on-failure: Playwright screenshot + AI summary on ATS failure | this triage 2026-05-01 | Surfaces in stuck-queue card; helps diagnose recurring CAPTCHA / field_mismatch |
+-| Manual job entry modal (full) | SCREENS.md § Phase mapping > Deferred | `+ Add by URL` is the partial Phase 1 path |
+-| Application detail slide-over | SCREENS.md § Phase mapping > Deferred | Phase 2 introduces `/tracking/:id` route |
+-| OIDC for self-hosted (Authentik / Keycloak / Okta) | SCREENS.md § Phase mapping > Deferred | Phase 2+ |
+-| Onboarding offline retry buffer for autosave | INTERACTIONS.md § H.3 | Optional, not blocking MVP |
+-| `Show drafts` filter UI on Tracking | SCREENS.md § Tracking visibility rule | Endpoint stubbed in Wave 3; UI toggle Phase 1.x |
+-| `ProfileAnswer` reuse cache (screener answer memory) | DATA_MODEL.md § J | Phase 2+ entity |
+-| Auto-apply immediate dispatch on right-swipe (vs current 5-min cron) | this triage 2026-05-01 | Refinement; user expectation may grow once auto-apply ships |
+-| `Settings.scraper_aggressiveness` (rate-limit dial) | this triage 2026-05-01 | Phase 2+; default conservative |
+-| Portfolio API versioning (`/api/portfolio/cv?version=v1`) | this triage 2026-05-01 | Lets crypticsoul.dev pin its consumer; Phase 2+ |
+-| JWT signing-key rotation (multi-tenant cloud tier) | plan 10 Q7 | Phase 2+; single-key fine for self-hosted |
+-| JWT denylist on password rotation | PR #50 hacker Finding 3 (2026-05-17) | After successful `POST /api/v1/auth/change-password`, the OLD JWT remains valid for its natural TTL (24h default / 30d keep-signed-in). A stolen pre-rotation JWT survives the rotation. Defense-in-depth fix: maintain a server-side denylist of invalidated `jti`s (or rotate the signing-key prefix per user). Refresh-token rotation (sibling row above) covers part of this — but specifically the denylist for password-change events is its own row because it's narrower scope and easier to ship standalone. Lives in `services/auth.py` + a small DB table. Phase 1.x. |
+-| `JobEmbedding` semantic match (pgvector) | DATA_MODEL.md § H | Phase 6 |
+-| LinkedIn proxy support | BACKEND.md § J.4 | Phase 6+ |
+-| Submission-result observability dashboard (failure-kind aggregates) | this triage 2026-05-01 | Phase 6 — helps user spot recurring board-side failures |
+-| Argon2id vault upgrade (vs PBKDF2) | plan 10 Q6 | Phase 6 polish if security review flags |
+-| Light mode | DESIGN.md | Phase 6 |
+-| **Restore Lucide via CDN** | plan 09a follow-up 2026-05-02 | Self-hosted at `/static/lucide.min.js` for now to fix "no icons render" issue. Production should serve from a CDN — investigate why unpkg failed (content-blocker / CSP / rate-limit), pick a stable URL or fallback chain, drop the local file. |
+-| **Sidebar mobile-toggle reliability after navigation** | plan 09a follow-up 2026-05-02 | Idempotent script guards fixed the most common failure mode; user reports it's "still kind of wonky" after navigating away. Repro on real device, isolate the remaining timing issue (likely Tailwind JIT vs HTMX swap order). Not a blocker. |
+-| **Discover card max-w cap on ultra-wide screens** | plan 09a follow-up 2026-05-02 | 09a-follow-up dropped the `max-w-7xl` page cap on Discover so the card fills available space. On 4K+ monitors the card may stretch >1500px and feel sparse — add a `2xl:max-w-[1400px]` cap if user feedback comes in. |
+-| `Settings.daily_llm_cost_cap_usd` dashboard widget | POST_PHASE_1 § Tier 3 (consolidated 2026-05-02) | Wave 6 ships the enforcement; visible cap-progress UI is a Settings polish item. |
+-| Full `NAAVIK_PERSISTENCE` env-var removal — migrate remaining ~20 lower-traffic accessors + page handlers to service-layer DB reads | this triage 2026-05-03 (post-Wave-5) | Wave 4 partial-swap + Wave 5 partial-swap left ~20 accessors falling back to memory. Plan 10b sets `NAAVIK_PERSISTENCE=db` as orchestrator default, but the env var still gates the swap. Cleanup deserves its own plan once Phase 1 is fully verified — likely as a tiny tail-end paper cut once POST_PHASE_1 testing confirms which accessors actually matter. |
+-| Pre-existing ruff errors in `migrations/` + `scripts/roadmap_parser.py` (UP007 / UP035 / I001) | PR #53 devops review 2026-05-17 (Issue #55, DEF-24) | 10 ruff violations confirmed pre-existing via stash technique during A.15 PR review. Files: `migrations/versions/0001_initial.py` (4), `migrations/versions/0002_settings_multi_users.py` (4), `scripts/roadmap_parser.py` (2). All fixable via `ruff check --fix`. ~30 min. Surfaced by devops while gating A.15 PR #53; not introduced by A.15. |
+-| DB-test gating gap — 11 test files lack `_skip_if_no_db()` (asyncpg `InvalidPasswordError` on `localhost:5432`) | PR #53 devops review 2026-05-17 (Issue #56, DEF-25) | 65 pytest failures across 11 test files confirmed pre-existing via stash: `test_application_qs_form`, `test_discover_redesign`, `test_settings_llm_form`, `test_stub_endpoints`, `test_swipe_handler`, `test_draft_lifecycle`, `test_inplace_expand`, `test_mobile_layouts`, `test_mobile_sidebar`, `test_pages`, `test_persistence_swap`, `test_sample_data`, `test_scroll_spy`. Canonical pattern at `tests/test_settings_llm_form.py:17-25` (`_skip_if_no_db()` helper). PR body cited "1 pre-existing failure" via `pytest -x` halt-first; actual is 65 — scope correction filed here. ~1h to propagate the helper to the remaining 11 files. |
+-
+-#### Pre-Phase-2 paper cuts (immediate; ship before plan 11)
+-
+-These are dev-experience fixes carried over from Wave 2/3 + Wave 5. Ship as small focused plans or fold inline into the start of plan 11. Each is < 1 day of work.
+-
+-| # | Item | Status | Notes |
+-|---|---|---|---|
+-| PC.1 | Process-compose: confirm app logs + cold-start reliability | [x] | **Plan 10a (2026-05-02 + 2026-05-03 orphan-fix):** Root cause turned out to be H4 (TTY/SIGTTIN), not the suspected H2 (alembic async wedge). fastapi-cli's worker opens `/dev/tty` via `watchfiles/run.py:411 set_tty()`, gets SIGTTIN'd in a process-compose-spawned background process group, never binds `:8000`. **Load-bearing fix:** `exec setsid -w uv run --no-sync ... < /dev/null` on migrate + app + `coreutils` in devTools — setsid creates a sessionless detached child where `/dev/tty` open returns ENXIO and watchfiles falls back gracefully. **Orphan-cleanup fix (2026-05-03):** `setsid -w` doesn't forward signals; `shutdown.command` pkills the detached session by tight cmdline patterns (`fastapi dev src/main.py`, `naavik/.venv/bin/python -s -c`, `naavik/.venv/bin/alembic`) so Ctrl-C tears everything down cleanly. Sync `migrations/env.py` (psycopg) + `--no-sync` + `unset PYTHONPATH` still landed as defense-in-depth. Verified via real interactive `nix run .#dev`. Full writeup in archived plan. |
+-| PC.2 | `uv run fastapi dev` (no path) should just work | [x] | **Plan 10a (2026-05-02):** 2-line `app.py` shim at repo root re-exports `src.main:app`. README "Manual local development setup" step 2 trimmed to `uv run fastapi dev`. `pyproject.toml` `[tool.setuptools] py-modules` extended with `"app"` so `pip install .` ships the shim. |
+-| PC.3 | Playwright local capture on NixOS | [x] | **Plan 10a (2026-05-02):** dev shell adds `nodejs_22` + `PLAYWRIGHT_NODEJS_PATH` env var so pip-installed playwright python uses Nix-built node (the bundled prebuilt fails NixOS' non-FHS layout). Playwright pinned to `>=1.58.0,<1.59` to match `pkgs.playwright-driver.browsers`'s chromium-1208. `tests/visual/capture.py --baseline` captures 20 desktop PNGs to `tests/visual/baseline/` (committed); `tests/visual/screenshots/` gitignored for ad-hoc work. WORKFLOW.md § Capturing a new visual baseline documents the recipe. |
+-| PC.4 | Phase-1 finalization — orchestrator greenlet/libstdc++ + NAAVIK_PERSISTENCE=db default + working dev credential + signup endpoint + `naavik` CLI subcommands (init / vault rotate-key / vault status) + Settings · LLM Provider form-wiring + Settings · Deployment vault-locked banner + README rewrite + ROADMAP wave-numbering cleanup | [x] | **Plan 10b EXECUTED 2026-05-03** (`docs/plans/archive/10b-phase-1-finalization.md` + `docs/prompts/archive/10b-phase-1-finalization.md`). 9 paper cuts shipped: `flake.nix` exports `LD_LIBRARY_PATH` + `NAAVIK_PERSISTENCE=db`; `db/seed.py` injects real bcrypt hash via `NAAVIK_DEV_PASSWORD` env or random; `POST /api/v1/auth/signup` w/ single-user gate via new `Settings.allow_multiple_users` (Alembic 0002); `naavik` CLI dispatcher (serve / init / vault status / vault rotate-key); Settings · LLM Provider form-wrap + 2 fragment endpoints; Settings · Deployment vault-locked banner; README first-time-setup + signup + troubleshooting rewrite; CLAUDE.md "Last updated" wave-cross-walk. 475 tests pass (~12 new); ruff clean. Live smoke: `nix run .#dev` boots clean (greenlet fix verified), seed prints credential message, signup gate returns 403 on seeded DB, login returns 204+JWT, PUT /api/v1/settings/llm via form persists Anthropic↔Ollama swap, `naavik vault status` + `rotate-key` round-trip + locked-state detection all green. Deviations documented in archived plan; key items: shorter migration revision id (alembic varchar(32)), scalar select for `Settings.allow_multiple_users` to dodge live-worker ORM-mapping quirk, sqlmodel.select replacing sqlalchemy.select in auth path. |
+-| PC.5 | `SECRET_KEY` boot-time enforcement — refuse to start when value is `change-me-in-production` or <32 bytes outside DEBUG | [x] | **Plan 17 EXECUTED 2026-05-16** (PR #49 squash `ceca24b`; archived `docs/plans/archive/17-pc5-secret-key-enforcement.md`). `Settings._enforce_secret_key` validator at `src/config.py:45-66` refuses module import when `SECRET_KEY` is the shipped default or <32 bytes unless `NAAVIK_DEBUG=1`. Folded 3 hacker findings into the same PR: (1) `Settings.debug` alias narrowed to `NAAVIK_DEBUG` only (dropped generic `DEBUG` foot-gun); (2) `docker-compose.yml` requires `SECRET_KEY` at compose-render time via `${VAR:?...}`; (3) `populate_by_name=True` attempted + reverted (pydantic-settings v2.13 conflict with finding 1). |
+-| PC.6 | Password complexity rules (min 12 chars, must contain digit + letter) + must-change-on-first-login flag for env-injected dev creds | [x] | **Plan 18 EXECUTED 2026-05-17** (PR #50 squash `7c7e12a`; archived `docs/plans/archive/18-pc6-password-complexity.md`). Shipped: `validate_password_complexity` helper + `User.must_change_password` column (alembic `0003_user_must_change_password`) + `require_password_complete` dep + `POST /api/v1/auth/change-password` REST + `GET /auth/change-password` page reusing plan-10c auth shell + rotation-unlinks-`~/.naavik/dev-credentials` (Q2 inline cleanup) + cookie/CSRF rotation on success. 11 new tests; 494 total pass / 25 skip. Required a path-C re-loop after hacker REQUEST_CHANGES on initial review: `baad10c` (first commit, all 5 Q1–Q5 architect decisions verbatim) + `78c6d20` (path-C: gated `src/ui/routes/settings.py:411` stub with `Depends(require_password_complete)` + added `Depends(require_csrf)` to `post_change_password` + AGENT_OPS § 2.8 hook-regex case-sensitivity note + 6-bullet deviations section). PC.6a filed for broader `require_password_complete` gate to `api/profile` + `api/settings` (below). JWT denylist row filed in Phase 1.x deferred items. |
+-| PC.7 | First-time setup ergonomics — `nix develop` `NAAVIK_PERSISTENCE=db` parity + login signup-link promotion + signup-disabled banner (server-gated on `users_exist AND not Settings.allow_multiple_users`) + persisted `~/.naavik/dev-credentials` (mode 0600, debug + SELF_HOSTED gated) + lifespan credential echo so the dev credential is the last visible line on `nix run .#dev` startup OR retrievable via plain `cat` | [x] | **Plan 10c EXECUTED 2026-05-12** (`docs/plans/archive/10c-first-time-setup.md` + `docs/prompts/archive/10c-first-time-setup.md`). Three sub-items shipped: (10c.1) `nix/devshell.nix:shellHook` exports `NAAVIK_PERSISTENCE=db`; (10c.2) `src/ui/templates/pages/login.html` promotes the "Create account" CTA out of the footer to a prominent below-submit affordance + renders an amber `lock` banner when `signup_disabled=True` (server-side gate in `src/ui/routes/auth.py:_compute_signup_disabled` mirrors `POST /api/v1/auth/signup`'s 403 condition); (10c.3) `src/db/seed.py` writes `~/.naavik/dev-credentials` (mode 0600) when `app_settings.debug + dev_password_source == "generated" + Settings.deployment_mode == SELF_HOSTED`, and `src/main.py` lifespan spawns a fire-and-forget task that echoes the file ~750 ms after startup via stdlib `logging`. **No new CLI subcommand** (per CLI sunset policy in AGENTS.md § Key Conventions § CLI). 478 tests pass (3 new pages tests + 2 new live-DB seed tests vs the 475 baseline). New config field `Settings.debug` on `src/config.py` (reads `NAAVIK_DEBUG` / `DEBUG` via pydantic-settings alias); `flake.nix:devEnv` exports `NAAVIK_DEBUG=1` so the orchestrator unlocks the file write + lifespan echo. Deviations documented in the archived plan; key items: added the new `Settings.debug` config field (plan referenced `app_settings.debug` without saying to add it), kept `nix/devshell.nix` without `NAAVIK_DEBUG=1` (preserves `test_design_components_route::test_fixture_404_without_debug`), `_compute_signup_disabled` fails-open to form-render on DB errors, updated `tests/visual/baseline/login-desktop.png` in addition to adding `login-signup-banner-desktop.png`. |
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.2.1.01 | JWT signing-key rotation (multi-tenant cloud tier) | [ ] | — | DEF-13 | Phase 2+; single-key fine for self-hosted. From plan 10 Q7. |
++| 0.2.1.02 | OIDC for self-hosted (Authentik / Keycloak / Okta) | [ ] | — | DEF-06 | Phase 2+. From SCREENS.md § Phase mapping > Deferred. |
++| 0.2.1.03 | Argon2id vault upgrade (vs PBKDF2) | [ ] | — | DEF-17 | Phase 6 polish if security review flags. **MOOT post-0.2.0.01** (vault deletion) — retained here for completeness; may close on 0.2.0.01 merge. From plan 10 Q6. |
++| 0.2.1.04 | JWT denylist on password rotation (defense-in-depth for stolen pre-rotation JWTs) | [ ] | — | DEF-26 (was unfiled in Phase 1 deferred items table; gets DEF# here) | After successful `POST /api/v1/auth/change-password`, the OLD JWT remains valid for its natural TTL. A stolen pre-rotation JWT survives the rotation. Defense-in-depth fix: maintain a server-side denylist of invalidated `jti`s (or rotate the signing-key prefix per user). Lives in `services/auth.py` + a small DB table. **Filed 2026-05-17 (PR #50 hacker Finding 3).** Distinct from `0.2.1.01` (signing-key rotation, broader scope). |
+ 
+-**Deliverable (end of Phase 1):** User uploads resume → AI extracts profile → user edits in UI → Discover queue scored + filtered → tailored resume + cover letter generated for any job → submit application via supported ATS → email-signal-driven Tracking → outreach drafts go to LinkedIn / email → portfolio API serves profile + downloadable resume.
++**Deliverable (0.2.1):** Self-hosted OIDC option + post-vault-sunset auth-hardening cleanup.
+ 
+ ---
+ 
+-### Phase 2: Job Scraping & Discovery
+-> **Goal:** Automated multi-source job discovery with AI extraction.
+-> **Plan:** `docs/plans/11-phase-2-scrapers.md` (to be authored after Phase 1 ships). Splits cleanly into 11a (LinkedIn + Greenhouse + Lever + Ashby) and 11b (Workday + Indeed + Generic + n8n migration).
+-> **Implementation contract:** `docs/design/BACKEND.md` § J (scraping architecture), § I (cron catalog), § K (auto-apply pipeline). Wave 6 services + Phase 2 sub-prompts of plan 10.
+-> **Estimated effort:** 2–3 weeks.
++### 0.2.2 — UI cleanup (legacy DEF UI rows)
++> **Goal:** UI polish + light mode + icon/sidebar stability paper cuts from Phase 1.
++> **Status:** 🟡 Queued.
++> **Plan:** Per-row plans authored when scheduled.
+ 
+-| # | Task | Priority | Notes |
+-|---|---|---|---|
+-| 2.1 | Crawl4AI setup + generic scraper base class | CRITICAL | Replace Browserless |
+-| 2.2 | Site scrapers: LinkedIn (**guest API + Crawl4AI stealth; RSShub opt-in fallback** per `docs/design/research/LINKEDIN_SCRAPING.md` — revisit § 8 Revisit checklist before locking option into plan 11a), Workday, Greenhouse, Lever, Ashby, Indeed | CRITICAL | Port from n8n. LinkedIn cell wording shifted 2026-05-17 from the original "RSS via RSShub + guest API" after the architect option matrix landed; the matrix recommendation supersedes the original framing on plan 11a authorship. |
+-| 2.3 | AI job extraction: HTML → JobInfo (company, position, location, visa, salary, skills) | CRITICAL | Structured output |
+-| 2.4 | Job deduplication (URL-based + fuzzy title/company) | HIGH | |
+-| 2.5 | APScheduler: periodic scraping per source | HIGH | PostgreSQL job store |
+-| 2.6 | SQLModel: Job, StatusHistory models + migration | CRITICAL | |
+-| 2.7 | HTMX UI: job list with filters, job detail view | HIGH | |
+-| 2.8 | Discord + Telegram notifications for new jobs | MEDIUM | Port from n8n |
+-| 2.9 | Rate limiting + anti-detection (random delays, throttling) | HIGH | |
+-| 2.10 | Migrate existing n8n DataTable + Google Sheets data to PostgreSQL | MEDIUM | Seed script |
+-| PC.6a | Broader `require_password_complete` gate — extend to `src/api/profile.py` + `src/api/settings.py` + `src/ui/routes/*` | MEDIUM | **Plan 23 EXECUTED 2026-05-18 via PR #69** (archived `docs/plans/archive/23-PC.6a-broader-auth-gate.md`). Closes Issue #62. Shipped new `require_authed_session` wrapper in `src/services/auth.py:297-371` (real-JWT-first + fake-session-fallback + must-change-password redirect; 307+HX-Redirect for UI / 403+HX-Redirect for `/api/v1/`); applied to **41 mutation routes** across `src/api/profile.py` (7) + `src/api/settings.py` (5) + `src/ui/routes/{settings 9, discover 9, outreach 8, tracking 1, email 1, integrations 2}`. 2 onboarding routes skipped (`post_extraction_upload` + `post_profile_from_extraction` — they SET the fake-session cookie; gating would 401 every signup). 13 new tests (7 in new `tests/test_auth_gate.py` + 6 in `tests/test_auth.py` extension). **Reviewers**: hacker APPROVE_WITH_NOTES (1 MEDIUM: onboarding bypass — flagged user can re-trigger `/api/v1/profile/from-extraction` to replace real-JWT with fake-session, erasing the gate; not-merge-blocker; **filed PC.6b #70**); devops PASS 8/8 gates (0 regression confirmed via baseline diff; 420 pass / 87 fail / 25 skip vs main 407/87/25; +13 new passes). 3 deviations promoted into archived plan. Tier-1 wave 4 of 4 — **closes Tier 1**. |
+-| PC.6b | Onboarding bypass — `/api/v1/profile/from-extraction` lets flagged user replace real-JWT with fake-session | MEDIUM | **Filed 2026-05-18 via PR #69 hacker review** (Issue #70). Hacker `APPROVE_WITH_NOTES` MEDIUM finding: a `must_change_password=True` user can navigate to public `/onboarding`, POST `/api/v1/profile/from-extraction`, and the server replaces their real-JWT cookie with `naavik_session=fake-1`. From there `require_authed_session` returns the fake-session branch (None pass-through) and must-change-password redirect never fires — mutation surface fully open until cookie expires. **Mitigating**: single-user MVP scope (Naavik is self-hosted single-user); demoted state is still fake-session (not impersonation). **Fix**: add no-existing-user precondition to `post_profile_from_extraction` (`src/ui/routes/auth.py:223`) — if `User` row exists, return 409. **Folded scope**: also addresses 3 hacker LOW non-blocking notes (monkeypatch fragility comment in `tests/test_auth.py:1217`; gate-sweep positive-control assertion in `tests/test_auth_gate.py:184`; wrapper type annotation `User | None` → `User` in `src/services/auth.py:307-308`). ~20-30 min engineer. Reference: PR #69 hacker.log + plan 23 § Deviations § 1. Must ship before any multi-user expansion. |
+-| 2.12 | **Vault deprecation → env-only secrets.** Delete `src/services/vault.py` (AES-256-GCM + PBKDF2 + lockfile + audit log) and the encrypted vault entirely. Switch to standard self-hosted-app pattern: secrets via env vars sourced from a gitignored `.env` (loaded by `nix develop:shellHook`, `flake.nix:devEnv`, and Docker Compose `env_file:`). Ship `.env.example` with all secret slots commented. **DB migration:** alembic 0003 drops `Settings.*_configured` booleans + `Settings.*_fingerprint` columns; secret presence becomes runtime-derived from env. **API surface:** `PUT /api/v1/settings/llm` becomes read-only — exposes "Anthropic configured via env: ✓ / ✗" without an input field. Same for Discord webhook URL, Telegram bot token, ATS credentials, Netlify webhook. **UI:** drop the API-key input from `_settings_llm.html` (replace with a "configured via env" indicator); drop the vault-locked banner from `_settings_deployment.html`; Settings · Deployment shows the env-detection state per integration. **Files removed:** `src/services/vault.py`, `src/cli/vault.py`, `src/cli/init.py`, `tests/test_vault.py`, vault sections of `tests/test_cli.py`. **Operational surface gone:** `~/.naavik/secrets.enc{,.lock,.bak.*}`, `~/.naavik/key.bin`, `~/.naavik/logs/vault-audit.log`. **README rewrite (~150 lines):** delete § Vault / § Rotating SECRET_KEY / § Vault audit log / § Troubleshooting "vault locked"; replace with § Configuring secrets via `.env`. **UX regression to flag in changelog:** rotating an LLM API key is now "edit `.env` + restart" instead of a Settings UI form — standard self-hosted practice but worth being explicit. **Backup discipline:** `.env` becomes the secret-restoration target; document alongside the existing `~/.naavik/data/` snapshot story. | HIGH | Sequence BEFORE 2.11 — most of the CLI's reason-to-exist is the vault. ~2–3 days. Touches ~15 files; mostly deletions. |
+-| 2.11 | **CLI sunset** — depends on 2.12. After 2.12 ships, the only `naavik` subcommand left is `serve`; `init` / `vault status` / `vault rotate-key` are gone with the vault. Final cleanup: delete `src/cli/`, drop `[project.scripts] naavik = "cli.main:main"` from `pyproject.toml`, collapse the server entrypoint to `python -m main` or the Nix flake's `apps.default` output. Keep `naavik-alembic` (alembic's own CLI surface, not a Naavik feature). May merge into the same PR as 2.12 if scope stays tight. **Policy in AGENTS.md § Key Conventions § CLI:** do NOT extend the CLI in interim plans; new operator features ship in the UI. | HIGH | < 1 day after 2.12. Independent of scrapers (2.1–2.10). |
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.2.2.01 | Light mode | [ ] | — | DEF-18 | Phase 6. From DESIGN.md. |
++| 0.2.2.02 | Restore Lucide via CDN | [ ] | — | DEF-19 | Self-hosted at `/static/lucide.min.js` for now to fix "no icons render" issue. Production should serve from a CDN — investigate why unpkg failed (content-blocker / CSP / rate-limit), pick a stable URL or fallback chain, drop the local file. From plan 09a follow-up 2026-05-02. |
++| 0.2.2.03 | Sidebar mobile-toggle reliability after navigation | [ ] | — | DEF-20 | Idempotent script guards fixed the most common failure mode; user reports it's "still kind of wonky" after navigating away. Repro on real device, isolate the remaining timing issue (likely Tailwind JIT vs HTMX swap order). Not a blocker. From plan 09a follow-up 2026-05-02. |
++| 0.2.2.04 | Discover card max-w cap on ultra-wide screens | [ ] | — | DEF-21 | 09a-follow-up dropped the `max-w-7xl` page cap on Discover so the card fills available space. On 4K+ monitors the card may stretch >1500px and feel sparse — add a `2xl:max-w-[1400px]` cap if user feedback comes in. From plan 09a follow-up 2026-05-02. |
+ 
+-**Deliverable:** Jobs scraped on schedule, AI-extracted, deduplicated, shown in dashboard with notifications. Vault deprecated; secrets via `.env`; CLI removed.
++**Deliverable (0.2.2):** Light mode shipped; sidebar stable; Lucide CDN-served; Discover card width-capped.
+ 
+ ---
+ 
+-### Phase 3: Intelligent Scoring & Matching
++### 0.2.3 — ATS / scraper cleanup (legacy DEF scraper rows)
++> **Goal:** Long-tail ATS adapters (Workday/LinkedIn/Indeed/Generic) + scraping diagnostics that didn't make 0.2.0.07.
++> **Status:** 🟡 Queued.
++> **Plan:** Per-row plans authored when scheduled.
++
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.2.3.01 | Workday / LinkedIn / Indeed / Generic ATS adapters (Greenhouse / Lever / Ashby shipped in 0.1.0.23) | [ ] | — | DEF-01 | Need credentials + Playwright + manual review queue. Greenhouse / Lever / Ashby ship in 0.1.0.23. From plan 10 § C.4. |
++| 0.2.3.02 | Postmortem-on-failure: Playwright screenshot + AI summary on ATS failure | [ ] | — | DEF-03 | Surfaces in stuck-queue card; helps diagnose recurring CAPTCHA / field_mismatch. From this triage 2026-05-01. |
++| 0.2.3.03 | LinkedIn proxy support | [ ] | — | DEF-15 | Phase 6+. From BACKEND.md § J.4. |
++
++**Deliverable (0.2.3):** Full ATS coverage + scraper diagnostics + LinkedIn proxy hardening.
++
++---
++
++### 0.2.4 — Tracking cleanup (legacy DEF tracking rows)
++> **Goal:** Tracking UI gap-fills + DRAFT-lifecycle hardening + manual-entry modal.
++> **Status:** 🟡 Queued.
++> **Plan:** Per-row plans authored when scheduled.
++
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.2.4.01 | Stale-DRAFT cleanup cron (`admin.cleanup_stale_drafts`) | [ ] | — | DEF-02 | Auto-discard or auto-archive DRAFTs idle >30 days; otherwise queue accumulates. From this triage 2026-05-01. |
++| 0.2.4.02 | Manual job entry modal (full) | [ ] | — | DEF-04 | `+ Add by URL` is the partial Phase 1 path. From SCREENS.md § Phase mapping > Deferred. |
++| 0.2.4.03 | Application detail slide-over | [ ] | — | DEF-05 | Phase 2 introduces `/tracking/:id` route. From SCREENS.md § Phase mapping > Deferred. |
++| 0.2.4.04 | `Show drafts` filter UI on Tracking | [ ] | — | DEF-08 | Endpoint stubbed in Wave 3; UI toggle Phase 1.x. From SCREENS.md § Tracking visibility rule. |
++| 0.2.4.05 | Auto-apply immediate dispatch on right-swipe (vs current 5-min cron) | [ ] | — | DEF-10 | Refinement; user expectation may grow once auto-apply ships. From this triage 2026-05-01. |
++
++**Deliverable (0.2.4):** Tracking UI feature-complete vs SCREENS.md spec; stale-DRAFTs auto-cleaned.
++
++---
++
++### 0.2.5 — Observability cleanup (legacy DEF observability rows)
++> **Goal:** Cost-cap dashboard + submission-result analytics + rate-limit dial.
++> **Status:** 🟡 Queued.
++> **Plan:** Per-row plans authored when scheduled.
++
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.2.5.01 | `Settings.scraper_aggressiveness` (rate-limit dial) | [ ] | — | DEF-11 | Phase 2+; default conservative. From this triage 2026-05-01. |
++| 0.2.5.02 | Submission-result observability dashboard (failure-kind aggregates) | [ ] | — | DEF-16 | Phase 6 — helps user spot recurring board-side failures. From this triage 2026-05-01. |
++| 0.2.5.03 | `Settings.daily_llm_cost_cap_usd` dashboard widget | [ ] | — | DEF-22 | Wave 6 ships the enforcement; visible cap-progress UI is a Settings polish item. From POST_PHASE_1 § Tier 3 (consolidated 2026-05-02). |
++
++**Deliverable (0.2.5):** Operator-facing scrape + LLM cost + ATS-failure analytics dashboards.
++
++---
++
++### 0.2.6 — Tooling / paper-cut cleanup (legacy DEF tooling rows + A.28a)
++> **Goal:** Pre-existing dev-experience papercuts (ruff cleanup, DB-test gating, NAAVIK_PERSISTENCE removal) + post-A.28 script hardening.
++> **Status:** 🟡 Queued.
++> **Plan:** Per-row plans authored when scheduled.
++
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.2.6.01 | Onboarding offline retry buffer for autosave | [ ] | — | DEF-07 | Optional, not blocking MVP. From INTERACTIONS.md § H.3. |
++| 0.2.6.02 | `ProfileAnswer` reuse cache (screener answer memory) | [ ] | — | DEF-09 | Phase 2+ entity. From DATA_MODEL.md § J. |
++| 0.2.6.03 | Portfolio API versioning (`/api/portfolio/cv?version=v1`) | [ ] | — | DEF-12 | Lets crypticsoul.dev pin its consumer; Phase 2+. From this triage 2026-05-01. |
++| 0.2.6.04 | `JobEmbedding` semantic match (pgvector) | [ ] | — | DEF-14 | Phase 6. From DATA_MODEL.md § H. |
++| 0.2.6.05 | Full `NAAVIK_PERSISTENCE` env-var removal — migrate remaining ~20 lower-traffic accessors + page handlers to service-layer DB reads | [ ] | — | DEF-23 | Wave 4 partial-swap + Wave 5 partial-swap left ~20 accessors falling back to memory. Plan 10b sets `NAAVIK_PERSISTENCE=db` as orchestrator default, but the env var still gates the swap. Cleanup deserves its own plan once Phase 1 is fully verified. From this triage 2026-05-03 (post-Wave-5). |
++| 0.2.6.06 | Pre-existing ruff errors in `migrations/` + `scripts/roadmap_parser.py` (UP007 / UP035 / I001) | [ ] | — | DEF-24 | 10 ruff violations confirmed pre-existing via stash technique during A.15 PR review. Files: `migrations/versions/0001_initial.py` (4), `migrations/versions/0002_settings_multi_users.py` (4), `scripts/roadmap_parser.py` (2). All fixable via `ruff check --fix`. ~30 min. From PR #53 devops review 2026-05-17 (Issue #55). |
++| 0.2.6.07 | DB-test gating gap — 11 test files lack `_skip_if_no_db()` (asyncpg `InvalidPasswordError` on `localhost:5432`) | [ ] | — | DEF-25 | 65 pytest failures across 11 test files confirmed pre-existing via stash. Canonical pattern at `tests/test_settings_llm_form.py:17-25`. ~1h to propagate the helper. From PR #53 devops review 2026-05-17 (Issue #56). |
++| 0.2.6.08 | `scripts/A.28-board-restructure.sh` hardening — eval pattern + rollback doc + apply default + ROADMAP § Agent System mirror-conventions 4-status refresh | [ ] | — | A.28a | **Filed 2026-05-17 via PR #63 hacker + devops review** (Issue #64). 3 LOW defense-in-depth findings in the migration runbook: (1) `run()` helper uses `eval` against composed string (line 54) — zero exploit today (all callers pass validated numeric Issue#s + node IDs), invites future bug if anyone interpolates Issue titles; fix = arg-array pass-through; (2) no rollback contract documented in header — script IS idempotent but recovery contract not stated; fix = 4-line comment; (3) `--apply` is silent default (lines 23-43) — bare invocation runs APPLY; fix = `DRY_RUN=true` default, require explicit `--apply`. Plus devops informational note. ~30 min engineer paper cut. **Folded to 0.2.6 (tooling/paper-cut) per theme match with rest of this patch's rows.** |
++
++**Deliverable (0.2.6):** Repository-wide tooling cleanup; pre-existing CI/test gaps closed; script hardening complete.
++
++---
++
++### 0.3.0 — Intelligent Scoring & Matching (legacy Phase 3)
+ > **Goal:** AI compatibility scoring with tag-based profile matching and explainable results.
++> **Status:** ⚪ Future.
+ > **Plan:** `docs/plans/12-phase-3-scoring.md` (to be authored after plan 11 ships).
+ > **Implementation contract:** `docs/design/BACKEND.md` § H.1 (`scorer` service), § M.3 (`score_job` prompt). DATA_MODEL.md § C (`Job.score`, `Job.score_explanation`, `Job.match_breakdown`).
+ > **Estimated effort:** 1–2 weeks.
+ 
+-| # | Task | Priority | Notes |
+-|---|---|---|---|
+-| 3.1 | Tag-based matching: job desc → identify tags → match against profile bullets | CRITICAL | |
+-| 3.2 | AI scoring: structured output (score 0-1, explanation, gap analysis) | CRITICAL | Cloud + local model support |
+-| 3.3 | Visa/sponsorship auto-filter (score 0 for citizenship-required / no-sponsorship) | CRITICAL | |
+-| 3.4 | Tailored resume preview: show which bullets selected/excluded for a job | HIGH | |
+-| 3.5 | One-click generation: from job detail → tailored resume + cover letter | HIGH | |
+-| 3.6 | Score history + analytics | MEDIUM | |
+-| 3.7 | HTMX UI: score card, match explanation, bullet selection preview | HIGH | |
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.3.0.01 | Tag-based matching: job desc → identify tags → match against profile bullets | [ ] | — | 3.1 | |
++| 0.3.0.02 | AI scoring: structured output (score 0-1, explanation, gap analysis) | [ ] | — | 3.2 | Cloud + local model support |
++| 0.3.0.03 | Visa/sponsorship auto-filter (score 0 for citizenship-required / no-sponsorship) | [ ] | — | 3.3 | |
++| 0.3.0.04 | Tailored resume preview: show which bullets selected/excluded for a job | [ ] | — | 3.4 | |
++| 0.3.0.05 | One-click generation: from job detail → tailored resume + cover letter | [ ] | — | 3.5 | |
++| 0.3.0.06 | Score history + analytics | [ ] | — | 3.6 | |
++| 0.3.0.07 | HTMX UI: score card, match explanation, bullet selection preview | [ ] | — | 3.7 | |
+ 
+-**Deliverable:** Every job scored with explanation. User sees bullet selection preview and generates tailored docs in one click.
++**Deliverable (0.3.0):** Every job scored with explanation. User sees bullet selection preview and generates tailored docs in one click.
+ 
+ ---
+ 
+-### Phase 4: Application Tracking & Auto-Apply
++### 0.4.0 — Application Tracking & Auto-Apply (legacy Phase 4)
+ > **Goal:** Full application lifecycle with configurable automation level.
++> **Status:** ⚪ Future.
+ > **Plan:** Most of Phase 4 ships inside plan 10 Wave 6 (DRAFT lifecycle, ATS submit, semi-auto + auto-apply paths). UI polish + analytics dashboard ship as a small follow-up `13a-tracking-polish.md` post-Phase-1.
+ > **Implementation contract:** `docs/design/BACKEND.md` § K (auto-apply + manual paths), § K.5 (ATS adapters per board), § L.1 (Gmail/Outlook OAuth). `docs/design/DATA_MODEL.md` § A multi-axis state, § E state transitions.
+ 
+-| # | Task | Priority | Notes |
+-|---|---|---|---|
+-| 4.1 | Application multi-axis state model: `status` (APPLIED → RECRUITER_SCREEN → ONSITE_LOOP → OFFER → CLOSED) + `closed_reason` (rejected_by_them / withdrawn_by_me / ghosted / accepted_other) + orthogonal sub-states `docs_state`, `referral_state`, `recruiter_state`, computed `outreach_engagement`. State machine + transitions per axis. See `docs/design/DATA_MODEL.md` (plan 05) for authoritative definitions. | CRITICAL | |
+-| 4.2 | Manual application logger (form for external applications) | HIGH | |
+-| 4.3 | Semi-auto flow: generate docs → notification → human approves → submit → update status | HIGH | Default mode |
+-| 4.4 | Auto-apply flow: high-score jobs → generate → submit automatically (user setting, default OFF) | HIGH | Configurable threshold |
+-| 4.5 | Playwright form filling for supported boards (with optional review step) | MEDIUM | |
+-| 4.6 | Google Sheets sync (optional secondary view) | LOW | Keep for shared tracking |
+-| 4.7 | Application analytics dashboard | MEDIUM | Response rate, interview rate, by company/role |
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.4.0.01 | Application multi-axis state model: `status` (APPLIED → RECRUITER_SCREEN → ONSITE_LOOP → OFFER → CLOSED) + `closed_reason` + orthogonal sub-states `docs_state`, `referral_state`, `recruiter_state`, computed `outreach_engagement` | [ ] | — | 4.1 | State machine + transitions per axis. See `docs/design/DATA_MODEL.md` (plan 05) for authoritative definitions. |
++| 0.4.0.02 | Manual application logger (form for external applications) | [ ] | — | 4.2 | |
++| 0.4.0.03 | Semi-auto flow: generate docs → notification → human approves → submit → update status | [ ] | — | 4.3 | Default mode |
++| 0.4.0.04 | Auto-apply flow: high-score jobs → generate → submit automatically (user setting, default OFF) | [ ] | — | 4.4 | Configurable threshold |
++| 0.4.0.05 | Playwright form filling for supported boards (with optional review step) | [ ] | — | 4.5 | |
++| 0.4.0.06 | Google Sheets sync (optional secondary view) | [ ] | — | 4.6 | Keep for shared tracking |
++| 0.4.0.07 | Application analytics dashboard | [ ] | — | 4.7 | Response rate, interview rate, by company/role |
+ 
+-**Deliverable:** Full Kanban tracking. Semi-auto or auto-apply based on user preference. Analytics.
++**Deliverable (0.4.0):** Full Kanban tracking. Semi-auto or auto-apply based on user preference. Analytics.
+ 
+ ---
+ 
+-### Phase 5: Email Monitoring & Outreach
+-> **Goal:** Monitor emails, classify responses, manage interview prep, and track recruiter/employee outreach. (Email auto-classification feeds the multi-axis Application sub-states defined in Phase 4 — `recruiter_state`, `outreach_engagement` — via Tracking; this phase adds the email + outreach mechanics behind that.)
++### 0.5.0 — Email Monitoring & Outreach (legacy Phase 5)
++> **Goal:** Monitor emails, classify responses, manage interview prep, and track recruiter/employee outreach.
++> **Status:** ⚪ Future.
+ > **Plans:** `docs/plans/13-phase-5-email.md` (Gmail/Outlook OAuth + classifier) → then `docs/plans/14-phase-5-outreach.md` (LinkedIn DM + Calendar + Discord/Telegram inbound). Both authored after plan 12 ships.
+ > **Implementation contract:** `docs/design/BACKEND.md` § L.1 (Gmail/Outlook), § L.2 (LinkedIn browser, account-ban risk), § L.3–L.5 (Discord/Telegram/Calendar), § H.1 (`email_classifier`, `outreach_generator`, `contact_tracker`).
+ > **Estimated effort:** Plan 13 1–2 weeks; plan 14 2–3 weeks (LinkedIn is the most fragile dep).
+ 
+-| # | Task | Priority | Notes |
+-|---|---|---|---|
+-| **Email Tracking** | | | |
+-| 5.1 | Gmail API / IMAP email monitoring | HIGH | Connect to user's email inbox |
+-| 5.2 | AI email classification: INTERVIEW_REQUEST, REJECTION, OFFER, ASSESSMENT, FOLLOW_UP | HIGH | |
+-| 5.3 | Auto-update job status from email classification | HIGH | |
+-| 5.4 | Priority notifications (HIGH for interviews/offers) | MEDIUM | |
+-| 5.5 | Email thread tracking per application | HIGH | |
+-| 5.6 | AI draft response generation | MEDIUM | |
+-| **Interview Prep** | | | |
+-| 5.7 | Interview scheduling integration (Calendly/webhook) — surfaces on Tracking application detail and Overview priority actions | MEDIUM | |
+-| 5.8 | Interview prep: role-specific questions from job desc + profile gaps | LOW | |
+-| **Recruiter & Employee Outreach** | | | |
+-| 5.9 | LinkedIn connection tracker: store recruiter/employee contacts per company | HIGH | |
+-| 5.10 | Outreach template system: personalized messages for recruiters + employees | HIGH | Uses profile + job context |
+-| 5.11 | AI-generated outreach messages: referral requests, follow-ups, check-ins | HIGH | Tone-appropriate, not spammy |
+-| 5.12 | LinkedIn automation: send connection requests + messages via API | MEDIUM | Rate-limited, anti-detection. **Re-open `docs/design/research/LINKEDIN_SCRAPING.md` option matrix when authoring plan 14** — § 5 stack-rank flags stickerdaniel/linkedin-mcp-server (1.9k stars, Apache-2.0, Patchright-based) as the front-runner for the outreach surface because authenticated session is unavoidable here, unlike task 2.2 where the guest API wins. |
+-| 5.13 | Outreach history tracking: sent messages, responses, acceptance rates | MEDIUM | |
+-| 5.14 | Warm intro finder: suggest mutual connections for warm outreach | LOW | LinkedIn API |
+-| 5.15 | Interview process accelerator: auto-send thank-you notes, follow-up reminders | MEDIUM | |
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.5.0.01 | Gmail API / IMAP email monitoring | [ ] | — | 5.1 | Connect to user's email inbox |
++| 0.5.0.02 | AI email classification: INTERVIEW_REQUEST, REJECTION, OFFER, ASSESSMENT, FOLLOW_UP | [ ] | — | 5.2 | |
++| 0.5.0.03 | Auto-update job status from email classification | [ ] | — | 5.3 | |
++| 0.5.0.04 | Priority notifications (HIGH for interviews/offers) | [ ] | — | 5.4 | |
++| 0.5.0.05 | Email thread tracking per application | [ ] | — | 5.5 | |
++| 0.5.0.06 | AI draft response generation | [ ] | — | 5.6 | |
++| 0.5.0.07 | Interview scheduling integration (Calendly/webhook) — surfaces on Tracking application detail and Overview priority actions | [ ] | — | 5.7 | |
++| 0.5.0.08 | Interview prep: role-specific questions from job desc + profile gaps | [ ] | — | 5.8 | |
++| 0.5.0.09 | LinkedIn connection tracker: store recruiter/employee contacts per company | [ ] | — | 5.9 | |
++| 0.5.0.10 | Outreach template system: personalized messages for recruiters + employees | [ ] | — | 5.10 | Uses profile + job context |
++| 0.5.0.11 | AI-generated outreach messages: referral requests, follow-ups, check-ins | [ ] | — | 5.11 | Tone-appropriate, not spammy |
++| 0.5.0.12 | LinkedIn automation: send connection requests + messages via API | [ ] | — | 5.12 | Rate-limited, anti-detection. **Re-open `docs/design/research/LINKEDIN_SCRAPING.md` option matrix when authoring plan 14** — § 5 stack-rank flags stickerdaniel/linkedin-mcp-server (1.9k stars, Apache-2.0, Patchright-based) as the front-runner for the outreach surface because authenticated session is unavoidable here, unlike 0.2.0.07 where the guest API wins. |
++| 0.5.0.13 | Outreach history tracking: sent messages, responses, acceptance rates | [ ] | — | 5.13 | |
++| 0.5.0.14 | Warm intro finder: suggest mutual connections for warm outreach | [ ] | — | 5.14 | LinkedIn API |
++| 0.5.0.15 | Interview process accelerator: auto-send thank-you notes, follow-up reminders | [ ] | — | 5.15 | |
+ 
+-**Deliverable:** Email inbox monitored → job statuses auto-updated. Recruiter/employee contacts tracked → AI-assisted outreach → referral requests sent at optimal timing.
++**Deliverable (0.5.0):** Email inbox monitored → job statuses auto-updated. Recruiter/employee contacts tracked → AI-assisted outreach → referral requests sent at optimal timing.
+ 
+ ---
+ 
+-### Phase 6: Optimization & Polish
++### 0.6.0 — Optimization & Polish (legacy Phase 6)
+ > **Goal:** Performance, analytics, and advanced features.
++> **Status:** ⚪ Future.
+ > **Plan:** `docs/plans/15-phase-6-polish.md` — splits cleanly into 15a (observability — Prometheus + Sentry + OTel), 15b (light mode), 15c (LaTeX template + ML scoring calibration). Author after plan 14 ships.
+ > **Implementation contract:** `docs/design/BACKEND.md` § N (observability — Prometheus, Sentry, OTel), `docs/design/DATA_MODEL.md` § H (`JobEmbedding` pgvector for semantic match), `DESIGN.md` (light mode tokens — Phase 6).
+ > **Estimated effort:** 3–4 weeks total (split across 15a/b/c).
+ 
+-| # | Task | Priority | Notes |
+-|---|---|---|---|
+-| 6.1 | Resume A/B testing (track which variants get responses) | MEDIUM | |
+-| 6.2 | Semantic job matching with pgvector embeddings | MEDIUM | |
+-| 6.3 | Weekly summary reports | LOW | |
+-| 6.4 | Performance: caching, batch AI calls, parallel scraping | LOW | |
+-| 6.5 | ML scoring calibration from application outcomes | LOW | |
+-| 6.6 | LaTeX template support alongside Typst (for users who prefer LaTeX) | LOW | NEU template compat, latexmk/tectonic compilation |
+-| 6.7 | Additional Typst/LaTeX resume templates (modern, academic, creative) | LOW | Template marketplace |
+-
+----
+-
+-### Phase A: Agent System
+-> **Goal:** A reproducible agent-driven delivery system mirrored from this ROADMAP onto a GitHub Project v2 board. 6 specialized subagents + 13 slash commands + tracing + token budget + bootstrap tooling. Tracked separately from product phases — this is meta (the dev process), not the product.
+-> **Plan:** `docs/AGENT_OPS.md` (operational guide — single source for setup, daily workflow, troubleshooting).
+-> **Status:** 🚧 Active (bootstrap shipped 2026-05-16). Run `scripts/gh-project.sh init && scripts/gh-project.sh bootstrap --apply` once per fork to mirror this phase's tasks onto the Project board.
+-> **Mirror milestone:** `Phase A`.
+-
+-| # | Task | Status | Priority | Notes |
+-|---|---|---|---|---|
+-| A.1 | Author 6 subagent prompts under `.claude/agents/{manager,architect,engineer,devops,hacker,designer}.md` | [x] | CRITICAL | Frontmatter (name/description/tools/model/color) + body (principles, operating loop, tracing format, escalation). Models: manager+architect+hacker on opus-4-7; engineer+devops+designer on sonnet-4-6 with `ESCALATE: opus` pattern. |
+-| A.2 | Author 13 slash commands under `.claude/commands/` | [x] | CRITICAL | `/build`, `/plan`, `/discuss`, `/triage-bug`, `/review-pr`, `/threat-model`, `/design-screen`, `/groom`, `/standup`, `/bootstrap`, `/sync-roadmap`, `/budget`, `/runs`. Each wraps a multi-agent flow. |
+-| A.3 | `scripts/gh-project.sh` — Projects v2 helper | [x] | CRITICAL | `init`, `bootstrap`, `sync`, `milestone-status`, `add-item`, `create-issue`, `set-status`, `next-unblocked`, `runs`. Idempotent; user-or-org auto-detected. Cache at `.claude/github-project.json` (gitignored). |
+-| A.4 | Token budget config + ledger | [x] | HIGH | `.claude/budget.json` (caps) + `.claude/budget-ledger.json` (manager-managed, gitignored). Halt at projected-spend-exceeds-cap; `/budget` to inspect. |
+-| A.5 | Trace system: `traces/<run-id>/` + `watch.sh` (tmux) + `runs.log` index + `MANIFEST.json` per run | [x] | HIGH | Run-id format `YYYY-MM-DDTHH-MM-SS_<6hash>`. Per-agent log format frozen in each agent's prompt. `/runs` to list history. |
+-| A.6 | `docs/AGENT_OPS.md` — single operational guide | [x] | CRITICAL | Bootstrap → daily workflow → commands reference → agent reference → GitHub Mirror conventions → tracing → budget → troubleshooting → extending the system. Linked from README, AGENTS.md, CLAUDE.md. |
+-| A.7 | `.github/` templates: 3 Issue forms (bug / feature / plan-execution) + PR template | [x] | MEDIUM | PR template aligns with AGENTS.md § Workflow step 7 (deviations summary required). |
+-| A.8 | First end-to-end `/build` shipping a real paper cut | [x] | HIGH | Satisfied 2026-05-16 via PR #49 (PC.5). First end-to-end `/build` of agent-system v2 validated: 5 skills invoked, git `prepare-commit-msg` hook auto-appended `Closes #7`, deviations promoted into plan 17, plan archived. Manager → architect → engineer → hacker → devops → ROADMAP update → Issue close → Project advance loop exercised. |
+-| A.11 | **Agent system v2 — cold-start infra + per-agent skill suite + git commit automation** | [x] | HIGH | **Plan 16 EXECUTED 2026-05-17** across all 4 phases (archived `docs/plans/archive/16-agent-system-v2.md`). **Phase 1** (2026-05-16): `.claude/hooks/cold-start.sh` SessionStart hook + `.claude/skills/naavik-cold-start/SKILL.md` + `Skill` tool added to all 6 agents + `.claude/hooks/git/prepare-commit-msg` auto-appends `Closes #N` from branch name using `.claude/github-issue-map.json` (case-sensitive — see AGENT_OPS § 2.8) + Project v2 automation guide. **Phase 2** (2026-05-16): per-agent skill suite under `.claude/skills/<name>/SKILL.md` — shipped 29 skills (28 spec'd; +1 = `build` skill authored mid-Phase-4 codifying dual-surface convention in AGENT_OPS § 10.2). Breakdown: manager 4 / architect 4 / engineer 5 / designer 5 / hacker 3 / devops 3 + shared 4 (`naavik-cold-start` / `naavik-roadmap-status` / `naavik-deviations-check` / `naavik-vault-sunset-guard`) + `build`. **Phase 3** (2026-05-16): first `/build` (PC.5 → PR #49 squash `ceca24b`) — satisfies A.8. **Phase 4** (2026-05-17): second `/build` (PC.6 → PR #50 squash `7c7e12a`) — surfaced the REQUEST_CHANGES → engineer-re-loop → re-review → approve path-C flow end-to-end; validates the loop's reliability on multi-finding reviews. Side artifact: `docs/design/research/LINKEDIN_SCRAPING.md` option matrix authored in parallel (Phase 2 task 2.2 + Phase 5 task 5.12 pre-staging). Kickoff prompt: `docs/prompts/agent-system-v2.md`. |
+-| A.12 | Map cache + single-writer governance (gh-project.sh hardening) | [x] | HIGH | Shipped 2026-05-16. `scripts/gh-project.sh` `find_issue_by_prefix` + `ensure_milestone` consult `.claude/github-issue-map.json` first (eliminates search-API race); new `refresh-map` subcommand reconciles from authoritative GitHub state (prefers open + lowest-#); dry-run now correctly reports `exists`/`PLAN` for milestones + epics (was lying with "would create if missing"); duplicate epics #46/#47 closed; "GitHub state — single writer" rule codified in CLAUDE.md / AGENTS.md / manager.md / bootstrap.md / AGENT_OPS.md. Bootstrap is now fully idempotent (`would create=0`). |
+-| A.13 | Tracing contract — ERROR + BUILT/REVIEWED event family + MANIFEST schema extensions | [x] | MEDIUM | Shipped 2026-05-17 via commit `aa2f6a0` (**WORKFLOW MISS:** pushed directly to `main` without PR review; should have been a PR with hacker + devops review. Logged as a one-time process violation; future source-of-truth changes will go through PR per AGENTS.md § Workflow). Adds two cross-agent event families to `docs/AGENT_OPS.md § 7.2`: (1) `ERROR step=<what> kind=<retry\|skip\|halt\|pivot> reason='<line>' attempt=<n>/<max>` — logged the moment failure happens, not buffered (sandbox denials, test flakes, plan-vs-reality pivots, self-approval blocks); (2) `BUILT` / `REVIEWED` — last line of every agent log, one-sentence summary. Extends MANIFEST schema (§ 7.3) with `outcome` (delivered\|halted\|failed), `halt_reason`, `what_built` (paragraph aggregated from BUILT/REVIEWED lines), `errors_encountered` (array auto-aggregated from per-agent ERROR lines). All 6 agent prompts gain "Tracing contract — mandatory" section; `devops-trace-manifest` skill aggregates via bash snippets. Surfaced in response to user feedback after PR #50 — "make sure agents write to the trace properly. if something went wrong or errors happened during the execution it all must be logged." Current run's MANIFEST.json retroactively backfilled with 5 `errors_encountered` entries documenting actual pivots (engineer find-replace scope, branch case, hacker self-approval block, devops destructive-rm guard, manager sandbox denial). |
+-| A.14 | Task Playbook — strict if-then task classification (`docs/PLAYBOOK.md`) | [x] | MEDIUM | **Shipped 2026-05-17 via PR #51 squash `ab9f2589`** = `chore(playbook): add task playbook — strict if-then task classification`. PR took two commits: initial `d882139` shipped the 9-category playbook with strict procedures + hard rules; Path-B re-loop `fda092d` resolved hacker Finding 1 by restructuring § File classification quick reference from enumerative-both-sides into **default-deny + allow-list-only**. Closes the judgment surface that produced `aa2f6a0`. **9 categories**: STATUS / INSPECT / 3 gate responses (PLAN/PR/MILESTONE) / PRODUCT_WORK / BUG_TRIAGE / CONTRACT_CHANGE / BOOKKEEPING. **Critical invariant**: Default = CONTRACT_CHANGE (PR required); BOOKKEEPING is allow-list only (`ROADMAP.md`, `docs/plans/archive/**`, `docs/prompts/archive/**`, `traces/**`, `README.md` "Last updated" only). Never mix in one commit. New file `docs/PLAYBOOK.md` (341 lines); 4 reference-file updates (`AGENTS.md` Quick Start, `docs/AGENT_OPS.md § 3`, `.claude/agents/manager.md` Task Playbook section, `.claude/skills/naavik-cold-start/SKILL.md` canonical reading list). Hacker delta-review: APPROVE — *"Path-B is structurally STRONGER than Path-A — turns the rule from enumerative-both-sides into fail-safe allow-list-only-for-BOOKKEEPING"*. Devops re-gate: PASS (7/7 checks). Self-validating authorship: PR #51 followed its own category H procedure (chore/ branch, no direct push, PR + reviewers). Total spend: ~50k tokens (engineer 18k + hacker 24k + devops 12k). |
+-| A.15 | **Agent memory + learning system** — persistent stores + indexed knowledge base + discussion-capture + periodic learning + session analysis | [x] | HIGH | **Plan 19 EXECUTED 2026-05-17 via PR #53 squash `a63b774`** (archived `docs/plans/archive/19-agent-memory-and-learning.md`). 3-Wave scope shipped in ONE PR (user-locked deviation from architect's 3-PR recommendation). Shipped 22 files (15 new + 7 modified) on `feat/A.15-agent-memory`. **Wave 1 (substrate)**: `.claude/memory/` + 6 stores (`decisions.jsonl`, `discussions.jsonl`, `lessons.jsonl`, `knowledge/<topic>.md` × 5 seeded + `knowledge/INDEX.md`, `recurring-patterns.jsonl`, `runs-analysis/<run-id>.md`) + `scripts/agent-memory.sh` (697-line bash single-writer, mirrors `gh-project.sh`) + 2 skills (`naavik-memory-lookup` + `naavik-discussion-capture`) + read-only `MEMORY.md` integration. **Wave 2 (analytics)**: `/learn` slash command + `naavik-learn` skill mirror + `analyze-run` + `mine-patterns` per-agent ERROR aggregation. **Wave 3 (promotion)**: `promote-lesson` threshold=5 + alias mining via MEMORY_MISS events + `manager-promote-lesson` skill + decision supersession (`--supersedes` marks state=superseded, default query filter `state=active`). Cross-walk: `docs/design/AGENT_MEMORY.md` (design doc graduation), `README.md § Operations`, `CLAUDE.md`, `AGENTS.md § Agent System`, `docs/AGENT_OPS.md § 14`, `hacker-secrets-audit/SKILL.md` (single-writer rule check). Smoke: **50/50 PASS**. Follow-ups filed pre-merge per user wrap-up: A.17 #54 (hacker hardening, HIGH), DEF-24 #55 (pre-existing ruff, LOW), DEF-25 #56 (pre-existing DB-test gating, MEDIUM); A.11 #48 board drift reconciled inline. Full PR_REVIEW_GATE report archived at `traces/2026-05-17T08-40-13_4abef2/pr-review-gate.md`. |
+-| A.16 | Machine-readable wording rewrite of agent-system instruction files | [x] | HIGH | **Plan 22 EXECUTED 2026-05-18 via PR #68** (archived `docs/plans/archive/22-A.16-machine-readable-rewrite.md`). Closes Issues #61 + #67. 57 files rewritten: `.claude/agents/*` (6) + `.claude/skills/*/SKILL.md` (34) + `.claude/commands/*` (15) + `.claude/hooks/cold-start.sh` (1) + `scripts/agent-memory.sh:119` (A.17a regex widening) + `tests/test_agent_memory.sh` (+1 test 22c). **Token savings**: 49,090 → 44,334 words (-9.7% / ~-8.5k tokens per ingest cycle). Below 25% Q1 floor; user-accepted ~10% as realistic ceiling per PR_REVIEW_GATE decision — structural-preservation cap (frontmatter description blocks, TRIGGER tables, operating-loop step numbering, 9 PLAYBOOK categories, 16-item PR checklist, 11-item plan-quality-bar, attack-tree examples, FORBIDDEN/ANTI-PATTERN sections all preserved verbatim). **A.17a fold-in**: `ALIASES_RE` widened from `^[a-z0-9 .,/_-]*$` to `^[a-zA-Z0-9 .,/_#-]*$`; uppercase + `#` aliases now accepted; newline + `---` injection still blocked by separate sentinels (lines 111-117). **Reviewers**: hacker APPROVE 0 findings (semantic preservation intact — every load-bearing element character-identical); devops PASS 11/11 gates (cold-start parseable, A.17a positive+negative smokes pass, `Closes #61` + `Closes #67` both verified). 3 deviations promoted into archived plan; PC.6a next (Tier-1 wave 4 — final before Tier-2 sunsets). |
+-| A.17 | `agent-memory.sh` hardening — flock + jq sandbox + alias regex + manifest escape | [x] | HIGH | **Plan 21 EXECUTED 2026-05-18 via PR #66 squash `<see commit log>`** (archived `docs/plans/archive/21-A.17-agent-memory-hardening.md`). Closes Issue #54. All 5 hacker findings closed: (F1 MEDIUM) `with_lock` helper + `flock -x` on `.claude/memory/.lock` wraps 6 writers + supersede block; `cmd_update_index` split via `_update_index_inline` to avoid reentrancy deadlock — 30/30 writes persist (was 13/30 pre-fix). (F2 MEDIUM) `validate_jq_expr` regex char allowlist + word-boundary identifier deny-list (`env|input|inputs|input_filename|getpath|path|paths|setpath|delpaths|debug|stderr`) + `$ENV` check — `env.NAAVIK_*` exfil rejected; word-boundary verified (`.endpoint` doesn't false-positive). (F3 LOW) `mapfile -t RUNS` at both call sites. (F4 LOW) `validate_aliases` rejects newline + `---` fence sentinels + regex `^[a-z0-9 .,/_-]*$` (Q3 widened from strict kebab per existing seeded corpus; uppercase tokens still rejected — A.17a #67 widens further). (F5 LOW) MANIFEST.json content wrapped in fenced code blocks. **Coverage**: 14 new test assertions in `tests/test_agent_memory.sh` (64/64 total PASS); 30-writer flock smoke 30/30. **Reviewers**: hacker APPROVE (0 new findings, self-author COMMENTED pivot); devops PASS 8/8 gates. **Coupling**: Q1 honored (no `--unsafe-jq` escape hatch); Q2 Q5 honored; `docs/design/AGENT_MEMORY.md § Invariants` extended +2 lines. Tier-1 wave 2 of pre-Phase-2 close-out — next: A.16 (wave 3). |
+-| A.17a | `agent-memory.sh` — widen aliases regex to include uppercase tokens (`[a-zA-Z0-9 .,/_#-]`) | [x] | LOW | **EXECUTED 2026-05-18 via PR #68 (A.16 fold-in)** — closed by `Closes #67` trailer. `ALIASES_RE` widened at `scripts/agent-memory.sh:119`; test 22c added in `tests/test_agent_memory.sh` verifies uppercase + `#` aliases accepted; newline + `---` injection still blocked. Both positive + negative smokes pass in devops review. |
+-| A.28 | Board restructure — add Backlog status + Phase 2.5 milestone + Priority Queue section in ROADMAP | [x] | HIGH | **Plan 20 EXECUTED 2026-05-17 via PR #63 squash `28a07d6`** (archived `docs/plans/archive/20-A.28-board-restructure.md`). 5 waves shipped end-to-end: (W1) `Backlog` status added to Project v2 single-select (id=`9f6ecdc6`, color GRAY) via new `cmd_add_status` in `scripts/gh-project.sh`; (W2) script extensions — `cmd_set_status` accepts Backlog; new `cmd_create_milestone`, `cmd_item_id`, `cmd_backlog_by_epic` (~50 LOC) subcommands; `cmd_next_unblocked` skips Backlog; `cmd_sync` Backlog-preservation branch (deviation from plan G risk 4 — actual trample path was sync not bootstrap); (W3) agent prompt + skill + command + PLAYBOOK + AGENT_OPS rewrites — new `manager-backlog-promote` skill (auto-promote workflow), `manager-pick-next` 4-status semantics, manager.md operating-loop step 2 expansion (~15 LOC), `docs/PLAYBOOK.md` new "Board status convention (post-A.28)" section, `docs/AGENT_OPS.md § 6.3` 4-row status table + asymmetric mapping note; (W4) ROADMAP surgery — relocated A.9 + A.10 + A.18–A.27 (12 rows) into new `### Phase 2.5: Agent-system follow-ups (deferred from Phase A)` section; relocated PC.6a to Phase 2 table near 2.12; new top-of-doc `## Priority Queue` section (rank 1–7+); `docs/ROADMAP_OVERVIEW.md § 3` refreshed; (W5) one-shot idempotent migration runbook `scripts/A.28-board-restructure.sh` (`--dry-run` / `--apply`, 7 steps, per-Issue MIRROR events). Phase 2.5 milestone #5 + Phase 2.5 epic created. 16 files touched (~+550 LOC). Hacker: APPROVE_WITH_NOTES (3 LOW defense-in-depth findings in runbook — A.28a #64). Devops: PASS 13/13 gates. 5 deviations promoted into archived plan. Tier-1 lock order: A.28 (this, done) → A.17 → A.16 → PC.6a → 2.12 → 2.11. |
+-| A.28a | `scripts/A.28-board-restructure.sh` hardening — eval pattern + rollback doc + apply default + ROADMAP § Agent System mirror-conventions 4-status refresh | [ ] | LOW | **Filed 2026-05-17 via PR #63 hacker + devops review** (Issue #64). Hacker `APPROVE_WITH_NOTES` surfaced 3 LOW defense-in-depth findings in the migration runbook: (1) `run()` helper uses `eval` against composed string (line 54) — zero exploit today (all callers pass validated numeric Issue#s + node IDs), invites future bug if anyone interpolates Issue titles; fix = arg-array pass-through; (2) no rollback contract documented in header — script IS idempotent but recovery contract not stated; fix = 4-line comment; (3) `--apply` is silent default (lines 23-43) — bare invocation runs APPLY; fix = `DRY_RUN=true` default, require explicit `--apply`. Plus devops informational note: `ROADMAP.md:497-506` § Agent System (mirror conventions) status mapping table still describes 3-status convention; canonical 4-status doc lives in `docs/AGENT_OPS.md § 6.3` and `docs/PLAYBOOK.md`. ~30 min engineer paper cut. Reference: PR #63 hacker.log + devops.log + `traces/2026-05-17T21-03-51_0695e7/`. |
+-| A.30 | Python rewrite of legacy bash scripts (`gh-project.sh` 1469 LOC + `agent-memory.sh` 843 LOC + `roadmap_parser.py`) into `.claude/naavik_ops/` Python modules under the `naavik-ops` dispatcher; full `scripts/` → `.claude/` migration | [ ] | MEDIUM | **Filed 2026-05-18 — A.29 follow-up. Ships as `0.1.1` patch release post-A.29's `0.1.0` cut.** Scope: rewrite `scripts/gh-project.sh` (1469 LOC bash) and `scripts/agent-memory.sh` (843 LOC bash) into Python modules under `.claude/naavik_ops/gh.py` and `.claude/naavik_ops/memory.py`; replace `subprocess.run` shims (which A.29 ships) with direct Python calls. Roll `scripts/roadmap_parser.py` (304 LOC) into `.claude/naavik_ops/lib/roadmap.py`. Delete legacy `scripts/*.sh` files after parity tests pass. Update all callers to drop subprocess paths. Move `scripts/A.28-board-restructure.sh` (done one-shot) to `.claude/migrations/`. **Touches**: 4 legacy script files (delete after rewrite), ~3 new Python modules in `.claude/naavik_ops/`, ~25 caller sites (agent prompts + skills + commands referencing old paths). After A.30: `scripts/` at repo base is reserved for project-wide scripts only (user-runnable build/deploy/test); empty initially. **Build sequence**: Wave 1 — port `gh.py` from `gh-project.sh` w/ parity tests against existing `tests/test_*` suite. Wave 2 — port `memory.py` from `agent-memory.sh` w/ parity (`tests/test_agent_memory.sh`). Wave 3 — caller rewrites + legacy delete + path migration. Wave 4 — post-merge `naavik-ops release 0.1.1 --cut`. ~2-2.5 days engineer. **Depends on**: A.29 EXECUTED (must ship first to establish the `naavik-ops` dispatcher + `.claude/naavik_ops/` package + subprocess shims this plan replaces). |
+-| A.29 | Phase numbering system + `.claude/naavik-ops` Python dispatcher — 4-level semver task IDs replace Project Priority field; full retroactive renumber + release ceremony tooling | [x] | HIGH | **Plan 24 EXECUTED 2026-05-18 via PR #73 squash `c5ac58f`** (archived `docs/plans/archive/24-A.29-phase-numbering-system.md` with full `## Deviations from plan` section — 8 entries). Waves 1-4 shipped: W1 `.claude/naavik-ops` Python dispatcher + `.claude/naavik_ops/` package (5 groups task/release/deps/gh/memory; 13 subcommands; gh+memory subprocess-wrap legacy bash during A.29); W2 `.claude/migrations/A.29-phase-renumber.py` migration runbook (13-step Python, DRY RUN only; Wave 5 applies post-merge); W3 ~30-site caller rewrites (agent prompts + skills + commands + AGENT_OPS + PLAYBOOK + AGENTS + CLAUDE) + Conventional Commits enforcement in `prepare-commit-msg`; W4 `docs/design/PHASE_NUMBERING.md` graduated 388 → 533 lines. **Reviewers**: hacker APPROVE_WITH_NOTES (3 LOW findings — 2 cosmetic duplicate Bash grants, 1 latent CHANGELOG markdown sanitization filed as A.31); devops PASS 11/11 build+smoke gates (0 PR-introduced regressions; 101/101 naavik_ops tests; 65/65 agent_memory tests). 8 engineer deviations promoted into archived plan (Wave 1 mutating subcommands stubbed → A.30; W2 step 7 ROADMAP-rewrite needs Wave 5 architect dispatch; W3 dual Bash grant for A.29 transition). **New operational surfaces**: `.claude/naavik-ops` entry point, `~/.naavik/naavik-ops.lock` + `~/.naavik/A.29-migration.lock` flocks, Conv Commits enforcement on feat branches. **Wave 5 deferred (post-merge work)**: architect dispatch authors `docs/plans/24-A.29-roadmap-diff.patch` → run `python .claude/migrations/A.29-phase-renumber.py --apply` → `.claude/naavik-ops release 0.1.0 --cut` (bumps pyproject.toml + nix/package.nix + writes CHANGELOG.md + git tag `0.1.0` + gh release) → close `Phase A` + `Pre-Phase-2 paper cuts` + `Phase 1 deferred items` + `Phase 2.5` GitHub Milestones. A.30 (#72) becomes ready for planning after Wave 5. **Filed 2026-05-18 — design brainstormed but not yet planned/shipped.** (run `2026-05-18T11-23-20_8cf822`); sequencing override accepted (was queued AFTER Tier 2, now NOW per user direction: *"lets use the build skill to create A.29 and then fix the whole naming system"*). Architect dispatched to author `docs/plans/24-A.29-phase-numbering-system.md` (DRAFT) with full option-matrix audit per design decision + design-doc-graduation proposal (`docs/design/PHASE_NUMBERING.md`) + plan-quality-bar pass. Decision memory entry recorded: `manager-immediate-requirement-logging` (user requirements file IMMEDIATELY; only PLAN/PR/MILESTONE gates remain). **Filed 2026-05-18 — design brainstormed but not yet planned/shipped.** User directive: *"if we are at 1.6 we add something new we add it at 1.7. we always need to have a way to defer items or pull them earlier."* Scope (8 design decisions locked at brainstorm — architect plan must confirm before engineer dispatch): (1) **Position cap**: open-ended `1.01`–`1.99` (max 99 items per phase, lex-sortable). (2) **Sub-phase treatment**: three-level `1.5.01` (Phase 1.5 = transitional bucket between Phase 1 and Phase 2; sub-tasks numbered `1.5.01`–`1.5.99`). (3) **Done-item IDs**: FROZEN once `[x]` (audit trail preserved; active items renumber around gaps). (4) **GitHub Project Priority field**: DEPRECATE (Position is canonical; remove from `gh-project.sh create-issue` arg list). (5) **Source of truth on drift**: ROADMAP wins (matches existing single-doc-tracking rule); script's `sync` rewrites Issue titles from ROADMAP if they drift. (6) **Phase 1 consolidation**: collapse Phase 0 (Foundation, done) + Phase 1 (MVP, done) + Pre-Phase-2 paper cuts (PC.1-PC.7 done) + done Phase A items (A.1-A.15 + A.28) into one `### Phase 1` ROADMAP section with sub-section headers — preserves history without separate milestones. (7) **Migration scope**: ALL items get retroactive IDs (done items still need IDs for canonical sequence; just frozen forever). (8) **Naming**: BOTH `### Phase 1.5: ...` heading AND `1.5.01` row prefix — heading orients reader; row prefix is canonical task ID. **`scripts/phase-tasks.sh` subcommands**: `insert <phase>.<pos> "<title>" [--priority P --effort E]` (shift `pos+` down by 1); `defer <task-id> [--by N=1 | --to <new-pos>]` (move down N positions); `prioritize <task-id> [--by N | --to <new-pos>]` (move up N positions); `move <task-id> <new-phase>.<new-pos>` (cross-phase relocate with both-side renumbering); `list <phase> [--status <s>]` (read-only ordered output); `renumber <phase>` (compact gaps from removed tasks); `rename-phase <old> <new>` (bulk renames). Each op updates: ROADMAP row position + ID + Issue title prefix `[<phase>.<pos>] <title>` + `.claude/github-issue-map.json` map cache + `~/.naavik/phase-tasks.lock` flock for atomicity. **Build sequence**: Wave 1 — `scripts/phase-tasks.sh` core ops (~400 LOC, ~1d engineer). Wave 2 — migration script `scripts/A.29-phase-renumber.sh --dry-run/--apply` (~200 LOC, ~0.5d). Wave 3 — agent prompt + AGENT_OPS + PLAYBOOK updates for new convention (~0.5d). Wave 4 — run migration `--apply` post-merge; close superseded milestones; deprecate Priority field. Total: ~2-3 days engineer + ~0.5d architect plan + reviews. **Touches**: `scripts/phase-tasks.sh` (new), `scripts/A.29-phase-renumber.sh` (new), `scripts/gh-project.sh` (deprecate Priority paths; add helpers), `ROADMAP.md` (full re-section), `docs/AGENT_OPS.md § 6`, `docs/PLAYBOOK.md`, `.claude/agents/manager.md`, `.claude/skills/manager-pick-next/SKILL.md`, `.claude/skills/manager-backlog-promote/SKILL.md`, possibly more — ~17 files. **Sequencing**: per user "go with sequence change" call — A.29 ships AFTER Tier 2 (2.12 + 2.11) AND BEFORE Phase 2 scrapers (so 2.1–2.10 land on the new numbering). Closes Phase A entirely after merge. **Open question raised by user 2026-05-18 — architect must resolve in plan**: under strict number-as-priority (`1.9 < 2.0` → 1.9 ships first), where do DEF-01..DEF-25 (deferred Phase 1 MVP gaps) go? They're LOWER priority than Phase 2 + later phases, so calling them "Phase 1.9" inverts the priority rule. Three candidate mappings: **(A) Distribute by ship-phase** — DEF-01 (Workday/LinkedIn ATS adapters) → Phase 2 long-tail (2.13+) or 4.x tracking; DEF-05 (refresh-token rotation) → 6.x polish; etc. Each DEF row read individually to assign its actual ship-phase. **(B) Long-tail bucket** — all DEF-XX → Phase 7.01–7.25 (or 6.99 if Phase 6 polish is the last named phase). Simple + signals "long tail." **(C) Backlog without phase number** — DEF-XX stay in Backlog status; only get task ID when promoted to Todo. Clean but loses audit-trail-via-ID for frozen-done items later. Architect recommendation likely (A) for honesty, (B) for migration speed. Same priority-vs-ID inversion applies to existing Phase 2 sub-tasks (2.12 vault sunset is highest priority within Phase 2, but `2.1 < 2.12` under the new rule says 2.1 ships first); migration script must renumber: vault sunset 2.12 → 2.01, CLI sunset 2.11 → 2.02, Job models 2.6 → 2.03, Crawl4AI 2.1 → 2.04, etc. |
+-
+-| A.31 | CHANGELOG.md markdown sanitization — escape commit-msg bodies before `.claude/naavik_ops/lib/changelog.py:62` renders to released artifact | [ ] | LOW | **Filed 2026-05-18 via PR #73 hacker review** (hacker Finding 3, LOW latent). Ships as `0.1.1.NN` sub-task under A.30 OR standalone before A.30's Wave 5 changelog-ingestion lands. `.claude/naavik_ops/lib/changelog.py:62` `ReleaseEntry.text` passes commit-message body to rendered Markdown unsanitized. NOT exploitable today (Wave 5 ingestion not yet wired). When Wave 5 wires closed-Issue ingestion, attacker-influenced PR commit-msg bodies could inject markdown into released CHANGELOG.md (header smuggling / link injection; no RCE). **Fix**: escape markdown chars (`#`, `[`, `]`, `(`, `)`, `>`) in `ReleaseEntry.text` at render OR strip newlines + leading `#` from entry text. ~30 min engineer. Reference: PR #73 hacker.log + `traces/2026-05-18T11-23-20_8cf822/`. Must land BEFORE A.30 Wave 5 ingests real commit data. |
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.6.0.01 | Resume A/B testing (track which variants get responses) | [ ] | — | 6.1 | |
++| 0.6.0.02 | Semantic job matching with pgvector embeddings | [ ] | — | 6.2 | |
++| 0.6.0.03 | Weekly summary reports | [ ] | — | 6.3 | |
++| 0.6.0.04 | Performance: caching, batch AI calls, parallel scraping | [ ] | — | 6.4 | |
++| 0.6.0.05 | ML scoring calibration from application outcomes | [ ] | — | 6.5 | |
++| 0.6.0.06 | LaTeX template support alongside Typst (for users who prefer LaTeX) | [ ] | — | 6.6 | NEU template compat, latexmk/tectonic compilation |
++| 0.6.0.07 | Additional Typst/LaTeX resume templates (modern, academic, creative) | [ ] | — | 6.7 | Template marketplace |
+ 
+-**Deliverable (Phase A):** A fork-able agent system. `gh auth login → scripts/gh-project.sh init → scripts/gh-project.sh bootstrap --apply → claude /standup → claude /build "next"` works end-to-end. New contributors onboard via `docs/AGENT_OPS.md`.
++**Deliverable (0.6.0):** Observability stack live; light mode shipped; LaTeX template parity with Typst; ML-calibrated scoring.
+ 
+ ---
+ 
+-### Phase 2.5: Agent-system follow-ups (deferred from Phase A)
++### 0.7.0 — Agent-system follow-ups (legacy Phase 2.5)
+ > **Goal:** Quality-of-life improvements + nice-to-have agent-system features deferred until Phase 2 (job scrapers) clears. None blocks the product; all surfaced during Phase A bring-up.
++> **Status:** ⚪ Future (deferred per user lock 2026-05-17; ships post-0.2.0 cycle clears).
+ > **Plan:** No single plan — each row gets its own plan when scheduled (post-Phase-2 user pickup).
+-> **Status:** 🟡 Queued (filed 2026-05-17 per A.28 board restructure; ships post-Phase-2).
+-> **Mirror milestone:** `Phase 2.5` (created by `scripts/gh-project.sh create-milestone "Phase 2.5"`).
+-> **Mirror epic:** `[Epic] Phase 2.5`.
++> **Mirror milestone:** `0.7.0` (recreated by migration step 4; supersedes `Phase 2.5`).
++> **Mirror epic:** `[Epic] 0.7.0`.
+ >
+ > User-locked scope decision 2026-05-17: A.22 carries HIGH priority within Phase 2.5 but still defers — Tier 1 / Tier 2 work clears first per pre-Phase-2 scope lock.
+ 
+-| # | Task | Status | Priority | Notes |
+-|---|---|---|---|---|
+-| A.9 | Cap retention on `traces/` (auto-delete runs > N days) | [ ] | LOW | Today: manual delete. Add a `traces/.cleanup.sh` cron-style helper once accumulation gets noisy (>50 runs). |
+-| A.10 | Visual run dashboard (web UI for `traces/runs.log`) | [ ] | LOW | Nice-to-have. Current state: `claude /runs` + `./traces/watch.sh` cover the inspection use cases. |
+-| A.18 | Architect-as-PR-reviewer (replaces devops in review role) | [ ] | MEDIUM | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"moving forward i want the architect to review the PR and not the devops."* Rationale: architect's option-matrix lens fits PR reviews; current devops "CI surrogate" role is awkward without real CI. Open: does devops stay for build-gate re-verify (ruff/pytest clean-shell) while architect does code-correctness + plan-fidelity, OR does devops fully exit PR-review duty? Architect plan needed to scope: (1) architect.md prompt extension with review duties, (2) PLAYBOOK § D PR_REVIEW procedure update (replace `hacker ║ devops` with `hacker ║ architect` or 3-way), (3) `.claude/commands/build.md` + `/review-pr.md` updates, (4) devops scope narrows to: deployment / ops / runbook / observability / CI when it lands. Couples with A.16 machine-readable rewrite. |
+-| A.19 | Security review bar — Claude-Mythos-style depth | [ ] | MEDIUM | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"there will be security review similar to the one that claude mythos provides."* Current: `hacker-pr-security-checklist` is 16-item OWASP-style; finds surface-level issues. Target: deeper STRIDE per-feature + supply-chain checks (dependency CVE scan, lockfile drift) + secret-rotation hygiene + auth-flow modeling + LLM prompt-injection vectors for scrapers. **Open question for architect**: clarify what "Claude Mythos provides" — reference doc, demo, or example output. May be a specific product/pattern user has seen; architect researches and proposes the bar. Output: `hacker.md` prompt rewrite + new skill `hacker-mythos-checklist` (or rename existing) + reference doc in `docs/design/SECURITY_REVIEW.md`. |
+-| A.20 | PR review verdicts stored in repo (not only GitHub) | [ ] | MEDIUM | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"the approved with notes is good but it should be stored in the repo not left on github."* Current: hacker + devops post review comments on GitHub PR; verdict lives in PR body + GitHub review state. Target: also persist to repo as `traces/<run-id>/pr-reviews/<pr-num>.md` (per-run trace artifact, gitignored) AND/OR `docs/reviews/<pr-num>-<slug>.md` (canonical audit trail, committed). Survives GitHub data loss; greppable history; works offline. Format: machine-readable per A.16. Couples with A.18 (whoever the reviewer is writes the verdict file). Open: trace-only (ephemeral, with the run) OR docs-committed (permanent audit trail). |
+-| A.21 | Progress indicator — flow visualizer like Jenkins pipeline | [ ] | LOW | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"somewhere in the PR or in claude code when im building it shows what step we are at in the whole process. like a flow diagram showing which step we are on kinda like how jenkins shows it."* Current: manager surfaces gates verbally in chat; no persistent "step 4 of 15" indicator. Target: linear pipeline view of operating-loop steps (1-15 per `.claude/agents/manager.md § Operating loop`) with current step highlighted + previous steps marked done + future steps grayed. Three candidate surfaces (architect picks): (a) PR body section auto-updated by manager on each gate transition, (b) chat preamble line `[Step 7 of 15: PR_REVIEW_GATE]` before every manager message, (c) `.claude/current-step.json` file managed by manager (other agents read on dispatch). Architect to propose option matrix. Estimate: ~1-2 engineer days. |
+-| A.22 | Confusion-gate clause — ask user on ambiguity even in auto mode; technical decisions OK, business decisions always user | [ ] | HIGH | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"add a clause to always ask questions if the requirement is confusing or there are multiple paths forward even if youre in auto mode. do not make business descisison on your own. only technical decisions in automode are okay but even then the most critical decisions must be made by the user."* Scope: extend `docs/PLAYBOOK.md` with explicit confusion-gate clause + decision-class taxonomy (technical vs business vs critical); update `.claude/agents/manager.md` § Tone or new § Decision authority to reflect the clause; update `AGENTS.md` § Agent System with the operator-facing rule. **Decision classes (architect to refine)**: (a) TECHNICAL — auto-mode OK (jq filter choice, file structure, import order, test pattern); (b) BUSINESS — always ask (scope, priority shift, ROADMAP row addition, plan approval, gate response); (c) CRITICAL — always ask + extra context (auth design, vault/CLI sunset deviation, billing/cost, architectural cuts, breaking-change adoption). Current playbook has partial coverage in `# How the manager uses this` ("ask the user ONE precise question") but lacks the explicit class-based gating. Architect plan needed. Couples with A.16 machine-readable rewrite. |
+-| A.23 | State-of-the-art security review tools (replace standard Claude Code hacker tooling) | [ ] | MEDIUM | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"instead of using the standard claude code tools for security review and designer and architect. lets add state of the art tools."* Current: `hacker-pr-security-checklist` skill (16-item OWASP-style hand-review) + `hacker-secrets-audit` skill (grep-based). Target: integrate SoTA SAST/DAST/SCA tools — Semgrep (rule-based static analysis), CodeQL (GitHub native deep static analysis), Snyk/Trivy (CVE + container scanning), gitleaks (secret scanning), pip-audit (Python deps), OWASP ZAP (DAST), plus LLM-specific (prompt-injection detectors, jailbreak scanners for scraper inputs). Architect plan needed to research + option-matrix the tool set + integration surface (`.claude/hooks/security-check.sh`? CI? `hacker-mythos-checklist` skill?). Couples with A.19 (Claude-Mythos-style security depth) and A.20 (verdict storage). |
+-| A.24 | State-of-the-art architect tools | [ ] | MEDIUM | **Filed 2026-05-17 — deferred until after Phase 2.** User directive (same line as A.23): *"state of the art tools... for architect."* Current: architect uses `context7` (live library docs), `nixos` (nixpkgs), `tavily` (web research), `github` MCPs + 4 architect-* skills (option-matrix, plan-quality-bar, sunset-guard, design-doc-graduation). Target: add architecture-visualization + ADR tooling — Structurizr (C4 model), Mermaid (sequence + state diagrams, gh-native), PlantUML, diagrams.net, OpenAPI/AsyncAPI generators, dependency graph tools, ADR-tools or similar. Plan needed to scope: which tools land as MCP servers vs CLI vs prompts. Couples with A.21 (Jenkins-style progress visualizer) — if mermaid lands for architect, manager can reuse for progress diagrams. |
+-| A.25 | State-of-the-art designer tools — wire huashu-design + similar | [ ] | MEDIUM | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"for designer we are not using huashu design tooling. we need to use that."* Current: `.claude/agents/designer.md` allowlists `huashu-design`, `ui-ux-pro-max`, `frontend-design` skills BUT operational dispatches default to the AI-slop-prone built-ins. Target: surface `huashu-design` as PRIMARY designer skill — its hi-fi prototype + animation + design-variant + expert-review pipeline (花叔Design — 5 schools × 20 philosophies, 8 scenarios × 3 styles, Junior Designer workflow, anti-AI-slop checklist, Playwright validation, HTML→MP4/GIF export at 60fps) is meaningfully ahead of `ui-styling` / generic frontend skills. Action: update `.claude/agents/designer.md` § Required reading + § Output to explicitly invoke `huashu-design` at task start; update `designer-component-reuse` + `designer-componentization-memo` to bridge huashu output → COMPONENTS.md catalog; possibly add `designer-huashu-pipeline` skill. Plan needed. Couples with A.16 machine-readable rewrite. |
+-| A.26 | Trace analytics dashboard — simple metrics script (was duplicate-A.17; renumbered 2026-05-17 to resolve collision with hardening A.17 #54 which has the canonical Issue) | [ ] | MEDIUM | **Filed 2026-05-17 — deferred until after Phase 2.** Simple stdout script (`scripts/trace-analytics.py` or `scripts/agent-metrics.sh`) that reads `traces/<run-id>/MANIFEST.json` × N + `traces/runs.log` and prints aggregate metrics: per-day token spend trends, per-agent spend breakdown, halt-reason frequencies, gate-cycle counts, deviation patterns (most-deviated plans), success-rate per task type, average wall-time per phase. **NOT a web UI** (that's A.10). Data-side first; A.10 builds visualization on top. Reads-only the trace logs. Output: terminal table + optional JSON for piping. Couples with `naavik-learn` skill (A.15) — `/learn N` runs this script as part of retrospective. Estimate: ~1 engineer day. |
+-| A.27 | `develop` branch workflow — move PR target away from `main` | [ ] | MEDIUM | **Filed 2026-05-17 — deferred (user-flagged future move).** User directive: *"we will move to a develop branch later on so thats fine."* Context filed when discussing BOOKKEEPING-direct-push: user reverted the `pull_request` ruleset on `main` to restore direct-push for BOOKKEEPING, but mentioned moving to a `develop` branch later. Action when scheduled: (1) create `develop` branch from `main`; (2) shift PR targets from `main` to `develop` (all CONTRACT_CHANGE PRs); (3) keep `main` as release/stable + a periodic `develop → main` promotion PR; (4) update `docs/PLAYBOOK.md` § D PR_REVIEW_GATE_RESPONSE and § F PRODUCT_WORK procedures; (5) update `.claude/commands/build.md` + manager.md operating loop references to base branch; (6) update repo settings (default branch + branch protections — re-enable required-PR rule on `main` since direct-push to main becomes wrong); (7) update CI/release docs once those land. Open: do BOOKKEEPING commits go on `develop` (with periodic main-promotion) or stay on `main` (with PRs targeting `develop`)? Architect plan needed. |
++| # | Task | Status | Priority | Legacy ID | Notes |
++|---|---|---|---|---|---|
++| 0.7.0.01 | Cap retention on `traces/` (auto-delete runs > N days) | [ ] | — | A.9 | Today: manual delete. Add a `traces/.cleanup.sh` cron-style helper once accumulation gets noisy (>50 runs). |
++| 0.7.0.02 | Visual run dashboard (web UI for `traces/runs.log`) | [ ] | — | A.10 | Nice-to-have. Current state: `claude /runs` + `./traces/watch.sh` cover the inspection use cases. |
++| 0.7.0.03 | Architect-as-PR-reviewer (replaces devops in review role) | [ ] | — | A.18 | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"moving forward i want the architect to review the PR and not the devops."* Rationale: architect's option-matrix lens fits PR reviews. Open: does devops stay for build-gate re-verify (ruff/pytest clean-shell) while architect does code-correctness + plan-fidelity, OR does devops fully exit PR-review duty? |
++| 0.7.0.04 | Security review bar — Claude-Mythos-style depth | [ ] | — | A.19 | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"there will be security review similar to the one that claude mythos provides."* Target: deeper STRIDE per-feature + supply-chain checks (dependency CVE scan, lockfile drift) + secret-rotation hygiene + auth-flow modeling + LLM prompt-injection vectors for scrapers. |
++| 0.7.0.05 | PR review verdicts stored in repo (not only GitHub) | [ ] | — | A.20 | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"the approved with notes is good but it should be stored in the repo not left on github."* Target: also persist to repo as `traces/<run-id>/pr-reviews/<pr-num>.md` AND/OR `docs/reviews/<pr-num>-<slug>.md`. Survives GitHub data loss; greppable history; works offline. Format: machine-readable per A.16 (now 0.1.0.44). |
++| 0.7.0.06 | Progress indicator — flow visualizer like Jenkins pipeline | [ ] | — | A.21 | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"somewhere in the PR or in claude code when im building it shows what step we are at."* Three candidate surfaces (architect picks): (a) PR body section auto-updated, (b) chat preamble line, (c) `.claude/current-step.json` file. ~1-2 engineer days. |
++| 0.7.0.07 | Confusion-gate clause — ask user on ambiguity even in auto mode; technical decisions OK, business decisions always user | [ ] | HIGH | A.22 | **Filed 2026-05-17 — deferred until after Phase 2 (HIGH within 0.7.0 but cycle defer).** User directive: *"add a clause to always ask questions if the requirement is confusing or there are multiple paths forward."* Scope: extend `docs/PLAYBOOK.md` with explicit confusion-gate clause + decision-class taxonomy (technical vs business vs critical). |
++| 0.7.0.08 | State-of-the-art security review tools (replace standard Claude Code hacker tooling) | [ ] | — | A.23 | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"instead of using the standard claude code tools for security review."* Target: integrate SoTA SAST/DAST/SCA tools — Semgrep, CodeQL, Snyk/Trivy, gitleaks, pip-audit, OWASP ZAP, plus LLM-specific (prompt-injection detectors, jailbreak scanners). |
++| 0.7.0.09 | State-of-the-art architect tools | [ ] | — | A.24 | **Filed 2026-05-17 — deferred until after Phase 2.** Target: add architecture-visualization + ADR tooling — Structurizr (C4 model), Mermaid (sequence + state diagrams, gh-native), PlantUML, diagrams.net, OpenAPI/AsyncAPI generators, dependency graph tools, ADR-tools. |
++| 0.7.0.10 | State-of-the-art designer tools — wire huashu-design + similar | [ ] | — | A.25 | **Filed 2026-05-17 — deferred until after Phase 2.** User directive: *"for designer we are not using huashu design tooling. we need to use that."* Target: surface `huashu-design` as PRIMARY designer skill. |
++| 0.7.0.11 | Trace analytics dashboard — simple metrics script | [ ] | — | A.26 | **Filed 2026-05-17 — deferred until after Phase 2.** Simple stdout script (`scripts/trace-analytics.py` or `scripts/agent-metrics.sh`) reads `traces/<run-id>/MANIFEST.json` × N + `traces/runs.log` and prints aggregate metrics. NOT a web UI (that's 0.7.0.02). Reads-only the trace logs. ~1 engineer day. |
++| 0.7.0.12 | `develop` branch workflow — move PR target away from `main` | [ ] | — | A.27 | **Filed 2026-05-17 — deferred (user-flagged future move).** Action when scheduled: (1) create `develop` branch from `main`; (2) shift PR targets from `main` to `develop`; (3) keep `main` as release/stable + periodic `develop → main` promotion PR; (4) update PLAYBOOK + manager + repo settings. Open: BOOKKEEPING commits routing TBD. **Couples with A.29 release-tag implications** — release branches per MINOR? Release-branch promotion ceremony? A.27 owns the decision. |
+ 
+-**Deliverable (Phase 2.5):** Pickup queue for quality-of-life work after the scrapers ship. New rows added via `scripts/gh-project.sh create-issue <id> "..." --milestone "Phase 2.5" --priority <P>`; rows graduate to active Phase A or Phase 2/3/4/5/6 when scheduled.
++**Deliverable (0.7.0):** Pickup queue for quality-of-life work after the scrapers ship. New rows added via `.claude/naavik-ops gh create-issue 0.7.0.NN "..." --milestone "0.7.0"`; rows graduate to active `0.2.X` or `0.3.0`+ release when scheduled.
+ 
+ ---
+ 
+@@ -516,28 +449,28 @@
+ > - `docs/DEPLOYMENT.md` — 4 deployment paths + config + ops checklist
+ > - `docs/RUNBOOK.md` — devops runbook (known failure modes + diagnostic recipes + recovery)
+ > - `docs/plans/POST_PHASE_1.md` — testing playbook + monitoring + "when something goes wrong"
++> - `docs/design/PHASE_NUMBERING.md` — 4-level semver schema + release ceremony + Conventional Commits (post-A.29)
+ 
+-This ROADMAP is mirrored onto a GitHub Project v2 board for queryability and assignability. **ROADMAP is authoritative** (per AGENTS.md § Single-doc-tracking); the Project is a one-way operational mirror. The mapping is mechanical:
++This ROADMAP is mirrored onto a GitHub Project v2 board for queryability and assignability. **ROADMAP is authoritative** (per AGENTS.md § Single-doc-tracking); the Project is a one-way operational mirror. The mapping is mechanical (post-A.29):
+ 
+ | ROADMAP element | GitHub Project equivalent |
+ |---|---|
+-| `### Phase N: <Name>` header | Milestone `Phase N` (description = `**Goal:**` line) |
+-| Task row in a phase table | Issue titled `[<task-id>] <description>`, body links back to ROADMAP |
+-| `[ ]` / `[~]` / `[x]` status | Project Status field: `Todo` / `In Progress` / `Done` |
+-| Priority column (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`) | Project Priority single-select |
+-| Phase header | Project Milestone single-select (`Phase 0`–`Phase 6`, `Phase A`, `Pre-Phase-2 paper cuts`, `Phase 1.x deferred`) |
++| `### <X.Y.Z> — <Name>` release header | Milestone `<X.Y.Z>` (description = `**Goal:**` line) |
++| Task row in a release table | Issue titled `[<X.Y.Z.NN>] <description>`, body links back to ROADMAP |
++| `[ ]` / `[~]` / `[x]` status | Project Status field: `Backlog` (deferred) / `Todo` / `In Progress` / `Done` |
++| Priority column (`HIGH` / `MEDIUM` / `LOW` / unset; TASK-level only) | Project Priority single-select (4-level IDs only; never on 3-level patches/releases) |
++| Release header | Project Milestone single-select (`0.1.0`–`0.6.0`, `0.1.1`, `0.2.1`–`0.2.6`, `0.7.0`) |
+ | Notes column | Issue body |
+-| `Plan:` reference (e.g., `docs/plans/11-…`) | Label `plan:<NN>` on the Issue |
+-| `[~]` row that takes >1 day | Optionally split into sub-Issues via `/groom` |
++| Plan reference (`docs/plans/NN-name.md`) | Label `plan:<NN>` on the Issue |
+ 
+-**Sync flow:** always ROADMAP → Project. Manager updates ROADMAP first (mark `[~]` on start, `[x]` on done), then runs `scripts/gh-project.sh set-status` to push to Project. `/sync-roadmap --apply` is the bulk reconcile. If the Project drifts from ROADMAP, the Project is wrong — never edit ROADMAP to match a stale board.
++**Sync flow:** always ROADMAP → Project. Manager updates ROADMAP first (mark `[~]` on start, `[x]` on done), then runs `.claude/naavik-ops gh set-status` to push to Project. `/sync-roadmap --apply` is the bulk reconcile. If the Project drifts from ROADMAP, the Project is wrong — never edit ROADMAP to match a stale board.
+ 
+-**Bootstrap:** `scripts/gh-project.sh bootstrap [--apply]` parses ROADMAP's task tables and creates Milestones + Issues + Project items for the active phases (defaults to Pre-Phase-2 paper cuts + Phase A + Phase 2 + Phase 1.x deferred — completed Phase 0/1 rows are skipped). See `docs/AGENT_OPS.md` § 2 for the full setup walkthrough.
++**Bootstrap:** `.claude/naavik-ops gh bootstrap [--apply]` parses ROADMAP's task tables and creates Milestones + Issues + Project items for the active releases (defaults to `0.2.0` + `0.2.1`–`0.2.6` + `0.7.0` open releases; closed `0.1.0` is skipped). See `docs/AGENT_OPS.md` § 2 for the full setup walkthrough.
+ 
+ **What to do as a plan / task author:**
+-1. Write the task row in ROADMAP first (status `[ ]`, with Priority).
+-2. Run `/plan <task-id>` — architect drafts the plan, opens the GH Issue (via `scripts/gh-project.sh create-issue`), adds to Project, links back to ROADMAP.
+-3. Run `/build <milestone>` (or `/build "next"`) when ready to implement.
++1. Write the task row in ROADMAP first (status `[ ]`, with optional Priority on 4-level IDs).
++2. Run `/plan <task-id>` — architect drafts the plan, opens the GH Issue (via `.claude/naavik-ops gh create-issue`), adds to Project, links back to ROADMAP.
++3. Run `/build <release>` (or `/build "next"`) when ready to implement.
+ 
+ **What to do as an implementer:**
+ 1. Mark the ROADMAP row `[~]` when starting.
