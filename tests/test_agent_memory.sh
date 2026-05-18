@@ -247,6 +247,103 @@ echo "$OUTPUT" | grep -q "hacker-self-approval"; assert "mine-aliases surfaces h
 rm -rf "$SYN_DIR3"
 
 # ---------------------------------------------------------------------------
+# A.17 hardening regression tests
+# ---------------------------------------------------------------------------
+
+# 19. Finding 1 — flock around concurrent writers. Spawn 30 background
+# record-discussion calls, wait for all, assert all 30 rows landed.
+PRE_COUNT="$(wc -l < "$TMP_MEM/discussions.jsonl")"
+N_PARALLEL=30
+for i in $(seq 1 "$N_PARALLEL"); do
+  ("$SCRIPT" record-discussion "concurrency-test-$i" "test.log" --priority LOW >/dev/null 2>&1) &
+done
+wait
+POST_COUNT="$(wc -l < "$TMP_MEM/discussions.jsonl")"
+ADDED=$((POST_COUNT - PRE_COUNT))
+[[ "$ADDED" -eq "$N_PARALLEL" ]]; assert "Finding 1 — 30 concurrent record-discussion writes all persist (got $ADDED/$N_PARALLEL)" $?
+
+# 20. Finding 2 (positive control) — safe jq expression passes the sandbox.
+"$SCRIPT" query decisions '.state == "active"' >/dev/null 2>&1
+assert "Finding 2 (positive) — '.state == \"active\"' passes the sandbox" $?
+
+# 20a. Positive control — pattern_id substring containing 'path' is NOT a
+# false-positive (word-boundary regex must not match inside identifiers).
+"$SCRIPT" query patterns '.pattern_id == "test-step__pivot"' >/dev/null 2>&1
+assert "Finding 2 (positive) — pattern_id substring 'path' is not a false-positive" $?
+
+# 21. Finding 2 (negative control) — env exfiltration rejected.
+NAAVIK_TEST_SECRET="leaked-secret-abc123" "$SCRIPT" query decisions 'true) | env.NAAVIK_TEST_SECRET' > /tmp/test_jq_exfil_$$ 2>&1
+RC=$?
+[[ $RC -ne 0 ]]; assert "Finding 2 (negative) — env.* exfil exits non-zero" $?
+! grep -q "leaked-secret-abc123" /tmp/test_jq_exfil_$$; assert "Finding 2 (negative) — env.* exfil does NOT leak secret to output" $?
+rm -f /tmp/test_jq_exfil_$$
+
+# 21a. Finding 2 (negative control) — .path identifier blocked at word boundary.
+"$SCRIPT" query decisions '.path == "x"' >/dev/null 2>&1
+RC=$?
+[[ $RC -ne 0 ]]; assert "Finding 2 (negative) — '.path' identifier rejected (word-boundary)" $?
+
+# 21b. Finding 2 (negative control) — \$ENV reference blocked.
+"$SCRIPT" query decisions '$ENV.HOME' >/dev/null 2>&1
+RC=$?
+[[ $RC -ne 0 ]]; assert "Finding 2 (negative) — '\$ENV' reference rejected" $?
+
+# 22. Finding 4 (positive control) — alias matching the seeded corpus shape passes.
+echo "smoke body" | "$SCRIPT" record-knowledge alias-positive-test - \
+  --aliases "kebab-case, another-kebab, with .naavik/db path" >/dev/null 2>&1
+assert "Finding 4 (positive) — multi-token aliases with spaces/dots/slashes accepted" $?
+
+# 22a. Finding 4 (negative control) — newline + front-matter injection rejected.
+NL_ALIAS=$'pwned\n---\nTopic:owned\n---'
+echo "body" | "$SCRIPT" record-knowledge alias-injection-test - --aliases "$NL_ALIAS" >/dev/null 2>&1
+RC=$?
+[[ $RC -ne 0 ]]; assert "Finding 4 (negative) — front-matter injection via --aliases rejected" $?
+test ! -f "$TMP_MEM/knowledge/alias-injection-test.md"; assert "Finding 4 (negative) — injected knowledge file NOT created" $?
+
+# 22b. Finding 4 (negative control) — bare '---' fence rejected.
+echo "body" | "$SCRIPT" record-knowledge alias-fence-test - --aliases "good, ---, evil" >/dev/null 2>&1
+RC=$?
+[[ $RC -ne 0 ]]; assert "Finding 4 (negative) — bare '---' fence in --aliases rejected" $?
+
+# 23. Finding 5 — MANIFEST.json values land inside fenced code blocks
+# (no Markdown link / inline code rendering).
+SYN_RUN5="2099-12-31T05-00-00_test05"
+SYN_DIR5="$REPO_ROOT/traces/$SYN_RUN5"
+mkdir -p "$SYN_DIR5"
+cat > "$SYN_DIR5/MANIFEST.json" <<'EOF'
+{
+  "run_id": "2099-12-31T05-00-00_test05",
+  "started_at": "2099-12-31T05:00:00Z",
+  "ended_at": "2099-12-31T05:30:00Z",
+  "milestone": "fence-test",
+  "outcome": "delivered",
+  "halt_reason": null,
+  "issues_closed": [],
+  "prs_merged": [],
+  "files_touched": ["[evil](http://x.test)", "`whoami`", "normal/path.py"],
+  "deviations_recorded": [],
+  "tokens_spent": {"agent-a": 100, "agent-b": "`whoami`"},
+  "what_built": "fence test",
+  "errors_encountered": []
+}
+EOF
+"$SCRIPT" analyze-run "$SYN_RUN5" >/dev/null
+ANALYSIS="$TMP_MEM/runs-analysis/$SYN_RUN5.md"
+test -f "$ANALYSIS"; assert "Finding 5 — analyze-run wrote output file" $?
+# Files touched line "[evil](http://x.test)" must be inside a fenced block (not rendered as a link).
+# Verify by checking that the fenced block opens before the literal string + closes after.
+awk '
+  /^```$/ { in_fence = !in_fence; fence_count++; next }
+  /\[evil\]/ { if (in_fence) evil_in_fence = 1 }
+  END { exit (evil_in_fence && fence_count >= 4 ? 0 : 1) }
+' "$ANALYSIS"
+assert "Finding 5 — '[evil](...)' string lands inside a fenced code block (not rendered as a Markdown link)" $?
+# Tokens line value "\`whoami\`" must also be inside a fence.
+grep -q "agent-b: \`whoami\`" "$ANALYSIS"; assert "Finding 5 — tokens_spent value preserved verbatim inside fence" $?
+
+rm -rf "$SYN_DIR5"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 
