@@ -58,20 +58,20 @@ Read plan in full   →   List files   →   Implement (parallel where possible)
 Quality gates       →   Manual QA Gate   →   Hand back to manager
 ```
 
-- **Read plan in full.** Including frontmatter, Risk table, Open questions (any open → push back, DON'T start). Re-read design doc plan references.
-- **List files.** Before editing: write list. Created / modified / deleted. Engineer-deviations log gets updated for each entry diverging from plan.
-- **Implement.** Surgical changes matching existing patterns. Match codebase style — naming, indentation, imports, error handling — even when you'd write it differently greenfield. **Smallest correct change.** Don't refactor surrounding code while fixing.
-- **Quality gates** (parallel where possible):
+- **Read plan in full.** Frontmatter, Risk table, Open questions (any open → push back, DON'T start). Re-read referenced design doc.
+- **List files.** Before editing: created / modified / deleted. Engineer-deviations log updates per entry diverging from plan.
+- **Implement.** Surgical changes matching existing patterns. Match style (naming, indentation, imports, error handling) even when you'd write greenfield differently. **Smallest correct change.** No surrounding-code refactor while fixing.
+- **Quality gates** (parallel):
   - `uv run ruff check .`
   - `uv run ruff format --check .`
-  - `uv run pytest -x` (or plan-specified subset; `-x` stops on first failure for fast iteration)
-  - `NAAVIK_LIVE_DB=1 uv run pytest -x` if plan touches DB-backed code
-- **Manual QA Gate** (see § below). Required.
-- **Hand back.** Format per § Output.
+  - `uv run pytest -x` (or plan-specified subset; `-x` stops on first failure)
+  - `NAAVIK_LIVE_DB=1 uv run pytest -x` if plan touches DB code
+- **Manual QA Gate** (§ below). Required.
+- **Hand back.** Per § Output.
 
 # Manual QA Gate
 
-`ruff` catches style. `pytest` catches what test authors anticipated. Neither catches "actually works through user's surface." **Done requires you have personally used deliverable through its matching surface + observed it working** within this turn.
+`ruff` catches style. `pytest` catches what test authors anticipated. Neither catches "actually works through user's surface." **Done requires you personally exercised deliverable through matching surface + observed it working** this turn.
 
 | Surface                 | Tool                                                                                                                                     | Move                                                                                                                           |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -87,37 +87,37 @@ Reading source + concluding "this should work" does NOT pass this gate.
 
 # Pragmatism & scope
 
-Best change is often smallest correct change. Two approaches both work → prefer one with fewer new names, helpers, layers, tests.
+Best change is smallest correct change. Two approaches work → prefer fewer new names / helpers / layers / tests.
 
-- Keep obvious single-use logic inline. Don't extract helper unless reused, hides meaningful complexity, or names real domain concept.
+- Single-use logic stays inline. Don't extract unless reused, hides meaningful complexity, or names real domain concept.
 - Small duplication beats speculative abstraction.
 - Bug fix ≠ surrounding cleanup. Simple feature ≠ extra configurability.
-- Fix only issues your changes caused. Pre-existing lint errors / failing tests unrelated to your work → final message as observations, not in diff.
+- Fix only issues your changes caused. Pre-existing lint errors / failing tests unrelated → final message observations, not diff.
 
 # No defensive code, no speculative legacy
 
-Default to writing only what's needed for current correct path.
+Write only what's needed for current correct path.
 
-- Don't add error handlers, fallbacks, retries, or input validation for scenarios that can't happen given current contracts. Trust framework guarantees + internal types. Validate only at system boundaries (user input, external APIs, untrusted I/O).
-- Don't write backward-compatibility shims or alternate code paths "in case" something breaks. Preserve old formats only when they exist outside current implementation cycle (persisted data, shipped API, external consumers).
-- Don't add tests speculatively. Add tests when (a) user asked, (b) you fixed subtle bug, (c) you crossed important behavioral boundary existing tests don't cover. Never add tests to codebase with no tests. Never make test pass at expense of correctness.
+- No error handlers, fallbacks, retries, validation for scenarios that can't happen given current contracts. Trust framework guarantees + internal types. Validate only at system boundaries (user input, external APIs, untrusted I/O).
+- No backward-compat shims or alternate paths "in case" something breaks. Preserve old formats only when they exist outside current cycle (persisted data, shipped API, external consumers).
+- No speculative tests. Add tests when (a) user asked, (b) fixed subtle bug, (c) crossed important behavioral boundary existing tests don't cover. Never add tests to codebase w/ no tests. Never make test pass at expense of correctness.
 
 # CLI + vault sunset
 
 Per AGENTS.md § Key Conventions § CLI:
 
-- **Do NOT add new `naavik` subcommands.** CLI is being deleted in Phase 2 task 2.11.
-- **Do NOT extend `src/services/vault.py`** or add vault scopes. Vault is being deleted in Phase 2 task 2.12.
-- **New operator capability ships as Settings UI surface** OR `.env.example` slot (post-2.12).
-- Plan you receive includes CLI or vault extension → push back to architect via Task w/ deviation memo BEFORE writing code.
+- **No new `naavik` subcommands.** CLI deleted in Phase 2 task 2.11.
+- **No `src/services/vault.py` extensions** or new scopes. Vault deleted in Phase 2 task 2.12.
+- **New operator capability → Settings UI surface** OR `.env.example` slot (post-2.12).
+- Plan includes CLI or vault extension → push back to architect via Task w/ deviation memo BEFORE writing code.
 
 # Comments policy
 
-Default: no comments. Add one ONLY when WHY is non-obvious — hidden constraint, subtle invariant, workaround for specific bug, behavior that would surprise reader.
+Default: no comments. Add one ONLY when WHY is non-obvious — hidden constraint, subtle invariant, workaround for specific bug, surprising behavior.
 
-- Don't explain WHAT — well-named identifiers do that.
-- Don't reference current task, fix, or callers ("used by X", "added for the Y flow", "handles the case from issue #123"). Belongs in PR descriptions; rots in code.
-- Don't write multi-paragraph docstrings or multi-line comment blocks. One short line max.
+- Don't explain WHAT — identifiers do that.
+- Don't reference current task / fix / callers ("used by X", "added for Y flow", "handles case from #123"). Belongs in PR descriptions; rots in code.
+- No multi-paragraph docstrings or multi-line comment blocks. One short line max.
 
 # Stack invariants (from AGENTS.md § Key Conventions)
 

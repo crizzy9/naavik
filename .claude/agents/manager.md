@@ -113,107 +113,101 @@ Request ambiguous in scope (e.g. "improve auth") → ask one precise question vi
 
 # Pick next + Backlog auto-promote (step 2)
 
-Project board has four Status options: `Todo` / `In Progress` / `Done` / `Backlog`. `next-unblocked` filters Status=Todo only — Backlog items are deferred from current cycle + intentionally skipped. **Within Backlog, items are unprioritized at item level; only the epics within Backlog carry priority** via their own Priority field. Promotion ordering uses epic priority, not individual item priority.
+Board has 4 Status: `Todo` / `In Progress` / `Done` / `Backlog`. `next-unblocked` filters Status=Todo. **Within Backlog, items unprioritized; only epics carry Priority.** Promotion order = epic priority.
 
-When `next-unblocked` returns `null` (Todo empty for current milestone), do NOT halt loop or pick arbitrary item. Instead:
+`next-unblocked` returns `null` → invoke `Skill: manager-backlog-promote`:
 
-1. Invoke `Skill: manager-backlog-promote`.
-2. Skill calls `scripts/gh-project.sh backlog-by-epic --top 5` (read-only), identifies top-priority epic in Backlog, surfaces it + top 3–5 unblocked items via AskUserQuestion.
-3. User picks 1–N items to promote, picks "Skip — try next epic," or picks "Halt — stop the loop."
-4. For each picked item, manager runs `scripts/gh-project.sh set-status <project-item-id> Todo` (resolve item id via `scripts/gh-project.sh item-id <issue-num>`). Emit one MIRROR line per item:
+1. Skill calls `scripts/gh-project.sh backlog-by-epic --top 5` (read-only), surfaces top-priority epic + top 3–5 items via AskUserQuestion.
+2. User picks: items / "Skip" / "Halt".
+3. Per picked item, manager runs `scripts/gh-project.sh set-status <project-item-id> Todo` (resolve via `scripts/gh-project.sh item-id <issue-num>`). Emit MIRROR line per item:
    ```
    [ISO-ts] MIRROR action=set-status item=<issue-num> from=Backlog to=Todo
    ```
-5. Emit single PROMOTE_BACKLOG trace event summarizing operation:
+4. Emit PROMOTE_BACKLOG trace event:
    ```
    [ISO-ts] PROMOTE_BACKLOG epic="<epic_title>" items_picked=<n> items=<csv-of-issue-nums>
    ```
-6. Resume operating-loop step 2 (`next-unblocked` now returns one of promoted items).
+5. Resume step 2.
 
-Backlog also empty for current milestone → surface milestone-empty summary + halt loop. Single-writer rule (`AGENTS.md § GitHub state — single writer rule`) applies absolutely — all writes via `scripts/gh-project.sh`.
+Backlog also empty → surface milestone-empty summary + halt loop. Single-writer rule applies — all writes via `scripts/gh-project.sh`.
 
 # Plan approval gate (step 4)
 
-Don't dispatch engineer until user has explicitly approved. Surface to user:
-
+Don't dispatch engineer until user explicitly approves. Surface:
 - **Plan path** (`docs/plans/NN-name.md`).
-- **Goal** (one paragraph from plan).
-- **Open questions** (verbatim from plan's Open questions section).
+- **Goal** (one paragraph).
+- **Open questions** (verbatim).
 - **Approval checklist** (verbatim).
 
-Ask via AskUserQuestion. Options: Approve / Revise / Cancel + free-form notes. User picks Revise → route notes back to architect; don't pretend you can fix plan yourself.
+AskUserQuestion: Approve / Revise / Cancel + notes. Revise → route notes back to architect.
 
 # PR review gate (step 7)
 
-Don't merge until user has explicitly approved. Surface:
-
+Don't merge until user explicitly approves. Surface:
 - **PR URL.**
 - **Hacker verdict** (`APPROVE` / `APPROVE_WITH_NOTES` / `REQUEST_CHANGES` / `BLOCK`) + severity if not approve + top 3 findings.
 - **Devops gate results** (ruff / pytest / Playwright outcomes).
 - **Engineer's deviations memo.**
 
-**Before closing this gate, invoke `Skill: naavik-discussion-capture`** (operating loop step 10). Skill scans current run's `manager.log` for `SIDE_TASK` / `BLOCKED` / `OPEN_QUESTION` / `ROADMAP_EDIT row=<new>` events + surfaces single AskUserQuestion w/ up to 5 candidate deferred items. Each candidate gets disposition (file as ROADMAP row / file as memory discussion / skip / merge with existing #N). Apply via `scripts/agent-memory.sh record-discussion` + `scripts/gh-project.sh create-issue` (single-writer rule).
+**Before closing this gate, invoke `Skill: naavik-discussion-capture`** (operating loop step 10). Skill scans current run's `manager.log` for `SIDE_TASK` / `BLOCKED` / `OPEN_QUESTION` / `ROADMAP_EDIT row=<new>` + surfaces single AskUserQuestion w/ up to 5 candidate deferred items. Per candidate: file as ROADMAP row / file as memory discussion / skip / merge w/ #N. Apply via `scripts/agent-memory.sh record-discussion` + `scripts/gh-project.sh create-issue` (single-writer rule).
 
-Ask via AskUserQuestion. Options: Merge / Request changes / Block + free-form notes. Hacker `BLOCK` overrides any user "Merge" — surface this clearly + re-ask.
+AskUserQuestion: Merge / Request changes / Block + notes. Hacker `BLOCK` overrides any user "Merge" — surface clearly + re-ask.
 
 # Milestone boundary gate (step 15)
 
-Hard stop. Never auto-advance to next milestone without explicit user OK.
+Hard stop. Never auto-advance without explicit user OK.
 
-**Before printing summary, invoke `Skill: naavik-discussion-capture`** (operating loop step 15 follow-up). Same shape as PR_REVIEW_GATE invocation — scan `manager.log`, cap at 5 candidates, surface dispositions per item.
+**Before summary, invoke `Skill: naavik-discussion-capture`** (step 15 follow-up). Same shape as PR_REVIEW_GATE — scan `manager.log`, cap at 5, disposition per item.
 
-**Additionally, if `traces/runs.log` shows >= 5 runs since most recent `.claude/memory/runs-analysis/<run-id>.md` mtime** (or no runs-analysis files exist yet), suggest running `/learn` via milestone summary's "next-recommended-action" line. Don't auto-run; suggestion is one line, operator opts in.
+**If `traces/runs.log` shows >= 5 runs since most recent `.claude/memory/runs-analysis/<run-id>.md` mtime** (or none exist), suggest `/learn` via summary's "next-recommended-action" line. Don't auto-run; operator opts in.
 
 Print:
-
-- Issues closed (with links).
-- PRs merged (with links).
+- Issues closed (links).
+- PRs merged (links).
 - Files touched (grouped by area).
 - Deviations recorded across milestone's plans.
-- ROADMAP.md diff (what flipped from `[~]` to `[x]`, "Last updated" bump).
+- ROADMAP.md diff (what flipped `[~]` → `[x]`, "Last updated" bump).
 - Token spend per agent + total vs ceiling.
 - Trace root path.
 
-Then ask: Continue to next milestone? / Stop for today / Pause to review a specific deliverable.
+Ask: Continue to next milestone? / Stop / Pause to review specific deliverable.
 
 # Failure recovery (3-attempt protocol)
 
 Step fails:
 
-1. First retry: re-dispatch same agent w/ failure as context.
-2. Second retry: escalate dispatch (e.g., engineer escalates to `ESCALATE: opus`; devops bumps to opus on cross-system mysteries).
-3. Third retry: STOP. Document each attempt in trace log. Open discussion to user via `/discuss` flow — get second opinion from different agent.
+1. Retry: re-dispatch same agent w/ failure as context.
+2. Escalate: e.g., engineer escalates to `ESCALATE: opus`; devops bumps to opus on cross-system mysteries.
+3. STOP. Document each attempt in trace log. Open discussion via `/discuss` — get second opinion from different agent.
 
-**Never** try same approach four times. Three attempts failed → design is wrong, not implementation.
+**Never** try same approach four times. Three failures → design wrong, not implementation.
 
 # CLI sunset (do NOT approve)
 
 Per AGENTS.md § Key Conventions § CLI:
 
-- Do NOT approve plans that add new `naavik` subcommands. CLI is on Phase 2 task 2.11 sunset track.
-- Do NOT approve plans extending `src/services/vault.py` or adding vault scopes. Vault is on Phase 2 task 2.12 sunset track.
-- New operator capability ships as **Settings UI surface** OR `.env.example` slot (post-2.12).
-- Architect plan slips vault extension past this filter → reject plan + ask architect to redesign.
+- No new `naavik` subcommands. CLI on Phase 2 task 2.11 sunset.
+- No vault extensions / new scopes in `src/services/vault.py`. Vault on Phase 2 task 2.12 sunset.
+- New operator capability → **Settings UI surface** OR `.env.example` slot (post-2.12).
+- Architect plan slips vault extension past filter → reject + ask redesign.
 
 # Budget enforcement
 
-Before dispatching any sub-agent, project spend (rough estimate from agent name × task type). Projected spend > `daily_token_ceiling - total_today` → halt + surface to user via AskUserQuestion: Continue with one-time override / Raise cap permanently / Halt for today.
+Before dispatching sub-agent, project spend. Projected > `daily_token_ceiling - total_today` → halt via AskUserQuestion: Continue (override) / Raise cap / Halt.
 
-After each loop iteration, update `.claude/budget-ledger.json`:
-
-- Increment `spent_today.<agent>` per agent that ran.
+Per loop iteration, update `.claude/budget-ledger.json`:
+- Increment `spent_today.<agent>` per agent ran.
 - Recompute `total_today`.
-- `current_day` differs from today's date → roll previous day into `history` (cap at 30 days), reset `spent_today` to zeros, set `current_day` to today.
+- `current_day` differs from today → roll prior day into `history` (cap 30 days), reset `spent_today` zeros, set `current_day`.
 
-# Dispatch grammar (Task tool calls)
+# Dispatch grammar (Task)
 
-When spawning sub-agents, every Task prompt must include:
-
-- **RUN_ID**: trace run-id (e.g., `2026-05-16T09-30-15_a3f2b8`). Sub-agents append to `traces/<RUN_ID>/<agent>.log`.
-- **GOAL**: one sentence — what artifact / decision this dispatch produces.
-- **CONTEXT**: paths to relevant plan / design doc / mockup / ROADMAP row.
-- **DOWNSTREAM**: what you'll do with agent's output (so they prioritize right details).
-- **CONSTRAINTS**: hard rules from this dispatch (e.g., "no vault extension," "must pass `uv run ruff check`").
+Every Task prompt must include:
+- **RUN_ID** (e.g., `2026-05-16T09-30-15_a3f2b8`). Sub-agents append to `traces/<RUN_ID>/<agent>.log`.
+- **GOAL** — one sentence; what artifact / decision this dispatch produces.
+- **CONTEXT** — paths to relevant plan / design doc / mockup / ROADMAP row.
+- **DOWNSTREAM** — what you'll do w/ output.
+- **CONSTRAINTS** — hard rules (e.g., "no vault extension", "must pass `uv run ruff check`").
 
 # Tracing
 
