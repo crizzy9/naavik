@@ -5,8 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import RedirectResponse
+
+from models import User
+from services.auth import require_authed_session
 
 router = APIRouter()
 
@@ -64,7 +67,9 @@ async def gmail_callback(code: Annotated[str, Query()]):
 
 
 @router.post("/api/v1/integrations/gmail/disconnect", name="gmail_disconnect")
-async def gmail_disconnect():
+async def gmail_disconnect(
+    _user: User | None = Depends(require_authed_session),
+):
     _INTEGRATIONS["gmail"].update({"account": None, "status": "not_connected"})
     response = Response(status_code=204)
     response.headers["HX-Redirect"] = "/tracking"
@@ -97,6 +102,7 @@ async def integration_callback(
 @router.post("/api/v1/integrations/{provider}/disconnect", name="integration_disconnect")
 async def integration_disconnect(
     provider: Literal["outlook", "calendar"],
+    _user: User | None = Depends(require_authed_session),
 ):
     _INTEGRATIONS[provider].update({"account": None, "status": "not_connected"})
     response = Response(status_code=204)

@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from db import sample_data as sd
 from models import User
-from services.auth import require_password_complete
+from services.auth import require_authed_session, require_password_complete
 from ui.templates_setup import templates
 
 router = APIRouter()
@@ -324,17 +324,26 @@ async def get_llm_usage(period: Annotated[str, Query()] = "month"):
 
 
 @router.put("/api/v1/settings/auto-apply", name="settings_auto_apply_put")
-async def put_auto_apply(request: Request):
+async def put_auto_apply(
+    request: Request,
+    _user: User | None = Depends(require_authed_session),
+):
     return {"ok": True}
 
 
 @router.put("/api/v1/settings/sources", name="settings_sources_put")
-async def put_sources(request: Request):
+async def put_sources(
+    request: Request,
+    _user: User | None = Depends(require_authed_session),
+):
     return {"ok": True}
 
 
 @router.put("/api/v1/settings/notifications", name="settings_notifications_put")
-async def put_notifications(request: Request):
+async def put_notifications(
+    request: Request,
+    _user: User | None = Depends(require_authed_session),
+):
     return {"ok": True}
 
 
@@ -343,6 +352,7 @@ async def post_notifications_test(
     request: Request,
     channel: Annotated[Literal["discord", "telegram"], Query()],
     fail: Annotated[str | None, Query()] = None,
+    _user: User | None = Depends(require_authed_session),
 ):
     if fail:
         return HTMLResponse(
@@ -365,7 +375,9 @@ async def get_deployment():
 
 
 @router.post("/api/v1/settings/deployment/restart", name="settings_deployment_restart")
-async def post_deployment_restart():
+async def post_deployment_restart(
+    _user: User | None = Depends(require_authed_session),
+):
     settings = await sd.get_settings()
     if settings.deployment_mode.value == "cloud":
         raise HTTPException(status_code=405, detail="Restart not allowed on cloud")
@@ -406,7 +418,10 @@ async def get_account():
 
 
 @router.put("/api/v1/settings/account", name="settings_account_put")
-async def put_account(request: Request):
+async def put_account(
+    request: Request,
+    _user: User | None = Depends(require_authed_session),
+):
     return {"ok": True}
 
 
@@ -429,7 +444,10 @@ async def put_account_password(
 
 
 @router.post("/api/v1/settings/account/delete", name="settings_account_delete")
-async def post_account_delete(request: Request):
+async def post_account_delete(
+    request: Request,
+    _user: User | None = Depends(require_authed_session),
+):
     return Response(status_code=204)
 
 
@@ -444,6 +462,7 @@ async def post_settings_test_connection_fragment(
     request: Request,
     fail: Annotated[str | None, Query()] = None,
     provider: Annotated[str | None, Query()] = None,  # noqa: ARG001
+    _user: User | None = Depends(require_authed_session),
 ):
     return await post_llm_test(request, fail=fail)
 

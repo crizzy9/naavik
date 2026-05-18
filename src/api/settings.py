@@ -25,7 +25,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 # JSON parser (which would 422 the request). Body parsing is done inline.
 from db.session import get_session
 from models import LLMProvider as LLMProviderEnum
+from models import User
 from services import settings_service
+from services.auth import require_authed_session
 
 router = APIRouter()
 
@@ -59,6 +61,7 @@ async def get_llm(session: AsyncSession = Depends(get_session)):
 async def put_llm(
     request: Request,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     """Update LLM provider config.
 
@@ -140,6 +143,7 @@ async def put_llm(
 @router.post("/api/v1/settings/llm/test", name="api_settings_llm_test")
 async def post_llm_test(
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     """Try a tiny `provider.complete("ping")` and return ok/latency.
 
@@ -176,6 +180,7 @@ async def post_llm_test(
 async def put_auto_apply(
     payload: Annotated[dict[str, Any] | None, Body()] = None,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     payload = payload or {}
     s = await settings_service.update_auto_apply(
@@ -201,6 +206,7 @@ async def put_auto_apply(
 async def put_sources(
     payload: Annotated[dict[str, Any] | None, Body()] = None,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     payload = payload or {}
     s = await settings_service.update_sources(
@@ -222,6 +228,7 @@ async def put_sources(
 async def put_notifications(
     payload: Annotated[dict[str, Any] | None, Body()] = None,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     payload = payload or {}
     s = await settings_service.update_notifications(

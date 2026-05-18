@@ -16,7 +16,9 @@ from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.session import get_session
+from models import User
 from services import profile_service
+from services.auth import require_authed_session
 from ui.templates_setup import templates
 
 router = APIRouter()
@@ -31,6 +33,7 @@ async def put_field(
     field: str,
     fail: Annotated[str | None, Query()] = None,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     """Per-field autosave. Returns the OOB autosave indicator partial."""
     if fail:
@@ -72,6 +75,7 @@ async def put_application_questions(
     request: Request,
     payload: Annotated[dict[str, Any] | None, Body()] = None,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     payload = payload or {}
     try:
@@ -96,6 +100,7 @@ async def post_bullet(
     text: Annotated[str, Form()] = "",
     experience_id: Annotated[int, Form()] = 0,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     if not experience_id:
         raise HTTPException(status_code=422, detail="experience_id is required")
@@ -116,6 +121,7 @@ async def put_bullet(
     text: Annotated[str | None, Form()] = None,
     fail: Annotated[str | None, Query()] = None,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     if fail:
         raise HTTPException(status_code=422, detail="Couldn't save bullet")
@@ -134,6 +140,7 @@ async def put_bullet(
 async def delete_bullet(
     bullet_id: int,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     deleted = await profile_service.delete_bullet(session, bullet_id)
     if not deleted:
@@ -148,6 +155,7 @@ async def delete_bullet(
 async def post_bullet_rewrite(
     bullet_id: int,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     """Stub LLM rewrite — Wave 6 wires `prompts/auto_tag_bullets` + a rewrite prompt."""
     bullet = await profile_service.get_bullet(session, bullet_id)
@@ -165,6 +173,7 @@ async def post_bullet_rewrite(
 async def post_bullets_reorder(
     payload: Annotated[dict[str, Any] | None, Body()] = None,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     payload = payload or {}
     bullet_ids = payload.get("bullet_ids") or []

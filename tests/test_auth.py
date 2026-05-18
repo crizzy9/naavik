@@ -424,3 +424,176 @@ def test_change_password_accepts_matching_csrf_token() -> None:
     # incorrect." The status proves require_csrf accepted matching tokens.
     assert r.status_code == 422
     assert "Current password" in r.text
+
+
+# ── Plan 23 (PC.6a) — require_authed_session wrapper ────────────────────
+
+
+def _build_authed_session_test_app(*, override_user=None):
+    """Build a minimal FastAPI app exposing one /api/v1/* mutation route and
+    one non-/api/v1/* UI route, both gated by `require_authed_session`.
+    `override_user` is the User the patched `get_user_by_id` returns; if
+    None, no user override is applied (default DB path).
+    """
+    from fastapi import Depends, FastAPI
+
+    from models import User
+    from services.auth import require_authed_session
+
+    app = FastAPI()
+
+    @app.post("/api/v1/probe")
+    async def probe_api(_user: User | None = Depends(require_authed_session)):
+        return {"ok": True}
+
+    @app.post("/probe")
+    async def probe_ui(_user: User | None = Depends(require_authed_session)):
+        return {"ok": True}
+
+    return app
+
+
+def test_require_authed_session_no_cookie_401() -> None:
+    """Plan 23 (PC.6a): missing `naavik_session` cookie raises 401."""
+    from fastapi.testclient import TestClient
+
+    app = _build_authed_session_test_app()
+    client = TestClient(app)
+
+    r = client.post("/api/v1/probe")
+    assert r.status_code == 401
+
+
+def test_require_authed_session_fake_cookie_returns_none() -> None:
+    """Plan 23 (PC.6a): cookie equals `FAKE_SESSION_VALUE` → wrapper returns
+    None and the route body runs to completion.
+    """
+    from fastapi.testclient import TestClient
+
+    app = _build_authed_session_test_app()
+    client = TestClient(app)
+
+    r = client.post(
+        "/api/v1/probe",
+        cookies={"naavik_session": "fake-1"},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+
+
+def test_require_authed_session_invalid_jwt_401(monkeypatch) -> None:
+    """Plan 23 (PC.6a): non-fake cookie that doesn't decode as a JWT → 401."""
+    from fastapi.testclient import TestClient
+
+    from services import auth as auth_svc
+
+    app = _build_authed_session_test_app()
+    client = TestClient(app)
+
+    # verify_jwt returns None on the patched call (mimicking an invalid token).
+    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: None)
+
+    r = client.post(
+        "/api/v1/probe",
+        cookies={"naavik_session": "definitely-not-a-jwt"},
+    )
+    assert r.status_code == 401
+
+
+def test_require_authed_session_real_jwt_unflagged_passes(monkeypatch) -> None:
+    """Plan 23 (PC.6a): valid JWT + unflagged user → wrapper returns the User
+    and the route body runs.
+    """
+    from fastapi.testclient import TestClient
+
+    from models import User
+    from services import auth as auth_svc
+
+    app = _build_authed_session_test_app()
+    client = TestClient(app)
+
+    async def fake_get_user_by_id(session, user_id):
+        return User(
+            id=1,
+            email="dev@local",
+            password_hash="$2b$04$placeholder.hash.for.test.only",
+            is_active=True,
+            is_admin=True,
+            must_change_password=False,
+        )
+
+    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: 1)
+    monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
+
+    r = client.post(
+        "/api/v1/probe",
+        cookies={"naavik_session": "valid-jwt"},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+
+
+def test_require_authed_session_real_jwt_flagged_403_on_api(monkeypatch) -> None:
+    """Plan 23 (PC.6a): /api/v1/* path + flagged user → 403 with HX-Redirect."""
+    from fastapi.testclient import TestClient
+
+    from models import User
+    from services import auth as auth_svc
+
+    app = _build_authed_session_test_app()
+    client = TestClient(app)
+
+    async def fake_get_user_by_id(session, user_id):
+        return User(
+            id=1,
+            email="dev@local",
+            password_hash="$2b$04$placeholder.hash.for.test.only",
+            is_active=True,
+            is_admin=True,
+            must_change_password=True,
+        )
+
+    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: 1)
+    monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
+
+    r = client.post(
+        "/api/v1/probe",
+        cookies={"naavik_session": "valid-jwt"},
+    )
+    assert r.status_code == 403
+    assert r.headers.get("hx-redirect") == "/auth/change-password"
+
+
+def test_require_authed_session_real_jwt_flagged_307_on_ui(monkeypatch) -> None:
+    """Plan 23 (PC.6a): non-/api/v1/* path + flagged user → 307 with
+    HX-Redirect AND Location set to /auth/change-password.
+    """
+    from fastapi.testclient import TestClient
+
+    from models import User
+    from services import auth as auth_svc
+
+    app = _build_authed_session_test_app()
+    # Disable follow_redirects so we observe the 307 directly.
+    client = TestClient(app, follow_redirects=False)
+
+    async def fake_get_user_by_id(session, user_id):
+        return User(
+            id=1,
+            email="dev@local",
+            password_hash="$2b$04$placeholder.hash.for.test.only",
+            is_active=True,
+            is_admin=True,
+            must_change_password=True,
+        )
+
+    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: 1)
+    monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
+
+    r = client.post(
+        "/probe",
+        cookies={"naavik_session": "valid-jwt"},
+    )
+    assert r.status_code == 307
+    assert r.headers.get("hx-redirect") == "/auth/change-password"
+    assert r.headers.get("location") == "/auth/change-password"
