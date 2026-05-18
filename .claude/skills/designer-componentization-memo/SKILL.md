@@ -4,17 +4,17 @@ description: Generate the canonical handoff memo to engineer for a new screen �
 
 # designer-componentization-memo
 
-Every mockup ships with a one-page memo so engineer doesn't have to re-derive the component composition from the visual artifact. The memo names: components used (from the catalog), new variants introduced (if any — propose `COMPONENTS.md` edit), HTMX patterns referenced, mockup paths, build target file path, route handler, data accessor. This is the contract between designer and engineer.
+Every mockup ships w/ one-page memo so engineer doesn't re-derive component composition from visual artifact. Memo names: components used (from catalog), new variants introduced (if any — propose `COMPONENTS.md` edit), HTMX patterns referenced, mockup paths, build target file path, route handler, data accessor. Contract between designer + engineer.
 
 ## When to invoke
 
-- Designer has produced a mockup at `docs/design/mockups/{n}-{slug}-{desktop|mobile}.png` and is handing off to engineer.
-- Designer just composed a new screen using `frontend-design` or `huashu-design` skill output.
-- Reviewing a screen-handoff PR — verify the memo is complete and accurate.
+- Designer produced mockup at `docs/design/mockups/{n}-{slug}-{desktop|mobile}.png`, handing off to engineer.
+- Designer just composed new screen using `frontend-design` or `huashu-design` skill output.
+- Reviewing screen-handoff PR — verify memo is complete + accurate.
 
-## What this skill does
+## Memo shape
 
-Render the memo in this exact shape (matches `.claude/agents/designer.md § Componentization notes`):
+Render in exact shape (matches `.claude/agents/designer.md § Componentization notes`):
 
 ```
 Screen: <screen name>
@@ -41,9 +41,9 @@ Accessor:
   - db mode: src/services/<service>.py:<method>
 ```
 
-### Section-by-section guidance
+## Section guidance
 
-**Composition.** List every partial used, with the count and the variant args (if any). Order from outermost to innermost (shell → page-level → row-level → atomic). Example for Tracking:
+**Composition.** List every partial used, count, variant args. Order outermost to innermost (shell → page-level → row-level → atomic). Example for Tracking:
 ```
 - sidebar (1) — nav variant=tracking
 - view_toggle (1) — modes=[board, list], default=board
@@ -55,16 +55,16 @@ Accessor:
 - empty_state (1) — shown when no applications yet
 ```
 
-**New variants introduced.** If you couldn't satisfy the design with existing variants, document the addition:
+**New variants introduced.** Couldn't satisfy design w/ existing variants → document addition:
 ```
 - variant=urgent on followup_banner — adds rose-tinted border for >7-day stalled threads
-  Rationale: existing amber tint is for "needs followup"; urgent is a stronger signal
+  Rationale: existing amber tint is for "needs followup"; urgent is stronger signal
   Propose: COMPONENTS.md § Tracking row for followup_banner — add `urgent` to Variants column
 ```
 
-**HTMX patterns.** Reference `docs/design/INTERACTIONS.md` by section. Common patterns:
-- `autosave` — inline field saves with 500ms debounce + `autosave_indicator`
-- `modal` — `<dialog>` element with `hx-target="#modal-content"` + fade entry
+**HTMX patterns.** Reference `docs/design/INTERACTIONS.md` by section. Common:
+- `autosave` — inline field saves w/ 500ms debounce + `autosave_indicator`
+- `modal` — `<dialog>` element w/ `hx-target="#modal-content"` + fade entry
 - `SSE` — server-sent events for live updates (Tracking refreshes, scoring progress)
 - `drag-drop` — Sortable.js + HTMX swap on drop (Tracking board reordering)
 - `optimistic-rollback` — apply locally + revert on HTMX error
@@ -72,7 +72,7 @@ Accessor:
 
 **Mockup files.** Both desktop + mobile PNGs. Engineer compares to these during Manual QA Gate.
 
-**Build target / Route handler / Accessor.** Tells engineer exactly where to write code. The accessor field has two lines (memory mode + db mode) because Phase 1's NAAVIK_PERSISTENCE env var supports both.
+**Build target / Route handler / Accessor.** Tells engineer exactly where to write code. Accessor has two lines (memory mode + db mode) because Phase 1's NAAVIK_PERSISTENCE env var supports both.
 
 ## Worked example — Tracking screen
 
@@ -108,9 +108,9 @@ Accessor:
   - db mode: src/services/application_service.py:list_applications_for_user
 ```
 
-## Implementation handoff checklist (mental, for the designer)
+## Implementation handoff checklist (mental, for designer)
 
-Before sending the memo:
+Before sending memo:
 
 ```
 [ ] Mockup exists at docs/design/mockups/{n}-{slug}-{desktop|mobile}.png
@@ -126,22 +126,22 @@ Before sending the memo:
 
 ## Canonical references
 
-- `.claude/agents/designer.md` § "Componentization notes (handoff to engineer)" — the canonical template.
+- `.claude/agents/designer.md` § "Componentization notes (handoff to engineer)" — canonical template.
 - `.claude/agents/designer.md` § "Implementation handoff checklist".
-- `docs/design/COMPONENTS.md` — the catalog the composition pulls from.
-- `docs/design/SCREENS.md` — the per-screen functional contract.
-- `docs/design/INTERACTIONS.md` — HTMX patterns the memo references.
+- `docs/design/COMPONENTS.md` — catalog composition pulls from.
+- `docs/design/SCREENS.md` — per-screen functional contract.
+- `docs/design/INTERACTIONS.md` — HTMX patterns memo references.
 - `docs/design/WORKFLOW.md` § Read order + § Accessibility checklist.
 
 ## When NOT to invoke
 
-- Polish pass on an existing screen (the memo's purpose is new-screen handoff; for polish, use a critique skill).
+- Polish pass on existing screen (memo purpose is new-screen handoff; for polish, use critique skill).
 - Pure component-extension change (no screen-level composition shift).
 - Compaction events.
 
 ## Forbidden during invocation
 
-- Do NOT skip the "New variants introduced" section. If you really introduced none, explicitly say "none". Silence reads as "I didn't check the catalog".
-- Do NOT omit the mobile path. Mobile layout is half the work; engineer needs both.
-- Do NOT name a non-existent partial in the Composition list. If it's "new", it lives in the "New variants" section with the proposed COMPONENTS.md edit.
-- Do NOT skip the accessor field. Engineer needs both memory + db paths because Phase 1's persistence mode is env-driven.
+- Do NOT skip "New variants introduced" section. Introduced none → explicitly say "none". Silence reads as "I didn't check catalog".
+- Do NOT omit mobile path. Mobile layout is half the work; engineer needs both.
+- Do NOT name non-existent partial in Composition list. If "new", lives in "New variants" section w/ proposed COMPONENTS.md edit.
+- Do NOT skip accessor field. Engineer needs both memory + db paths because Phase 1's persistence mode is env-driven.

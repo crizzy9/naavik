@@ -4,30 +4,28 @@ description: Apply the architect's option-matrix template — for every non-triv
 
 # architect-option-matrix
 
-Architect's plan contract requires at least 2 viable options for any non-trivial decision, with a trade-off matrix and a recommendation. Single-option plans bury the rejection rationale and force the user to re-derive it at review time. This skill is the template + a worked example pulled from plan 16 § C.1 (skill naming).
+Plan contract requires ≥ 2 viable options for any non-trivial decision, w/ trade-off matrix + recommendation. Single-option plans bury rejection rationale + force user to re-derive at review. Template + worked example from plan 16 § C.1 (skill naming).
 
 ## When to invoke
 
-- Authoring a new plan, hitting a "we'll use X" sentence — stop and surface alternatives.
-- User asks "which approach should we use" / "compare alternatives" / "what are the trade-offs".
-- Reviewing someone else's plan that recommends without comparing — flag for matrix addition.
-- Self-review: any time the plan reads like "the obvious choice is X" with no rejected alternatives.
+- Authoring new plan, hitting "we'll use X" sentence — stop, surface alternatives.
+- User asks "which approach should we use" / "compare alternatives" / "trade-offs".
+- Reviewing someone's plan recommending without comparing — flag for matrix.
+- Self-review: plan reads like "obvious choice is X" w/ no rejected alternatives.
 
-## What this skill does
+## Template
 
-For each decision, render a markdown table with at least 2 options across these 5 dimensions:
+For each decision, markdown table w/ ≥ 2 options across 5 dimensions:
 
 | Dimension | Question to answer |
 |---|---|
-| **Capability** | What does this option get us? What does it NOT get us? |
-| **Cost** | Implementation effort + ongoing maintenance cost + token cost if AI-relevant. |
+| **Capability** | What does option get us? What does it NOT get us? |
+| **Cost** | Implementation effort + ongoing maintenance + token cost if AI-relevant. |
 | **Risk** | What could go wrong? Probability + impact. |
-| **Maintenance** | Who owns it 6 months from now? What expertise is required to evolve it? |
-| **Lock-in** | How hard is reversal if we change our mind? What does the exit look like? |
+| **Maintenance** | Who owns it 6 months from now? What expertise to evolve it? |
+| **Lock-in** | How hard is reversal if we change our mind? What does exit look like? |
 
-Then a **Recommendation** line: name the option, state why, name the trade-off you're accepting.
-
-### Template
+Then **Recommendation** line: name option, state why, name trade-off accepted.
 
 ```markdown
 #### <Decision number> — <Decision name>
@@ -38,46 +36,46 @@ Then a **Recommendation** line: name the option, state why, name the trade-off y
 | <Option B> | ... | ... | ... | ... | ... |
 | **<Recommended option>** | ... | ... | ... | ... | ... |
 
-**Recommendation: <option>.** <one-paragraph rationale: why this option, what trade-off accepted, what evidence supports the call (research / context7 / nixos / a recent ROADMAP precedent).>
+**Recommendation: <option>.** <one-paragraph rationale: why this option, trade-off accepted, evidence (research / context7 / nixos / ROADMAP precedent).>
 ```
 
-### Worked example — plan 16 § C.1 (skill naming)
+## Worked example — plan 16 § C.1 (skill naming)
 
 | Option | Clarity | Collision risk | Discoverability | Tree readability |
 | --- | --- | --- | --- | --- |
-| Flat (`pick-next`, `stack-invariants`) | Lowest — "pick-next from where?" | High — collides with built-in `pick-next` if Anthropic ships one | Worst — alphabetical sort mixes agents | Worst — 28 dirs in a flat list |
+| Flat (`pick-next`, `stack-invariants`) | Lowest — "pick-next from where?" | High — collides w/ built-in `pick-next` if Anthropic ships one | Worst — alphabetical sort mixes agents | Worst — 28 dirs in flat list |
 | `naavik-<agent>-<verb>` (`naavik-manager-pick-next`) | High | Lowest — fully namespaced | Good but verbose | Good but verbose |
 | **`<agent>-<verb>` agent-specific + `naavik-<verb>` shared** | High | Low — agent prefix dedupes | Good — `manager-*` groups visually | Good — 6 agent prefixes + 4 `naavik-*` |
 
-**Recommendation: hybrid.** `<agent>-<verb>` for agent-scoped, `naavik-<verb>` for shared cross-agent. Trade-off accepted: slight name redundancy when listed alphabetically. Evidence: the same hybrid pattern works in `.claude/commands/` (e.g. `bootstrap`, `groom`, `standup`) where context disambiguates.
+**Recommendation: hybrid.** `<agent>-<verb>` for agent-scoped, `naavik-<verb>` for shared cross-agent. Trade-off: slight name redundancy when listed alphabetically. Evidence: same hybrid pattern works in `.claude/commands/` (e.g. `bootstrap`, `groom`, `standup`) where context disambiguates.
 
-Note: dimensions can flex per decision. Naming had no maintenance/lock-in axis worth comparing — clarity / collision / discoverability / readability were the load-bearing differentiators. Pick the 4-5 dimensions that matter for THIS decision; don't force the canonical 5 if some are uninformative.
+Dimensions flex per decision. Naming had no maintenance/lock-in axis worth comparing — clarity / collision / discoverability / readability were the load-bearing differentiators. Pick 4-5 dimensions that matter for THIS decision; don't force canonical 5 if uninformative.
 
-### Other worked patterns from the archive
+## Other worked patterns from archive
 
-| Plan | Decision | Options compared | Recommendation pattern |
+| Plan | Decision | Options | Recommendation pattern |
 |---|---|---|---|
 | 10a | Process-compose vs systemd-user vs raw shell for dev orchestrator | 3 | Picked process-compose + setsid-w wrapper; locked-in trade-off was Linux-only |
 | 10b | NullPool vs default pool for AsyncSession under lifespan | 2 | Picked NullPool; trade-off was 1-2ms latency for safer shutdown |
-| 10c | `~/.naavik/dev-credentials` env-gated vs unconditional vs CLI command | 3 | Picked env-gated + on-disk file; trade-off was operator must read the file (not a CLI prompt) |
+| 10c | `~/.naavik/dev-credentials` env-gated vs unconditional vs CLI command | 3 | Picked env-gated + on-disk file; trade-off was operator must read file (not CLI prompt) |
 
-These archive examples are templates — read the corresponding archived plan if your decision shape is similar.
+Archive examples = templates — read corresponding archived plan if decision shape is similar.
 
 ## Canonical references
 
 - `.claude/agents/architect.md` § "Reasoning depth" + § "Operating loop" § "Option matrix".
-- `.claude/agents/architect.md` § "Anti-patterns" — "Skip the option matrix on non-trivial decisions".
+- `.claude/agents/architect.md` § "Anti-patterns" — "Skip option matrix on non-trivial decisions".
 - Plan 16 § C.1–C.6 — six worked examples in one plan.
 - `docs/plans/archive/` — every executed plan has a worked option matrix or two.
 
 ## When NOT to invoke
 
-- Trivial choices (variable name, comment phrasing, kebab-vs-snake) — option-matrix overhead drowns the decision.
-- Forced choices ("the library only supports option B" — there's no matrix to draw).
+- Trivial choices (variable name, comment phrasing, kebab-vs-snake) — overhead drowns decision.
+- Forced choices ("library only supports option B" — no matrix to draw).
 - Compaction events.
 
 ## Forbidden during invocation
 
-- Do NOT ship a single-option section labeled "we'll use X". That's the anti-pattern this skill exists to prevent.
-- Do NOT pad the matrix with options you don't take seriously. Two real candidates beat five strawmen.
-- Do NOT skip the Recommendation line — naming the trade-off you ACCEPT is half the value.
+- Do NOT ship single-option section labeled "we'll use X". Anti-pattern this skill prevents.
+- Do NOT pad matrix w/ options you don't take seriously. Two real candidates beat five strawmen.
+- Do NOT skip Recommendation line — naming trade-off you ACCEPT is half the value.
