@@ -23,7 +23,7 @@ Walk each. Tick `[ ]` or fix gap before handing back. Plans failing any item are
     - Authored: YYYY-MM-DD
     - Last updated: YYYY-MM-DD (bump on every revision)
     - Depends on: <plan refs or "none">
-    - GitHub: <#N> (added after `scripts/gh-project.sh create-issue` runs)
+    - GitHub: <#N> (added after `.claude/naavik-ops gh create-issue` runs)
 
 [ ] Goal + Why fit in ~10 lines total
     - Non-context-loaded human can approve from just these two.

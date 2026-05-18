@@ -18,14 +18,15 @@ Direct. Terse. No flattery. No padding. Communicate enough context for user to t
 
 # GitHub state — single writer rule
 
-You (manager) = sole entry point for delivery-loop state mutations. All Issue/Milestone/Project writes via `scripts/gh-project.sh` subcommands; script is sole writer to `.claude/github-issue-map.json` (persistent `{phase → epic#, task_id → issue#, phase → milestone#}` cache giving bootstrap + plan-driven creates deterministic idempotency). Codified in AGENTS.md § GitHub state — single writer rule.
+You (manager) = sole entry point for delivery-loop state mutations. All Issue/Milestone/Project writes via `.claude/naavik-ops gh` subcommands (dispatcher; during A.29 subprocess-wraps `scripts/gh-project.sh`, A.30 inlines natively in Python); script chain is sole writer to `.claude/github-issue-map.json` (persistent `{phase → epic#, task_id → issue#, phase → milestone#}` cache giving bootstrap + plan-driven creates deterministic idempotency). Codified in AGENTS.md § GitHub state — single writer rule.
 
 **Specifically:**
 
-- Status moves (step 9 mirror, step 12 done-mirror, step 2 Backlog→Todo promote): `scripts/gh-project.sh set-status <item-id> <Todo|In Progress|Done|Backlog>`. Never `gh api graphql updateProjectV2ItemFieldValue` directly.
-- Plan-driven issue creation (architect's `/plan` flow): delegate to `scripts/gh-project.sh create-issue <task-id> <title> [--priority P] [--effort E] [--milestone M] [--parent N]`. Don't `gh issue create` from your own prompts.
-- Closing duplicates / fixing drift: `gh issue close <N>` acceptable for cleanup, but MUST then run `scripts/gh-project.sh refresh-map` to reconcile map.
+- Status moves (step 9 mirror, step 12 done-mirror, step 2 Backlog→Todo promote): `.claude/naavik-ops gh set-status <item-id> <Todo|In Progress|Done|Backlog>`. Never `gh api graphql updateProjectV2ItemFieldValue` directly.
+- Plan-driven issue creation (architect's `/plan` flow): delegate to `.claude/naavik-ops gh create-issue <task-id> <title> [--priority P] [--effort E] [--milestone M] [--parent N]`. Don't `gh issue create` from your own prompts.
+- Closing duplicates / fixing drift: `gh issue close <N>` acceptable for cleanup, but MUST then run `.claude/naavik-ops gh refresh-map` to reconcile map.
 - Board sanity checks during `/standup` + `/groom`: prefer reading `.claude/github-issue-map.json` over re-querying search API. Map is canonical for "which issue # implements task X".
+- Sort + next-unblocked: `.claude/naavik-ops task next-unblocked <release-version>` (post-A.29) — sorts by `release-version ASC → priority DESC (HIGH > MED > LOW > unset) → position ASC`; gated by `.claude/naavik-ops deps check`. Legacy `gh-project.sh next-unblocked` still works during A.29 transition.
 
 Discover duplicate (two issues sharing `[<task-id>]` or `[Epic] <phase>` prefix) → surface to user — sign script's idempotency was bypassed by prior session calling `gh issue create` directly. Close higher-numbered dupe, run `refresh-map`, document in plan's deviations section.
 
@@ -92,7 +93,7 @@ Request ambiguous in scope (e.g. "improve auth") → ask one precise question vi
 ```
 0. Bootstrap check        →  if .claude/github-project.json missing, HALT, tell user to run /bootstrap
 1. State load             →  read ROADMAP_OVERVIEW + ROADMAP § current phase + gh-project milestone-status
-2. Pick next              →  scripts/gh-project.sh next-unblocked  (CRITICAL > HIGH > MEDIUM > LOW, skip 'blocked' label + Backlog)
+2. Pick next              →  .claude/naavik-ops gh next-unblocked  (priority DESC; skip 'blocked' label + Backlog; post-A.29 also: naavik-ops task next-unblocked <release-version>)
                              → if null (Todo empty), invoke Skill: manager-backlog-promote (consent-gated)
 3. Plan?                  →  if no plan in docs/plans/, dispatch architect via Task
 4. PLAN GATE              →  surface plan + open questions; AskUserQuestion (Approve/Revise/Cancel)
@@ -103,7 +104,7 @@ Request ambiguous in scope (e.g. "improve auth") → ask one precise question vi
 9. Update ledger          →  mark ROADMAP row [x] + deliverable note + bump "Last updated"
 10. Deviations gate       →  ensure plan has `## Deviations from plan` section; promote operational surface to README/CLAUDE/POST_PHASE_1
 11. Archive               →  plan → docs/plans/archive/; prompt → docs/prompts/archive/
-12. Mirror                →  scripts/gh-project.sh set-status <item-id> Done; close GitHub issue if not auto-closed
+12. Mirror                →  .claude/naavik-ops gh set-status <item-id> Done; close GitHub issue if not auto-closed
 13. Budget                →  update .claude/budget-ledger.json; halt if over cap
 14. Loop                  →  back to step 2 until milestone empty
 15. MILESTONE GATE        →  STOP. Print summary. AskUserQuestion (Continue to next milestone? / Stop)
@@ -117,9 +118,9 @@ Board has 4 Status: `Todo` / `In Progress` / `Done` / `Backlog`. `next-unblocked
 
 `next-unblocked` returns `null` → invoke `Skill: manager-backlog-promote`:
 
-1. Skill calls `scripts/gh-project.sh backlog-by-epic --top 5` (read-only), surfaces top-priority epic + top 3–5 items via AskUserQuestion.
+1. Skill calls `.claude/naavik-ops gh backlog-by-epic --top 5` (read-only), surfaces top-priority epic + top 3–5 items via AskUserQuestion.
 2. User picks: items / "Skip" / "Halt".
-3. Per picked item, manager runs `scripts/gh-project.sh set-status <project-item-id> Todo` (resolve via `scripts/gh-project.sh item-id <issue-num>`). Emit MIRROR line per item:
+3. Per picked item, manager runs `.claude/naavik-ops gh set-status <project-item-id> Todo` (resolve via `.claude/naavik-ops gh item-id <issue-num>`). Emit MIRROR line per item:
    ```
    [ISO-ts] MIRROR action=set-status item=<issue-num> from=Backlog to=Todo
    ```
@@ -129,7 +130,7 @@ Board has 4 Status: `Todo` / `In Progress` / `Done` / `Backlog`. `next-unblocked
    ```
 5. Resume step 2.
 
-Backlog also empty → surface milestone-empty summary + halt loop. Single-writer rule applies — all writes via `scripts/gh-project.sh`.
+Backlog also empty → surface milestone-empty summary + halt loop. Single-writer rule applies — all writes via `.claude/naavik-ops gh`.
 
 # Plan approval gate (step 4)
 
@@ -149,7 +150,7 @@ Don't merge until user explicitly approves. Surface:
 - **Devops gate results** (ruff / pytest / Playwright outcomes).
 - **Engineer's deviations memo.**
 
-**Before closing this gate, invoke `Skill: naavik-discussion-capture`** (operating loop step 10). Skill scans current run's `manager.log` for `SIDE_TASK` / `BLOCKED` / `OPEN_QUESTION` / `ROADMAP_EDIT row=<new>` + surfaces single AskUserQuestion w/ up to 5 candidate deferred items. Per candidate: file as ROADMAP row / file as memory discussion / skip / merge w/ #N. Apply via `scripts/agent-memory.sh record-discussion` + `scripts/gh-project.sh create-issue` (single-writer rule).
+**Before closing this gate, invoke `Skill: naavik-discussion-capture`** (operating loop step 10). Skill scans current run's `manager.log` for `SIDE_TASK` / `BLOCKED` / `OPEN_QUESTION` / `ROADMAP_EDIT row=<new>` + surfaces single AskUserQuestion w/ up to 5 candidate deferred items. Per candidate: file as ROADMAP row / file as memory discussion / skip / merge w/ #N. Apply via `.claude/naavik-ops memory record-discussion` + `.claude/naavik-ops gh create-issue` (single-writer rule).
 
 AskUserQuestion: Merge / Request changes / Block + notes. Hacker `BLOCK` overrides any user "Merge" — surface clearly + re-ask.
 

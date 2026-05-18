@@ -1,6 +1,6 @@
 ---
 description: Auto-promote workflow primitive for the manager. When manager detects an empty Todo column (operating-loop step 2 OR `next-unblocked` returns null mid-loop), invoke this skill to surface the top-priority epic in Backlog + its top unblocked items via AskUserQuestion. User picks 1–N items; manager applies `set-status <id> Todo` per pick (one MIRROR per item) and resumes the loop. Triggers on phrases like "todo empty", "auto-promote", "promote backlog item", "next-unblocked returned null", "backlog promotion", "pull backlog into current cycle".
-allowed-tools: Read, Bash(scripts/gh-project.sh:*), Bash(jq:*), AskUserQuestion
+allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), Bash(jq:*), AskUserQuestion
 ---
 
 # manager-backlog-promote
@@ -11,18 +11,18 @@ Codified A.28 PLAN_GATE 2026-05-17 (Q3 REVERSED): Backlog → Todo promotion is 
 
 ## When to invoke
 
-- Manager operating loop step 2 (`/build`) → `scripts/gh-project.sh next-unblocked` returns null for current milestone.
+- Manager operating loop step 2 (`/build`) → `.claude/naavik-ops gh next-unblocked` returns null for current milestone.
 - Manager detects Todo count == 0 mid-loop (post-close, pre-next-pick).
 - User asks "what's in Backlog" / "promote a Backlog item" — same prompt surfaced for explicit promotion.
 - Manager pre-flight at MILESTONE_GATE — next milestone's Todo empty → surface promotion gate before "Continue."
 
 ## Steps
 
-1. **Verify Todo empty.** Run `scripts/gh-project.sh next-unblocked`. Expect `null`. Non-null → halt; caller invoked in error.
+1. **Verify Todo empty.** Run `.claude/naavik-ops gh next-unblocked`. Expect `null`. Non-null → halt; caller invoked in error.
 
 2. **Pull Backlog by epic.**
    ```bash
-   scripts/gh-project.sh backlog-by-epic --top 5
+   .claude/naavik-ops gh backlog-by-epic --top 5
    ```
    Returns JSON: array of `{epic_issue, epic_title, epic_priority, items[], total_items}` ordered by epic priority (CRITICAL > HIGH > MEDIUM > LOW > unset). Within epic, items unprioritized (only epic carries priority); insertion order preserved.
 
@@ -49,9 +49,9 @@ Codified A.28 PLAN_GATE 2026-05-17 (Q3 REVERSED): Backlog → Todo promotion is 
 
 5. **Apply picks.** Per picked item:
    ```bash
-   scripts/gh-project.sh set-status <project-item-id> Todo
+   .claude/naavik-ops gh set-status <project-item-id> Todo
    ```
-   Resolve project-item-id from Issue # via `scripts/gh-project.sh item-id <issue-num>`. One MIRROR line per item to `traces/<run-id>/manager.log`:
+   Resolve project-item-id from Issue # via `.claude/naavik-ops gh item-id <issue-num>`. One MIRROR line per item to `traces/<run-id>/manager.log`:
    ```
    [ISO-ts] MIRROR action=set-status item=<issue-num> from=Backlog to=Todo
    ```

@@ -1,6 +1,6 @@
 ---
-description: Before answering questions about LinkedIn scraping, prepare-commit-msg case sensitivity, hacker self-approval pivots, destructive-rm guard, sandbox post-direct-push denials, or any topic with a captured knowledge entry, check `.claude/memory/knowledge/<topic>.md`. Run `scripts/agent-memory.sh list knowledge` to see the index. Use whenever an agent is about to research a topic that may have been captured before. Triggers on phrases like "have we hit this before", "what did we decide about", "memory lookup", "knowledge entry", "lookup the topic", "is there a knowledge file", "do we know about", "captured pattern", "linkedin scraping", "branch case sensitivity", "self-approval", "destructive rm", "sandbox denial".
-allowed-tools: Read, Glob, Grep, Bash(scripts/agent-memory.sh:*), Bash(jq:*)
+description: Before answering questions about LinkedIn scraping, prepare-commit-msg case sensitivity, hacker self-approval pivots, destructive-rm guard, sandbox post-direct-push denials, or any topic with a captured knowledge entry, check `.claude/memory/knowledge/<topic>.md`. Run `.claude/naavik-ops memory list knowledge` to see the index. Use whenever an agent is about to research a topic that may have been captured before. Triggers on phrases like "have we hit this before", "what did we decide about", "memory lookup", "knowledge entry", "lookup the topic", "is there a knowledge file", "do we know about", "captured pattern", "linkedin scraping", "branch case sensitivity", "self-approval", "destructive rm", "sandbox denial".
+allowed-tools: Read, Glob, Grep, Bash(.claude/naavik-ops:*), Bash(scripts/agent-memory.sh:*), Bash(jq:*)
 ---
 
 # naavik-memory-lookup
@@ -21,7 +21,7 @@ Memory + learning reading surface (A.15 Wave 1). Use before researching topic fr
 ### 1 — Enumerate captured topics
 
 ```bash
-scripts/agent-memory.sh list knowledge
+.claude/naavik-ops memory list knowledge
 ```
 
 Returns table of `TOPIC | CONFIDENCE | ALIASES` from `.claude/memory/knowledge/*.md`.
@@ -38,17 +38,17 @@ Front-matter: `Topic`, `Aliases`, `First captured`, `Last referenced`, `Supersed
 
 Prior decisions:
 ```bash
-scripts/agent-memory.sh query decisions '.rationale | test("<topic-keyword>"; "i")'
+.claude/naavik-ops memory query decisions '.rationale | test("<topic-keyword>"; "i")'
 ```
 
 Prior discussions:
 ```bash
-scripts/agent-memory.sh query discussions '.topic | test("<topic-keyword>"; "i")'
+.claude/naavik-ops memory query discussions '.topic | test("<topic-keyword>"; "i")'
 ```
 
 Prior lessons (Wave 2+):
 ```bash
-scripts/agent-memory.sh query lessons '.pattern | test("<topic-keyword>"; "i")'
+.claude/naavik-ops memory query lessons '.pattern | test("<topic-keyword>"; "i")'
 ```
 
 ### 4 — Decide if knowledge is current
@@ -72,14 +72,14 @@ Wave 3's `mine-patterns --aliases` aggregates these to propose alias additions.
 Read-only skill. To capture, route through single writer:
 
 ```bash
-echo "<body markdown>" | scripts/agent-memory.sh record-knowledge <slug> - \
+echo "<body markdown>" | .claude/naavik-ops memory record-knowledge <slug> - \
   --aliases "phrase1, phrase2, phrase3" --confidence high --run-id <run-id>
 ```
 
 Or decision:
 
 ```bash
-scripts/agent-memory.sh record-decision <id> '<one-line verdict>' '<rationale>' \
+.claude/naavik-ops memory record-decision <id> '<one-line verdict>' '<rationale>' \
   --run-id <run-id>
 ```
 
@@ -105,4 +105,4 @@ NEVER use `Edit` / `Write` directly against `.claude/memory/` — single-writer 
 - Do NOT `Edit` / `Write` against `.claude/memory/`. All writes via `scripts/agent-memory.sh`.
 - Do NOT write to `~/.claude/projects/<...>/memory/MEMORY.md`. Claude Code's; read only.
 - Do NOT trust `Confidence: low` entry over the live source it cites — re-read linked `traces/<run-id>/<log>.log` or `docs/plans/archive/<NN>.md` before acting.
-- Do NOT mass-promote knowledge entries inline. Promotion via `/learn` → `scripts/agent-memory.sh promote-lesson` (Wave 3) so audit trail survives.
+- Do NOT mass-promote knowledge entries inline. Promotion via `/learn` → `.claude/naavik-ops memory promote-lesson` (Wave 3) so audit trail survives.

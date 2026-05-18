@@ -41,4 +41,4 @@ Emit one `Loaded:` summary line. Proceed with task.
 
 - Do NOT extend `src/cli/` or `src/services/vault.py` (sunset, Phase 2 tasks 2.11 / 2.12).
 - Do NOT propose tracking-table duplication of ROADMAP in plans (drift trap per `AGENTS.md § Single-doc-tracking`).
-- Do NOT write GitHub Issue / Project state via raw `gh issue create` / `gh api graphql` — all mutations via `scripts/gh-project.sh` (per `CLAUDE.md § GitHub state — single writer rule`).
+- Do NOT write GitHub Issue / Project state via raw `gh issue create` / `gh api graphql` — all mutations via `.claude/naavik-ops gh` (which during A.29 subprocess-wraps `scripts/gh-project.sh`; per `CLAUDE.md § GitHub state — single writer rule`).

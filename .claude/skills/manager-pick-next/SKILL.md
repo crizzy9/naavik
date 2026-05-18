@@ -1,11 +1,11 @@
 ---
-description: Identify the next unblocked GitHub Project task for the current milestone via `scripts/gh-project.sh next-unblocked` and the persistent issue-map cache. Use when manager runs the operating-loop step 2 (Pick next), when the user asks "what's next" or "pick the next task" or "what should I work on", or whenever a `/build` run needs the next item after closing the previous one. Triggers on phrases like "next task", "pick next", "what's next", "next unblocked", "what should I work on", "operating loop step 2".
-allowed-tools: Read, Bash(scripts/gh-project.sh:*), Bash(jq:*)
+description: Identify the next unblocked GitHub Project task for the current milestone via `.claude/naavik-ops gh next-unblocked` and the persistent issue-map cache. Use when manager runs the operating-loop step 2 (Pick next), when the user asks "what's next" or "pick the next task" or "what should I work on", or whenever a `/build` run needs the next item after closing the previous one. Triggers on phrases like "next task", "pick next", "what's next", "next unblocked", "what should I work on", "operating loop step 2".
+allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), Bash(jq:*)
 ---
 
 # manager-pick-next
 
-Operating loop step 2: find highest-priority unblocked **Todo** issue for current milestone. Backlog items are deferred + skipped by `next-unblocked`. Within Backlog, only EPICS carry Priority (item-level unprioritized). When Todo empty (`next-unblocked` → null), invoke `Skill: manager-backlog-promote` to surface top-priority Backlog epic + items for user pick via AskUserQuestion. Manager applies picks via `scripts/gh-project.sh set-status <id> Todo` (one MIRROR per item) then resumes loop. Single-writer rule: only helper script reads/writes Project state.
+Operating loop step 2: find highest-priority unblocked **Todo** issue for current milestone. Backlog items are deferred + skipped by `next-unblocked`. Within Backlog, only EPICS carry Priority (item-level unprioritized). When Todo empty (`next-unblocked` → null), invoke `Skill: manager-backlog-promote` to surface top-priority Backlog epic + items for user pick via AskUserQuestion. Manager applies picks via `.claude/naavik-ops gh set-status <id> Todo` (one MIRROR per item) then resumes loop. Single-writer rule: only helper script reads/writes Project state.
 
 ## When to invoke
 
@@ -17,7 +17,7 @@ Operating loop step 2: find highest-priority unblocked **Todo** issue for curren
 
 1. **Run helper.**
    ```bash
-   scripts/gh-project.sh next-unblocked
+   .claude/naavik-ops gh next-unblocked
    ```
    Returns next open issue with Status=Todo, sorted by Priority (`CRITICAL > HIGH > MEDIUM > LOW`), excluding `blocked`/`epic` labels. Single JSON object or `null`.
 
@@ -39,7 +39,7 @@ Operating loop step 2: find highest-priority unblocked **Todo** issue for curren
    ```
    Example: `Next: [PC.5] SECRET_KEY boot-time enforcement (priority: MEDIUM, milestone: Pre-Phase-2 paper cuts, issue: #7, estimate: ~1h)`.
 
-6. **If `next-unblocked` returns `null`,** Todo column empty for milestone. **Invoke `Skill: manager-backlog-promote`** to surface next-priority Backlog epic + items via AskUserQuestion. Manager applies picks via `scripts/gh-project.sh set-status <id> Todo` (one MIRROR per item) and resumes step 1. No auto-promote without user consent. If promote skill also returns "Backlog empty," milestone fully cleared — emit:
+6. **If `next-unblocked` returns `null`,** Todo column empty for milestone. **Invoke `Skill: manager-backlog-promote`** to surface next-priority Backlog epic + items via AskUserQuestion. Manager applies picks via `.claude/naavik-ops gh set-status <id> Todo` (one MIRROR per item) and resumes step 1. No auto-promote without user consent. If promote skill also returns "Backlog empty," milestone fully cleared — emit:
    ```
    Next: <none> — milestone <name> empty (Todo + Backlog). Recommend `/standup` or pick a different milestone.
    ```

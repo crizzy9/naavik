@@ -1,6 +1,6 @@
 ---
 description: Scan the current run's `manager.log` for deferred items (SIDE_TASK, BLOCKED, OPEN_QUESTION, ROADMAP_EDIT row=<new>) and surface them via AskUserQuestion before closing a PR_REVIEW_GATE or MILESTONE_GATE. Each candidate is dispositioned (file as ROADMAP row / file as memory discussion / skip / merge with existing). Use whenever manager is about to close a gate. Triggers on phrases like "gate approved", "about to merge", "milestone done", "wrapping up", "before we close", "anything we deferred", "discussion capture", "what did we talk about".
-allowed-tools: Read, Grep, Bash(grep:*), Bash(scripts/agent-memory.sh:*), Bash(scripts/gh-project.sh:*), AskUserQuestion
+allowed-tools: Read, Grep, Bash(grep:*), Bash(.claude/naavik-ops:*), Bash(scripts/agent-memory.sh:*), Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), AskUserQuestion
 ---
 
 # naavik-discussion-capture
@@ -48,17 +48,17 @@ Show top 5; rest in "see more" expandable note pointing at log line.
 
 One question per gate, one row per candidate. Each row offers:
 
-- **File as ROADMAP row** — manager runs `scripts/gh-project.sh create-issue <task-id> "<title>" --priority MEDIUM --effort S` AND records discussion via `scripts/agent-memory.sh record-discussion ... --filed-as #<N>`.
-- **File as memory discussion only** — no ROADMAP row; manager runs `scripts/agent-memory.sh record-discussion <topic> manager.log --priority LOW` (operator wanted rationale, not work).
-- **Skip** — explicit skip; manager records `scripts/agent-memory.sh record-discussion <topic> manager.log --priority LOW --filed-as skipped` so future runs see it was considered + rejected.
+- **File as ROADMAP row** — manager runs `.claude/naavik-ops gh create-issue <task-id> "<title>" --priority MEDIUM --effort S` AND records discussion via `.claude/naavik-ops memory record-discussion ... --filed-as #<N>`.
+- **File as memory discussion only** — no ROADMAP row; manager runs `.claude/naavik-ops memory record-discussion <topic> manager.log --priority LOW` (operator wanted rationale, not work).
+- **Skip** — explicit skip; manager records `.claude/naavik-ops memory record-discussion <topic> manager.log --priority LOW --filed-as skipped` so future runs see it was considered + rejected.
 - **Merge with existing row #N** — operator names existing ROADMAP/Issue # candidate belongs to.
 
 ### 4 — Apply dispositions
 
 Per user response, manager invokes matching writer (single-writer rule):
 
-- ROADMAP row: edit `ROADMAP.md` (BOOKKEEPING — direct push post-merge) + `scripts/gh-project.sh create-issue ...` for Project mirror.
-- Memory discussion: `scripts/agent-memory.sh record-discussion ...`.
+- ROADMAP row: edit `ROADMAP.md` (BOOKKEEPING — direct push post-merge) + `.claude/naavik-ops gh create-issue ...` for Project mirror.
+- Memory discussion: `.claude/naavik-ops memory record-discussion ...`.
 - Merge: append `merged_into: #<N>` via `record-discussion --filed-as #<N>`.
 
 ### 5 — Append run-level event
@@ -81,8 +81,8 @@ Args:
 - `docs/design/AGENT_MEMORY.md § 4` — discussion-capture gate procedure.
 - `docs/AGENT_OPS.md § 7.2` — event shapes for manager.log.
 - `.claude/agents/manager.md` § Operating loop step 10 + step 15.
-- `scripts/agent-memory.sh record-discussion` — write path.
-- `scripts/gh-project.sh create-issue` — ROADMAP-mirror write path.
+- `.claude/naavik-ops memory record-discussion` — write path.
+- `.claude/naavik-ops gh create-issue` — ROADMAP-mirror write path.
 - `AGENTS.md § GitHub state — single writer rule` + § Single-doc-tracking.
 
 ## When NOT to invoke

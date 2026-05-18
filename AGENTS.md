@@ -393,19 +393,20 @@ When you implement a plan:
 
 The plan stays rich; ROADMAP stays current.
 
-### GitHub state — single writer rule (codified 2026-05-16)
+### GitHub state — single writer rule (codified 2026-05-16; updated 2026-05-18 for A.29 dispatcher)
 
-`ROADMAP.md` is the authoritative ledger; the GitHub Project v2 board mirrors it. To keep the mirror deterministic, the script `scripts/gh-project.sh` is the **sole writer** to GitHub Issues, Milestones, Project items, and `.claude/github-issue-map.json` (the persistent `{phase → epic#, task_id → issue#, phase → milestone#}` association cache).
+`ROADMAP.md` is the authoritative ledger; the GitHub Project v2 board mirrors it. To keep the mirror deterministic, **`.claude/naavik-ops gh`** (Python dispatcher; subprocess-wraps `scripts/gh-project.sh` during the A.29 transition, native Python in A.30) is the **sole writer entry point** to GitHub Issues, Milestones, Project items, and `.claude/github-issue-map.json` (the persistent `{phase → epic#, task_id → issue#, phase → milestone#}` association cache).
 
 **Why this exists.** The GitHub search API is eventually consistent (~30s–2min indexing lag) and rate-limited. Pre-2026-05-16 the script's idempotency check (`find_issue_by_prefix`) queried that API and silently treated indexing-lag misses as "doesn't exist," producing duplicate issues (e.g. `#46` dup `#6` for `[Epic] Pre-Phase-2 paper cuts`, `#47` dup `#7` for `[PC.5]`). The map cache eliminates the race: every create writes to the map, every existence check reads it first.
 
 **Operational rules:**
 
-- All `gh issue create` / `gh issue close` / Project field writes go through `scripts/gh-project.sh` subcommands (`create-issue`, `create-epic`, `set-status`, `set-priority`, `set-effort`, `add-subissue`). Never call `gh` or `gh api graphql` for those operations from agent prompts or scripts.
+- All `gh issue create` / `gh issue close` / Project field writes go through `.claude/naavik-ops gh` subcommands (`create-issue`, `create-epic`, `set-status`, `set-priority`, `set-effort`, `add-subissue`). The dispatcher subprocess-wraps `scripts/gh-project.sh` during A.29; A.30 (0.1.1) inlines native Python. Never call `gh` or `gh api graphql` for those operations from agent prompts or scripts.
 - Never hand-edit `.claude/github-issue-map.json`. It's machine-managed.
-- If manual UI edits drift the map (someone renames/closes/deletes an issue in github.com), run `scripts/gh-project.sh refresh-map` to reconcile from authoritative GitHub state. Collisions on title prefix resolve to (open, lowest-#).
-- The `manager` agent is the sole entry point for delivery-loop state mutations. Other agents (architect, engineer, hacker, devops, designer) may invoke `scripts/gh-project.sh create-issue` for plan-driven issue creation, but must not write the Project board's Status column directly — that's manager's job during step 9 (mirror) of the workflow.
+- If manual UI edits drift the map (someone renames/closes/deletes an issue in github.com), run `.claude/naavik-ops gh refresh-map` to reconcile from authoritative GitHub state. Collisions on title prefix resolve to (open, lowest-#).
+- The `manager` agent is the sole entry point for delivery-loop state mutations. Other agents (architect, engineer, hacker, devops, designer) may invoke `.claude/naavik-ops gh create-issue` for plan-driven issue creation, but must not write the Project board's Status column directly — that's manager's job during step 9 (mirror) of the workflow.
 - This rule supersedes the older AGENT_OPS.md § 9.5 "bootstrap created duplicates" guidance, which assumed dupes were a rename problem. They're almost always a search-API consistency problem; run `refresh-map`, close the duplicate by hand, document in the relevant plan's deviations section.
+- **Post-A.29 sort key for `next-unblocked`:** release-version ASC → priority DESC (HIGH > MED > LOW > unset) → position ASC, gated by deps. Use `.claude/naavik-ops task next-unblocked <release-version>` (e.g. `0.2.0`) for the new schema; legacy `next-unblocked` (no version) sorts by Project Priority field for backward compat during A.29 transition.
 
 ---
 
