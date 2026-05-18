@@ -26,7 +26,7 @@ Scope: $ARGUMENTS
 4. **Open GitHub Issue + add to Project** (after user approves plan, not before):
 
    ```
-   scripts/gh-project.sh create-issue <task-id> "<plan title>" --priority <CRITICAL|HIGH|MEDIUM|LOW> --milestone "<Phase X>"
+   .claude/naavik-ops gh create-issue <task-id> "<plan title>" --priority <CRITICAL|HIGH|MEDIUM|LOW> --milestone "<Phase X>"
    ```
 
    - `<task-id>` = ROADMAP row ID (e.g., `PC.5`, `2.11`, `A.8`). Plan introduces new scope not yet rowed in ROADMAP → ALSO add ROADMAP row first.

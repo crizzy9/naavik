@@ -14,7 +14,7 @@ Milestone: $ARGUMENTS (default: "next")
 3. **Spawn `manager` via Task** with operating loop in its system prompt. Pass in prompt:
    - **Target milestone**: $ARGUMENTS (or "next open milestone in GitHub Project" if "next").
    - **Current ROADMAP state**: brief summary of current phase + open task ledger (manager reads `ROADMAP.md` directly to confirm).
-   - **GitHub Project ID**: read from `.claude/github-project.json`. Missing → run `scripts/gh-project.sh init` first + re-read.
+   - **GitHub Project ID**: read from `.claude/github-project.json`. Missing → run `.claude/naavik-ops gh init` first + re-read.
    - **Token budget**: read `.claude/budget.json` + pass `daily_token_ceiling` + per-agent caps. Halt if projected next-step spend exceeds remaining budget.
    - **Trace root**: `./traces/<run-id>/` — all sub-agents append to per-agent log files there.
 
@@ -38,4 +38,4 @@ Milestone: $ARGUMENTS (default: "next")
    - Append run summary to `./traces/<run-id>/MANIFEST.json` (schema in AGENT_OPS.md § 7.3).
    - Append one-liner to `./traces/runs.log`: `[ISO-timestamp] run=<run-id> milestone=<name> outcome=<delivered|halted|failed> issues=<n> prs=<n> tokens=<n>`.
    - Update `.claude/budget-ledger.json` w/ run's spend (per AGENT_OPS.md § 8.2).
-   - Run `scripts/gh-project.sh sync --apply` at end of run to push any ROADMAP edits manager made through to Project (idempotent; usually no-op if manager already called `set-status` per-task).
+   - Run `.claude/naavik-ops gh sync --apply` at end of run to push any ROADMAP edits manager made through to Project (idempotent; usually no-op if manager already called `set-status` per-task).

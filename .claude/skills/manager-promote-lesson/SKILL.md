@@ -1,6 +1,6 @@
 ---
-description: Promote a recurring pattern (occurrence_count >= 5) to a lesson + knowledge stub. Consent-gated wrapper around `scripts/agent-memory.sh promote-lesson <pattern_id>`. Use when /learn surfaces a promotion candidate, when manager has user approval to promote a specific pattern, when the user says "promote this pattern" / "make this a lesson" / "this should be a knowledge entry". Triggers on phrases like "promote lesson", "promote pattern", "lesson promotion", "make this a lesson", "knowledge stub from pattern", "threshold 5".
-allowed-tools: Read, Bash(scripts/agent-memory.sh:*), Bash(jq:*), AskUserQuestion
+description: Promote a recurring pattern (occurrence_count >= 5) to a lesson + knowledge stub. Consent-gated wrapper around `.claude/naavik-ops memory promote-lesson <pattern_id>` (subprocess-wraps `scripts/agent-memory.sh` during A.29). Use when /learn surfaces a promotion candidate, when manager has user approval to promote a specific pattern, when the user says "promote this pattern" / "make this a lesson" / "this should be a knowledge entry". Triggers on phrases like "promote lesson", "promote pattern", "lesson promotion", "make this a lesson", "knowledge stub from pattern", "threshold 5".
+allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/agent-memory.sh:*), Bash(jq:*), AskUserQuestion
 ---
 
 # manager-promote-lesson
@@ -18,7 +18,7 @@ Wave 3 promotion wrapper. Patterns crossing `occurrence_count >= 5` are candidat
 ### 1 — Verify pattern qualifies
 
 ```bash
-scripts/agent-memory.sh query patterns ".pattern_id == \"<pattern_id>\""
+.claude/naavik-ops memory query patterns ".pattern_id == \"<pattern_id>\""
 ```
 
 Confirm:
@@ -57,7 +57,7 @@ Promote pattern '<pattern_id>' (count=<N>) to lesson '<lesson_id>' + knowledge s
 ### 4 — Run promotion
 
 ```bash
-scripts/agent-memory.sh promote-lesson <pattern_id>
+.claude/naavik-ops memory promote-lesson <pattern_id>
 ```
 
 Creates `lessons.jsonl` row + `knowledge/<slug>.md` stub from `proposed_action`. Output:
@@ -80,7 +80,7 @@ Promoted:
 Operator expands auto-generated stub via:
 
 ```bash
-scripts/agent-memory.sh record-knowledge <slug> <body-file> \
+.claude/naavik-ops memory record-knowledge <slug> <body-file> \
   --aliases "<merged-list>" --confidence high --overwrite
 ```
 
@@ -126,7 +126,7 @@ Operator job after: replace `## Context` + `## Pattern` w/ prose; merge useful `
 
 ## Canonical references
 
-- `scripts/agent-memory.sh promote-lesson <pattern_id>` — underlying write.
+- `.claude/naavik-ops memory promote-lesson <pattern_id>` — underlying write.
 - `.claude/commands/learn.md` § Section A + § Section E — consent-collection surface.
 - `docs/design/AGENT_MEMORY.md § 6.4` — promotion extension guide.
 - `docs/AGENT_OPS.md § 14.6` — Wave 3 surface documentation.
@@ -140,7 +140,7 @@ Operator job after: replace `## Context` + `## Pattern` w/ prose; merge useful `
 
 ## Forbidden during invocation
 
-- Do NOT override threshold-5 gate. `scripts/agent-memory.sh promote-lesson` enforces.
+- Do NOT override threshold-5 gate. `.claude/naavik-ops memory promote-lesson` enforces.
 - Do NOT auto-promote without user consent. AskUserQuestion gate is the point.
 - Do NOT bypass auto-slug rule. Deterministic slug → promotion idempotent across re-runs.
 - Do NOT bulk-promote. One pattern per invocation.

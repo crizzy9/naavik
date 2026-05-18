@@ -14,7 +14,7 @@ Inspect agent system run history. Per `docs/AGENT_OPS.md` § 7.
 **$ARGUMENTS is number** (default: 10): show last N runs.
 
 ```
-scripts/gh-project.sh runs <count>
+.claude/naavik-ops gh runs <count>
 ```
 
 Print one line per run, formatted as table:

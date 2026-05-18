@@ -94,7 +94,7 @@ HALT.
 **IF** category = C **AND** user said **CANCEL** **THEN:**
 
 1. Append GATE event with `outcome=cancel`.
-2. Mirror the task back to Todo on the Project board via `scripts/gh-project.sh set-status <item-id> Todo`. Cancellation puts the work back in the current cycle pool (NOT Backlog — that's "deferred from current cycle," which is a different intent than "user changed mind, redo").
+2. Mirror the task back to Todo on the Project board via `.claude/naavik-ops gh set-status <item-id> Todo`. Cancellation puts the work back in the current cycle pool (NOT Backlog — that's "deferred from current cycle," which is a different intent than "user changed mind, redo").
 3. Flip ROADMAP row from `[~]` back to `[ ]` (this is BOOKKEEPING — execute per § I).
 4. Surface cancellation summary. HALT.
 
@@ -151,7 +151,7 @@ HALT.
 
 1. `Skill: naavik-cold-start` if not loaded.
 2. `Skill: manager-pick-next` if the user didn't specify the task; otherwise use the user-named task. If `next-unblocked` returns null (Todo empty), invoke `Skill: manager-backlog-promote` for the auto-promote workflow (4-status convention per post-A.28).
-3. Mirror PC.X / 2.X / etc. → In Progress on Project board: `scripts/gh-project.sh set-status <item-id> "In Progress"`.
+3. Mirror PC.X / 2.X / etc. → In Progress on Project board: `.claude/naavik-ops gh set-status <item-id> "In Progress"`.
 4. Check `docs/plans/`:
    - If `<NN>-<slug>.md` exists with `Status: APPROVED` → jump to step 7.
    - If exists with `Status: DRAFT` → surface PLAN_GATE for user review.
@@ -188,11 +188,13 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 - `src/**` (code)
 - `tests/**` (tests)
 - `migrations/**` (alembic migrations)
-- `scripts/**` (helper scripts)
+- `scripts/**` (helper scripts — bash + Python)
 - `.claude/agents/**` (agent prompts)
 - `.claude/skills/**` (skill bodies)
 - `.claude/commands/**` (slash commands)
 - `.claude/hooks/**` (Claude Code hooks + git hooks)
+- `.claude/naavik_ops/**` (Python dispatcher package; new in A.29) + `.claude/naavik-ops` entry point
+- `.claude/migrations/**` (one-shot historical migration runbooks; new in A.29)
 - `.claude/settings.json`, `.claude/settings.local.json` (config)
 - `AGENTS.md`, `CLAUDE.md` (workflow contract + Claude conventions)
 - `docs/AGENT_OPS.md`, `docs/PLAYBOOK.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/DEPLOYMENT.md` (operational contracts)
@@ -257,7 +259,7 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
    - `docs(roadmap): file <task-id> + <task-id> follow-ups`
    - `docs(roadmap): bump Last updated — <one-line>`
 4. `git push origin main`.
-5. If new ROADMAP rows were added that need Project board sync, run `scripts/gh-project.sh create-issue <task-id> "<title>" --priority <P> --effort <E> --milestone "<M>" --parent <epic-#>` per the single-writer rule (`AGENTS.md § GitHub state — single writer rule`). NEVER `gh issue create` directly.
+5. If new ROADMAP rows were added that need Project board sync, run `.claude/naavik-ops gh create-issue <task-id> "<title>" --priority <P> --effort <E> --milestone "<M>" --parent <epic-#>` per the single-writer rule (`AGENTS.md § GitHub state — single writer rule`). NEVER `gh issue create` directly. During A.29 transition the dispatcher subprocess-wraps `scripts/gh-project.sh`; either path preserves the single-writer invariant.
 
 ---
 
@@ -267,7 +269,7 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 2. **Never `git push --force` to main/master.** Period.
 3. **Never `git commit --amend` to fix pre-commit-hook failures.** Create a NEW commit. (`AGENTS.md § Workflow`.)
 4. **Never skip the deviations section before archiving a plan.** (`AGENTS.md § Workflow step 7`.)
-5. **Never write GitHub Issue / Project state directly.** Use `scripts/gh-project.sh` per single-writer rule.
+5. **Never write GitHub Issue / Project state directly.** Use `.claude/naavik-ops gh` per single-writer rule (which during A.29 subprocess-wraps `scripts/gh-project.sh`).
 6. **Never extend `src/cli/` or `src/services/vault.py`.** Both on sunset track (`ROADMAP.md` § Phase 2 tasks 2.11 + 2.12).
 7. **Always log `ERROR` events as failures happen.** (`docs/AGENT_OPS.md § 7.2`.)
 8. **Always emit `BUILT` / `REVIEWED` summary line at end of every dispatch.** Last line of the agent's log.
@@ -300,7 +302,7 @@ Non-exhaustive examples that fall under "everything else" (CONTRACT_CHANGE — P
 
 ## Board status convention (post-A.28)
 
-The GitHub Project v2 board uses **four** single-select Status options: `Todo` / `In Progress` / `Done` / **`Backlog`**. Backlog is the parking spot for items deferred from the current cycle — they stay open Issues, retain their ROADMAP rows, but `scripts/gh-project.sh next-unblocked` skips them. To pull a Backlog item into the current cycle, run `scripts/gh-project.sh set-status <item-id> Todo` explicitly (or invoke the manager-backlog-promote skill for the consent-gated auto-promote workflow).
+The GitHub Project v2 board uses **four** single-select Status options: `Todo` / `In Progress` / `Done` / **`Backlog`**. Backlog is the parking spot for items deferred from the current cycle — they stay open Issues, retain their ROADMAP rows, but `.claude/naavik-ops gh next-unblocked` skips them. To pull a Backlog item into the current cycle, run `.claude/naavik-ops gh set-status <item-id> Todo` explicitly (or invoke the manager-backlog-promote skill for the consent-gated auto-promote workflow).
 
 ROADMAP checkboxes don't distinguish Todo vs Backlog (both are `[ ]`); the **Project Status column is the single source of truth for "is this in the current cycle."** `/sync-roadmap --apply` preserves Backlog (Backlog → Todo is not a drift); the asymmetric mapping is codified in `docs/AGENT_OPS.md § 6.3`. Within Backlog, items are unprioritized at the item level — only the EPICS within Backlog carry priority via their own Priority field. Promotion ordering uses epic priority, not individual item priority.
 

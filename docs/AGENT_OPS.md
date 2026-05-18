@@ -1,6 +1,7 @@
 # Naavik Agent System — Operations Guide
 
-> **Last updated:** 2026-05-17 (A.28 — board restructure. § 6.3 extended to 4-row status table + asymmetric Backlog convention; § 2.2 fields list adds Backlog + Phase 2.5 milestone. New shared skill `manager-backlog-promote` for auto-promote workflow when Todo empties. `scripts/gh-project.sh` gains `add-status` / `create-milestone` / `item-id` / `backlog-by-epic` subcommands; `set-status` accepts `Backlog`; `cmd_sync` preserves Backlog. PLAYBOOK gains "Board status convention (post-A.28)" section.)
+> **Last updated:** 2026-05-18 (A.29 Waves 1-4 — phase numbering system + `.claude/naavik-ops` Python dispatcher. New § 2.7a documents the dispatcher entry point + subcommand groups + 4-level semver task ID schema. `gh` + `memory` subcommand groups subprocess-wrap the legacy `scripts/gh-project.sh` + `scripts/agent-memory.sh` during A.29 transition; A.30 (0.1.1) inlines natively. Caller references throughout migrated from `scripts/gh-project.sh` → `.claude/naavik-ops gh`. § 2.8 commit-msg hook unchanged scope; Conventional Commits enforcement added per D.18.)
+> Earlier line: 2026-05-17 (A.28 — board restructure. § 6.3 extended to 4-row status table + asymmetric Backlog convention; § 2.2 fields list adds Backlog + Phase 2.5 milestone. New shared skill `manager-backlog-promote` for auto-promote workflow when Todo empties. `scripts/gh-project.sh` gains `add-status` / `create-milestone` / `item-id` / `backlog-by-epic` subcommands; `set-status` accepts `Backlog`; `cmd_sync` preserves Backlog. PLAYBOOK gains "Board status convention (post-A.28)" section.)
 > Earlier line: 2026-05-17 (A.15 SHIPPED — § 14 added: agent memory + learning system. `.claude/memory/` + `scripts/agent-memory.sh` + `naavik-memory-lookup` + `naavik-discussion-capture` + `naavik-learn` + `manager-promote-lesson` skills + `/memory` + `/learn` commands. Manager § PR review gate + § Milestone boundary gate updated to invoke `Skill: naavik-discussion-capture`. Plan: `docs/plans/19-agent-memory-and-learning.md`; design doc: `docs/design/AGENT_MEMORY.md`.)
 > Earlier line: 2026-05-16 (plan 16 Phase 1 EXECUTED — § 2.7 + § 2.8 added: GitHub Projects v2 workflow rules + git commit-message hook install)
 > **Status:** Active. This is THE single doc for using the agent-driven delivery system. Read it once; reference as needed.
@@ -119,6 +120,43 @@ If you change Project ID later, re-run `scripts/gh-project.sh init` so the
 field option IDs cache stays current. Workflow rules survive this; they live
 on the Project itself.
 
+### 2.7a `naavik-ops` dispatcher entry point (new in A.29, 2026-05-18)
+
+Agent-system operations route through **`.claude/naavik-ops`** — an executable Python
+dispatcher at the `.claude/` package boundary. Subcommand groups: `task` (release-version
+task ops), `release` (release ceremony — pyproject + nix/package.nix + CHANGELOG + tag
+atomically), `deps` (cross-task dependency graph), `gh` (GitHub Project + Issue ops),
+`memory` (`.claude/memory/` ops).
+
+```bash
+.claude/naavik-ops --help                                  # group surface
+.claude/naavik-ops task list 0.2.0                         # tasks for release (priority DESC → position ASC)
+.claude/naavik-ops task next-unblocked 0.2.0               # next unblocked task in 0.2.0
+.claude/naavik-ops task check                              # version drift lint (pyproject + nix/package.nix + tags)
+.claude/naavik-ops task bump patch                         # preview release bump
+.claude/naavik-ops release dry-run 0.1.0                   # preview release ceremony
+.claude/naavik-ops deps add 0.2.0.06 0.2.0.05              # record cross-task dep edge
+.claude/naavik-ops gh next-unblocked                       # legacy: scripts/gh-project.sh next-unblocked
+.claude/naavik-ops memory list discussions                 # legacy: scripts/agent-memory.sh list discussions
+```
+
+**Single-writer rule** (extends `AGENTS.md § GitHub state — single writer rule`): all
+agent prompts MUST route through `.claude/naavik-ops` for state mutations. During the
+A.29 transition the `gh` and `memory` groups subprocess-wrap the legacy
+`scripts/gh-project.sh` + `scripts/agent-memory.sh` — both paths preserve the
+single-writer invariant. A.30 (0.1.1) inlines native Python + deletes the bash scripts.
+
+**Lock:** `~/.naavik/naavik-ops.lock` (fcntl.flock; serializes concurrent mutations).
+
+**Schema (4-level semver task IDs):** `MAJOR.MINOR.PATCH[.POSITION]` — regex
+`^\d+\.\d+\.\d+(\.\d{2})?$`. 3-level = release version (e.g. `0.2.0`); 4-level = task
+within release (e.g. `0.2.0.05`). Position is 2-digit zero-padded for lex-sort
+stability. Sort: priority DESC → position ASC. See `docs/design/PHASE_NUMBERING.md`
+for the full schema + dispatcher design.
+
+**Migration runbook:** `.claude/migrations/A.29-phase-renumber.py` ships in the A.29 PR
+but **does NOT run during this PR**. Wave 5 (post-merge) invokes it with `--apply`.
+
 ### 2.8 Install the git commit-message hook (one-time, per-clone)
 
 The `.claude/hooks/git/prepare-commit-msg` script auto-appends `Closes #<N>` to
@@ -191,8 +229,8 @@ weekly:     /groom           → reconcile board priorities with ROADMAP
 You should never need to manually:
 
 - Mark a ROADMAP row `[~]` / `[x]` — manager does it during `/build`.
-- Update a Project Status column — manager does it via `scripts/gh-project.sh set-status`.
-- Open a GitHub Issue for a planned task — architect does it via `/plan` (which calls `scripts/gh-project.sh create-issue`).
+- Update a Project Status column — manager does it via `.claude/naavik-ops gh set-status` (subprocess-wraps `scripts/gh-project.sh` during A.29).
+- Open a GitHub Issue for a planned task — architect does it via `/plan` (which calls `.claude/naavik-ops gh create-issue`).
 - Write a `## Deviations from plan` section — engineer + manager assemble it from `traces/<run-id>/engineer-deviations.log`.
 
 If you find yourself doing those manually, something in the system is broken — file it as a paper cut.

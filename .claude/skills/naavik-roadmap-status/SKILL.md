@@ -54,10 +54,10 @@ Then `Read ROADMAP.md` with offset around matching line. Per phase:
 For live mirror state (Project Status column, assignments):
 
 ```bash
-scripts/gh-project.sh milestone-status "<phase-name>"
+.claude/naavik-ops gh milestone-status "<phase-name>"
 ```
 
-Read-only. Mods via `scripts/gh-project.sh` per single-writer rule (`AGENTS.md § GitHub state — single writer rule`).
+Read-only. Mods via `.claude/naavik-ops gh` (subprocess-wraps `scripts/gh-project.sh` during A.29) per single-writer rule (`AGENTS.md § GitHub state — single writer rule`).
 
 ### 4 — Read issue-map for Issue numbers
 
@@ -96,7 +96,7 @@ Proposals to extend either rejected at architect/manager/hacker review. See `arc
 - `ROADMAP.md` — 800-line authoritative ledger.
 - `AGENTS.md` § Roadmap Maintenance Rules.
 - `AGENTS.md` § Single-doc-tracking principle.
-- `scripts/gh-project.sh milestone-status` — live Project mirror.
+- `.claude/naavik-ops gh milestone-status` — live Project mirror.
 - `.claude/github-issue-map.json` — `{task_id → issue#}` cache.
 
 ## When NOT to invoke
@@ -110,4 +110,4 @@ Proposals to extend either rejected at architect/manager/hacker review. See `arc
 - Do NOT edit `ROADMAP.md` to match stale Project board — ROADMAP wins always (`AGENTS.md § Identity invariant` for manager).
 - Do NOT create plan-internal tracking tables duplicating ROADMAP's `[ ] / [~] / [x]` ledger. § Single-doc-tracking forbids.
 - Do NOT trust this skill's snapshot over live `ROADMAP.md` — snapshot drifts; file is authoritative.
-- Do NOT bypass `scripts/gh-project.sh` for board state lookups.
+- Do NOT bypass `.claude/naavik-ops gh` for board state lookups.

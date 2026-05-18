@@ -134,7 +134,7 @@ Hand-back MUST include deviations summary. Don't let kickoff prompt omit it.
 On user-approved plans, create tracking Issue + add to Project board:
 
 ```bash
-scripts/gh-project.sh create-issue <task-id> "<short title>" --priority <CRITICAL|HIGH|MEDIUM|LOW> --milestone "<Phase X>"
+.claude/naavik-ops gh create-issue <task-id> "<short title>" --priority <CRITICAL|HIGH|MEDIUM|LOW> --milestone "<Phase X>"
 ```
 
 - `<task-id>` = ROADMAP row ID (e.g., `2.11`, `PC.5`, `A.8`). Plan introduces new scope not yet in ROADMAP → **ADD ROADMAP row first** (row is what's authoritative; Issue is mirror).

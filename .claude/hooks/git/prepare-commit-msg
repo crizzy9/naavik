@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # .claude/hooks/git/prepare-commit-msg
-# Auto-appends `Closes #<N>` to commit messages on branches named
-# <type>/<task-id>-<slug> when the task-id is in .claude/github-issue-map.json.
+# Two responsibilities:
+#   1. Auto-append `Closes #<N>` to commit messages on branches named
+#      <type>/<task-id>-<slug> when the task-id is in
+#      .claude/github-issue-map.json. Mirrors A.11 Phase 1 contract.
+#   2. (A.29) Enforce Conventional Commits subject format on feature branches.
+#      Lenient on `main` (BOOKKEEPING direct-push convention preserved).
 #
 # Install:
 #   ln -sf ../../.claude/hooks/git/prepare-commit-msg .git/hooks/prepare-commit-msg
@@ -13,9 +17,14 @@
 #
 # Bails out silently when:
 #   - $2 is merge | squash | commit (don't munge those messages)
-#   - branch name doesn't match the regex
+#   - branch name doesn't match the regex (no Closes-N append)
 #   - .claude/github-issue-map.json is missing or doesn't have the task-id
 #   - the commit message already contains "Closes #" or "Fixes #" or "Resolves #"
+#
+# Aborts (non-zero exit) on Conventional Commits violation when:
+#   - Branch is NOT `main` (feature branches enforce; BOOKKEEPING bypasses)
+#   - Subject line is not a comment / not empty / not already valid
+#   - Bypass: `git commit --no-verify`
 
 set -euo pipefail
 
@@ -32,39 +41,97 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
 [[ -n "$REPO_ROOT" ]] || exit 0
 
 ISSUE_MAP="$REPO_ROOT/.claude/github-issue-map.json"
-[[ -f "$ISSUE_MAP" ]] || { echo "prepare-commit-msg: no issue map; skipping" >&2; exit 0; }
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
 [[ -n "$BRANCH" && "$BRANCH" != "HEAD" ]] || exit 0
 
+# ---------------------------------------------------------------------------
+# Closes #N append (A.11 contract — unchanged)
+# ---------------------------------------------------------------------------
+
 # Regex: <type>/<task-id>-<slug>
-# task-id ∈ { A.11, 2.11, 2.12a, PC.5, DEF-03 }
-REGEX='^(feat|fix|chore|docs|refactor)/([A-Z]+\.[0-9]+[a-z]?|PC\.[0-9]+|DEF-[0-9]+|A\.[0-9]+)-[a-z0-9-]+$'
+# task-id ∈ { A.11, 2.11, 2.12a, PC.5, DEF-03, 0.2.0.01, 0.1.0.50 } — supports
+# the legacy 2-level scheme AND the new 4-level semver scheme (A.29).
+BRANCH_REGEX='^(feat|fix|chore|docs|refactor)/([A-Z]+\.[0-9]+[a-z]?|PC\.[0-9]+|DEF-[0-9]+|A\.[0-9]+|[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]{2})?)-[a-z0-9-]+$'
 
-if [[ ! "$BRANCH" =~ $REGEX ]]; then
-  echo "prepare-commit-msg: branch '$BRANCH' does not match task-id pattern; skipping Closes-N append" >&2
+if [[ -f "$ISSUE_MAP" && "$BRANCH" =~ $BRANCH_REGEX ]]; then
+  TASK_ID="${BASH_REMATCH[2]}"
+  ISSUE_NUM="$(jq -r --arg k "$TASK_ID" '.issues[$k] // empty' "$ISSUE_MAP" 2>/dev/null || true)"
+  if [[ -n "$ISSUE_NUM" ]]; then
+    # Bail if any closing reference already present (case-insensitive).
+    if ! grep -qiE '^(closes|fixes|resolves) #[0-9]+' "$MSG_FILE"; then
+      # Append a blank line + the Closes-N trailer.
+      {
+        echo ""
+        echo "Closes #$ISSUE_NUM"
+      } >> "$MSG_FILE"
+    fi
+  else
+    echo "prepare-commit-msg: task-id '$TASK_ID' not in issue map; skipping Closes-N append" >&2
+  fi
+else
+  if [[ -f "$ISSUE_MAP" ]]; then
+    echo "prepare-commit-msg: branch '$BRANCH' does not match task-id pattern; skipping Closes-N append" >&2
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Conventional Commits enforcement (A.29 D.18 — branch-aware)
+# ---------------------------------------------------------------------------
+#
+# Strict on feature branches; lenient on `main` (BOOKKEEPING direct-push). The
+# bypass is `git commit --no-verify`.
+#
+# Subject regex per design doc § 3:
+#   ^(feat|fix|chore|docs|refactor|test|perf|build|ci|style|deprecate|remove)
+#   (\([a-z0-9-]+\))?!?:\s+.+$
+
+if [[ "$BRANCH" == "main" ]]; then
+  # BOOKKEEPING + accidental direct-push commits remain lenient. The
+  # category-H detection lives in docs/PLAYBOOK.md — the hook does not
+  # second-guess; manager / reviewer enforces in PR review.
   exit 0
 fi
 
-TASK_ID="${BASH_REMATCH[2]}"
+# Read the first non-comment, non-empty line as the subject.
+SUBJECT=""
+while IFS= read -r line; do
+  case "$line" in
+    \#*) continue ;;
+    "") continue ;;
+    *) SUBJECT="$line"; break ;;
+  esac
+done < "$MSG_FILE"
 
-ISSUE_NUM="$(jq -r --arg k "$TASK_ID" '.issues[$k] // empty' "$ISSUE_MAP" 2>/dev/null || true)"
-if [[ -z "$ISSUE_NUM" ]]; then
-  echo "prepare-commit-msg: task-id '$TASK_ID' not in issue map; skipping" >&2
+# Empty subject (e.g. user will type interactively after the hook) — pass.
+[[ -z "$SUBJECT" ]] && exit 0
+
+CC_REGEX='^(feat|fix|chore|docs|refactor|test|perf|build|ci|style|deprecate|remove)(\([a-z0-9-]+\))?!?: .+$'
+if [[ "$SUBJECT" =~ $CC_REGEX ]]; then
   exit 0
 fi
 
-# Bail if any closing reference already present (case-insensitive).
-if grep -qiE '^(closes|fixes|resolves) #[0-9]+' "$MSG_FILE"; then
-  exit 0
-fi
+cat >&2 <<EOF
+prepare-commit-msg: Conventional Commits violation on feature branch '$BRANCH'
 
-# Append a blank line + the Closes-N trailer before any existing trailers.
-# Simple approach: append to end of file. Trailers convention is "last block";
-# `git commit` will reflow it.
-{
-  echo ""
-  echo "Closes #$ISSUE_NUM"
-} >> "$MSG_FILE"
+  subject: '$SUBJECT'
 
-exit 0
+  required format:
+    <type>[(<scope>)][!]: <subject>
+
+  type ∈ feat | fix | chore | docs | refactor | test | perf | build | ci | style | deprecate | remove
+  scope (optional) is lowercase kebab (a-z0-9-)
+  ! indicates a breaking change (allowed in MINOR pre-1.0; forces MAJOR post-1.0)
+  subject must be non-empty
+
+  examples:
+    feat(naavik-ops): wave 1 — dispatcher + package
+    fix(auth): csrf token mismatch on signup
+    chore(security): rotate test secret key
+    feat!: drop python 3.11 (BREAKING CHANGE)
+
+  See docs/design/PHASE_NUMBERING.md § 3 + plan § D.18.
+
+  Bypass: git commit --no-verify
+EOF
+exit 1

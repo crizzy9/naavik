@@ -1,6 +1,6 @@
 ---
 description: Diff the persistent issue-map cache (`.claude/github-issue-map.json`) against live GitHub state to detect drift — orphaned map entries, renamed/closed issues not yet reflected, duplicate prefixes, deleted milestones. Use before any `bootstrap` re-run, after any manual GitHub UI edit, or whenever you suspect the map is stale. Triggers on phrases like "board sync", "is the map stale", "issue map drift", "refresh map", "did someone touch GitHub", "before I bootstrap", "verify issue map".
-allowed-tools: Read, Bash(scripts/gh-project.sh:*), Bash(jq:*), mcp__plugin_claude-code-home-manager_github__list_issues
+allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), Bash(jq:*), mcp__plugin_claude-code-home-manager_github__list_issues
 ---
 
 # manager-board-sync-check
@@ -9,7 +9,7 @@ allowed-tools: Read, Bash(scripts/gh-project.sh:*), Bash(jq:*), mcp__plugin_clau
 
 ## When to invoke
 
-- Pre-flight before any `scripts/gh-project.sh bootstrap --apply` re-run.
+- Pre-flight before any `.claude/naavik-ops gh bootstrap --apply` re-run.
 - After manual GitHub UI edit (close issue, rename milestone, delete, re-open).
 - When `next-unblocked` / `milestone-status` returns surprising output (closed issue still Todo, etc.).
 - User reports "GitHub looks weird" / "my issues moved" — drift first, then investigate.
@@ -62,12 +62,12 @@ allowed-tools: Read, Bash(scripts/gh-project.sh:*), Bash(jq:*), mcp__plugin_clau
 
    Status options (post-A.28): board has 4 Status options — Todo / In Progress / Done /
    Backlog. `.claude/github-project.json` must have `.status_options.backlog` populated;
-   if missing, run `scripts/gh-project.sh add-status Backlog --color GRAY` then re-run
+   if missing, run `.claude/naavik-ops gh add-status Backlog --color GRAY` then re-run
    init. Backlog asymmetric with ROADMAP (ROADMAP `[ ]` → Todo OR Backlog).
    ```
 
 5. **Recommend action.**
-   - Any drift → `scripts/gh-project.sh refresh-map` rebuilds from authoritative GitHub. Title-prefix collisions resolve (open, lowest-#).
+   - Any drift → `.claude/naavik-ops gh refresh-map` rebuilds from authoritative GitHub. Title-prefix collisions resolve (open, lowest-#).
    - Duplicates → close higher-# dup via `gh issue close <DUP> --reason "not planned"` + comment "Duplicate of #<ORIG>. Closing per CLAUDE.md § GitHub state — single writer." Then `refresh-map`.
    - Document drift in plan's `## Deviations from plan` if it surfaced a process bug.
 

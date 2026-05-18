@@ -20,19 +20,19 @@ Manager owns standup format. Canonical shape: milestone state + recent activity 
 
 2. **Milestone state.**
    ```bash
-   scripts/gh-project.sh milestone-status "<current-milestone>"
+   .claude/naavik-ops gh milestone-status "<current-milestone>"
    ```
    Parse JSON: items by Status (`Todo`/`In Progress`/`Done`/`Backlog`). Count each. Backlog = deferred (A.28 4-status); surface as separate "Backlog by epic" line.
 
 3. **Backlog by epic** (post-A.28).
    ```bash
-   scripts/gh-project.sh backlog-by-epic --top 3
+   .claude/naavik-ops gh backlog-by-epic --top 3
    ```
    JSON: epics by Priority, ≤3 items each. Top epic → "Backlog top epic" line. Empty → omit.
 
 4. **Drift signal.**
    ```bash
-   scripts/gh-project.sh sync   # dry-run, no --apply
+   .claude/naavik-ops gh sync   # dry-run, no --apply
    ```
    If lines > 0, recommend `/sync-roadmap --apply` (ROADMAP wins).
 
