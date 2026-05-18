@@ -5,13 +5,15 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from db import sample_data as sd
+from models import User
 from models.enums import (
     JobQueueState,
 )
+from services.auth import require_authed_session
 from ui import discover_ctx as dctx
 from ui import discover_review_ctx as drctx
 from ui.templates_setup import templates
@@ -62,6 +64,7 @@ async def post_skip(
     request: Request,
     job_id: int,
     fail: Annotated[str | None, Query()] = None,
+    _user: User | None = Depends(require_authed_session),
 ):
     if fail:
         raise HTTPException(status_code=502, detail="Couldn't skip")
@@ -70,7 +73,11 @@ async def post_skip(
 
 
 @router.post("/api/v1/discover/{job_id}/save", response_class=HTMLResponse, name="discover_save")
-async def post_save(request: Request, job_id: int):
+async def post_save(
+    request: Request,
+    job_id: int,
+    _user: User | None = Depends(require_authed_session),
+):
     await sd._set_job_queue_state(job_id, JobQueueState.SAVED)
     return await _next_card_response(request)
 
@@ -80,7 +87,11 @@ async def post_save(request: Request, job_id: int):
     response_class=HTMLResponse,
     name="discover_auto_submit",
 )
-async def post_auto_submit(request: Request, job_id: int):
+async def post_auto_submit(
+    request: Request,
+    job_id: int,
+    _user: User | None = Depends(require_authed_session),
+):
     """Right-swipe — flip Job → QUEUED_FOR_AUTO_APPLY + create DRAFT."""
     await sd._set_job_queue_state(job_id, JobQueueState.QUEUED_FOR_AUTO_APPLY)
     await sd._create_draft(1, job_id)
@@ -205,7 +216,10 @@ async def get_job_by_id(job_id: int):
 
 
 @router.post("/api/v1/jobs/by-url", name="jobs_by_url")
-async def post_job_by_url(payload: Annotated[dict[str, Any], Body()]):
+async def post_job_by_url(
+    payload: Annotated[dict[str, Any], Body()],
+    _user: User | None = Depends(require_authed_session),
+):
     """Stub `+ Add by URL` — append a synthetic Job + return it."""
     url = payload.get("url", "").strip()
     if not url:
@@ -217,7 +231,10 @@ async def post_job_by_url(payload: Annotated[dict[str, Any], Body()]):
 
 
 @router.post("/api/v1/jobs/{job_id}/rescore", name="jobs_rescore")
-async def post_rescore(job_id: int):
+async def post_rescore(
+    job_id: int,
+    _user: User | None = Depends(require_authed_session),
+):
     job = await sd.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -305,6 +322,7 @@ async def fragment_cover_section_save(
     application_id: int,
     section: str,
     text: Annotated[str, Form()] = "",
+    _user: User | None = Depends(require_authed_session),
 ):
     drctx.COVER_SECTION_TEXT[section] = text
     return templates.TemplateResponse(
@@ -325,7 +343,10 @@ async def fragment_cover_section_save(
     name="apply_cover_section_put",
 )
 async def put_cover_section(
-    application_id: int, section: str, payload: Annotated[dict[str, Any], Body()]
+    application_id: int,
+    section: str,
+    payload: Annotated[dict[str, Any], Body()],
+    _user: User | None = Depends(require_authed_session),
 ):
     text = payload.get("text", "")
     drctx.COVER_SECTION_TEXT[section] = text
@@ -335,7 +356,10 @@ async def put_cover_section(
 @router.post(
     "/api/v1/applications/{application_id}/cover-letter/generate", name="apply_cover_generate"
 )
-async def post_cover_generate(application_id: int):
+async def post_cover_generate(
+    application_id: int,
+    _user: User | None = Depends(require_authed_session),
+):
     """SSE stream — chunked cover-letter generation."""
 
     sections = ["intro", "body", "why_company", "close"]
@@ -365,6 +389,7 @@ async def put_screener(
     application_id: int,
     question_id: int,
     payload: Annotated[dict[str, Any], Body()] = None,
+    _user: User | None = Depends(require_authed_session),
 ):
     answer = (payload or {}).get("answer", "")
     a = await sd._record_screener_answer(question_id, answer)

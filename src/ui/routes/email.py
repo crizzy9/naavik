@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from db import sample_data as sd
+from models import User
 from models.enums import EmailClassification
+from services.auth import require_authed_session
 
 router = APIRouter()
 
@@ -41,6 +43,7 @@ async def get_email_thread(thread_id: int):
 async def post_email_thread_draft_reply(
     thread_id: int,
     payload: Annotated[dict[str, Any] | None, Body()] = None,
+    _user: User | None = Depends(require_authed_session),
 ):
     t = await sd.get_email_thread(thread_id)
     if t is None:

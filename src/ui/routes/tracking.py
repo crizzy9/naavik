@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Form, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 
 from db import sample_data as sd
+from models import User
 from models.enums import ApplicationStatus
+from services.auth import require_authed_session
 from ui import tracking_ctx as tctx
 from ui.templates_setup import templates
 
@@ -85,6 +87,7 @@ async def post_application_manual(
     salary_min: Annotated[int | None, Form()] = None,
     salary_max: Annotated[int | None, Form()] = None,
     notes: Annotated[str | None, Form()] = None,
+    _user: User | None = Depends(require_authed_session),
 ):
     await sd._append_manual_application(
         company=company,

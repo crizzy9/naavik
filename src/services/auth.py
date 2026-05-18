@@ -294,6 +294,83 @@ async def require_password_complete(
     return user
 
 
+async def require_authed_session(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    naavik_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+) -> User | None:
+    """Transitional auth dep for the plan-09 fake-session substrate.
+
+    Plan 23 (PC.6a, 2026-05-18). Gates state-changing UI + API routes whose
+    callers still send the fake-session cookie (`naavik_session=fake-1`)
+    rather than a real JWT. Retires when the fake-session stub is deleted
+    (post-Phase-2 task 2.12 / a real-auth migration). At that time:
+    `Depends(require_authed_session)` → `Depends(require_password_complete)`.
+
+    Resolution order:
+      1. Missing cookie → 401.
+      2. Cookie equals `FAKE_SESSION_VALUE` → return None. No user resolution.
+      3. Otherwise treat as JWT. On invalid/expired → 401. On valid → look
+         up the user; if `must_change_password` is True, raise:
+           - 307 + `HX-Redirect: /auth/change-password` for UI paths
+             (anything NOT prefixed with `/api/v1/`).
+           - 403 with `{"detail": "must change password"}` for API paths
+             (prefix `/api/v1/`). API consumers shouldn't auto-follow a
+             redirect to an HTML page.
+
+    Routes that USE this dep accept `_user: User | None` because the
+    fake-session path returns None; the handler body keeps reading
+    `sample_data` accessors the same way it does today.
+    """
+    # Import inside the function to keep the fake-session constant a
+    # single source of truth and avoid a top-of-file circular import.
+    from ui.auth_stub import FAKE_SESSION_VALUE
+
+    if not naavik_session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
+    if naavik_session == FAKE_SESSION_VALUE:
+        return None
+
+    user_id = verify_jwt(naavik_session)
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired",
+        )
+    user = await get_user_by_id(session, user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account disabled",
+        )
+    if user.must_change_password:
+        # Path-based split per dispatch brief. `HX-Redirect` is set on
+        # both branches so HTMX clients (which always set `HX-Request` and
+        # may target either path) navigate the browser regardless. The
+        # 403 vs 307 distinction matters for non-HTMX consumers (curl,
+        # SDKs) that should not auto-follow a redirect to an HTML page.
+        is_api = request.url.path.startswith("/api/v1/")
+        if is_api:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="must change password",
+                headers={"HX-Redirect": "/auth/change-password"},
+            )
+        raise HTTPException(
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+            detail="Password change required.",
+            headers={
+                "HX-Redirect": "/auth/change-password",
+                "Location": "/auth/change-password",
+            },
+        )
+    return user
+
+
 def get_client_ip(request: Request) -> str:
     """Return the request's client IP, honoring `X-Forwarded-For` if set
     (single-instance MVP — no chain validation)."""

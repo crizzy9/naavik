@@ -5,11 +5,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 
 from db import sample_data as sd
+from models import User
 from models.enums import OutreachIntent, OutreachStatus
+from services.auth import require_authed_session
 from ui import outreach_ctx as octx
 from ui.templates_setup import templates
 
@@ -58,6 +60,7 @@ async def fragment_outreach_draft(
     request: Request,
     contact_id: int,
     application_id: Annotated[int | None, Query()] = None,
+    _user: User | None = Depends(require_authed_session),
 ):
     """Return a freshly-drafted message card for a contact."""
     contact = await sd.get_contact(contact_id)
@@ -113,7 +116,10 @@ async def get_contacts(
 
 
 @router.post("/api/v1/contacts", name="contacts_post")
-async def post_contact(payload: Annotated[dict[str, Any], Body()]):
+async def post_contact(
+    payload: Annotated[dict[str, Any], Body()],
+    _user: User | None = Depends(require_authed_session),
+):
     return {"ok": True, "id": sd._next_id(sd.CONTACTS), "payload": payload}
 
 
@@ -126,7 +132,11 @@ async def get_contact(contact_id: int):
 
 
 @router.put("/api/v1/contacts/{contact_id}", name="contacts_put")
-async def put_contact(contact_id: int, payload: Annotated[dict[str, Any], Body()]):
+async def put_contact(
+    contact_id: int,
+    payload: Annotated[dict[str, Any], Body()],
+    _user: User | None = Depends(require_authed_session),
+):
     c = await sd.get_contact(contact_id)
     if c is None:
         raise HTTPException(status_code=404, detail="Contact not found")
@@ -134,7 +144,10 @@ async def put_contact(contact_id: int, payload: Annotated[dict[str, Any], Body()
 
 
 @router.delete("/api/v1/contacts/{contact_id}", name="contacts_delete")
-async def delete_contact(contact_id: int):
+async def delete_contact(
+    contact_id: int,
+    _user: User | None = Depends(require_authed_session),
+):
     c = await sd.get_contact(contact_id)
     if c is None:
         raise HTTPException(status_code=404, detail="Contact not found")
@@ -143,7 +156,10 @@ async def delete_contact(contact_id: int):
 
 
 @router.post("/api/v1/contacts/find", name="contacts_find")
-async def post_contacts_find(payload: Annotated[dict[str, Any], Body()]):
+async def post_contacts_find(
+    payload: Annotated[dict[str, Any], Body()],
+    _user: User | None = Depends(require_authed_session),
+):
     """Stub LinkedIn search — return 3 hardcoded fake contacts."""
     company = payload.get("company", "Unknown")
     fake = [
@@ -190,7 +206,10 @@ async def get_outreach_messages(
 
 
 @router.post("/api/v1/outreach/draft", name="outreach_draft_post")
-async def post_outreach_draft(payload: Annotated[dict[str, Any], Body()]):
+async def post_outreach_draft(
+    payload: Annotated[dict[str, Any], Body()],
+    _user: User | None = Depends(require_authed_session),
+):
     contact_id = int(payload.get("contact_id", 0))
     app_id = payload.get("app_id")
     intent_str = payload.get("intent", "follow_up")
@@ -216,7 +235,10 @@ async def post_outreach_draft(payload: Annotated[dict[str, Any], Body()]):
 
 
 @router.post("/api/v1/outreach/send", name="outreach_send")
-async def post_outreach_send(payload: Annotated[dict[str, Any], Body()]):
+async def post_outreach_send(
+    payload: Annotated[dict[str, Any], Body()],
+    _user: User | None = Depends(require_authed_session),
+):
     msg_id = int(payload.get("message_id", 0))
     msg = next((m for m in sd.OUTREACH_MESSAGES if m.id == msg_id), None)
     if msg is None:
@@ -228,5 +250,8 @@ async def post_outreach_send(payload: Annotated[dict[str, Any], Body()]):
 
 
 @router.post("/api/v1/outreach/skip", name="outreach_skip")
-async def post_outreach_skip(payload: Annotated[dict[str, Any], Body()]):
+async def post_outreach_skip(
+    payload: Annotated[dict[str, Any], Body()],
+    _user: User | None = Depends(require_authed_session),
+):
     return Response(status_code=204)

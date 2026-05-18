@@ -27,9 +27,21 @@ def _skip_if_no_db() -> None:
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
+    """TestClient carrying the plan-09 fake-session cookie by default.
+
+    Plan 23 (PC.6a, 2026-05-18) broadened `require_authed_session` across the
+    mutation surface — naked-call routes that previously accepted any caller
+    now 401 without an auth cookie. The tests below were written against the
+    pre-gate substrate, so the fixture pre-seeds the fake-session cookie to
+    match the way every other stub-endpoint test in the suite already calls.
+    Individual tests that want to test the unauthenticated path can clear
+    the cookie via `client.cookies.clear()`.
+    """
     from main import app
 
-    return TestClient(app, raise_server_exceptions=True)
+    c = TestClient(app, raise_server_exceptions=True)
+    c.cookies.set("naavik_session", "fake-1")
+    return c
 
 
 @pytest.fixture(autouse=True)
