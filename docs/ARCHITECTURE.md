@@ -140,11 +140,15 @@ The middle layer. Every business operation lives here.
 
 ### 3.8 `src/scraper/` — site adapters
 
-- `base.py` — abstract `Scraper` with `fetch(url) → JobInfo`.
-- Per-site: `linkedin.py`, `workday.py`, `greenhouse.py`, `lever.py`, `ashby.py`, `indeed.py`, `generic.py`.
-- Primary: Crawl4AI. Fallback: Playwright for interactive flows (LinkedIn login walls, Workday SSO).
-- Anti-detection: rate limits + random delays per source.
-- **Phase 2 work.** Scaffolds exist; production scrapers ship with plan 11.
+Canonical reference: `docs/design/SCRAPER_BASE.md` (plan 29 / `0.2.0.06`).
+
+- `types.py` — `RawJob` boundary DTO (17 fields, Pydantic v2, `extra="forbid"`) + `ScrapeQuery`.
+- `base.py` — abstract `ScraperBase(ABC)` with `async def scrape(query) -> AsyncIterator[RawJob]`. Subclasses declare `source` + `board` class attrs and stream `RawJob` instances; per-listing errors go into `self._errors`, scraper-fatal raise to the service layer.
+- `crawl4ai_client.py` — `Crawl4AIClient` wraps `AsyncWebCrawler` (`enable_stealth=True` default; `fetch_html(url)` + `stream_many(urls)`). Single upgrade surface for Crawl4AI version bumps; test injection point.
+- `sites/` — per-source subclasses populate `sites/__init__.py:scrapers` registry. `sample.py` is a test fixture only.
+- `services/scraper_service.py:run_scraper` is the only caller. Scrapers never touch the DB.
+- Per-source scrapers (LinkedIn / Workday / Greenhouse / Lever / Ashby / Indeed) ship in `0.2.0.07`; AI extraction in `0.2.0.08`; scheduler in `0.2.0.10`; rate-limit Settings UI in `0.2.0.13`.
+- Anti-detection layered: Crawl4AI stealth + `rate_limit_per_minute` class attr + `random_delay_seconds` jitter; `UndetectedAdapter` reserved for `0.2.0.13`.
 
 ### 3.9 `src/typst/` — PDF compilation
 

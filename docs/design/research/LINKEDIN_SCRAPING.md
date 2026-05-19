@@ -121,7 +121,7 @@ Per-task impact for Phase 2 tasks the recommended option touches. Plan 11a shoul
 
 | ROADMAP task | Status under option B | Notes |
 | --- | --- | --- |
-| **2.1 Crawl4AI setup + generic scraper base class** | ✅ No change. LinkedIn is a vanilla `Scraper` subclass that calls `crawler.arun(url, ...)`. Confirms 2.1 needs `enable_stealth` + `UndetectedAdapter` exposed in the base config (already in Crawl4AI 0.8.x). | The `scraper/base.py` interface (already designed in BACKEND.md § J) is sufficient; `linkedin.py` is just an implementation. |
+| **2.1 Crawl4AI setup + generic scraper base class** (now `0.2.0.06`) | ✅ SHIPPED 2026-05-19. LinkedIn is a vanilla `ScraperBase` subclass that calls `self._client.fetch_html(url)` / `self._client.stream_many(urls)`. `Crawl4AIClient(enable_stealth=True)` is the default. `UndetectedAdapter` engagement reserved for `0.2.0.13` if measured 403-rate exceeds threshold. | Canonical reference: `docs/design/SCRAPER_BASE.md` (plan 29). `linkedin.py` is just an implementation. |
 | **2.2 Site scrapers — LinkedIn portion** | New shape: `scraper/linkedin.py` calls `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=&location=&start=&f_TPR=r604800` for listings, then `/jobs-guest/jobs/api/jobPosting/{job_id}` per result for detail HTML. Parse with `bs4` (already in Crawl4AI's transitive deps). | Drop "RSS via RSShub" from the ROADMAP cell when 11a is authored. Edit ROADMAP row 2.2 to read "LinkedIn (guest API, Crawl4AI stealth)". |
 | **2.3 AI job extraction** | ✅ No change. The HTML body from `jobPosting/{id}` still needs LLM structured extraction for visa / salary / skills / sponsorship. | The shape of `JobInfo` doesn't change. |
 | **2.4 Deduplication** | ✅ No change. LinkedIn job IDs are stable, unique, and embedded in every URL — primary dedup key. Fuzzy title/company is the secondary key for cross-board duplicates. | |
@@ -137,16 +137,15 @@ Per-task impact for Phase 2 tasks the recommended option touches. Plan 11a shoul
 - The "RSS via RSShub" wording in 2.2 is replaced with "guest API + Crawl4AI stealth (RSShub kept as opt-in fallback)".
 - The deferred backlog row "LinkedIn proxy support → Phase 6+" stays Phase 6 — option B works without it for single-user self-host.
 
-**Files plan 11a will create / touch (preview, not authoritative — plan 11a finalizes):**
+**Files plan `0.2.0.07` (formerly 11a / 2.2) will create / touch (preview, not authoritative — `0.2.0.07` finalizes):**
 
-- `src/scraper/linkedin.py` (new, ~300 LOC)
-- `src/scraper/base.py` (already exists post-2.1; minor — add stealth-mode flag if not yet present)
-- `src/scheduler/jobs.py` (extend with `scraping.linkedin` + `scraping.linkedin_health_check`)
-- `src/services/job_scraper.py` (orchestration; already designed in BACKEND.md § J)
-- `src/config.py` (add `scraper_rsshub_url: str | None = None` — opt-in RSShub fallback)
-- `.env.example` (document the optional `SCRAPER_RSSHUB_URL`)
-- `tests/test_scraper_linkedin.py` (mock-HTTP tests against captured fixtures from `seeMoreJobPostings/search` + `jobPosting/{id}`)
-- `docs/RUNBOOK.md` § "LinkedIn scraper returns 0 jobs" (new failure-mode entry per option B's silent-breakage risk)
+- `src/scraper/sites/linkedin.py` (new, ~300 LOC) — subclass of `ScraperBase` from `docs/design/SCRAPER_BASE.md`. `source = JobSource.LINKEDIN`, `board = ApplicationBoard.LINKEDIN`. Override `rate_limit_per_minute` to ≤24/hour per § 5.
+- `src/scraper/sites/__init__.py` — register `scrapers[JobSource.LINKEDIN] = LinkedInScraper`.
+- `src/scheduler/jobs.py` — extend with `scraping.linkedin` + `scraping.linkedin_health_check` (calls `scraper_service.run_scraper(LinkedInScraper())`); ships in `0.2.0.10`.
+- `src/config.py` — add `scraper_rsshub_url: str | None = None` (opt-in RSShub fallback) + LinkedIn-specific rate-limit fields (`0.2.0.13`).
+- `.env.example` — document the optional `SCRAPER_RSSHUB_URL`.
+- `tests/test_scraper_linkedin.py` — mock-Crawl4AI tests via the `_FakeAsyncCrawler` pattern from `tests/test_crawl4ai_client.py`; captured fixtures from `seeMoreJobPostings/search` + `jobPosting/{id}`.
+- `docs/RUNBOOK.md` § "LinkedIn scraper returns 0 jobs" — new failure-mode entry per option B's silent-breakage risk.
 
 ---
 

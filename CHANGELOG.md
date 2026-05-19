@@ -53,6 +53,21 @@ All notable changes to Naavik are documented here. Format is based on [Keep a Ch
   - `src/db/sample_data.py` — 27 Job fixtures backfilled with `external_id` (deterministic sha1 prefix) + fanned-out `source` per board; 5 `JobScrapeRun` fixtures (last 24h of scraping, mixed `SUCCESS` / `PARTIAL` / `FAILED` statuses); `Job.last_scrape_run_id` wired across 24 of the 27 jobs.
   - `tests/test_alembic_0005.py` (3 cases, sqlite round-trip), `tests/test_job_service.py` (15 cases, in-memory FakeSession); `tests/test_no_legacy_jobsource_imports.py` (regression lint — fails if any `src/` file imports `JobSource.AUTOMATED`).
   - `docs/design/JOB_MODEL.md` — new canonical reference, graduated from plan 27.
+- **Crawl4AI scraper substrate** (`0.2.0.06` / Issue #10) — plan 29 graduates to `docs/design/SCRAPER_BASE.md`.
+  - `crawl4ai==0.8.6` (exact pin, post-2026-03-24 litellm supply-chain hotfix release) added to base deps.
+  - `playwright>=1.58.0,<1.59` PROMOTED from dev extras to base deps (Crawl4AI imports Playwright at module-import time; production runtime needs it).
+  - `src/scraper/types.py` — `RawJob` Pydantic v2 boundary DTO (17 fields, `extra="forbid"`, `*_hint` enum fields preserve scraper-guess vs AI-ground-truth separability) + `ScrapeQuery` input DTO.
+  - `src/scraper/base.py` — `ScraperBase(ABC)` with `async def scrape(query) -> AsyncIterator[RawJob]`. Class-level `rate_limit_per_minute=30` + `random_delay_seconds=(1.0, 3.0)` reserve the rate-limit interface (impl in `0.2.0.13`).
+  - `src/scraper/crawl4ai_client.py` — `Crawl4AIClient` wraps `AsyncWebCrawler`. `enable_stealth=True` default. Two public methods: `fetch_html(url) -> str | None` + `stream_many(urls) -> AsyncIterator[tuple[str, str | None]]`. Per-process token-bucket rate limiter with jitter.
+  - `src/scraper/sites/__init__.py` — `scrapers: dict[JobSource, type[ScraperBase]]` registry stub (populated by `0.2.0.07` site scrapers).
+  - `src/scraper/sites/sample.py` — `SampleScraper` test fixture yielding 3 hard-coded RawJobs (NOT registered for production dispatch).
+  - `src/services/scraper_service.py` — `run_scraper(session, *, scraper, user_id, query, triggered_by)` orchestrates the JobScrapeRun lifecycle (RUNNING → SUCCESS / PARTIAL / FAILED / TIMED_OUT). Streams `scraper.scrape(query)` → `job_service.upsert_job(...)` per yield; two-tier error model (per-listing recoverable / scraper-fatal raise / `asyncio.CancelledError` → TIMED_OUT re-raised).
+  - `tests/test_scraper_{types,base,sample,service}.py` + `tests/test_crawl4ai_client.py` — 43 new tests (RawJob field-validation, ABC enforcement, Crawl4AIClient with `_FakeAsyncCrawler` mock, SampleScraper materialization, JobScrapeRun status derivation across 7 lifecycle outcomes).
+  - `docs/design/SCRAPER_BASE.md` — new canonical reference (~330 LOC), graduated from plan 29; cross-refs into `BACKEND.md § J.1` + `JOB_MODEL.md § H` + `LINKEDIN_SCRAPING.md § 7` + `ARCHITECTURE.md § 3.8` updated to point at it.
+
+### Changed
+
+- `docs/design/BACKEND.md § J.1` — `BaseScraper(ABC)` sketch collapsed to single streaming `scrape() -> AsyncIterator[RawJob]` per plan 29 § D.5. Two-method `list_jobs + fetch_detail` + `matches()` shape DROPPED (RSShub / guest API / n8n migration imports have non-uniform shapes; subclasses orchestrate their own listing+detail chain internally). `matches()` routing logic moves to a future `scraper_service.dispatch_by_url(url)` reading the `sites/__init__.py:scrapers` registry.
 
 ### Operations
 
