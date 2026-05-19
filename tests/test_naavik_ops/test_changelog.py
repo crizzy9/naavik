@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from naavik_ops.lib import changelog
 
 
@@ -93,3 +94,60 @@ class TestParseRoundtrip:
         assert "phase 1" in added
         security = [e.text for e in parsed[0].sections.get("Security") or []]
         assert "secret key" in security
+
+
+class TestSanitize:
+    """Per plan 25 D.5 / Issue #74 — CHANGELOG markdown-escape hardening."""
+
+    def test_leading_hash_escaped(self):
+        # Header smuggling: `#evil heading` injection.
+        entry = changelog.ReleaseEntry(text="#evil header")
+        assert entry.text.startswith("\\#")
+
+    def test_link_syntax_escaped(self):
+        entry = changelog.ReleaseEntry(text="[click](http://evil.example)")
+        # Brackets + parens + dot escaped per CommonMark spec § 2.4.
+        assert "\\[click\\]" in entry.text
+        assert "\\(http://evil\\.example\\)" in entry.text
+
+    def test_embedded_newline_collapsed(self):
+        entry = changelog.ReleaseEntry(text="line 1\nline 2\n  line 3")
+        # All whitespace runs collapse to single space, trimmed.
+        assert "\n" not in entry.text
+        assert entry.text == "line 1 line 2 line 3"
+
+    def test_cr_rejected(self):
+        with pytest.raises(ValueError, match="CR"):
+            changelog.ReleaseEntry(text="windows\r\nline")
+
+    def test_emphasis_chars_escaped(self):
+        # CommonMark spec emphasis: *bold* / _underline_.
+        entry = changelog.ReleaseEntry(text="*bold* _under_")
+        assert entry.text == "\\*bold\\* \\_under\\_"
+
+    def test_from_rendered_skips_sanitization(self):
+        # Round-trip: rendered already-escaped text must not be re-escaped.
+        entry = changelog.ReleaseEntry.from_rendered("\\#already escaped")
+        assert entry.text == "\\#already escaped"
+
+    def test_0_1_0_existing_block_unchanged(self):
+        # Per plan 25 R14: existing CHANGELOG.md blocks (pre-A.31, hand-curated)
+        # round-trip through parse_changelog without double-escape on re-render.
+        original = (
+            "# Changelog\n"
+            "\n"
+            "## [Unreleased]\n"
+            "\n"
+            "## [0.1.0] - 2026-05-18\n"
+            "\n"
+            "### Added\n"
+            "- Phase numbering system\n"
+            "- `naavik-ops` dispatcher\n"
+        )
+        releases = changelog.parse_changelog(original)
+        assert len(releases) == 1
+        # Re-render without mutation.
+        rendered = changelog.render_release(releases[0])
+        # Backticks should NOT be double-escaped after parse/render cycle.
+        assert "`naavik-ops`" in rendered
+        assert "\\`naavik-ops\\`" not in rendered
