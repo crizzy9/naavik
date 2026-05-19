@@ -2,41 +2,16 @@
   Settings · Deployment tab body.
   Args:
     settings : Settings singleton
-    deployment : dict {mode, status, version, meta, update_available_version,
-                       vault_locked, vault_fingerprint_stored, vault_fingerprint_expected}
+    deployment : dict {mode, status, version, meta, update_available_version}
     log_lines  : list[{timestamp, level, message}]
     on_disk    : list[{label, path, sub, icon}]
 
-  Plan 10b (item 7, 2026-05-03): the rose vault-locked banner renders when
-  `SECRET_KEY` no longer matches the master key the on-disk vault was
-  encrypted with. The page handler computes the three vault fields via
-  `services/settings_service.get_deployment_info` (or directly via
-  `vault_svc.fingerprint()` etc. in the UI route helper).
+  Plan 26 (0.2.0.01): vault deleted. The rose vault-locked banner is gone;
+  secrets are env-loaded from `.env`. Filesystem permissions on `.env`
+  (chmod 0600) are the operative defense; there's no master-key-mismatch
+  failure mode to display.
 #}
 <div class="flex flex-col gap-6 max-w-5xl">
-  {% if deployment.vault_locked %}
-    <div class="rounded-lg bg-rose-500/10 border border-rose-500/30 p-4"
-         data-vault-locked-banner="true"
-         role="alert">
-      <div class="flex gap-3 items-start">
-        <i data-lucide="alert-triangle" class="h-5 w-5 text-rose-400 shrink-0" stroke-width="1.5"></i>
-        <div class="flex-1 min-w-0">
-          <h3 class="text-sm font-medium text-rose-200">Vault locked — SECRET_KEY mismatch</h3>
-          <p class="text-xs text-rose-300/80 mt-1">
-            The on-disk vault was encrypted with a different
-            <code class="font-mono">SECRET_KEY</code>. Reads of secrets fail; writes are rejected.
-            Run <code class="font-mono">naavik vault rotate-key</code> with the old + new keys, or
-            restore the original <code class="font-mono">SECRET_KEY</code> env var.
-          </p>
-          <p class="text-xs text-rose-300/60 mt-2 font-mono break-all">
-            stored fingerprint:   {{ deployment.vault_fingerprint_stored | default("(none)") }}<br>
-            expected fingerprint: {{ deployment.vault_fingerprint_expected | default("(none)") }}
-          </p>
-        </div>
-      </div>
-    </div>
-  {% endif %}
-
   {% with mode=deployment.mode, status=deployment.status, version=deployment.version,
           meta=deployment.meta, update_available_version=deployment.update_available_version %}
     {% include "components/deployment_status_card.html" %}

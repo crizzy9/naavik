@@ -4,17 +4,18 @@
   Args:
     settings        : Settings singleton
     cost_summary    : dict {month_cost_usd, avg_per_generation_usd, total_tokens, gen_count}
-    providers       : list[{id, name, model_default, description, kind}]
+    providers       : list[{id, name, model_default, description, kind, env_var}]
     provider_id     : str — currently-selected provider id (matches settings.llm_provider)
     model_options   : list[str] — model IDs valid for the active provider
     selected_model  : str — currently-selected model
-    api_key_field   : dict {provider_id, placeholder, has_existing_key, ollama_base_url}
+    env_indicators  : dict[str, bool] — {anthropic, openai, ollama} env-presence
     save_status     : str | None — "saved" / "error" — re-render hint after PUT
 
-  Plan 10b (item 6, 2026-05-03): the form below PUTs to /api/v1/settings/llm
-  and the API handler returns this same partial (re-rendered with the new
-  Settings state) via outerHTML swap. Per-provider model + api-key fragments
-  swap on radio change via /_fragments/settings/llm/model-options.
+  Plan 26 (0.2.0.01): vault deprecated. API keys are configured via env
+  vars (ANTHROPIC_API_KEY / OPENAI_API_KEY / OLLAMA_BASE_URL) in `.env`;
+  this tab no longer accepts secret input. The form mutates only the
+  active provider + model + fallback provider; the env-indicator section
+  surfaces presence without exposing values.
 #}
 <div id="llm-form" class="flex flex-col gap-6 max-w-5xl">
   <form
@@ -39,7 +40,6 @@
             hx-get="/_fragments/settings/llm/model-options?provider={{ p.id }}"
             hx-target="#llm-model-container"
             hx-swap="innerHTML"
-            hx-on::after-request="if (event.detail.successful) htmx.ajax('GET', '/_fragments/settings/llm/api-key-field?provider={{ p.id }}', {target: '#llm-api-key-container', swap: 'innerHTML'})"
           {% endset %}
           {% with provider=p, selected=(p.id == provider_id), radio_attrs=_radio_attrs %}
             {% include "components/provider_card.html" %}
@@ -51,35 +51,52 @@
     <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
       <header class="flex items-baseline justify-between mb-4 gap-3">
         <div>
-          <h2 class="text-base font-medium text-slate-50">API configuration</h2>
-          <p class="text-xs text-slate-400 mt-0.5">Stored encrypted at <code class="font-mono text-slate-300">~/.naavik/secrets.enc</code>.</p>
+          <h2 class="text-base font-medium text-slate-50">API key (configured via environment)</h2>
+          <p class="text-xs text-slate-400 mt-0.5">
+            API keys live in <code class="font-mono text-slate-300">.env</code>
+            (gitignored, <code class="font-mono">chmod 0600</code>). Edit + restart to rotate.
+            See <a href="https://github.com/crizzy9/naavik#configuration"
+                   class="text-indigo-300 hover:text-indigo-200 underline"
+                   target="_blank" rel="noopener">README · Configuration</a>.
+          </p>
         </div>
       </header>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div id="llm-api-key-container">
-          {% with provider_id=api_key_field.provider_id,
-                  placeholder=api_key_field.placeholder,
-                  has_existing_key=api_key_field.has_existing_key,
-                  ollama_base_url=api_key_field.ollama_base_url %}
-            {% include "pages/_settings_llm_api_key_field.html" %}
-          {% endwith %}
-        </div>
-
-        <div>
-          {% with label="MODEL", for_id="llm-model" %}
-            {% include "components/field_label.html" %}
-          {% endwith %}
-          <div id="llm-model-container">
-            {% with provider_id=provider_id, models=model_options, selected=selected_model %}
-              {% include "pages/_settings_llm_model_field.html" %}
-            {% endwith %}
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {% for p in providers %}
+          {% set _configured = env_indicators[p.id] %}
+          <div data-env-indicator="{{ p.id }}"
+               data-configured="{{ 'true' if _configured else 'false' }}"
+               class="rounded-lg border {{ 'border-emerald-500/30 bg-emerald-500/5' if _configured else 'border-slate-800 bg-slate-950/40' }} p-4">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-sm font-medium text-slate-100">{{ p.name }}</span>
+              {% if _configured %}
+                <span class="inline-flex items-center gap-1 text-xs text-emerald-300">
+                  <i data-lucide="check-circle-2" class="h-4 w-4" stroke-width="1.5"></i>
+                  configured
+                </span>
+              {% else %}
+                <span class="inline-flex items-center gap-1 text-xs text-slate-500">
+                  <i data-lucide="circle" class="h-4 w-4" stroke-width="1.5"></i>
+                  not set
+                </span>
+              {% endif %}
+            </div>
+            <p class="mt-2 text-xs text-slate-500">
+              Set <code class="font-mono text-slate-300">{{ p.env_var }}</code> in <code class="font-mono text-slate-300">.env</code>.
+            </p>
           </div>
+        {% endfor %}
+      </div>
 
-          <div class="mt-4 flex items-center gap-2 text-xs text-slate-500">
-            <i data-lucide="lock" class="h-3.5 w-3.5" stroke-width="1.5"></i>
-            Your API key is stored encrypted; Naavik never sends it to any third party.
-          </div>
+      <div class="mt-5">
+        {% with label="MODEL", for_id="llm-model" %}
+          {% include "components/field_label.html" %}
+        {% endwith %}
+        <div id="llm-model-container">
+          {% with provider_id=provider_id, models=model_options, selected=selected_model %}
+            {% include "pages/_settings_llm_model_field.html" %}
+          {% endwith %}
         </div>
       </div>
 
@@ -99,6 +116,11 @@
                 sub="tier 2" %}
           {% include "components/cost_card.html" %}
         {% endwith %}
+      </div>
+
+      <div class="mt-4 flex items-center gap-2 text-xs text-slate-500">
+        <i data-lucide="lock" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        Naavik never sends your API key to any third party. Filesystem permissions on <code class="font-mono">.env</code> are the operative defense.
       </div>
     </section>
 
