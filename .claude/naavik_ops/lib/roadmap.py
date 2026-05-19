@@ -523,26 +523,19 @@ def write_release_section(
 def _format_release_row(row: ReleaseRow) -> str:
     """Render a ReleaseRow back to a markdown table line.
 
-    Mirrors the column widths produced by `naavik-ops` migrations + manual
-    edits. Re-uses `raw_line` whenever the row was untouched (preserves
-    width quirks) — falls through to a canonical formatter only when caller
-    constructed a NEW row.
+    Re-uses `raw_line` verbatim when the row was untouched (preserves any
+    column-width quirks). Falls through to a canonical formatter only when
+    caller built a NEW row. Column order matches the ROADMAP table header:
+    `# | Task | Status | Priority | Notes`.
     """
-    # If the row's raw_line still encodes the same task_id+position (i.e. caller
-    # didn't bump the position), reuse it.
     if row.raw_line:
         m = RE_TABLE_ROW.match(row.raw_line.strip())
         if m:
             cells = _cells_of(row.raw_line)
             if cells and cells[0] == row.task_id:
-                # Rewrite the priority cell only if priority changed; otherwise
-                # return verbatim.
-                # We do NOT have column index here at the dataclass-only level;
-                # accept the raw line if the IDs match.
                 return row.raw_line.rstrip("\n")
-    # Canonical fall-through formatter:
     priority_cell = row.priority or ""
-    return f"| {row.task_id} | [{row.status}] | {row.title} | {priority_cell} | {row.notes} |"
+    return f"| {row.task_id} | {row.title} | [{row.status}] | {priority_cell} | {row.notes} |"
 
 
 def rewrite_atomic(diffs: list[ReleaseDiff], *, path: Path | None = None) -> None:
