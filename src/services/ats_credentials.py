@@ -1,11 +1,11 @@
 """ATS credential metadata service — Wave 4 of plan 10 § B.6.
 
 DB-side `ATSCredential` row carries metadata only (`has_credential`,
-`login_status`, `last_login_at`, `last_failure_kind`); secret material
-(cookies, tokens, 2FA backups) lives in `~/.naavik/secrets.enc` via vault.
-
-UI surfaces "Connect / Reconnect" via the metadata; ATS adapters dispatch
-via `resolve_secret(user_id, board)` to pull the actual secret material.
+`login_status`, `last_login_at`, `last_failure_kind`). Plan 26 (0.2.0.01)
+deleted the encrypted vault that previously held cookie / token blobs;
+Phase 2.X adapter plans (Workday / LinkedIn / Indeed) re-introduce a
+DB-side storage model when actually needed. Until then this module only
+serves UI-facing metadata.
 """
 
 from __future__ import annotations
@@ -16,9 +16,6 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import ApplicationBoard, ATSCredential, AtsLoginStatus
-from services import vault as vault_svc
-
-_VAULT_SCOPE = "ats"
 
 
 async def get_credential_metadata(
@@ -77,32 +74,3 @@ async def upsert_credential_metadata(
     session.add(row)
     await session.flush()
     return row
-
-
-def resolve_secret(user_id: int, board: ApplicationBoard) -> dict | None:
-    """Pull the secret material (cookies/tokens/2FA backups) from the vault.
-
-    Wave 4 returns the raw vault value as a dict if present. Adapters
-    interpret the shape per-board (Wave 6 + Phase 1.x adapter implementations).
-    """
-    raw = vault_svc.get(_VAULT_SCOPE, board.value, caller="ats_credentials")
-    if raw is None:
-        return None
-    import json
-
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        # Allow plain string shapes (legacy single-cookie value).
-        return {"value": raw}
-
-
-def store_secret(user_id: int, board: ApplicationBoard, secret: dict) -> None:
-    """Persist the secret material to the vault; DB row updated separately."""
-    import json
-
-    vault_svc.set(_VAULT_SCOPE, board.value, json.dumps(secret), caller="ats_credentials")
-
-
-def delete_secret(user_id: int, board: ApplicationBoard) -> bool:
-    return vault_svc.delete(_VAULT_SCOPE, board.value, caller="ats_credentials")
