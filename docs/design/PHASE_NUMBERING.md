@@ -32,6 +32,17 @@ Three fields independently describe a task's position in the work queue. Each ha
 2. **Priority** (HIGH / MEDIUM / LOW / unset) — canonical *intra-release impact signal*. Optional, sparse. **TASK-level only** (4-level IDs); patches and minor-releases never carry priority. Default = unset (= unprioritized).
 3. **Release version** — canonical *cross-release sequence signal*. `0.1.X` ships before `0.2.0` before `0.3.0`.
 
+### Position stability (codified 2026-05-19 via plan 28)
+
+Position is a **forward-fill ID slot**, not a sort invariant. Once a task is assigned position `NN` within a release, that ID is stable for the task's lifetime — including after the task moves to a different release or transitions to `[x]`. Operational consequences:
+
+- **`naavik-ops task move <src> <dest-version>.<dest-pos>` does NOT auto-renumber siblings** in either the source patch (gap left behind) or the destination patch (collision rejects). Source-section gaps are intentional.
+- **`naavik-ops task renumber <version>` is the explicit compaction tool.** Operator opts in when cosmetic alignment is wanted. Never a side-effect.
+- **`naavik-ops task defer <task-id>` is the intra-release shift tool.** Defer's purpose IS shifting siblings; that's a separate semantic from cross-release migration.
+- **Cross-release moves preserve referential integrity for siblings.** Archived plans that cite `0.2.0.05` continue to resolve to the same task even after another sibling moves out of the patch.
+
+See `.claude/memory/knowledge/patch-version-position-stability.md` for the principle origin + recovery procedure if a buggy script ever renumbers siblings against the rule.
+
 ### Regex
 
 ```

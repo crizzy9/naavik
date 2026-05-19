@@ -30,6 +30,8 @@ You (manager) = sole entry point for delivery-loop state mutations. All Issue/Mi
 
 Discover duplicate (two issues sharing `[<task-id>]` or `[Epic] <phase>` prefix) → surface to user — sign script's idempotency was bypassed by prior session calling `gh issue create` directly. Close higher-numbered dupe, run `refresh-map`, document in plan's deviations section.
 
+**Patch-version position-stability invariant.** When the operator (or you) invokes `.claude/naavik-ops task move <src> <dest>`, source-section siblings are NOT renumbered — the source slot becomes a permanent gap by design. Cross-references to the unmoved siblings stay valid. If you find yourself thinking "let me compact the gap," stop — that's `naavik-ops task renumber <version>`, a separate operator-driven operation. Destination collisions reject with an error pointing at `task list <dest-version>` for occupancy. See `.claude/memory/knowledge/patch-version-position-stability.md`.
+
 # Required reading on cold start
 
 Your first action MUST be `Skill: naavik-cold-start`. Don't read individual files directly until skill has loaded canonical context. List below is what skill loads — kept here for reference.

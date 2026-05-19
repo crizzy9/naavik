@@ -410,6 +410,14 @@ The plan stays rich; ROADMAP stays current.
 - This rule supersedes the older AGENT_OPS.md § 9.5 "bootstrap created duplicates" guidance, which assumed dupes were a rename problem. They're almost always a search-API consistency problem; run `refresh-map`, close the duplicate by hand, document in the relevant plan's deviations section.
 - **Post-A.29 sort key for `next-unblocked`:** release-version ASC → priority DESC (HIGH > MED > LOW > unset) → position ASC, gated by deps. Use `.claude/naavik-ops task next-unblocked <release-version>` (e.g. `0.2.0`) for the new schema; legacy `next-unblocked` (no version) sorts by Project Priority field for backward compat during A.29 transition.
 
+**Patch-version positions are not stable identifiers.** Captured 2026-05-19 as `.claude/memory/knowledge/patch-version-position-stability.md`; enforced in code from 0.7.0.13 (plan 28). In the 4-level semver task-ID schema (`MAJOR.MINOR.PATCH[.POSITION]`), the **release-version (3-level)** is the canonical tree source. The **position (4th level)** is a sort key, not a primary key. Operational consequences:
+
+- **Patch tasks are unprioritized + unordered by default.** HIGH/MED/LOW markers + position ASC are sort hints, not invariants.
+- **Gaps in position numbering are intentional + acceptable.** Moving `0.2.0.02` out (e.g. via `naavik-ops task move 0.2.0.02 0.7.0.05`) leaves position `02` empty in `0.2.0`; remaining tasks (`0.2.0.03`, `0.2.0.04`, ...) do NOT shift to fill the gap. `naavik-ops task move` enforces this — source-section siblings are never renumbered on cross-release move.
+- **Destination-section collisions reject.** Operator picks a free slot; `naavik-ops task list <dest-version>` shows occupancy.
+- **Cosmetic compaction is opt-in.** Run `naavik-ops task renumber <version>` to compact gaps when you actually want renumbering — never as an automatic side-effect of `move`.
+- **Within-section `defer` is different.** `naavik-ops task defer` shifts siblings by design (it's the "shove this task back N slots" operation). The non-shift rule applies to **cross-release** `move`, not intra-release `defer`.
+
 ---
 
 ## Design pipeline (sub-process within step 6 of the workflow)

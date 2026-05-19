@@ -278,6 +278,7 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 9. **Always halt at gates — never auto-advance.** User approval required at PLAN_GATE, PR_REVIEW_GATE, MILESTONE_GATE.
 10. **Always classify before acting.** First step of every user message is "which category does this fit?" — answer that, then run the strict procedure.
 11. **If unsure, ask ONE targeted question.** Don't improvise. Don't combine categories silently.
+12. **Never auto-renumber sibling positions on `task move`.** Patch positions are sort keys, not primary keys (`AGENTS.md § GitHub state — single writer rule` § "Patch-version positions are not stable identifiers"). Gaps in `0.2.0.NN` after a `move` are intentional. Operator runs `naavik-ops task renumber <version>` explicitly when cosmetic compaction is wanted. See `.claude/memory/knowledge/patch-version-position-stability.md`.
 
 ---
 
