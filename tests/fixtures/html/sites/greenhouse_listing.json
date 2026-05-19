@@ -1,0 +1,28 @@
+{
+  "jobs": [
+    {
+      "id": 5827341,
+      "title": "Senior Backend Engineer",
+      "absolute_url": "https://boards.greenhouse.io/acmefake/jobs/5827341",
+      "location": {"name": "Remote — US"},
+      "updated_at": "2026-05-15T14:22:00-07:00",
+      "departments": [{"name": "Engineering"}]
+    },
+    {
+      "id": 5827342,
+      "title": "Staff Platform Engineer",
+      "absolute_url": "https://boards.greenhouse.io/acmefake/jobs/5827342",
+      "location": {"name": "San Francisco, CA"},
+      "updated_at": "2026-05-12T09:00:00-07:00",
+      "departments": [{"name": "Platform"}]
+    },
+    {
+      "id": 5827343,
+      "title": "Engineering Manager, ML Infra",
+      "absolute_url": "https://boards.greenhouse.io/acmefake/jobs/5827343",
+      "location": {"name": "New York, NY"},
+      "updated_at": "2026-05-10T11:30:00-04:00"
+    }
+  ],
+  "meta": {"total": 3}
+}

@@ -22,6 +22,10 @@ from models import ApplicationBoard, JobSource
 from .types import RawJob, ScrapeQuery
 
 if TYPE_CHECKING:
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from llm.base import LLMProvider
+
     from .crawl4ai_client import Crawl4AIClient
 
 
@@ -43,7 +47,14 @@ class ScraperBase(ABC):
     rate_limit_per_minute: int = 30
     random_delay_seconds: tuple[float, float] = (1.0, 3.0)
 
-    def __init__(self, client: Crawl4AIClient | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        client: Crawl4AIClient | None = None,
+        session: AsyncSession | None = None,
+        user_id: int | None = None,
+        provider: LLMProvider | None = None,
+    ) -> None:
         if client is None:
             from .crawl4ai_client import Crawl4AIClient
 
@@ -52,6 +63,14 @@ class ScraperBase(ABC):
                 random_delay_seconds=self.random_delay_seconds,
             )
         self._client = client
+        # AI extraction context (plan 33 § D.3 / D.4). All optional so substrate
+        # smoke tests (SampleScraper) and `0.2.0.07` site scrapers running
+        # pre-`0.2.0.08` stay constructable without an LLM provider. The
+        # `_BaseSiteScraper._maybe_enrich` shim short-circuits when any of the
+        # three is None.
+        self._session = session
+        self._user_id = user_id
+        self._provider = provider
         # Per-listing error buffer; service layer aggregates into
         # `JobScrapeRun.errors[]` after the run completes.
         self._errors: list[str] = []

@@ -1,18 +1,44 @@
-"""Per-source site scraper registry (plan 29 § D.5).
+"""Per-source site scraper registry (plan 33 § D.7 + plan 29 § D.5).
 
-`0.2.0.07` populates `scrapers` with one entry per real source
-(`JobSource.LINKEDIN -> LinkedInScraper`, etc.). Plan 29 ships the stub +
-`SampleScraper` (which is a test fixture and is NOT registered for production
-dispatch — see `docs/design/SCRAPER_BASE.md § J`).
+`scrapers` maps `JobSource.value` (lowercase) → subclass. Keyed by the
+string form so APScheduler cron registration (`0.2.0.10`) + `+ Add by URL`
+dispatch (Phase 6) can look up via string keys persisted in DB / job-store.
+
+`SampleScraper` is exported for test reuse but deliberately NOT registered:
+production dispatch must never invoke it.
 """
 
 from __future__ import annotations
 
+from models import JobSource
+
 from ..base import ScraperBase
 from ..types import RawJob
+from .ashby import AshbyScraper
+from .greenhouse import GreenhouseScraper
+from .indeed import IndeedScraper
+from .lever import LeverScraper
+from .linkedin import LinkedInScraper
 from .sample import SampleScraper
+from .workday import WorkdayScraper
 
-# Populated by 0.2.0.07 site scrapers. Empty here on purpose.
-scrapers: dict[str, type[ScraperBase]] = {}
+scrapers: dict[str, type[ScraperBase]] = {
+    JobSource.LINKEDIN.value: LinkedInScraper,
+    JobSource.WORKDAY.value: WorkdayScraper,
+    JobSource.GREENHOUSE.value: GreenhouseScraper,
+    JobSource.LEVER.value: LeverScraper,
+    JobSource.ASHBY.value: AshbyScraper,
+    JobSource.INDEED.value: IndeedScraper,
+}
 
-__all__ = ["RawJob", "SampleScraper", "scrapers"]
+__all__ = [
+    "AshbyScraper",
+    "GreenhouseScraper",
+    "IndeedScraper",
+    "LeverScraper",
+    "LinkedInScraper",
+    "RawJob",
+    "SampleScraper",
+    "WorkdayScraper",
+    "scrapers",
+]

@@ -11,6 +11,29 @@ from unittest.mock import MagicMock
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _stub_url_guard_dns(monkeypatch):
+    """Force the url-guard DNS resolver to a public IP for all test hosts.
+
+    `Crawl4AIClient.{fetch_html,stream_many}` consults
+    `scraper.url_guard.is_safe_destination` (plan 33 § D.5) on every URL.
+    The guard's RFC1918 / IMDS denylist is keyed off DNS resolution; in CI
+    we want the guard to return `(True, None)` for anything that's not an
+    explicitly hostile host so existing tests stay focused on Crawl4AI's
+    HttpUrl gate + the rate-limit logic.
+    """
+    from scraper import url_guard
+
+    def fake_resolve(host: str) -> tuple[str, ...]:
+        # Public-looking IP; not in any deny network.
+        return ("93.184.216.34",)
+
+    monkeypatch.setattr(url_guard, "_resolve_host", fake_resolve)
+    url_guard._resolve_host.cache_clear() if hasattr(
+        url_guard._resolve_host, "cache_clear"
+    ) else None
+
 # ── Async-CM stand-in for AsyncWebCrawler ────────────────────────────────
 
 

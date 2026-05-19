@@ -1,0 +1,27 @@
+{
+  "jobs": [
+    {
+      "id": "01234567-89ab-cdef-0123-456789abcdef",
+      "title": "Senior Software Engineer, Distributed Systems",
+      "jobUrl": "https://jobs.ashbyhq.com/fakelabs/01234567-89ab-cdef-0123-456789abcdef",
+      "location": "San Francisco, CA",
+      "employmentType": "FullTime",
+      "isRemote": false,
+      "publishedAt": "2026-05-14T18:00:00Z",
+      "descriptionHtml": "<div><p>Build a multi-region database.</p><h3>What you'll do</h3><ul><li>Design consensus protocols</li></ul></div>",
+      "compensation": {
+        "compensationTierSummary": "$200,000 - $260,000 USD"
+      }
+    },
+    {
+      "id": "12345678-9abc-def0-1234-56789abcdef0",
+      "title": "Engineering Manager, Infra",
+      "jobUrl": "https://jobs.ashbyhq.com/fakelabs/12345678-9abc-def0-1234-56789abcdef0",
+      "location": "Remote",
+      "employmentType": "FullTime",
+      "isRemote": true,
+      "publishedAt": "2026-05-12T10:30:00Z",
+      "descriptionHtml": "<p>Lead the infrastructure team.</p>"
+    }
+  ]
+}

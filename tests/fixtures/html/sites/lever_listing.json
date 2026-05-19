@@ -1,0 +1,29 @@
+[
+  {
+    "id": "abc12345-6789-4def-9012-3456789abcde",
+    "text": "Software Engineer, Platform",
+    "hostedUrl": "https://jobs.lever.co/fakecorp/abc12345-6789-4def-9012-3456789abcde",
+    "applyUrl": "https://jobs.lever.co/fakecorp/abc12345-6789-4def-9012-3456789abcde/apply",
+    "categories": {
+      "team": "Platform",
+      "location": "Remote — Americas",
+      "commitment": "Full-time",
+      "department": "Engineering"
+    },
+    "description": "<p>Build core platform services.</p><h2>Requirements</h2><ul><li>5+ years experience</li></ul>",
+    "descriptionPlain": "Build core platform services.\n\nRequirements\n5+ years experience",
+    "createdAt": 1747339200000
+  },
+  {
+    "id": "def67890-1234-4abc-9876-fedcba987654",
+    "text": "Staff ML Engineer",
+    "hostedUrl": "https://jobs.lever.co/fakecorp/def67890-1234-4abc-9876-fedcba987654",
+    "categories": {
+      "team": "ML",
+      "location": "New York, NY",
+      "commitment": "Full-time"
+    },
+    "description": "<p>Lead ML infra projects.</p>",
+    "createdAt": 1747252800000
+  }
+]

@@ -27,6 +27,7 @@ from crawl4ai import (
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 
 from scraper.redaction import safe_exc, safe_msg, safe_url
+from scraper.url_guard import is_safe_destination
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +90,14 @@ class Crawl4AIClient:
                 safe_exc(exc),
             )
             return None
+        safe, reason = is_safe_destination(str(validated))
+        if not safe:
+            log.warning(
+                "crawl4ai fetch url-guard blocked: url=%s reason=%s",
+                safe_url(url),
+                reason,
+            )
+            return None
         await self._respect_rate_limit()
         async with AsyncWebCrawler(config=self._browser_config) as crawler:
             result = await crawler.arun(url=str(validated), config=self._run_config)
@@ -118,13 +127,23 @@ class Crawl4AIClient:
         validated: list[str] = []
         for raw in urls:
             try:
-                validated.append(str(_HTTP_URL_ADAPTER.validate_python(raw)))
+                checked = str(_HTTP_URL_ADAPTER.validate_python(raw))
             except ValidationError as exc:
                 log.warning(
                     "crawl4ai stream-many rejected: url=%s reason=%s",
                     safe_url(raw),
                     safe_exc(exc),
                 )
+                continue
+            safe, reason = is_safe_destination(checked)
+            if not safe:
+                log.warning(
+                    "crawl4ai stream-many url-guard blocked: url=%s reason=%s",
+                    safe_url(raw),
+                    reason,
+                )
+                continue
+            validated.append(checked)
         if not validated:
             return
         streaming_config = self._run_config.clone(stream=True)

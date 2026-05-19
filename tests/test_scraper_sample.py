@@ -57,9 +57,13 @@ async def test_sample_scraper_emits_distinct_hint_shapes():
 
 
 def test_sample_scraper_not_registered_for_production_dispatch():
-    """SampleScraper is a test fixture; production registry stays empty."""
-    from scraper.sites import scrapers
+    """SampleScraper is a test fixture; never dispatch-registered.
 
-    # SampleScraper class itself is exported, but the production lookup dict
-    # is empty until 0.2.0.07 adds the real source scrapers.
-    assert scrapers == {}
+    Plan 33 / 0.2.0.07 populated `scrapers` with the six production sources;
+    the invariant that SampleScraper STAYS out of that dict is enforced here
+    + cross-checked by `tests/test_scraper_sites/test_registry.py`.
+    """
+    from scraper.sites import SampleScraper, scrapers
+
+    assert SampleScraper not in scrapers.values()
+    assert JobSource.MANUAL.value not in scrapers
