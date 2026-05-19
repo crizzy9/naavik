@@ -1,4 +1,4 @@
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +32,33 @@ class Settings(BaseSettings):
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
+
+    # Scraper config — plan 33 / 0.2.0.07. All optional; cron skips a source
+    # silently when its company-list is unset. CSV parsed by pydantic-settings
+    # (e.g. `GREENHOUSE_COMPANIES=anthropic,openai,scale`).
+    scraper_rsshub_url: str | None = None
+    workday_companies: list[str] | None = None
+    greenhouse_companies: list[str] | None = None
+    lever_companies: list[str] | None = None
+    ashby_companies: list[str] | None = None
+
+    @field_validator(
+        "workday_companies",
+        "greenhouse_companies",
+        "lever_companies",
+        "ashby_companies",
+        mode="before",
+    )
+    @classmethod
+    def _parse_company_csv(cls, v: object) -> list[str] | None:
+        """Accept CSV (`anthropic,openai`) from env vars; trim + drop blanks."""
+        if v is None or v == "":
+            return None
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v  # type: ignore[return-value]
 
     # Plan 10c (10c.3, 2026-05-11): boot-time debug flag used by the seed-time
     # `dev-credentials` file write + the FastAPI lifespan credential echo.

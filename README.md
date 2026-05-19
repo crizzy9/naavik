@@ -371,6 +371,14 @@ PORTFOLIO_WEBHOOK_URL=...    # Netlify/Vercel rebuild trigger
 # (~/.naavik/secrets.enc, secrets.enc.lock, secrets.enc.bak.*, logs/vault-audit.log
 #  were deleted in plan 26 / 0.2.0.01; if upgrading from 0.1.x, see § Upgrading from 0.1.x.)
 DATA_DIR=.naavik
+
+# Scraper config (plan 33 / 0.2.0.07). Per-source company slugs as CSV.
+# Cron skips a source silently when its list is unset.
+GREENHOUSE_COMPANIES=anthropic,scale,databricks
+LEVER_COMPANIES=netflix,figma
+ASHBY_COMPANIES=ramp,vercel
+WORKDAY_COMPANIES=salesforce/External,adobe/Adobe_Careers
+SCRAPER_RSSHUB_URL=                        # optional LinkedIn RSShub fallback base URL
 ```
 
 ### Dev / test env vars (not user-facing)
