@@ -31,6 +31,7 @@ from models.enums import (
     Gender,
     GeneratedDocumentKind,
     JobQueueState,
+    JobScrapeStatus,
     JobSource,
     LLMProvider,
     OutreachIntent,
@@ -39,10 +40,13 @@ from models.enums import (
     RecruiterState,
     ReferralState,
     RelocateOpenness,
+    RemotePolicy,
     ScreenerAnswerSource,
     ScreenerQuestionType,
+    SeniorityLevel,
     Tag,
     VeteranStatus,
+    VisaRestriction,
     VisaSponsorship,
     WorkAuthorization,
 )
@@ -198,6 +202,7 @@ class Job(_Base):
     user_id: int
     source: JobSource
     board: ApplicationBoard
+    external_id: str
     url: str
     url_type: str
 
@@ -205,15 +210,20 @@ class Job(_Base):
     role: str
     team: str | None = None
     location: str | None = None
+    remote_policy: RemotePolicy = RemotePolicy.UNKNOWN
+    seniority_level: SeniorityLevel | None = None
 
     posted_at: datetime | None = None
+    posted_at_text: str | None = None
     found_at: datetime
 
     description: str
     description_html: str | None = None
+    description_extracted_at: datetime | None = None
+    description_extraction_model: str | None = None
     criteria: list[str] = Field(default_factory=list)
     skills_required: list[str] = Field(default_factory=list)
-    visa_restrictions: str | None = None
+    visa_restrictions: VisaRestriction = VisaRestriction.NOT_MENTIONED
 
     salary_min: int | None = None
     salary_max: int | None = None
@@ -227,11 +237,30 @@ class Job(_Base):
     tags: list[Tag] = Field(default_factory=list)
 
     warm_intro_contact_id: int | None = None
+    last_scrape_run_id: int | None = None
     raw_meta: dict[str, Any] = Field(default_factory=dict)
 
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None = None
+
+
+class JobScrapeRun(_Base):
+    id: int
+    user_id: int
+    source: JobSource
+    status: JobScrapeStatus
+    triggered_by: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    requests_made: int = 0
+    listings_returned: int = 0
+    new_jobs: int = 0
+    updated_jobs: int = 0
+    errors: list[str] = Field(default_factory=list)
+    duration_ms: int | None = None
+    raw_meta: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
 
 
 class Application(_Base):
@@ -485,6 +514,7 @@ __all__ = [
     "Project",
     "Certification",
     "Job",
+    "JobScrapeRun",
     "Application",
     "Contact",
     "ContactApplicationLink",

@@ -5,6 +5,10 @@ Wave 4 of plan 10 promotes the Pydantic shadow models in
 Sample-data fixtures (plan 09) still use the shadow classes; seed.py
 converts shadow → dict → SQLModel during `db/seed.py`.
 
+Plan 27 (0.2.0.05, 2026-05-19) adds the `JobScrapeRun` entity for
+scrape-side observability + extends the `JobSource` / `VisaRestriction` /
+`RemotePolicy` / `SeniorityLevel` / `JobScrapeStatus` enum vocabulary.
+
 Single source for `from src.models import User, Profile, ...`.
 """
 
@@ -34,6 +38,7 @@ from .enums import (
     Gender,
     GeneratedDocumentKind,
     JobQueueState,
+    JobScrapeStatus,
     JobSource,
     LLMProvider,
     OutreachIntent,
@@ -42,16 +47,20 @@ from .enums import (
     RecruiterState,
     ReferralState,
     RelocateOpenness,
+    RemotePolicy,
     ScreenerAnswerSource,
     ScreenerQuestionType,
+    SeniorityLevel,
     StatusChangeTrigger,
     Tag,
     VeteranStatus,
+    VisaRestriction,
     VisaSponsorship,
     WorkAuthorization,
 )
 from .event import AppEvent
-from .job import Job
+from .job import Job, JobCreate, JobFilter, JobRead, JobUpdate
+from .job_scrape_run import JobScrapeRun, JobScrapeRunRead
 from .profile import Bullet, Certification, Education, Experience, Profile, Project, Skill
 from .settings import Settings
 from .user import User
@@ -67,6 +76,7 @@ __all__ = [
     "Project",
     "Certification",
     "Job",
+    "JobScrapeRun",
     "Application",
     "ApplicationScreenerAnswer",
     "GeneratedDocument",
@@ -78,6 +88,12 @@ __all__ = [
     "AppEvent",
     "ApiUsage",
     "Settings",
+    # Pydantic API schemas
+    "JobCreate",
+    "JobFilter",
+    "JobRead",
+    "JobUpdate",
+    "JobScrapeRunRead",
     # Enums (re-export)
     "AppEventKind",
     "ApplicationBoard",
@@ -93,6 +109,7 @@ __all__ = [
     "Gender",
     "GeneratedDocumentKind",
     "JobQueueState",
+    "JobScrapeStatus",
     "JobSource",
     "LLMProvider",
     "OutreachIntent",
@@ -101,11 +118,14 @@ __all__ = [
     "RecruiterState",
     "ReferralState",
     "RelocateOpenness",
+    "RemotePolicy",
     "ScreenerAnswerSource",
     "ScreenerQuestionType",
+    "SeniorityLevel",
     "StatusChangeTrigger",
     "Tag",
     "VeteranStatus",
+    "VisaRestriction",
     "VisaSponsorship",
     "WorkAuthorization",
 ]

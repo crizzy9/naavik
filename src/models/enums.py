@@ -59,8 +59,48 @@ class JobQueueState(StrEnum):
 
 
 class JobSource(StrEnum):
-    AUTOMATED = "automated"
+    LINKEDIN = "linkedin"
+    WORKDAY = "workday"
+    GREENHOUSE = "greenhouse"
+    LEVER = "lever"
+    ASHBY = "ashby"
+    INDEED = "indeed"
+    COMPANY_DIRECT = "company_direct"
+    RSSHUB = "rsshub"
+    N8N_LEGACY = "n8n_legacy"
     MANUAL = "manual"
+
+
+class VisaRestriction(StrEnum):
+    US_CITIZEN_ONLY = "us_citizen_only"
+    GREEN_CARD_REQUIRED = "green_card_required"
+    SPONSORSHIP_AVAILABLE = "sponsorship_available"
+    NOT_MENTIONED = "not_mentioned"
+
+
+class RemotePolicy(StrEnum):
+    REMOTE = "remote"
+    HYBRID = "hybrid"
+    ONSITE = "onsite"
+    UNKNOWN = "unknown"
+
+
+class SeniorityLevel(StrEnum):
+    ENTRY = "entry"
+    MID = "mid"
+    SENIOR = "senior"
+    STAFF = "staff"
+    PRINCIPAL = "principal"
+    EXEC = "exec"
+    UNKNOWN = "unknown"
+
+
+class JobScrapeStatus(StrEnum):
+    RUNNING = "running"
+    SUCCESS = "success"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
 
 
 class BulletSelectionOverride(StrEnum):

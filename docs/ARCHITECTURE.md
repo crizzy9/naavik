@@ -1,6 +1,6 @@
 # Naavik · Architecture Guide
 
-> **Last updated:** 2026-05-16
+> **Last updated:** 2026-05-19
 > **Audience:** architect + engineer agents reading the system before authoring plans or shipping code.
 > **Companion docs:** `docs/design/BACKEND.md` (canonical backend reference — services, routes, cron, scrapers, LLM, observability), `docs/design/DATA_MODEL.md` (canonical data model — 18 entities, state machines, indexes, validation), `docs/design/INTERACTIONS.md` (HTMX patterns), `DESIGN.md` (visual contract — tokens, type, voice), `docs/design/WORKFLOW.md` (UI sub-process — skill routing, checklists, common patterns).
 
@@ -132,10 +132,11 @@ The middle layer. Every business operation lives here.
 
 ### 3.7 `src/models/` — SQLModel models
 
-- One file per entity domain (`profile.py`, `application.py`, `job.py`, `event.py`, etc.).
+- One file per entity domain (`profile.py`, `application.py`, `job.py`, `job_scrape_run.py`, `event.py`, etc.).
 - `SQLModel` inherits Pydantic BaseModel + SQLAlchemy declarative. ONE class definition serves both API schemas + DB rows.
+- Pydantic API-only models (e.g. `JobCreate` / `JobRead` / `JobFilter` / `JobScrapeRunRead`) co-locate with the SQLModel of the same domain rather than living in a separate `api/schemas/` directory — matches the existing `profile.py` convention.
 - Relationships **stripped** in current implementation — services do FK joins explicitly. (Plan 10 Wave 3 deviation: SQLModel 0.0.22's forward-ref resolution failed under our circular FK graph.)
-- Enums live in `src/models/enums.py` for cross-entity reuse.
+- Enums live in `src/models/enums.py` for cross-entity reuse. Plan 27 (`0.2.0.05`) added `VisaRestriction` / `RemotePolicy` / `SeniorityLevel` / `JobScrapeStatus` + replaced the 2-value `JobSource` enum with the 10-value per-source form. Canonical Job + JobScrapeRun reference: `docs/design/JOB_MODEL.md`.
 
 ### 3.8 `src/scraper/` — site adapters
 

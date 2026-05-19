@@ -39,6 +39,20 @@ All notable changes to Naavik are documented here. Format is based on [Keep a Ch
 - `tests/test_no_vault_imports.py` — regression lint walks `src/` for `from services import vault` / `import vault` / `vault_svc` references + the on-disk vault module file. Fails loudly if anything reintroduces the vault.
 - `tests/test_settings_llm_form.py` — env-indicator render checks + 422-on-secret-payload tests.
 - `migrations/versions/0004_drop_vault_columns.py` — drops 5 `Settings` columns with reversible downgrade.
+- **`Job` model hardening + `JobScrapeRun` scrape-side observability** (`0.2.0.05` / Issue #15) — plan 27 graduates to `docs/design/JOB_MODEL.md`.
+  - 6 new `Job` columns: `external_id` (NOT NULL after sha1 backfill, partial-unique on `(user_id, source, external_id) WHERE deleted_at IS NULL` — primary dedup constraint), `remote_policy` (NOT NULL default `UNKNOWN`), `seniority_level` (nullable), `posted_at_text` (raw scraper string), `description_extracted_at`, `description_extraction_model`, `last_scrape_run_id` (FK → `job_scrape_run.id`).
+  - `Job.visa_restrictions` promoted from free-form `str | None` to typed `VisaRestriction` enum via 4-step ALTER TABLE (add-col + UPDATE-CASE + drop-old + rename). Backfill maps lowercase string values + `LIKE '%sponsorship%'` onto enum members.
+  - New `JobScrapeRun` table — 17 columns + 2 CHECK constraints + 3 composite indexes (`(source, started_at)`, `(user_id, status, started_at)`, `started_at`). One row per scraper invocation; carries `(status, started_at, finished_at, requests_made, listings_returned, new_jobs, updated_jobs, errors[], duration_ms, raw_meta)`.
+  - 4 new Postgres ENUM types: `visarestriction` (4 values), `remotepolicy` (4 values), `senioritylevel` (7 values), `jobscrapestatus` (5 values).
+  - `JobSource` enum: 9 per-source values added (`LINKEDIN` / `WORKDAY` / `GREENHOUSE` / `LEVER` / `ASHBY` / `INDEED` / `COMPANY_DIRECT` / `RSSHUB` / `N8N_LEGACY`); `AUTOMATED` deprecated (existing rows remapped to per-board values via `board::text::jobsource`; the dangling `automated` value stays in the type definition because Postgres has no `ALTER TYPE ... DROP VALUE` before PG16 — cosmetic only, follow-up `0.2.5.NN` cleanup row planned).
+  - `migrations/versions/0005_job_hardening.py` (additive on Postgres; sqlite test-only fallback paths). Round-trip verified on Postgres + sqlite.
+  - `src/services/job_service.py` — 8-function service surface: `upsert_job` (idempotent on `(user_id, source, external_id)`; merges raw_meta; field-level merge deferred to `0.2.0.09`), `get_job`, `list_jobs` (filtered, score DESC + found_at DESC, soft-delete honored), `archive_job`, `restore_job` (collision-aware), `create_manual_job` (synthetic `external_id = manual-<uuid4>[:12]`), `count_jobs_by_source`, `record_scrape_run`. AsyncSession everywhere; no raw SQL in routes.
+  - Pydantic API schemas in `src/models/job.py` + `src/models/job_scrape_run.py`: `JobCreate` / `JobUpdate` / `JobFilter` / `JobRead` / `JobScrapeRunRead`. Co-located with the SQLModel of the same domain (matches existing `profile.py` convention).
+  - `src/services/scorer.py` updated to match against `VisaRestriction` enum members (was free-form string set).
+  - `src/llm/prompts/extract_job.py` — `ExtractedJob.visa_restrictions` is now the typed enum; AI extraction is structurally constrained via Pydantic `provider.structured(...)`.
+  - `src/db/sample_data.py` — 27 Job fixtures backfilled with `external_id` (deterministic sha1 prefix) + fanned-out `source` per board; 5 `JobScrapeRun` fixtures (last 24h of scraping, mixed `SUCCESS` / `PARTIAL` / `FAILED` statuses); `Job.last_scrape_run_id` wired across 24 of the 27 jobs.
+  - `tests/test_alembic_0005.py` (3 cases, sqlite round-trip), `tests/test_job_service.py` (15 cases, in-memory FakeSession); `tests/test_no_legacy_jobsource_imports.py` (regression lint — fails if any `src/` file imports `JobSource.AUTOMATED`).
+  - `docs/design/JOB_MODEL.md` — new canonical reference, graduated from plan 27.
 
 ### Operations
 
