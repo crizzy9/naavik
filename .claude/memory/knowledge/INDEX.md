@@ -13,7 +13,8 @@ Aliases drive `Skill: naavik-memory-lookup` discovery. Add a new entry via:
 | `destructive-rm-guard` | high | auto-mode rm guard, .naavik/db wipe blocked, destructive command, sandbox shared state, devops live-orchestrator pivot, TestClient surrogate | 2026-05-17 (run 2026-05-17T08-40-13_4abef2) | 2026-05-17 |
 | `hacker-self-approval` | high | self-approval blocked, own author PR review, hacker COMMENTED state, GitHub PR review API restriction, pr-review-write pivot, pull-request-review-write__pivot, pull_request_review_write pivot, hacker pivot to COMMENTED, self-approve API restriction | 2026-05-19 (run 2026-05-18T16-00-00_a29w5a) | 2026-05-19 |
 | `linkedin-scraping` | high | linkedin, scrapers, job feed, RSShub, guest API, voyager, MCP linkedin | 2026-05-17 (run 2026-05-17T08-40-13_4abef2) | 2026-05-17 |
+| `patch-version-position-stability` | high | patch-version-task-numbering | 2026-05-19 (run 2026-05-19T05-40-56_194aa5) | 2026-05-19 |
 | `prepare-commit-msg-case` | high | git hook case, branch task-id case, Closes #N missing, uppercase branch, lowercase branch, PR not auto-closing | 2026-05-17 (run 2026-05-17T08-40-13_4abef2) | 2026-05-17 |
 | `sandbox-post-direct-push` | high | sandbox denial gh issue create, post-direct-push gh subcommand blocked, BOOKKEEPING push, follow-up issue deferred, .claude/naavik-ops gh create-issue halt | 2026-05-17 (run 2026-05-17T08-40-13_4abef2) | 2026-05-17 |
 
-_5 entries. Generated 2026-05-19T04:56:34Z._
+_6 entries. Generated 2026-05-19T08:00:49Z._
