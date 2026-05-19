@@ -35,6 +35,18 @@ dependencies = [
     "cryptography>=44.0.0",
     "apscheduler>=3.10.4",
     "pypdf>=5.1.0",
+    # Pinned to match the chromium revision shipped by `pkgs.playwright-driver.browsers`
+    # in our pinned nixpkgs (currently 1.58.2 → chromium-1208). Bumping pypi past
+    # this without bumping the nixpkgs pin will produce a "Executable doesn't exist
+    # at chromium_headless_shell-NNNN" error on NixOS. See plan 10a / PC.3.
+    # Promoted from dev extras in plan 29 (0.2.0.06) — Crawl4AI requires Playwright
+    # at module-import time, so the production runtime needs it on the base path.
+    "playwright>=1.58.0,<1.59",
+    # Scraper substrate (plan 29, 0.2.0.06). 0.8.6 is the post-litellm-supply-chain
+    # hotfix release; older releases ship the compromised litellm transitively.
+    # Exact pin keeps the lockfile deterministic; future bumps come after release
+    # notes are read.
+    "crawl4ai==0.8.6",
 ]
 
 [project.optional-dependencies]
@@ -42,11 +54,6 @@ dev = [
     "ruff>=0.9.0",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.25.0",
-    # Pinned to match the chromium revision shipped by `pkgs.playwright-driver.browsers`
-    # in our pinned nixpkgs (currently 1.58.2 → chromium-1208). Bumping pypi past
-    # this without bumping the nixpkgs pin will produce a "Executable doesn't exist
-    # at chromium_headless_shell-NNNN" error on NixOS. See plan 10a / PC.3.
-    "playwright>=1.58.0,<1.59",
 ]
 
 [project.scripts]
