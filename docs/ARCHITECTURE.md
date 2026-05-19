@@ -48,12 +48,15 @@ Naavik is a Python 3.12 FastAPI monolith with an HTMX frontend, backed by Postgr
 └────────────────────────────────────────────────────────────┘
 
 On-disk state at ~/.naavik/:
-  secrets.enc          AES-256-GCM vault (sunset: Phase 2 task 2.12 → .env)
-  key.bin              vault master key derivation seed
-  logs/vault-audit.log JSONL audit log (never carries values)
   data/documents/      per-app + portfolio PDF outputs
   data/snapshots/      daily DB snapshot markers
   dev-credentials      mode 0600 plaintext dev creds (debug + SELF_HOSTED gated, plan 10c)
+
+Secrets (API keys, webhook URLs, bot tokens) load from `.env` in the repo /
+deployment root via `pydantic-settings` in `src/config.py`. `.env` is
+gitignored; operators run `chmod 0600 .env`. The previous AES-256-GCM vault
+(`~/.naavik/secrets.enc` + `~/.naavik/key.bin` + `~/.naavik/logs/vault-audit.log`)
+was deleted in plan 26 / `0.2.0.01` (2026-05-19) — see § 4.2.
 ```
 
 ---
@@ -110,9 +113,9 @@ The middle layer. Every business operation lives here.
 - `contact_tracker.py` — recruiter/employee contact management.
 - `notifications.py` — Discord embed + Telegram outbound + toast queue.
 - `portfolio_sync.py` — public CV API + debounced generic resume regen + Netlify webhook.
-- `settings_service.py` — per-tab CRUD; routes API keys through vault.
-- `ats_credentials.py` — metadata in DB; secret in vault.
-- `vault.py` — AES-256-GCM. **Sunset, do not extend** (Phase 2 task 2.12).
+- `settings_service.py` — per-tab CRUD for non-secret Settings fields. API keys / webhook URLs / bot tokens are env-loaded post plan 26 / `0.2.0.01`; this service no longer mediates secret material.
+- `ats_credentials.py` — metadata only (board, login_status, has_credential flag). Plan 26 removed `store_secret` / `resolve_secret` / `delete_secret`; Phase 2.X ATS adapter plans re-introduce a DB-side encrypted column when concrete adapters need persistent cookies.
+- `env_secrets.py` — env-presence indicators (post-vault). `llm_provider_configured(provider)` / `discord_webhook_configured()` / `telegram_bot_configured()` / `portfolio_webhook_configured()` + tab bundles for the Settings UI. Returns bools, never values.
 - `llm_tracker.py` — wraps every LLM call with `tracked_call`; persists ApiUsage.
 
 **Rule:** services consume `AsyncSession` via DI. Services don't import `api/` or `ui/` — they're called BY those layers, not the other way around.
@@ -176,10 +179,11 @@ The middle layer. Every business operation lives here.
 
 ### 4.2 Secret handling
 
-- **Current (sunset):** AES-256-GCM vault at `~/.naavik/secrets.enc`. Master key derived from `SECRET_KEY` via PBKDF2-HMAC-SHA256 (100k iterations). Plaintext header carries `key_fingerprint = sha256(master_key)[:32]` for mismatch detection.
-- **Future (Phase 2 task 2.12):** vault deleted entirely. Secrets via env vars sourced from gitignored `.env`. Standard self-hosted pattern.
-- **Audit log:** every vault op (`get` / `set` / `delete` / `list` / `rotate-key`) writes a JSON line to `~/.naavik/logs/vault-audit.log`. Values **never** appear; only operation + scope + key name + caller.
-- **Rule:** do NOT extend the vault. New secret needs land in `.env` (post-2.12 pattern) OR Settings UI as "configured via env" indicators.
+- **Source of truth:** gitignored `.env` at the repo / deployment root, consumed by `pydantic-settings` in `src/config.py`. Operators run `chmod 0600 .env` — filesystem permissions are the operative defense, matching the standard self-hosted pattern (n8n, Grafana, Authentik).
+- **Surface in the UI:** `services/env_secrets.py` exposes per-scope presence helpers (`llm_provider_configured(provider)`, `discord_webhook_configured()`, `telegram_bot_configured()`, `portfolio_webhook_configured()`) returning bools. The Settings UI's LLM Provider + Notifications tabs render configured / not-set indicators from these; values never leave the env.
+- **API guard:** `PUT /api/v1/settings/llm` and `PUT /api/v1/settings/notifications` reject (422) any payload carrying `api_key` / `ollama_base_url` / `discord_webhook_url` / `telegram_bot_token` / `telegram_chat_id`, with a hint pointing at the relevant env vars + `.env`.
+- **Sunset history:** the AES-256-GCM vault (`~/.naavik/secrets.enc` + `~/.naavik/key.bin` + `~/.naavik/logs/vault-audit.log`) and `src/services/vault.py` (436 LOC) were deleted in plan 26 / `0.2.0.01` (2026-05-19). The master key was derived from `SECRET_KEY` (same env var the JWT signer reads), so the vault added no defense beyond what env + filesystem perms provide; it was theater. `tests/test_no_vault_imports.py` is a regression lint that fails if anything reintroduces `from services import vault` / `vault_svc` references in `src/`.
+- **Rule:** do NOT reintroduce encrypted-at-rest secret storage (no new AES-GCM / PBKDF2 / `key.bin` / `secrets.enc` code paths). New operator-facing secrets land as `.env` slots in `.env.example` + Settings UI presence indicators.
 
 ### 4.3 Async + DB
 
@@ -266,7 +270,7 @@ n8n hosted the legacy job-discovery automation. Naavik replaces all of it across
 
 #### Future integrations (Phase 5+)
 
-Gmail / Outlook / LinkedIn / Calendar all land in Phase 5 (plans 13–14). Each will get a `§ 4.7.x` subsection here when shipped. Authentication patterns will follow OAuth + token-in-vault (or post-2.12, OAuth + token-in-env).
+Gmail / Outlook / LinkedIn / Calendar all land in Phase 5 (plans 13–14). Each will get a `§ 4.7.x` subsection here when shipped. Authentication patterns will follow OAuth + refresh-token persistence; post plan 26 / `0.2.0.01`, persistent OAuth tokens live in DB rows (likely encrypted via a dedicated column type at Phase 5 design time, not in the deleted vault).
 
 ---
 
@@ -300,7 +304,7 @@ When implementing a pattern that already exists in the codebase, **read the exis
 | Stub fragment + JSON dual endpoint | `src/db/sample_data.py` + `src/ui/routes/*` (memory mode) | Gated by `NAAVIK_PERSISTENCE` |
 | Optimistic rollback | `src/ui/static/base.js` (htmx:responseError listener) | Pairs with `hx-swap-oob` |
 | Lifespan-managed scheduler | `src/main.py` lifespan + `src/scheduler/__init__.py` | APScheduler PostgresJobStore |
-| Vault secret resolution | `src/services/vault.py` + `src/services/settings_service.py:get_deployment_info` | **Sunset; don't extend** |
+| Env-presence indicator | `src/services/env_secrets.py:llm_provider_configured` + `_settings_llm.html` / `_settings_notifications.html` | Replaces deleted vault scope booleans (plan 26 / `0.2.0.01`); never returns values |
 
 ---
 

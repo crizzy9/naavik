@@ -23,7 +23,7 @@ All notable changes to Naavik are documented here. Format is based on [Keep a Ch
 ### Changed
 
 - `PUT /api/v1/settings/llm` rejects (`422`) any payload carrying `api_key` or `ollama_base_url`. Body now configures only `llm_provider` / `llm_model` / `llm_fallback_provider`.
-- `PUT /api/v1/settings/notifications` rejects (`422`) any payload carrying `discord_webhook_url` or `telegram_bot_token`. Body now configures only `notify_threshold` / `notify_on_errors` / `notifications_enabled`.
+- `PUT /api/v1/settings/notifications` rejects (`422`) any payload carrying `discord_webhook_url`, `telegram_bot_token`, or `telegram_chat_id`. Body now configures only `notify_threshold` / `notify_on_errors` / `notifications_enabled`.
 - `GET /api/v1/settings/llm` returns `env_indicators` (per-provider bools); no `llm_api_key_fingerprint` field.
 - `GET /api/v1/settings/notifications` similarly returns `env_indicators`; no `*_configured` fields.
 - Settings · LLM Provider tab — drops the API-key input field + per-provider Ollama base URL field. New "API key (configured via environment)" indicator section shows configured / not-set per provider, sourced from env presence via `services/env_secrets.py`.

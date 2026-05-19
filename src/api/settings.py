@@ -231,20 +231,24 @@ async def put_notifications(
 ):
     """Update notification preferences.
 
-    Plan 26 (0.2.0.01): rejects any payload carrying `discord_webhook_url`
-    or `telegram_bot_token` with a 422 + env-migration guidance. Webhook
-    URL and bot token + chat ID are env-only post-vault.
+    Plan 26 (0.2.0.01): rejects any payload carrying `discord_webhook_url`,
+    `telegram_bot_token`, or `telegram_chat_id` with a 422 + env-migration
+    guidance. Webhook URL, bot token, and chat ID are env-only post-vault.
     """
     payload = payload or {}
-    if payload.get("discord_webhook_url") or payload.get("telegram_bot_token"):
+    if (
+        payload.get("discord_webhook_url")
+        or payload.get("telegram_bot_token")
+        or payload.get("telegram_chat_id")
+    ):
         return JSONResponse(
             status_code=422,
             content={
                 "detail": (
-                    "Discord webhook URL + Telegram bot token are configured "
-                    "via env vars (DISCORD_WEBHOOK_URL / TELEGRAM_BOT_TOKEN / "
-                    "TELEGRAM_CHAT_ID) starting in 0.2.0. Edit .env and "
-                    "restart. See README § Configuration."
+                    "Discord webhook URL, Telegram bot token, and Telegram "
+                    "chat ID are configured via env vars (DISCORD_WEBHOOK_URL "
+                    "/ TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID) starting in "
+                    "0.2.0. Edit .env and restart. See README § Configuration."
                 ),
             },
         )

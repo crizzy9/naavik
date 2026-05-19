@@ -162,6 +162,19 @@ def test_put_notifications_rejects_telegram_bot_token(client: TestClient, auth_c
     assert r.status_code == 422
 
 
+def test_put_notifications_rejects_telegram_chat_id(client: TestClient, auth_cookies):
+    r = client.put(
+        "/api/v1/settings/notifications",
+        json={"telegram_chat_id": "987654321"},
+        cookies=auth_cookies,
+    )
+    assert r.status_code == 422
+    body = r.json()
+    detail = body.get("detail", "")
+    assert "TELEGRAM_CHAT_ID" in detail
+    assert ".env" in detail
+
+
 # ── Live-DB round-trip (opt-in) ──────────────────────────────────────────
 
 
