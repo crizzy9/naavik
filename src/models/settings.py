@@ -8,9 +8,10 @@ Per DATA_MODEL.md § C `Settings` + § L consumer mapping. Includes:
 
 No secret material — every API key, OAuth refresh token, IMAP password,
 ATS cookie, Discord webhook URL, Telegram bot token, Netlify hook lives in
-`~/.naavik/secrets.enc` via `services/vault.py`. Settings stores at most a
-fingerprint (`llm_api_key_fingerprint: sha256:...`) so the UI can show
-"key set" without holding the key.
+the `.env` file consumed by `pydantic-settings` (per plan 26 / `0.2.0.01`,
+the AES-256-GCM vault was deleted in favor of standard env-loading).
+`services/env_secrets.py` exposes presence indicators for the Settings UI
+without surfacing values.
 """
 
 from __future__ import annotations
@@ -33,7 +34,6 @@ class Settings(SQLModel, table=True):
     # LLM
     llm_provider: LLMProvider = Field(default=LLMProvider.ANTHROPIC)
     llm_model: str = Field(default="claude-3.5-sonnet-20250219")
-    llm_api_key_fingerprint: str | None = None
     llm_fallback_provider: LLMProvider | None = None
 
     # Auto-apply
@@ -53,10 +53,9 @@ class Settings(SQLModel, table=True):
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
 
-    # Channels (URL/token in vault; bool here flags whether configured)
-    discord_webhook_configured: bool = Field(default=False)
-    telegram_bot_configured: bool = Field(default=False)
-    portfolio_webhook_configured: bool = Field(default=False)
+    # Channels — URL/token configured via env vars (DISCORD_WEBHOOK_URL,
+    # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PORTFOLIO_WEBHOOK_URL).
+    # `services/env_secrets.py` exposes presence indicators.
     portfolio_cors_allowed_origins: list[str] = Field(
         default_factory=lambda: ["https://crypticsoul.dev"],
         sa_column=Column(
@@ -79,7 +78,6 @@ class Settings(SQLModel, table=True):
         default_factory=list,
         sa_column=Column(ARRAY(String), nullable=False, server_default="{}"),
     )
-    scraper_proxy_configured: bool = Field(default=False)
 
     # Deployment
     deployment_mode: DeploymentMode = Field(default=DeploymentMode.SELF_HOSTED)

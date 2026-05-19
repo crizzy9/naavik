@@ -441,7 +441,6 @@ class Settings(_Base):
 
     llm_provider: LLMProvider = LLMProvider.ANTHROPIC
     llm_model: str = "claude-3.5-sonnet-20250219"
-    llm_api_key_fingerprint: str | None = None
     llm_fallback_provider: LLMProvider | None = None
 
     auto_apply_enabled: bool = False
@@ -455,9 +454,6 @@ class Settings(_Base):
     notify_on_errors: bool = True
     notifications_enabled: dict[str, bool] = Field(default_factory=dict)
 
-    discord_webhook_configured: bool = False
-    telegram_bot_configured: bool = False
-    portfolio_webhook_configured: bool = False
     portfolio_cors_allowed_origins: list[str] = Field(
         default_factory=lambda: ["https://crypticsoul.dev"]
     )
@@ -465,7 +461,6 @@ class Settings(_Base):
     sources_enabled: dict[str, bool] = Field(default_factory=dict)
     source_schedules: dict[str, str] = Field(default_factory=dict)
     workday_companies: list[str] = Field(default_factory=list)
-    scraper_proxy_configured: bool = False
 
     deployment_mode: DeploymentMode = DeploymentMode.SELF_HOSTED
 
