@@ -1,8 +1,8 @@
 ---
 Topic: hacker-self-approval
-Aliases: self-approval blocked, own author PR review, hacker COMMENTED state, GitHub PR review API restriction, pr-review-write pivot
-First captured: 2026-05-17 (run 2026-05-17T08-40-13_4abef2)
-Last referenced: 2026-05-17
+Aliases: self-approval blocked, own author PR review, hacker COMMENTED state, GitHub PR review API restriction, pr-review-write pivot, pull-request-review-write__pivot, pull_request_review_write pivot, hacker pivot to COMMENTED, self-approve API restriction
+First captured: 2026-05-19 (run 2026-05-18T16-00-00_a29w5a)
+Last referenced: 2026-05-19
 Supersedes: none
 Confidence: high
 ---
@@ -23,3 +23,4 @@ When the dispatched hacker (or any reviewer) is the PR's author, submit reviews 
 - .claude/agents/manager.md § PR review gate — `BLOCK` override semantics
 - .claude/agents/hacker.md § Verdict — verdict-in-body format spec
 - docs/AGENT_OPS.md § 7.2 — `PR_REVIEW_POSTED` event format
+- recurring-patterns.jsonl: `pull-request-review-write__pivot` (mined 2026-05-19; occurrence_count 6 across runs 4abef2 / 0695e7 / a97ab8 / eb06d2 / 8cf822 / a29w5a)
