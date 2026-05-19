@@ -3,7 +3,7 @@
 > **Canonical reference** — graduated from `docs/plans/archive/27-0.2.0.05-job-models.md` per `AGENTS.md` § Workflow step 4.
 > **Status:** Active. This is the single source for the `Job` SQLModel, the `JobScrapeRun` scrape-lifecycle table, the 5 Job-domain enums, the dedup story, and the `services/job_service.py` 8-function contract.
 > **Last updated:** 2026-05-19 (plan 27 / `0.2.0.05` shipped).
-> **Companion docs:** `docs/design/DATA_MODEL.md` (cross-entity model overview — Job + JobScrapeRun cross-ref here), `docs/design/BACKEND.md` § J (scraper pipeline that writes through `upsert_job`), `docs/design/BACKEND.md` § H (scorer reading `Job.visa_restrictions`), `docs/ARCHITECTURE.md` § 3.7 (models layer rules).
+> **Companion docs:** `docs/design/DATA_MODEL.md` (cross-entity model overview — Job + JobScrapeRun cross-ref here), `docs/design/SCRAPER_BASE.md` (canonical `ScraperBase` ABC + `RawJob` DTO that maps onto `Job`; plan 29), `docs/design/BACKEND.md` § J (scraper pipeline that writes through `upsert_job`), `docs/design/BACKEND.md` § H (scorer reading `Job.visa_restrictions`), `docs/ARCHITECTURE.md` § 3.7 (models layer rules).
 > **Downstream plans depending on this contract:** `0.2.0.06` (Crawl4AI base), `0.2.0.07` (per-source site scrapers), `0.2.0.08` (AI extraction), `0.2.0.09` (dedup), `0.2.0.10` (scheduler), `0.2.0.11` (Discover UI), `0.2.0.12` (notifications), `0.2.0.13` (rate limiting), `0.2.0.14` (n8n migration).
 
 ---
@@ -384,8 +384,8 @@ Production dedup spec (`BACKEND.md` § J.3 step 2.c). Plan 27 ships the **first 
 
 | Consumer | File | Reads | Writes |
 |---|---|---|---|
-| Scraper service (Phase 2.0.06+) | `services/scraper_service.py` | `Job.found_at`, `Job.description_extracted_at` | `upsert_job(...)`, `record_scrape_run(...)` |
-| Per-source scrapers | `src/scraper/<source>.py` | `Settings.workday_companies`, etc. | `RawJob` payloads passed to scraper_service |
+| Scraper service (Phase 2.0.06+) | `services/scraper_service.py` (canonical: `docs/design/SCRAPER_BASE.md § F`) | `Job.found_at`, `Job.description_extracted_at` | `upsert_job(...)`, `record_scrape_run(...)` |
+| Per-source scrapers | `src/scraper/sites/<source>.py` (canonical: `docs/design/SCRAPER_BASE.md § I`) | `Settings.workday_companies`, etc. | `RawJob` instances yielded to scraper_service |
 | AI extraction prompt | `src/llm/prompts/extract_job.py` | scraper-fetched HTML | `ExtractedJob` w/ `visa_restrictions: VisaRestriction` enum |
 | Scorer (visa filter, Wave 6) | `src/services/scorer.py` | `Job.visa_restrictions` enum, `Profile.visa_sponsorship_needed` | `Job.score = 0.0` when filter trips |
 | Scorer (LLM scoring, Phase 3) | same | `Job` row, `Profile`, `Settings.llm_provider` | `Job.score` + `score_explanation` + `match_breakdown` |

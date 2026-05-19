@@ -60,16 +60,20 @@ src/
 │       ├── linkedin_apply.py
 │       ├── indeed.py
 │       └── generic.py
-├── scraper/                   ← Per-source scrapers (HTML → RawJob)
-│   ├── base.py                ← BaseScraper interface
-│   ├── dispatch.py            ← URL → scraper instance
-│   ├── linkedin.py            ← RSShub-fed; details via guest API / Playwright
-│   ├── workday.py
-│   ├── greenhouse.py
-│   ├── lever.py
-│   ├── ashby.py
-│   ├── indeed.py
-│   └── generic.py             ← Playwright fallback for arbitrary URLs
+├── scraper/                   ← Per-source scrapers (HTML → RawJob); SCRAPER_BASE.md
+│   ├── types.py               ← RawJob + ScrapeQuery boundary DTOs
+│   ├── base.py                ← ScraperBase ABC
+│   ├── crawl4ai_client.py     ← AsyncWebCrawler wrapper (test injection point)
+│   └── sites/
+│       ├── __init__.py        ← scrapers: dict[JobSource, type[ScraperBase]]
+│       ├── sample.py          ← test fixture (NOT for production)
+│       ├── linkedin.py        ← 0.2.0.07: RSShub-fed; details via guest API
+│       ├── workday.py         ← 0.2.0.07
+│       ├── greenhouse.py      ← 0.2.0.07
+│       ├── lever.py           ← 0.2.0.07
+│       ├── ashby.py           ← 0.2.0.07
+│       ├── indeed.py          ← 0.2.0.07
+│       └── generic.py         ← Phase 6: Playwright fallback for arbitrary URLs
 ├── llm/                       ← LLM provider abstraction
 │   ├── base.py                ← LLMProvider interface
 │   ├── anthropic.py
@@ -111,7 +115,7 @@ src/
 - Route handlers ≤30 lines each. Anything beyond parameter parsing + dispatch belongs in a service.
 - Services own business logic. Async by default. Return Pydantic models. Raise typed exceptions caught by global handlers.
 - LLM calls go through `llm/`. Never call provider SDKs directly from services.
-- Scrapers conform to `BaseScraper`. Scraper code never touches the DB; `services/scraper_service.py` does.
+- Scrapers conform to `ScraperBase` (see `docs/design/SCRAPER_BASE.md`). Scraper code never touches the DB; `services/scraper_service.py` does.
 - Background jobs are registered in `scheduler/jobs.py` and call services. Job functions stay thin.
 - Integrations isolate auth state + RPC. Service code consumes integration methods, never raw SDK objects.
 - **The DB stores no secret material.** Encrypted refresh tokens, ATS credentials, IMAP passwords, LinkedIn cookies — all live in `~/.naavik/secrets.enc` via `services/vault.py`. DB-side `ATSCredential` rows hold metadata only (`has_credential`, `login_status`, `last_login_at`). See § L.1 + DATA_MODEL.md § H.
@@ -393,12 +397,12 @@ Services own all business logic. Routes parse → call service → return respon
 
 **New job arrives via scraper:**
 ```
-scheduler/scrape_jobs_<source>
-  → scraper_service.scrape(source)
-    → scraper/<source>.list_jobs() → fetch_detail()
-    → prompts.extract_job(provider, html)
-    → scraper_service.dedup()
-    → scorer.score(job, profile)
+scheduler/scrape_jobs_<source>                          # 0.2.0.10
+  → scraper_service.run_scraper(scraper=...)            # 0.2.0.06; see SCRAPER_BASE.md § F
+    → scraper.scrape(query) yields RawJob...             # 0.2.0.07 site subclasses
+    → job_service.upsert_job(session, raw=...) per yield
+    → prompts.extract_job(provider, description_html)   # 0.2.0.08 (separate pass)
+    → scorer.score(job, profile)                        # post-extract pass
     → AppEvent emitted
     → notifications.notify_new_high_score_job() if score ≥ threshold
 ```
@@ -521,48 +525,35 @@ Telegram inbound (Phase 5: `/status`, `/today`, `/silent` commands) uses long-po
 
 Three layers: dispatcher → per-source scraper → service.
 
-### J.1 `BaseScraper` interface (`scraper/base.py`)
+### J.1 `ScraperBase` interface (`scraper/base.py`)
+
+**Canonical reference:** `docs/design/SCRAPER_BASE.md` (graduated from plan 29, `0.2.0.06`).
+
+Plan 29 reconciled the original two-method sketch (`list_jobs` + `fetch_detail` + `matches`) into a single streaming `scrape() -> AsyncIterator[RawJob]`. Rationale:
+
+- **Two-pass `list_jobs` + `fetch_detail`** forces every scraper into the listing-page-then-detail-page shape. RSShub feeds, LinkedIn guest API, n8n migration imports have different shapes; uniform streaming `scrape()` lets each subclass orchestrate its own listing-then-detail chain internally.
+- **`matches(url)`** was for the "+ Add by URL" router. That logic now belongs in `scraper_service.dispatch_by_url(url)` (Phase 6 polish) reading the `src/scraper/sites/__init__.py:scrapers` registry — NOT on every subclass.
+
+Surface (canonical detail in `SCRAPER_BASE.md § C` + `§ D`):
 
 ```python
-from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel
+class ScraperBase(ABC):
+    source: JobSource           # subclass-declared
+    board: ApplicationBoard     # subclass-declared
+    rate_limit_per_minute: int = 30
+    random_delay_seconds: tuple[float, float] = (1.0, 3.0)
 
-
-class ScrapeQuery(BaseModel):
-    keywords: list[str] = []
-    location: Optional[str] = None
-    company_filter: Optional[list[str]] = None
+    @abstractmethod
+    async def scrape(self, query: ScrapeQuery) -> AsyncIterator[RawJob]: ...
 
 
 class RawJob(BaseModel):
-    source: str
-    url: str
-    company: str
-    title: str
-    location: Optional[str]
-    salary_text: Optional[str]
-    description_html: str
-    posted_at: Optional[datetime]
-    raw_meta: dict  # source-specific extras
-
-
-class BaseScraper(ABC):
-    rate_limit_seconds: float = 1.0  # min delay between requests
-
-    @abstractmethod
-    async def list_jobs(self, query: ScrapeQuery) -> list[RawJob]:
-        """Return abbreviated job rows; details fetched separately."""
-
-    @abstractmethod
-    async def fetch_detail(self, url: str) -> RawJob:
-        """Return full job detail for one URL."""
-
-    @abstractmethod
-    def matches(self, url: str) -> bool:
-        """True if this scraper handles the URL."""
+    """17-field boundary DTO. Pydantic v2, extra='forbid'."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    # See docs/design/SCRAPER_BASE.md § D.1 for the full field table.
 ```
+
+`Crawl4AIClient` (`src/scraper/crawl4ai_client.py`) wraps `AsyncWebCrawler` for test injection + single upgrade surface. See `SCRAPER_BASE.md § E`.
 
 ### J.2 Per-source modules
 
@@ -578,42 +569,53 @@ class BaseScraper(ABC):
 
 ### J.3 Pipeline (`services/scraper_service.py`)
 
+Canonical lifecycle reference: `docs/design/SCRAPER_BASE.md § F`. Summary:
+
 ```
-scrape(source):
-  0. Open a JobScrapeRun row: services.job_service.record_scrape_run(
-        user_id=1, source=source, status=RUNNING, triggered_by="cron")
-     → returns scrape_run; pass scrape_run.id to step 2.f.
-  1. Fetch listings via scraper.list_jobs(query)
-  2. For each new URL not in DB:
-     a. Fetch detail via scraper.fetch_detail(url)
-     b. Extract structured Job via prompts.extract_job(provider, html)
-     c. Dedup (exact (source, external_id) match via Job.last_scrape_run_id
-        write — plan 27 § D.3; URL match fallback; fuzzy title/company
-        Levenshtein — 0.2.0.09 work)
-     d. Score via scorer.score(job, profile)
-     e. Visa-filter: auto-zero score if profile.visa_sponsorship_needed AND
-        job.visa_restrictions ∈ {US_CITIZEN_ONLY, GREEN_CARD_REQUIRED}
-     f. Persist Job via job_service.upsert_job(session, user_id=1,
-        source=source, external_id=raw.external_id, raw=raw,
-        scrape_run_id=scrape_run.id). On (job, created=True) the helper
-        also bumps scrape_run.new_jobs counter; on (job, created=False)
-        bumps updated_jobs.
-     g. Emit AppEvent
-     h. If score ≥ Settings.notify_threshold: notifications.notify_new_high_score(job)
-  3. Finalize scrape_run: status=SUCCESS|PARTIAL|FAILED|TIMED_OUT,
-     finished_at=now(), errors[] populated. The row is the canonical
-     diagnostic surface (operator UI reads this; not the log file).
-  4. Log run summary to ~/.naavik/logs/jobs/scraping.<source>.log
+run_scraper(session, *, scraper, user_id, query, triggered_by):
+  0. record_scrape_run(... status=RUNNING) → JobScrapeRun row.
+  1. async for raw_job in scraper.scrape(query):
+       listings_returned += 1
+       try:
+         _, created = job_service.upsert_job(session, user_id=user_id,
+              source=raw_job.source, external_id=raw_job.external_id,
+              raw=raw_job.model_dump(exclude_unset=True),
+              scrape_run_id=run.id)
+         new_jobs / updated_jobs counter += 1
+       except per-listing: append errors[]; continue.
+  2. errors.extend(scraper._errors)  # aggregate per-listing tier-1
+  3. Status derivation per SCRAPER_BASE.md § F.2 table:
+       errors=[], N>0          → SUCCESS
+       errors!=[], N>0         → PARTIAL
+       errors!=[], N==0        → FAILED
+       raise mid-stream, N>0   → PARTIAL
+       raise mid-stream, N==0  → FAILED
+       asyncio.CancelledError  → TIMED_OUT (re-raised)
+  4. finally: mutate run.status / finished_at / counters / errors /
+     duration_ms in-place; session.add(run); await session.flush().
+
+# Downstream concerns NOT in 0.2.0.06 substrate:
+# - AI extraction (0.2.0.08) writes Job.description, Job.tags,
+#   Job.skills_required, Job.match_breakdown using description_html input
+#   from RawJob.
+# - Dedup beyond (user_id, source, external_id) — fuzzy title/company
+#   Levenshtein — 0.2.0.09.
+# - Scoring (services/scorer.py) + visa filter — runs on the persisted Job,
+#   not on the RawJob; cron job kicks score-job tasks per Job created.
+# - Notifications (services/notifications.notify_new_high_score) — fires
+#   from the scoring cron, not from run_scraper itself.
+# - Per-source cron registration (`scraping.linkedin` etc.) — 0.2.0.10.
 ```
 
-Canonical Job + JobScrapeRun reference: `docs/design/JOB_MODEL.md` (graduated from plan 27).
+Canonical Job + JobScrapeRun reference: `docs/design/JOB_MODEL.md` (plan 27).
+Canonical ScraperBase + RawJob + Crawl4AIClient reference: `docs/design/SCRAPER_BASE.md` (plan 29).
 
 ### J.4 Anti-detection
 
-- **Per-source rate limits** — respect `BaseScraper.rate_limit_seconds`.
-- **Random jitter** — sleep `rate_limit_seconds + uniform(0, rate_limit_seconds*0.5)`.
+- **Per-source rate limits** — `ScraperBase.rate_limit_per_minute` (default 30) + `ScraperBase.random_delay_seconds` (default `(1.0, 3.0)`); `0.2.0.13` lifts both into `Settings` fields with per-source defaults.
+- **Crawl4AI stealth** — `Crawl4AIClient(enable_stealth=True)` by default. Patches `navigator.webdriver`, modifies fingerprints, emulates realistic plugin behavior. First-line defense per `docs/design/research/LINKEDIN_SCRAPING.md` § 6 risk #3.
 - **User-Agent rotation** — Phase 2.x optional; per-request UA from a small pool.
-- **Playwright headless mode** — generic scraper opts out of `navigator.webdriver` fingerprint.
+- **`UndetectedAdapter`** — reserved for `0.2.0.13` if measured 403-rate on a specific source exceeds threshold.
 - **Proxy support** — Phase 6+; `Settings.scraper_proxy_url` (optional).
 
 ### J.5 n8n migration
