@@ -120,7 +120,7 @@ HALT.
 
 1. Append GATE event with `outcome=request_changes path=<A|B|C|...> notes='<verbatim>'`.
 2. Re-dispatch engineer with change scope. Engineer adds NEW commits to the same branch (no `--amend` per `AGENTS.md § Workflow`).
-3. Re-dispatch hacker + architect in parallel for delta-only re-review (devops only if delta touches build gates).
+3. Re-dispatch hacker + architect in parallel **in a single assistant message, TWO `Agent` tool calls** for delta-only re-review (devops only if delta touches build gates). Same pre-flight as § F step 9.
 4. HALT at next PR_REVIEW_GATE.
 
 **IF** category = D **AND** user said **BLOCK** **THEN:**
@@ -162,7 +162,7 @@ HALT.
 6. **HALT at PLAN_GATE** — surface plan path + goal + open questions + approval checklist. User picks Approve / Revise / Cancel → category C.
 7. On approve → dispatch engineer via Task with the plan path + locked decisions + branch name `feat/<task-id>-<slug>` (UPPERCASE).
 8. Engineer implements + runs quality gates + manual QA + opens PR via `gh pr create` using `.github/pull_request_template.md`.
-9. Dispatch hacker + architect via Task **in parallel** (single message, multiple tool uses) for review. (Devops dispatches on-demand for build-gate failures + runtime issues; engineer self-runs `devops-build-gates` skill pre-PR.)
+9. Dispatch hacker + architect via Task **in parallel — single assistant message, TWO `Agent` tool calls, not two messages, not one then the other**. Pre-flight: if your draft message contains exactly ONE `Agent` call with `subagent_type` in `{hacker, architect}`, STOP and add the counterpart in the same response before submitting. See `.claude/agents/manager.md § Parallel reviewer invariant` (codified 2026-05-19 after `2026-05-19T15-42-42_833f4a` violated this twice in one run). Devops dispatches on-demand for build-gate failures + runtime issues; engineer self-runs `devops-build-gates` skill pre-PR.
 10. **HALT at PR_REVIEW_GATE** — surface hacker verdict + architect verdict + engineer deviations. User picks Merge / Request changes / Block → category D.
 11. On merge → category I (BOOKKEEPING).
 
@@ -214,7 +214,7 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 4. Commit with `chore(<scope>):` or `docs(<scope>):` prefix.
 5. `git push -u origin <branch>`.
 6. Open PR: `gh pr create --title "..." --body "..."` using `.github/pull_request_template.md`.
-7. Dispatch hacker + architect in parallel for review (even for doc-only changes — they verify forward pointers, deviations sections, design-coherence, and stack-invariant compliance).
+7. Dispatch hacker + architect in parallel **in a single assistant message, TWO `Agent` tool calls** (not two messages, not one then the other) — even for doc-only changes (they verify forward pointers, deviations sections, design-coherence, and stack-invariant compliance). Pre-flight identical to § F step 9: ONE `Agent` call with reviewer `subagent_type` and no counterpart in the same response = violation. See `.claude/agents/manager.md § Parallel reviewer invariant`.
 8. **HALT at PR_REVIEW_GATE.**
 9. On merge → category I (BOOKKEEPING).
 
