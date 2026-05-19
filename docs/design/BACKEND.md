@@ -580,19 +580,33 @@ class BaseScraper(ABC):
 
 ```
 scrape(source):
+  0. Open a JobScrapeRun row: services.job_service.record_scrape_run(
+        user_id=1, source=source, status=RUNNING, triggered_by="cron")
+     → returns scrape_run; pass scrape_run.id to step 2.f.
   1. Fetch listings via scraper.list_jobs(query)
   2. For each new URL not in DB:
      a. Fetch detail via scraper.fetch_detail(url)
      b. Extract structured Job via prompts.extract_job(provider, html)
-     c. Dedup (URL match + fuzzy title/company via edit-distance)
+     c. Dedup (exact (source, external_id) match via Job.last_scrape_run_id
+        write — plan 27 § D.3; URL match fallback; fuzzy title/company
+        Levenshtein — 0.2.0.09 work)
      d. Score via scorer.score(job, profile)
      e. Visa-filter: auto-zero score if profile.visa_sponsorship_needed AND
-        job requires US-citizen / no-sponsorship
-     f. Persist Job(queue_state=unswiped)
+        job.visa_restrictions ∈ {US_CITIZEN_ONLY, GREEN_CARD_REQUIRED}
+     f. Persist Job via job_service.upsert_job(session, user_id=1,
+        source=source, external_id=raw.external_id, raw=raw,
+        scrape_run_id=scrape_run.id). On (job, created=True) the helper
+        also bumps scrape_run.new_jobs counter; on (job, created=False)
+        bumps updated_jobs.
      g. Emit AppEvent
      h. If score ≥ Settings.notify_threshold: notifications.notify_new_high_score(job)
-  3. Log run summary to ~/.naavik/logs/jobs/scraping.<source>.log
+  3. Finalize scrape_run: status=SUCCESS|PARTIAL|FAILED|TIMED_OUT,
+     finished_at=now(), errors[] populated. The row is the canonical
+     diagnostic surface (operator UI reads this; not the log file).
+  4. Log run summary to ~/.naavik/logs/jobs/scraping.<source>.log
 ```
+
+Canonical Job + JobScrapeRun reference: `docs/design/JOB_MODEL.md` (graduated from plan 27).
 
 ### J.4 Anti-detection
 

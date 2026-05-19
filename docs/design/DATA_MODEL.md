@@ -36,7 +36,7 @@ See § J for the full screener-answer model and lifecycle.
 
 ## B · Entity inventory
 
-19 SQLModel entities + 1 settings singleton. Phase 1 ships all of them; Phase 2+ extends some (e.g. scraping sources, semantic embeddings).
+20 SQLModel entities + 1 settings singleton. Phase 1 ships 19; plan 27 (`0.2.0.05`) adds `JobScrapeRun` (entity #20). Phase 2+ extends others (e.g. semantic embeddings, notification routing).
 
 | # | Entity | Purpose | Phase 1 row count (per SAMPLE_DATA.md) |
 |---|---|---|---|
@@ -48,7 +48,7 @@ See § J for the full screener-answer model and lifecycle.
 | 6 | `Education` | Schools | 2 |
 | 7 | `Project` | Portfolio projects | 4 |
 | 8 | `Certification` | Optional | 1 |
-| 9 | `Job` | Pre-application opportunities (scraped or manual) | ~20 |
+| 9 | `Job` | Pre-application opportunities (scraped or manual) — see `docs/design/JOB_MODEL.md` for the post-plan-27 hardened shape | ~20 |
 | 10 | `Application` | Pre + post-submission record (DRAFT through CLOSED) | 14 (incl. 2 DRAFT) |
 | 11 | `Contact` | Recruiter / employee at a company | ~20 |
 | 12 | `ContactApplicationLink` | Many-to-many: which contacts know about which applications | ~25 |
@@ -59,9 +59,10 @@ See § J for the full screener-answer model and lifecycle.
 | 17 | `ApplicationScreenerAnswer` | Per-job custom screener questions + drafted/user answers (see § J) | ~20 |
 | 18 | `ATSCredential` | Per-board login state metadata (DB row only; secret material in `~/.naavik/secrets.enc`) | 0 in Phase 1 fixtures |
 | 19 | `ApiUsage` | Per-LLM-call cost + token + latency log; powers Settings · LLM Provider cost cards | grows with usage; fixtures seed ~30 historical rows |
+| 20 | `JobScrapeRun` | One row per scraper invocation — `(source, status, started_at, finished_at, requests_made, listings_returned, new_jobs, updated_jobs, errors[], duration_ms, raw_meta)`. Plan 27 (`0.2.0.05`). See `docs/design/JOB_MODEL.md` § B.2 + § C for the canonical shape. | 5 fixtures (last 24h per source) |
 | – | `Settings` (singleton) | Per-user LLM provider, auto-apply config, etc. (see § L for full shape) | 1 |
 
-Phase 2+ adds: `ScrapingSource`, `Notification`, `CalendarEvent`, `JobEmbedding` (pgvector), `ProfileAnswer` (screener-answer reuse cache; see § J).
+Phase 2+ adds: `Notification`, `CalendarEvent`, `JobEmbedding` (pgvector), `ProfileAnswer` (screener-answer reuse cache; see § J). `ScrapingSource` is subsumed by `Settings.sources_enabled` + the `JobSource` enum + per-run `JobScrapeRun` rows — no separate entity ships.
 
 `ApiUsage` was promoted from Phase 2+ to Phase 1 entity #19 on 2026-05-01 because Settings · LLM Provider's "THIS MONTH" / "AVG / GENERATION" / "RATE LIMIT" cost cards (SCREENS.md § 11) need it from day one. Adding the table later would mean a migration + a broken cost-card interim.
 
@@ -309,6 +310,9 @@ class Certification(SQLModel, table=True):
 
 ### `Job`
 
+> **Canonical reference for the hardened post-plan-27 shape:** `docs/design/JOB_MODEL.md` § B.1 + § C.
+> This section sketches the same surface for cross-doc orientation; the canonical SQLModel + constraint list lives there.
+
 ```python
 class Job(SQLModel, table=True):
     __tablename__ = "job"
@@ -316,50 +320,98 @@ class Job(SQLModel, table=True):
     id: int = Field(primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
 
-    source: JobSource  # AUTOMATED (scraped) | MANUAL (+ Add by URL or manual entry)
+    # Plan 27 (0.2.0.05): JobSource is now 10-valued per-source enum
+    # (LINKEDIN / WORKDAY / GREENHOUSE / LEVER / ASHBY / INDEED /
+    # COMPANY_DIRECT / RSSHUB / N8N_LEGACY / MANUAL). AUTOMATED dropped.
+    source: JobSource
     board: ApplicationBoard
+    # Plan 27: stable per-source identifier — e.g. `linkedin_job_id`,
+    # `greenhouse_internal_id`. MANUAL source synthesizes `manual-<uuid4>`.
+    external_id: str
     url: str = Field(index=True)
-    url_type: str  # "ats" | "company_direct" | "rss" | "manual"
+    url_type: str  # "ats" | "company_direct" | "rss" | "manual" | "external"
 
     company: str
     role: str
     team: Optional[str] = None
     location: Optional[str] = None
+    # Plan 27 (D.6): Discover filter toggle "Remote only".
+    remote_policy: RemotePolicy = Field(default=RemotePolicy.UNKNOWN)
+    seniority_level: Optional[SeniorityLevel] = None
 
     posted_at: Optional[datetime] = None
+    posted_at_text: Optional[str] = None      # plan 27: raw scraper string
     found_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
-    description: str  # extracted plain-text JD
-    description_html: Optional[str] = None  # original scrape (for re-extraction)
+    description: str
+    description_html: Optional[str] = None
+    description_extracted_at: Optional[datetime] = None      # plan 27
+    description_extraction_model: Optional[str] = None       # plan 27
     criteria: list[str] = Field(default_factory=list, sa_column=Column(ARRAY(String)))
     skills_required: list[str] = Field(default_factory=list, sa_column=Column(ARRAY(String)))
-    visa_restrictions: Optional[str] = None  # "us_citizen_only" | "green_card_required" | "sponsorship_available" | None
+    # Plan 27 (D.5): promoted from free-form str to typed VisaRestriction enum.
+    visa_restrictions: VisaRestriction = Field(default=VisaRestriction.NOT_MENTIONED)
 
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
     equity_pct: Optional[float] = None
 
-    score: float = Field(default=0.0)  # 0.0–1.0 (UI shows 0–100)
+    score: float = Field(default=0.0)
     score_explanation: Optional[str] = None
     match_breakdown: dict = Field(default_factory=dict, sa_column=Column(JSON))
-    # match_breakdown shape: {"ai-ml": 0.95, "platform": 0.88, ...} — keys ⊆ Tag values
 
     queue_state: JobQueueState = Field(default=JobQueueState.UNSWIPED)
     tags: list[Tag] = Field(default_factory=list, sa_column=Column(ARRAY(String)))
 
     warm_intro_contact_id: Optional[int] = Field(default=None, foreign_key="contact.id")
+    # Plan 27 (D.2): FK to the JobScrapeRun row that last touched this Job.
+    last_scrape_run_id: Optional[int] = Field(default=None, foreign_key="job_scrape_run.id")
     raw_meta: dict = Field(default_factory=dict, sa_column=Column(JSON))
-    # raw_meta carries scraper-specific extras (e.g. greenhouse internal_job_id)
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     deleted_at: Optional[datetime] = None
-
-    applications: list["Application"] = Relationship(back_populates="job")
-    warm_intro_contact: Optional["Contact"] = Relationship()
 ```
 
-**Indexes:** `user_id`, `(user_id, queue_state)`, `score desc`, `found_at desc`, GIN on `tags`, `url` (unique per user via partial unique constraint). **Validation:** `0.0 <= score <= 1.0`; `salary_min <= salary_max OR salary_min IS NULL`. **Phase 6+:** `JobEmbedding` (pgvector) sibling table for semantic match.
+**Indexes:** `user_id`, `(user_id, queue_state)`, `score desc`, `found_at desc`, GIN on `tags`, `(user_id, url)` partial-unique WHERE `deleted_at IS NULL`, `(user_id, source, external_id)` partial-unique WHERE `deleted_at IS NULL` (plan 27 § D.3 — primary dedup). **Validation:** `0.0 <= score <= 1.0`; `salary_min <= salary_max OR salary_min IS NULL`. **Phase 6+:** `JobEmbedding` (pgvector) sibling table for semantic match.
+
+**Service contract.** Job CRUD + dedup-aware upsert + scrape-run lifecycle go through `src/services/job_service.py` (8 functions per plan 27 § D.9): `upsert_job` / `get_job` / `list_jobs` / `archive_job` / `restore_job` / `create_manual_job` / `count_jobs_by_source` / `record_scrape_run`. No raw SQL in route handlers; scrapers (0.2.0.06+) write through `upsert_job` which is idempotent on `(user_id, source, external_id)`.
+
+### `JobScrapeRun`
+
+> **Plan 27 (`0.2.0.05`) addition.** Canonical reference: `docs/design/JOB_MODEL.md` § B.2 + § C.
+
+One row per scraper invocation — distinct from `AppEvent` (which is per-Application history). Powers the future Scrapes operator panel + `0.2.0.13` rate-limiting + `0.2.0.09` dedup observability.
+
+```python
+class JobScrapeRun(SQLModel, table=True):
+    __tablename__ = "job_scrape_run"
+
+    id: int = Field(primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+
+    source: JobSource
+    status: JobScrapeStatus      # RUNNING | SUCCESS | PARTIAL | FAILED | TIMED_OUT
+    triggered_by: str            # "cron" | "manual" | "test" | "migration" (free-form)
+
+    started_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    finished_at: Optional[datetime] = None
+
+    requests_made: int = 0
+    listings_returned: int = 0
+    new_jobs: int = 0
+    updated_jobs: int = 0
+
+    errors: list[str] = Field(default_factory=list, sa_column=Column(ARRAY(String)))
+    # errors[i] format: "stage=<list_jobs|fetch_detail|persist> url=<...> kind=<rate_limit|captcha|timeout|parse_failure|other> msg=<...>"
+
+    duration_ms: Optional[int] = None
+    raw_meta: dict = Field(default_factory=dict, sa_column=Column(JSON))
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+```
+
+**Indexes:** `(source, started_at)`, `(user_id, status, started_at)`, `started_at`. **Validation:** `finished_at IS NULL OR finished_at >= started_at`; `requests_made / listings_returned / new_jobs / updated_jobs >= 0`. **Soft-delete:** NONE — scrape-run rows are operator audit data, pruned by a future cron at scale (Phase 6+).
 
 ### `Application`
 
@@ -823,8 +875,72 @@ class JobQueueState(StrEnum):
 
 
 class JobSource(StrEnum):
-    AUTOMATED = "automated"  # via scheduled scraper
-    MANUAL = "manual"        # + Add by URL or manual entry
+    """Per-source provenance — plan 27 (`0.2.0.05`) replaced the AUTOMATED catch-all
+    with 9 per-source values + MANUAL. Pre-plan-27 rows with source='automated'
+    are remapped to per-board values by alembic 0005 (board::text::jobsource).
+    `automated` lingers in the Postgres ENUM type only (no clean DROP VALUE
+    before PG16); follow-up `0.2.5.NN` cosmetic cleanup row tracks the purge.
+    Canonical reference: `docs/design/JOB_MODEL.md` § C.1.
+    """
+    LINKEDIN = "linkedin"
+    WORKDAY = "workday"
+    GREENHOUSE = "greenhouse"
+    LEVER = "lever"
+    ASHBY = "ashby"
+    INDEED = "indeed"
+    COMPANY_DIRECT = "company_direct"   # generic scraper / +Add by URL with known ATS
+    RSSHUB = "rsshub"                   # RSS-only inbound (rsshub.luminolab.net)
+    N8N_LEGACY = "n8n_legacy"           # 0.2.0.14 migration source
+    MANUAL = "manual"                   # user-entered, no scraper
+
+
+class VisaRestriction(StrEnum):
+    """Plan 27 (`0.2.0.05`) promoted from `Job.visa_restrictions: str | None`.
+    AI extraction emits one of these 4 values; the scorer's visa filter (plan
+    10 § C.1) matches against `US_CITIZEN_ONLY` / `GREEN_CARD_REQUIRED` when
+    `Profile.visa_sponsorship_needed = NEEDED_NOW`.
+    Canonical reference: `docs/design/JOB_MODEL.md` § C.2.
+    """
+    US_CITIZEN_ONLY = "us_citizen_only"
+    GREEN_CARD_REQUIRED = "green_card_required"
+    SPONSORSHIP_AVAILABLE = "sponsorship_available"
+    NOT_MENTIONED = "not_mentioned"
+
+
+class RemotePolicy(StrEnum):
+    """Discover filter toggle "Remote only" — plan 27 (`0.2.0.05`).
+    AI extraction populates this; default `UNKNOWN` when JD doesn't say.
+    Canonical reference: `docs/design/JOB_MODEL.md` § C.3.
+    """
+    REMOTE = "remote"          # fully remote
+    HYBRID = "hybrid"          # 1-3 days in-office
+    ONSITE = "onsite"          # 4-5 days in-office
+    UNKNOWN = "unknown"
+
+
+class SeniorityLevel(StrEnum):
+    """Discover filter toggle — plan 27 (`0.2.0.05`). 7-value resolution
+    covers the universe of US tech postings; AI extraction maps job-title
+    variants onto one of these. Canonical reference: `docs/design/JOB_MODEL.md` § C.4.
+    """
+    ENTRY = "entry"            # 0-2 yrs
+    MID = "mid"                # 2-5 yrs
+    SENIOR = "senior"          # 5-8 yrs
+    STAFF = "staff"            # 8+ yrs IC; design / influence wide
+    PRINCIPAL = "principal"    # tech-lead / architect
+    EXEC = "exec"              # VP+
+    UNKNOWN = "unknown"
+
+
+class JobScrapeStatus(StrEnum):
+    """Lifecycle status of a JobScrapeRun row — plan 27 (`0.2.0.05`, § D.2).
+    Canonical reference: `docs/design/JOB_MODEL.md` § C.5.
+    """
+    RUNNING = "running"
+    SUCCESS = "success"        # all listings processed, 0 errors
+    PARTIAL = "partial"        # some listings processed, some errors
+    FAILED = "failed"          # zero listings persisted
+    TIMED_OUT = "timed_out"    # cron hit budget before completing
 
 
 class BulletSelectionOverride(StrEnum):
