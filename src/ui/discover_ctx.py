@@ -6,6 +6,7 @@ from datetime import datetime
 
 from db import sample_data as sd
 from db.sample_data_models import Job
+from models.enums import VisaRestriction
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",
@@ -97,7 +98,7 @@ def swipe_card_dict(j: Job, *, warm_intro_label: str | None = None) -> dict[str,
         "tags": [t.value for t in j.tags],
         "match_breakdown": j.match_breakdown,
         "match_overall": j.score,
-        "visa_friendly": j.visa_restrictions == "sponsorship_available",
+        "visa_friendly": j.visa_restrictions == VisaRestriction.SPONSORSHIP_AVAILABLE,
     }
 
 

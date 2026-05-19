@@ -52,6 +52,7 @@ from models import (
     Experience,
     GeneratedDocument,
     Job,
+    JobScrapeRun,
     OutreachMessage,
     Profile,
     Project,
@@ -78,6 +79,8 @@ _TABLE_ORDER: list[tuple[type[SQLModel], Sequence, tuple[str, ...]]] = [
     (Project, sd.PROJECTS, ("id",)),
     (Certification, sd.CERTIFICATIONS, ("id",)),
     (Contact, sd.CONTACTS, ("id",)),
+    # JobScrapeRun must precede Job — Job.last_scrape_run_id FKs back here.
+    (JobScrapeRun, sd.JOB_SCRAPE_RUNS, ("id",)),
     (Job, sd.JOBS, ("id",)),
     (Application, sd.APPLICATIONS, ("id",)),
     (ContactApplicationLink, sd.CONTACT_APPLICATION_LINKS, ("id",)),
