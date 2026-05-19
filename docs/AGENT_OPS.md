@@ -420,7 +420,7 @@ Each agent writes one file in the run dir, format frozen per agent's prompt. Thr
   - `[ts] ERROR step=gh-pr-create kind=halt reason='sandbox denied gh subcommand after direct-push' attempt=1/1`
   - `[ts] ERROR step=find-replace kind=pivot reason='plan § C.8 said 25 sites; grep returned 5; pivoting to file PC.6a follow-up' attempt=1/1`
   - `[ts] ERROR step=live-orchestrator-boot kind=pivot reason='auto-mode destructive-rm guard blocked .naavik/db wipe; pivoting to TestClient surrogate' attempt=1/1`
-- **`BUILT` / `REVIEWED`** — one summary line at the end of every dispatch (last line in the agent's log). `BUILT` for agents that produce artifacts (architect, engineer, designer, manager); `REVIEWED` for agents that gate (hacker, devops). One sentence in `summary='...'`. Format frozen across all agents:
+- **`BUILT` / `REVIEWED`** — one summary line at the end of every dispatch (last line in the agent's log). `BUILT` for agents that produce artifacts (architect, engineer, designer, manager) when authoring artifacts; `REVIEWED` for agents that gate (hacker, architect when reviewing, devops when invoked for build-gate verification). Architect emits `BUILT` when authoring a plan/design doc, `REVIEWED` when on PR_REVIEW_GATE duty. One sentence in `summary='...'`. Format frozen across all agents:
   ```
   [ts] BUILT files_added=<n> files_modified=<n> files_deleted=<n> summary='<one-sentence>'
   [ts] BUILT plans=<n> design_docs=<n> research_docs=<n> summary='<one-sentence>'   # architect variant

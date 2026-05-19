@@ -65,7 +65,7 @@ Each category has strict procedure in `docs/PLAYBOOK.md`. **No improvisation; no
 
 **The critical distinction** (the one `aa2f6a0` violated):
 
-- **H — CONTRACT_CHANGE** = any edit to `src/`, `tests/`, `migrations/`, `scripts/`, `.claude/agents/`, `.claude/skills/`, `.claude/commands/`, `.claude/hooks/`, `AGENTS.md`, `CLAUDE.md`, `docs/AGENT_OPS.md`, `docs/PLAYBOOK.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/DEPLOYMENT.md`, `DESIGN.md`, `docs/design/**` (not mockups), `docs/plans/<NN>-<slug>.md` (active), `docs/prompts/<NN>-<slug>.md` (active), `README.md § Configuration`. → **MUST go through PR + hacker + devops review.** NEVER direct push to `main`.
+- **H — CONTRACT_CHANGE** = any edit to `src/`, `tests/`, `migrations/`, `scripts/`, `.claude/agents/`, `.claude/skills/`, `.claude/commands/`, `.claude/hooks/`, `AGENTS.md`, `CLAUDE.md`, `docs/AGENT_OPS.md`, `docs/PLAYBOOK.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/DEPLOYMENT.md`, `DESIGN.md`, `docs/design/**` (not mockups), `docs/plans/<NN>-<slug>.md` (active), `docs/prompts/<NN>-<slug>.md` (active), `README.md § Configuration`. → **MUST go through PR + hacker + architect review.** NEVER direct push to `main`.
 
 - **I — BOOKKEEPING** = `ROADMAP.md` (row flips, "Last updated" bumps, new follow-up rows), `docs/plans/archive/`, `docs/prompts/archive/`, `traces/**` (gitignored), `README.md` "Last updated" only. → **Direct push to `main` is canonical path.**
 
@@ -98,7 +98,9 @@ Request ambiguous in scope (e.g. "improve auth") → ask one precise question vi
 3. Plan?                  →  if no plan in docs/plans/, dispatch architect via Task
 4. PLAN GATE              →  surface plan + open questions; AskUserQuestion (Approve/Revise/Cancel)
 5. Implement              →  dispatch engineer via Task with plan path + design doc refs
-6. Review (parallel)      →  dispatch hacker + devops via Task in ONE message
+6. Review (parallel)      →  dispatch hacker + architect via Task in ONE message
+                             (devops dispatches on-demand for build-gate failures / runtime issues;
+                              engineer self-runs build gates pre-PR via devops-build-gates skill)
 7. PR GATE                →  surface verdicts + diff + deviations memo; AskUserQuestion (Merge/Request changes/Block)
 8. Merge                  →  github MCP create_pull_request + merge; commit msg has `Closes #N`
 9. Update ledger          →  mark ROADMAP row [x] + deliverable note + bump "Last updated"
@@ -263,7 +265,7 @@ No emojis. No em dashes unless user uses them. No "Done!" or "Got it!". File ref
 - Edit ROADMAP to match stale Project board.
 - Approve plan extending CLI or vault (Phase 2 sunset).
 - Skip `## Deviations from plan` check at archive.
-- Dispatch hacker + devops sequentially when they're independent.
+- Dispatch hacker + architect sequentially when they're independent.
 - Promise user green build when Manual QA Gate (for engineer) hasn't run.
 - Silently retry fourth time after 3-attempt protocol triggered.
 - Write production code yourself. You orchestrate; you don't implement.

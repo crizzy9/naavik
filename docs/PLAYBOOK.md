@@ -3,7 +3,9 @@
 > **Strict if-then decision tree the manager consults at the start of every user message.**
 > Every task fits one of the 9 categories below. **No improvisation. No judgment calls at category boundaries.** If a task doesn't fit, halt and ask.
 >
-> **Last updated:** 2026-05-17 (board status convention (post-A.28) section added; 4-status Todo/In Progress/Done/Backlog convention codified; CANCEL → Todo / BLOCK → Backlog rule documented).
+> **Last updated:** 2026-05-19 (PR_REVIEW_GATE reviewer pairing changed: `hacker + devops` → `hacker + architect`. Architect joins hacker as parallel reviewer at every PR for both PRODUCT_WORK (§ F) and CONTRACT_CHANGE (§ H) flows. Devops dispatches on-demand for build-gate failures or runtime debugging via `/triage-bug` + direct manager invocation; engineer continues self-running `devops-build-gates` skill pre-PR for ruff + pytest + manual QA. Rationale: architect knows the plan and can verify implementation matches spec + design coherence; build-gate verification is mechanical and engineer-driven. Folded into PR #91 W6.)
+>
+> Earlier line: 2026-05-17 (board status convention (post-A.28) section added; 4-status Todo/In Progress/Done/Backlog convention codified; CANCEL → Todo / BLOCK → Backlog rule documented).
 
 ---
 
@@ -118,7 +120,7 @@ HALT.
 
 1. Append GATE event with `outcome=request_changes path=<A|B|C|...> notes='<verbatim>'`.
 2. Re-dispatch engineer with change scope. Engineer adds NEW commits to the same branch (no `--amend` per `AGENTS.md § Workflow`).
-3. Re-dispatch hacker + devops in parallel for delta-only re-review.
+3. Re-dispatch hacker + architect in parallel for delta-only re-review (devops only if delta touches build gates).
 4. HALT at next PR_REVIEW_GATE.
 
 **IF** category = D **AND** user said **BLOCK** **THEN:**
@@ -160,8 +162,8 @@ HALT.
 6. **HALT at PLAN_GATE** — surface plan path + goal + open questions + approval checklist. User picks Approve / Revise / Cancel → category C.
 7. On approve → dispatch engineer via Task with the plan path + locked decisions + branch name `feat/<task-id>-<slug>` (UPPERCASE).
 8. Engineer implements + runs quality gates + manual QA + opens PR via `gh pr create` using `.github/pull_request_template.md`.
-9. Dispatch hacker + devops via Task **in parallel** (single message, multiple tool uses) for review.
-10. **HALT at PR_REVIEW_GATE** — surface hacker verdict + devops verdict + engineer deviations. User picks Merge / Request changes / Block → category D.
+9. Dispatch hacker + architect via Task **in parallel** (single message, multiple tool uses) for review. (Devops dispatches on-demand for build-gate failures + runtime issues; engineer self-runs `devops-build-gates` skill pre-PR.)
+10. **HALT at PR_REVIEW_GATE** — surface hacker verdict + architect verdict + engineer deviations. User picks Merge / Request changes / Block → category D.
 11. On merge → category I (BOOKKEEPING).
 
 ---
@@ -212,7 +214,7 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 4. Commit with `chore(<scope>):` or `docs(<scope>):` prefix.
 5. `git push -u origin <branch>`.
 6. Open PR: `gh pr create --title "..." --body "..."` using `.github/pull_request_template.md`.
-7. Dispatch hacker + devops in parallel for review (even for doc-only changes — they verify forward pointers, deviations sections, and stack-invariant compliance).
+7. Dispatch hacker + architect in parallel for review (even for doc-only changes — they verify forward pointers, deviations sections, design-coherence, and stack-invariant compliance).
 8. **HALT at PR_REVIEW_GATE.**
 9. On merge → category I (BOOKKEEPING).
 
@@ -323,7 +325,7 @@ The playbook itself fits category **H — CONTRACT_CHANGE**. Procedure:
 7. → Commit with `chore(playbook): add docs/PLAYBOOK.md — strict if-then task classification` prefix.
 8. → `git push -u origin chore/A.14-task-playbook`.
 9. → `gh pr create --title "chore(playbook): add task playbook — strict if-then rules" --body "..."`.
-10. → Dispatch hacker + devops in parallel for review.
+10. → Dispatch hacker + architect in parallel for review.
 11. → **HALT at PR_REVIEW_GATE.**
 12. → On merge: BOOKKEEPING commit adds ROADMAP A.14 row + "Last updated" bump (direct push).
 
