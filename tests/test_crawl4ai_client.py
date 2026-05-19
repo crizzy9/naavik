@@ -269,3 +269,38 @@ async def test_fetch_html_rejects_gopher_and_malformed(monkeypatch, hostile_url)
 
     assert html is None
     assert fake.arun_calls == []
+
+
+# ── stream_many SSRF/LFI scheme allowlist (plan 32 D.1) ──────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "hostile_url",
+    [
+        "file:///etc/passwd",
+        "ftp://x",
+        "gopher://x:6379/_INFO",
+        "javascript:alert(1)",
+    ],
+)
+async def test_stream_many_rejects_non_http_urls(monkeypatch, caplog, hostile_url):
+    """plan 32 D.1 — per-URL HttpUrl validation in stream_many."""
+    from scraper.crawl4ai_client import Crawl4AIClient
+
+    fake = _FakeAsyncCrawler(
+        arun_many_results=[
+            _fake_crawl_result(url="https://valid.com/1", html="<a>ok</a>", success=True),
+        ]
+    )
+    monkeypatch.setattr("scraper.crawl4ai_client.AsyncWebCrawler", lambda **_kw: fake)
+
+    client = Crawl4AIClient(random_delay_seconds=(0.0, 0.0), rate_limit_per_minute=1_000_000)
+    with caplog.at_level("WARNING", logger="scraper.crawl4ai_client"):
+        results = [pair async for pair in client.stream_many([hostile_url, "https://valid.com/1"])]
+
+    # The hostile URL is rejected pre-arun_many; only the valid URL reaches Crawl4AI.
+    assert results == [("https://valid.com/1", "<a>ok</a>")]
+    assert len(fake.arun_many_calls) == 1
+    assert fake.arun_many_calls[0]["urls"] == ["https://valid.com/1"]
+    assert any("stream-many rejected" in rec.message for rec in caplog.records)

@@ -280,9 +280,9 @@ except Exception as exc:  # noqa: BLE001 — top-level scraper failure
 
 Scheduler-level time budget elapses → `asyncio.CancelledError` raised into the running coroutine. `run_scraper` catches separately, marks `status=TIMED_OUT`, appends `stage=invocation kind=cancelled msg=asyncio.CancelledError` to errors, then re-raises. Structured concurrency demands re-raise so the scheduler can react.
 
-### H.4 Redaction (`safe_url` + `safe_exc`)
+### H.4 Redaction (`safe_url` + `safe_exc` + `safe_msg`)
 
-Both writer paths — `scraper_service.run_scraper` building `JobScrapeRun.errors[]` strings and `crawl4ai_client.{fetch_html, stream_many}` `log.warning` calls — route URL + exception material through `safe_url` (strips query string + fragment; preserves scheme + host + path; blocks non-http(s) schemes inline) and `safe_exc` (`<ClassName>: <message[:200]>`). Pure functions in `src/scraper/redaction.py`, importable from any scraper-layer or service-layer module. Shipped `0.2.0.06a` per plan 31. Subclasses in `0.2.0.07` building their own error strings MUST use these helpers; `JobScrapeRun.errors[]` is the operator-UI surface and the full traceback still lands in app logs via the existing `log.exception(...)` calls in `scraper_service.py`.
+Both writer paths — `scraper_service.run_scraper` building `JobScrapeRun.errors[]` strings and `crawl4ai_client.{fetch_html, stream_many}` `log.warning` calls — route URL + exception material through `safe_url` (strips query string + fragment; preserves scheme + host + path; blocks non-http(s) schemes inline) and `safe_exc` (`<ClassName>: <message[:200]>`). Pure functions in `src/scraper/redaction.py`, importable from any scraper-layer or service-layer module. Shipped `0.2.0.06a` per plan 31. Plan 32 (`0.2.0.06b`) added `safe_msg(s)` for raw upstream-message strings (Crawl4AI's `result.error_message`); same 200-char cap + ANSI / C0 / DEL strip as `safe_exc` but without the `<ClassName>:` prefix. Subclasses in `0.2.0.07` building their own error strings MUST use these helpers; `JobScrapeRun.errors[]` is the operator-UI surface and the full traceback still lands in app logs via the existing `log.exception(...)` calls in `scraper_service.py`.
 
 ---
 
