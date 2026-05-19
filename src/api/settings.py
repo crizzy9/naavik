@@ -4,13 +4,12 @@ Wave 4 of plan 10 § B.8. Replaces the plan-09 stubs for the state-changing
 settings endpoints. Plan-09's HTML page route (`GET /settings`) stays in
 `src/ui/routes/settings.py`.
 
-API key for `PUT /api/v1/settings/llm` flows through the vault (never
-stored on the Settings row directly).
-
-Plan 10b (item 6, 2026-05-03): `PUT /api/v1/settings/llm` now accepts BOTH
-JSON (machine API consumers) and form-encoded (HTMX UI form). The form
-path returns a re-rendered `_settings_llm.html` partial with `save_status`
-set so the existing form swaps in place via outerHTML.
+Plan 26 (0.2.0.01): the encrypted vault is gone. API keys, webhook URLs,
+and bot tokens are configured via env vars in `.env` (read by
+`pydantic-settings` in `src/config.py`). `PUT /api/v1/settings/llm` and
+`PUT /api/v1/settings/notifications` now reject any payload carrying
+secret material with a 422 + explicit guidance. `GET` responses expose
+env-derived presence indicators (bools), never values.
 """
 
 from __future__ import annotations
@@ -18,6 +17,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Request
+from fastapi.responses import JSONResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Plan 10b (item 6): the LLM PUT handler intentionally drops `Body()` from
@@ -26,7 +26,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from db.session import get_session
 from models import LLMProvider as LLMProviderEnum
 from models import User
-from services import settings_service
+from services import env_secrets, settings_service
 from services.auth import require_authed_session
 
 router = APIRouter()
@@ -43,18 +43,31 @@ def _is_form_request(request: Request) -> bool:
     return ct in _FORM_CONTENT_TYPES
 
 
-@router.get("/api/v1/settings/llm", name="api_settings_llm_get")
-async def get_llm(session: AsyncSession = Depends(get_session)):
-    s = await settings_service.get_or_create(session, user_id=1)
-    await session.commit()
+def _llm_response_payload(s) -> dict[str, Any]:
     return {
         "llm_provider": s.llm_provider.value,
         "llm_model": s.llm_model,
         "llm_fallback_provider": (
             s.llm_fallback_provider.value if s.llm_fallback_provider else None
         ),
-        "llm_api_key_fingerprint": s.llm_api_key_fingerprint,
+        "env_indicators": env_secrets.env_indicators_for_llm_tab(),
     }
+
+
+def _notifications_response_payload(s) -> dict[str, Any]:
+    return {
+        "notify_threshold": s.notify_threshold,
+        "notify_on_errors": s.notify_on_errors,
+        "notifications_enabled": s.notifications_enabled,
+        "env_indicators": env_secrets.env_indicators_for_notifications_tab(),
+    }
+
+
+@router.get("/api/v1/settings/llm", name="api_settings_llm_get")
+async def get_llm(session: AsyncSession = Depends(get_session)):
+    s = await settings_service.get_or_create(session, user_id=1)
+    await session.commit()
+    return _llm_response_payload(s)
 
 
 @router.put("/api/v1/settings/llm", name="api_settings_llm_put")
@@ -65,21 +78,19 @@ async def put_llm(
 ):
     """Update LLM provider config.
 
-    Two content types are accepted (plan 10b § 6):
+    Two content types accepted (plan 10b § 6):
       * `application/x-www-form-urlencoded` (HTMX UI form) → returns the
         re-rendered `pages/_settings_llm.html` partial as HTML.
       * `application/json` (machine consumers) → returns JSON with the
         post-update Settings shape.
 
-    Body is parsed inline — keeping `Body()` in the signature would tempt
-    FastAPI to JSON-decode the form payload and 422 the request.
+    Plan 26 (0.2.0.01): rejects any payload carrying `api_key` or
+    `ollama_base_url` with a 422 + clear migration message. Values are
+    env-only post-vault.
     """
     is_form = _is_form_request(request)
     if is_form:
         form = await request.form()
-        # Pydantic / dict semantics: blanks are treated as "no change", not
-        # "explicit null", so the operator can leave the API-key field empty
-        # to keep the previously-stored value.
         payload = {k: v for k, v in form.items() if str(v).strip()}
     else:
         try:
@@ -89,36 +100,31 @@ async def put_llm(
         if not isinstance(payload, dict):
             payload = {}
 
+    if payload.get("api_key") or payload.get("ollama_base_url"):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": (
+                    "API keys + Ollama base URL are configured via env vars "
+                    "(ANTHROPIC_API_KEY / OPENAI_API_KEY / OLLAMA_BASE_URL) "
+                    "starting in 0.2.0. Edit .env and restart. "
+                    "See README § Configuration."
+                ),
+            },
+        )
+
     provider = payload.get("llm_provider")
     fallback_provider = payload.get("llm_fallback_provider")
-    api_key = payload.get("api_key") or None
     s = await settings_service.update_llm(
         session,
         user_id=1,
         provider=LLMProviderEnum(provider) if provider else None,
         model=payload.get("llm_model"),
-        api_key=api_key,
         fallback_provider=(LLMProviderEnum(fallback_provider) if fallback_provider else None),
     )
-
-    # Form path may also carry the Ollama base URL — store via vault so it
-    # survives restarts; the on-row Settings stay secret-free.
-    ollama_url = payload.get("ollama_base_url") if is_form else None
-    if ollama_url:
-        from services import vault as vault_svc
-
-        vault_svc.set(
-            "llm",
-            "ollama_base_url",
-            str(ollama_url),
-            caller="settings_llm_form",
-        )
-
     await session.commit()
 
     if is_form:
-        # Re-render the LLM tab fragment with the post-save state. We have
-        # to import lazily to avoid the circular `api → ui.routes → api`.
         from ui.routes.settings import _ctx_for_tab
         from ui.templates_setup import templates as ui_templates
 
@@ -130,14 +136,7 @@ async def put_llm(
             ctx,
         )
 
-    return {
-        "llm_provider": s.llm_provider.value,
-        "llm_model": s.llm_model,
-        "llm_fallback_provider": (
-            s.llm_fallback_provider.value if s.llm_fallback_provider else None
-        ),
-        "llm_api_key_fingerprint": s.llm_api_key_fingerprint,
-    }
+    return _llm_response_payload(s)
 
 
 @router.post("/api/v1/settings/llm/test", name="api_settings_llm_test")
@@ -147,13 +146,13 @@ async def post_llm_test(
 ):
     """Try a tiny `provider.complete("ping")` and return ok/latency.
 
-    Wave 4 returns a stub OK without spending a real API call when no
-    api_key is configured (avoids surprise costs on first save).
+    Plan 26 (0.2.0.01): the "no api_key configured" guard now consults
+    env-presence indicators instead of `Settings.llm_api_key_fingerprint`.
     """
     from llm import get_provider
 
     s = await settings_service.get_or_create(session, user_id=1)
-    if not s.llm_api_key_fingerprint and s.llm_provider.value != "ollama":
+    if not env_secrets.llm_provider_configured(s.llm_provider) and s.llm_provider.value != "ollama":
         return {"ok": False, "error": "no api_key configured", "model": s.llm_model}
 
     try:
@@ -230,24 +229,35 @@ async def put_notifications(
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
 ):
+    """Update notification preferences.
+
+    Plan 26 (0.2.0.01): rejects any payload carrying `discord_webhook_url`
+    or `telegram_bot_token` with a 422 + env-migration guidance. Webhook
+    URL and bot token + chat ID are env-only post-vault.
+    """
     payload = payload or {}
+    if payload.get("discord_webhook_url") or payload.get("telegram_bot_token"):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": (
+                    "Discord webhook URL + Telegram bot token are configured "
+                    "via env vars (DISCORD_WEBHOOK_URL / TELEGRAM_BOT_TOKEN / "
+                    "TELEGRAM_CHAT_ID) starting in 0.2.0. Edit .env and "
+                    "restart. See README § Configuration."
+                ),
+            },
+        )
+
     s = await settings_service.update_notifications(
         session,
         user_id=1,
         notify_threshold=payload.get("notify_threshold"),
         notify_on_errors=payload.get("notify_on_errors"),
         notifications_enabled=payload.get("notifications_enabled"),
-        discord_webhook_url=payload.get("discord_webhook_url"),
-        telegram_bot_token=payload.get("telegram_bot_token"),
     )
     await session.commit()
-    return {
-        "notify_threshold": s.notify_threshold,
-        "notify_on_errors": s.notify_on_errors,
-        "notifications_enabled": s.notifications_enabled,
-        "discord_webhook_configured": s.discord_webhook_configured,
-        "telegram_bot_configured": s.telegram_bot_configured,
-    }
+    return _notifications_response_payload(s)
 
 
 @router.get("/api/v1/settings/deployment", name="api_settings_deployment_get")

@@ -1,4 +1,10 @@
-"""Settings page + tab routes + per-tab JSON / SSE stubs (BACKEND.md § D.7)."""
+"""Settings page + tab routes + per-tab JSON / SSE stubs (BACKEND.md § D.7).
+
+Plan 26 (0.2.0.01): the encrypted vault is gone. The API-key fragment
+endpoint (`/_fragments/settings/llm/api-key-field`) is deleted along with
+its template; the LLM tab now renders env-presence indicators instead of
+an input. Deployment-tab context drops the vault-locked banner triplet.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +16,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from db import sample_data as sd
 from models import User
+from services import env_secrets
 from services.auth import require_authed_session, require_password_complete
 from ui.templates_setup import templates
 
@@ -35,6 +42,7 @@ _PROVIDERS_DISPLAY = [
         "model_default": "claude-3.5-sonnet-20250219",
         "description": "Recommended · best resume bullet quality.",
         "kind": "CLOUD",
+        "env_var": "ANTHROPIC_API_KEY",
     },
     {
         "id": "openai",
@@ -42,6 +50,7 @@ _PROVIDERS_DISPLAY = [
         "model_default": "gpt-4o",
         "description": "Faster, slightly cheaper.",
         "kind": "CLOUD",
+        "env_var": "OPENAI_API_KEY",
     },
     {
         "id": "ollama",
@@ -49,6 +58,7 @@ _PROVIDERS_DISPLAY = [
         "model_default": "llama3.1:70b",
         "description": "Llama 3.1 70B on your machine · private.",
         "kind": "LOCAL",
+        "env_var": "OLLAMA_BASE_URL",
     },
 ]
 
@@ -66,12 +76,6 @@ _LLM_MODEL_OPTIONS: dict[str, list[str]] = {
     "ollama": ["llama3.1:70b", "llama3.1:8b", "qwen2.5:32b"],
 }
 
-_LLM_API_KEY_PLACEHOLDERS: dict[str, str] = {
-    "anthropic": "sk-ant-…",
-    "openai": "sk-…",
-    "ollama": "",
-}
-
 
 def _llm_model_options_for(provider_id: str) -> list[str]:
     return list(_LLM_MODEL_OPTIONS.get(provider_id, []))
@@ -80,38 +84,6 @@ def _llm_model_options_for(provider_id: str) -> list[str]:
 def _llm_default_model_for(provider_id: str) -> str:
     options = _LLM_MODEL_OPTIONS.get(provider_id, [])
     return options[0] if options else ""
-
-
-def _llm_api_key_field_ctx(provider_id: str, settings) -> dict[str, object]:
-    """Build the context for `_settings_llm_api_key_field.html` for one provider.
-
-    `has_existing_key` is True only when the active provider matches AND
-    the Settings row carries a fingerprint — gives the operator a "key
-    already saved, leave blank to keep it" hint without leaking the value.
-    """
-    has_existing_key = bool(
-        settings is not None
-        and provider_id == getattr(settings.llm_provider, "value", None)
-        and getattr(settings, "llm_api_key_fingerprint", None)
-    )
-    ollama_base_url: str | None = None
-    if provider_id == "ollama":
-        try:
-            from services import vault as vault_svc
-
-            ollama_base_url = vault_svc.get(
-                "llm",
-                "ollama_base_url",
-                caller="settings_llm_form",
-            )
-        except Exception:  # noqa: BLE001
-            ollama_base_url = None
-    return {
-        "provider_id": provider_id,
-        "placeholder": _LLM_API_KEY_PLACEHOLDERS.get(provider_id, ""),
-        "has_existing_key": has_existing_key,
-        "ollama_base_url": ollama_base_url,
-    }
 
 
 _LOG_LINES_SEED = [
@@ -163,6 +135,7 @@ _LOG_LINES_SEED = [
 ]
 
 
+# Plan 26 (0.2.0.01): SECRETS row replaced; CONFIG row now points at .env.
 _ON_DISK = [
     {
         "label": "DATA DIR",
@@ -171,15 +144,9 @@ _ON_DISK = [
         "icon": "folder",
     },
     {
-        "label": "SECRETS",
-        "path": "~/.naavik/secrets.enc",
-        "sub": "aes-256-gcm · 4 keys",
-        "icon": "lock",
-    },
-    {
         "label": "CONFIG",
-        "path": "~/.naavik/config.toml",
-        "sub": "last edited 2d ago",
+        "path": ".env",
+        "sub": "env-loaded · gitignored",
         "icon": "file-cog",
     },
     {
@@ -212,14 +179,14 @@ async def _ctx_for_tab(request: Request, tab: str) -> dict[str, object]:
         "providers": _PROVIDERS_DISPLAY,
         "cost_summary": cost_summary,
         # Plan 10b (item 6): LLM tab fragment context — the form template
-        # resolves model + api-key field state from these. The fragment
-        # endpoints below build the same context for HTMX swaps.
+        # resolves model + env-indicator state from these. The model fragment
+        # endpoint below builds the same context for HTMX swaps.
         "provider_id": provider_id,
         "model_options": _llm_model_options_for(provider_id),
         "selected_model": settings.llm_model or _llm_default_model_for(provider_id),
-        "api_key_field": _llm_api_key_field_ctx(provider_id, settings),
+        "env_indicators": env_secrets.env_indicators_for_llm_tab(),
+        "notify_env_indicators": env_secrets.env_indicators_for_notifications_tab(),
         "save_status": None,
-        # Deployment tab context — augmented with vault status (item 7).
         "deployment": deployment_info,
         "log_lines": _LOG_LINES_SEED,
         "on_disk": _ON_DISK,
@@ -231,26 +198,9 @@ async def _ctx_for_tab(request: Request, tab: str) -> dict[str, object]:
 async def _deployment_render_info(settings) -> dict[str, object]:
     """Build the `deployment` ctx dict consumed by `_settings_deployment.html`.
 
-    Plan 10b (item 7, 2026-05-03): adds `vault_locked`,
-    `vault_fingerprint_stored`, and `vault_fingerprint_expected` so the
-    template can render the rose vault-locked banner when SECRET_KEY drifts
-    from the value used to encrypt the on-disk vault.
+    Plan 26 (0.2.0.01): vault status fields removed. The template no longer
+    renders the rose vault-locked banner.
     """
-    from services import vault as vault_svc
-
-    try:
-        stored = vault_svc.fingerprint()
-    except Exception:  # noqa: BLE001
-        stored = None
-    try:
-        expected = vault_svc.expected_fingerprint()
-    except Exception:  # noqa: BLE001
-        expected = None
-    try:
-        locked = vault_svc.is_locked()
-    except Exception:  # noqa: BLE001
-        locked = False
-
     mode_value = settings.deployment_mode.value if settings else "self_hosted"
     return {
         "mode": "self-hosted" if mode_value == "self_hosted" else "cloud",
@@ -258,9 +208,6 @@ async def _deployment_render_info(settings) -> dict[str, object]:
         "version": "0.4.2",
         "meta": "docker-compose · uptime 14d 6h · last restart Apr 14",
         "update_available_version": "0.4.3",
-        "vault_locked": bool(locked),
-        "vault_fingerprint_stored": stored,
-        "vault_fingerprint_expected": expected,
     }
 
 
@@ -294,10 +241,10 @@ async def get_settings_tab(request: Request, tab: str):
 async def post_llm_test(request: Request, fail: Annotated[str | None, Query()] = None):
     """LLM connectivity-test fragment renderer used by the test-connection button.
 
-    Returns an HTML card; the upstream button (in `_settings_llm_api_key_field.html`)
-    swaps the result into `#llm-test-result`. JSON-style probe of the live
-    provider lives in `src/api/settings.py:post_llm_test` under the same
-    path; the form's button calls the fragment route below, not the API.
+    Returns an HTML card; the upstream button swaps the result into
+    `#llm-test-result`. JSON-style probe of the live provider lives in
+    `src/api/settings.py:post_llm_test` under the same path; the form's
+    button calls the fragment route below, not the API.
     """
     await asyncio.sleep(0.4)
     if fail:
@@ -469,6 +416,11 @@ async def post_settings_test_connection_fragment(
 
 # ─────────────────────────────────────────────────────────────────────────
 # Settings · LLM Provider — provider-aware fragment endpoints (plan 10b § 6)
+#
+# Plan 26 (0.2.0.01): the api-key-field fragment endpoint is DELETED along
+# with its template; the LLM tab renders env-presence indicators inline.
+# The model-options fragment survives — the model dropdown is still
+# provider-dependent.
 # ─────────────────────────────────────────────────────────────────────────
 
 
@@ -501,25 +453,4 @@ async def get_settings_llm_model_options(
             "models": _llm_model_options_for(provider),
             "selected": selected,
         },
-    )
-
-
-@router.get(
-    "/_fragments/settings/llm/api-key-field",
-    name="settings_llm_api_key_field_fragment",
-    response_class=HTMLResponse,
-)
-async def get_settings_llm_api_key_field(
-    request: Request,
-    provider: Annotated[str, Query(min_length=1, max_length=32)],
-):
-    """Render the API-key (or Ollama base URL) input for `provider`."""
-    if provider not in _VALID_PROVIDER_IDS:
-        raise HTTPException(status_code=400, detail="unknown provider")
-    settings = await sd.get_settings()
-    ctx = _llm_api_key_field_ctx(provider, settings)
-    return templates.TemplateResponse(
-        request,
-        "pages/_settings_llm_api_key_field.html",
-        ctx,
     )
