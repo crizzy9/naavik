@@ -26,7 +26,7 @@ uv run ruff check .
 
 Clean exit expected. Findings → engineer fixes before continuing.
 
-Pre-existing failures from prior phases (e.g. `scripts/roadmap_parser.py`, `migrations/versions/*.py`) are out-of-scope — list as observations, not failures of this dispatch.
+Pre-existing failures from prior phases (e.g. `.claude/naavik_ops/lib/roadmap.py`, `migrations/versions/*.py`) are out-of-scope — list as observations, not failures of this dispatch.
 
 ### 2. Format check
 

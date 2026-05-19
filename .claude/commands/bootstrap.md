@@ -7,7 +7,7 @@ Bootstrap Naavik agent system. Per `docs/AGENT_OPS.md` § 2 + CLAUDE.md § "GitH
 
 **Pre-flight checks** (do these first, report failures):
 1. `gh auth status` — confirm `gh` is authenticated. Not authenticated → instruct user to run `gh auth login` (suggest they paste `! gh auth login` so it runs in this session).
-2. Confirm `.claude/naavik-ops` + `scripts/gh-project.sh` + `scripts/roadmap_parser.py` exist + executable (dispatcher subprocess-wraps the legacy scripts during A.29).
+2. Confirm `.claude/naavik-ops` + `.claude/naavik_ops/gh.py` + `.claude/naavik_ops/lib/roadmap.py` exist + executable (dispatcher subprocess-wraps the legacy scripts during A.29).
 3. Check `.claude/github-project.json` — exists → ask user whether to re-init or skip.
 4. Check `.claude/github-issue-map.json` — exists → note when last refreshed (`jq '._meta.refreshed_at' .claude/github-issue-map.json`); older than ~7 days OR missing → plan to run `.claude/naavik-ops gh refresh-map` before dry-run so existence checks use fresh cache instead of eventually-consistent search API.
 5. Check `.claude/budget.json` exists.

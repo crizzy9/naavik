@@ -12,13 +12,13 @@
 
 Last session (2026-05-16) shipped:
 
-- `scripts/gh-project.sh` map-cache patches + new `refresh-map` subcommand
+- `.claude/naavik_ops/gh.py` map-cache patches + new `refresh-map` subcommand
 - `.claude/github-issue-map.json` persistent association cache (gitignored)
 - Closed duplicate issues `#46` (dup `#6`) + `#47` (dup `#7`) from prior search-API races
 - "GitHub state — single writer" governance text in `CLAUDE.md` / `AGENTS.md` /
   `.claude/agents/manager.md` / `.claude/commands/bootstrap.md` / `docs/AGENT_OPS.md`
 
-`scripts/gh-project.sh bootstrap` (dry-run) now reports `would create=0 skipped=40`
+`.claude/naavik-ops gh bootstrap` (dry-run) now reports `would create=0 skipped=40`
 — all milestones, epics, and 40 child issues exist and are correctly mapped.
 
 ## Goal
@@ -44,7 +44,7 @@ Phases halt at boundaries for user review. Don't auto-advance.
 4. `docs/ROADMAP_OVERVIEW.md` (130 lines, full)
 5. `.claude/agents/manager.md` (your own prompt) + the other 5 specialist prompts under `.claude/agents/`
 6. `.claude/commands/` directory listing (slash command inventory)
-7. `scripts/gh-project.sh` (skim — you'll be invoking subcommands)
+7. `.claude/naavik_ops/gh.py` (skim — you'll be invoking subcommands)
 8. `.claude/github-issue-map.json` (current cache contents — task_id → issue# mapping)
 9. `traces/runs.log` (tail 10 if it exists)
 10. `.claude/budget.json` + `.claude/budget-ledger.json`
@@ -113,7 +113,7 @@ agent to 3-5 skills (more is overhead). Seed list — architect refines naming +
 grouping in the plan:
 
 **Manager (orchestration):**
-- `manager-pick-next` — wraps `scripts/gh-project.sh next-unblocked` + filters by milestone + emits a one-line "next task" summary
+- `manager-pick-next` — wraps `.claude/naavik-ops gh next-unblocked` + filters by milestone + emits a one-line "next task" summary
 - `manager-standup-report` — generates the standup format from current Project state + budget + recent traces
 - `manager-board-sync-check` — diffs `.claude/github-issue-map.json` against live GitHub state; flags drift
 - `manager-deviation-promote` — at archive time, lifts the engineer-deviations log into the plan's `## Deviations from plan` section
@@ -196,7 +196,7 @@ is real and reliable. Same observation points as Phase 3.
          search: git prepare-commit-msg patterns), drafts
          `docs/plans/16-agent-system-v2.md`, ADDS the ROADMAP row A.11
          (per architect.md § GitHub mirror duty), creates the GitHub Issue
-         via `scripts/gh-project.sh create-issue A.11 "Agent System v2"
+         via `.claude/naavik-ops gh create-issue A.11 "Agent System v2"
          --priority HIGH --milestone "Phase A"`, halts at PLAN GATE
 [1.3]    User approves / revises / cancels
 
@@ -233,7 +233,7 @@ is real and reliable. Same observation points as Phase 3.
 ## Constraints
 
 - Don't extend `src/cli/` or `src/services/vault.py` (Phase 2 tasks 2.11 / 2.12 sunset)
-- All GitHub state mutations through `scripts/gh-project.sh` (CLAUDE.md § GitHub state
+- All GitHub state mutations through `.claude/naavik_ops/gh.py` (CLAUDE.md § GitHub state
   — single writer rule). New script subcommands are fine; new agent prompts that call
   `gh issue create` directly are not.
 - User has highest tier Anthropic sub + Opus 4.7 1M-context default for ALL agents

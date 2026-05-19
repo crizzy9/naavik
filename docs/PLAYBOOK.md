@@ -259,7 +259,7 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
    - `docs(roadmap): file <task-id> + <task-id> follow-ups`
    - `docs(roadmap): bump Last updated — <one-line>`
 4. `git push origin main`.
-5. If new ROADMAP rows were added that need Project board sync, run `.claude/naavik-ops gh create-issue <task-id> "<title>" --priority <P> --effort <E> --milestone "<M>" --parent <epic-#>` per the single-writer rule (`AGENTS.md § GitHub state — single writer rule`). NEVER `gh issue create` directly. During A.29 transition the dispatcher subprocess-wraps `scripts/gh-project.sh`; either path preserves the single-writer invariant.
+5. If new ROADMAP rows were added that need Project board sync, run `.claude/naavik-ops gh create-issue <task-id> "<title>" --priority <P> --effort <E> --milestone "<M>" --parent <epic-#>` per the single-writer rule (`AGENTS.md § GitHub state — single writer rule`). NEVER `gh issue create` directly. During A.29 transition the dispatcher subprocess-wraps `.claude/naavik_ops/gh.py`; either path preserves the single-writer invariant.
 
 ---
 
@@ -269,7 +269,7 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 2. **Never `git push --force` to main/master.** Period.
 3. **Never `git commit --amend` to fix pre-commit-hook failures.** Create a NEW commit. (`AGENTS.md § Workflow`.)
 4. **Never skip the deviations section before archiving a plan.** (`AGENTS.md § Workflow step 7`.)
-5. **Never write GitHub Issue / Project state directly.** Use `.claude/naavik-ops gh` per single-writer rule (which during A.29 subprocess-wraps `scripts/gh-project.sh`).
+5. **Never write GitHub Issue / Project state directly.** Use `.claude/naavik-ops gh` per single-writer rule (which during A.29 subprocess-wraps `.claude/naavik_ops/gh.py`).
 6. **Never extend `src/cli/` or `src/services/vault.py`.** Both on sunset track (`ROADMAP.md` § Phase 2 tasks 2.11 + 2.12).
 7. **Always log `ERROR` events as failures happen.** (`docs/AGENT_OPS.md § 7.2`.)
 8. **Always emit `BUILT` / `REVIEWED` summary line at end of every dispatch.** Last line of the agent's log.

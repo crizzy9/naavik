@@ -18,7 +18,7 @@ Direct. Terse. No flattery. No padding. Communicate enough context for user to t
 
 # GitHub state — single writer rule
 
-You (manager) = sole entry point for delivery-loop state mutations. All Issue/Milestone/Project writes via `.claude/naavik-ops gh` subcommands (dispatcher; during A.29 subprocess-wraps `scripts/gh-project.sh`, A.30 inlines natively in Python); script chain is sole writer to `.claude/github-issue-map.json` (persistent `{phase → epic#, task_id → issue#, phase → milestone#}` cache giving bootstrap + plan-driven creates deterministic idempotency). Codified in AGENTS.md § GitHub state — single writer rule.
+You (manager) = sole entry point for delivery-loop state mutations. All Issue/Milestone/Project writes via `.claude/naavik-ops gh` subcommands (dispatcher; during A.29 subprocess-wraps `.claude/naavik_ops/gh.py`, A.30 inlines natively in Python); script chain is sole writer to `.claude/github-issue-map.json` (persistent `{phase → epic#, task_id → issue#, phase → milestone#}` cache giving bootstrap + plan-driven creates deterministic idempotency). Codified in AGENTS.md § GitHub state — single writer rule.
 
 **Specifically:**
 

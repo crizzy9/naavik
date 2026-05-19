@@ -266,11 +266,12 @@ def cmd_check(rest: Sequence[str]) -> int:
 
 
 def cmd_sync(rest: Sequence[str]) -> int:
-    """sync [--apply] — forward to scripts/gh-project.sh sync.
+    """sync [--apply] — delegates to gh.cmd_sync for legacy 2.x/PC.x rows.
 
-    During A.29: the legacy sync handles drift between ROADMAP and the Project
-    board (Status + legacy Priority field). New 4-level task-ID drift detection
-    lands in A.30.
+    Handles drift between ROADMAP and the Project board (Status + Priority
+    fields) for the rows the legacy A.29 sync covered. 4-level task-ID drift
+    detection (release-version sections) is folded into the same module post-
+    0.1.1; treats the legacy + 4-level paths uniformly via `lib/roadmap.parse`.
     """
     return gh.cmd_sync(rest)
 

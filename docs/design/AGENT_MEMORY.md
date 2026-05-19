@@ -2,7 +2,7 @@
 
 > **Status:** Active (Wave 1+2+3 shipped 2026-05-17 via PR `feat/A.15-agent-memory`).
 > **Plan of record:** `docs/plans/19-agent-memory-and-learning.md` (archived after ship). This document is the permanent reference; the plan archives with its `## Deviations from plan` section.
-> **Companion docs:** `docs/AGENT_OPS.md § 14` (daily workflow), `AGENTS.md § Agent System` (infrastructure table), `scripts/agent-memory.sh` (single writer).
+> **Companion docs:** `docs/AGENT_OPS.md § 14` (daily workflow), `AGENTS.md § Agent System` (infrastructure table), `.claude/naavik_ops/memory.py` (single writer).
 
 ---
 
@@ -23,8 +23,8 @@ These complement Claude's native primitives without duplicating them:
 | `~/.claude/projects/<...>/memory/MEMORY.md` | Claude Code, auto-managed | per-user personal preferences | **read-only from this system** |
 | `.claude/skills/<name>/SKILL.md` | repo, hand-maintained | procedural memory (auto-trigger on phrase) | hand-edit |
 | `.claude/budget-ledger.json` | manager, auto-managed | daily token spend | manager-only writer |
-| `.claude/github-issue-map.json` | `scripts/gh-project.sh`, auto-managed | persistent `{task → issue#}` cache | script-only writer |
-| **`.claude/memory/`** | **`scripts/agent-memory.sh`, auto-managed** | **the surfaces this doc covers** | **script-only writer** |
+| `.claude/github-issue-map.json` | `.claude/naavik_ops/gh.py`, auto-managed | persistent `{task → issue#}` cache | script-only writer |
+| **`.claude/memory/`** | **`.claude/naavik_ops/memory.py`, auto-managed** | **the surfaces this doc covers** | **script-only writer** |
 
 ### Directory layout
 
@@ -47,7 +47,7 @@ These complement Claude's native primitives without duplicating them:
 
 ### Single-writer rule
 
-`scripts/agent-memory.sh` is the **sole writer** to `.claude/memory/`. Mirrors `scripts/gh-project.sh`'s pattern for GitHub state. Enforced by:
+`.claude/naavik_ops/memory.py` is the **sole writer** to `.claude/memory/`. Mirrors `.claude/naavik_ops/gh.py`'s pattern for GitHub state. Enforced by:
 
 - `hacker-secrets-audit` skill scans diffs for direct `Edit` / `Write` calls against `.claude/memory/` paths.
 - Schema validation runs on every write (malformed input rejected at the boundary).
@@ -93,7 +93,7 @@ Fields:
 
 Query default filter: `state == "active"`.
 
-Write surface: `scripts/agent-memory.sh record-decision <id> <verdict> <rationale> [--supersedes <id>] [--run-id <id>]`.
+Write surface: `.claude/naavik-ops memory record-decision <id> <verdict> <rationale> [--supersedes <id>] [--run-id <id>]`.
 
 ### 2.2 `discussions.jsonl`
 
@@ -120,11 +120,11 @@ Fields:
 
 Append-only. No supersede semantics — re-disposition produces a new row referencing the old via `surface: "discussions.jsonl#<old-id>"`.
 
-Write surface: `scripts/agent-memory.sh record-discussion <topic> <surface> [...]`.
+Write surface: `.claude/naavik-ops memory record-discussion <topic> <surface> [...]`.
 
 ### 2.3 `lessons.jsonl` (Wave 2)
 
-One line per promoted recurring pattern. Threshold 5 occurrences before promotion (`scripts/agent-memory.sh promote-lesson <pattern_id>` rejects below).
+One line per promoted recurring pattern. Threshold 5 occurrences before promotion (`.claude/naavik-ops memory promote-lesson <pattern_id>` rejects below).
 
 Schema:
 
@@ -134,11 +134,11 @@ Schema:
  "captured_at": "2026-05-17T09:00:00Z", "state": "active"}
 ```
 
-Write surface: `scripts/agent-memory.sh record-lesson <id> <pattern> <evidence-runs-csv> [...]`. Manual record-lesson is also available; auto-write happens via `promote-lesson` on patterns with `count >= 5`.
+Write surface: `.claude/naavik-ops memory record-lesson <id> <pattern> <evidence-runs-csv> [...]`. Manual record-lesson is also available; auto-write happens via `promote-lesson` on patterns with `count >= 5`.
 
 ### 2.4 `recurring-patterns.jsonl` (Wave 2)
 
-Auto-aggregated patterns from per-run `ERROR` events. Written by `scripts/agent-memory.sh mine-patterns [--lookback N]`.
+Auto-aggregated patterns from per-run `ERROR` events. Written by `.claude/naavik-ops memory mine-patterns [--lookback N]`.
 
 Schema:
 
@@ -170,11 +170,11 @@ Confidence: high
 
 `Aliases` are the discovery surface — `naavik-memory-lookup` skill triggers on alias phrases. Wave 3's `mine-patterns --aliases` proposes alias additions from `MEMORY_MISS` events.
 
-Write surface: `scripts/agent-memory.sh record-knowledge <slug> <body-source|-> [...]`. Refuses overwrite unless `--overwrite`; supersession via `--supersedes <slug>`.
+Write surface: `.claude/naavik-ops memory record-knowledge <slug> <body-source|-> [...]`. Refuses overwrite unless `--overwrite`; supersession via `--supersedes <slug>`.
 
 ### 2.6 `runs-analysis/<run-id>.md` (Wave 2)
 
-Per-run summary produced by `scripts/agent-memory.sh analyze-run <run-id>`. Idempotent — re-runs overwrite. Contents:
+Per-run summary produced by `.claude/naavik-ops memory analyze-run <run-id>`. Idempotent — re-runs overwrite. Contents:
 
 - Run metadata (started, ended, milestone, outcome, halt_reason).
 - Per-agent token spend.
@@ -194,13 +194,13 @@ Per-run summary produced by `scripts/agent-memory.sh analyze-run <run-id>`. Idem
 | `naavik-memory-lookup` | 1 | Before researching a topic, check `.claude/memory/knowledge/<topic>.md`. Triggers on alias phrases. |
 | `naavik-discussion-capture` | 1 | Manager invokes at PR_REVIEW_GATE + MILESTONE_GATE to surface deferred items. AskUserQuestion per candidate; one of file-as-ROADMAP / file-as-memory-only / skip / merge. |
 | `naavik-learn` | 2 | Skill mirror of `/learn` (dual-surface convention per AGENT_OPS § 10.2). Thin body; points at `.claude/commands/learn.md` as procedure source. |
-| `manager-promote-lesson` | 3 | Wraps `scripts/agent-memory.sh promote-lesson`. Consent flow + auto-slugging + knowledge stub template. |
+| `manager-promote-lesson` | 3 | Wraps `.claude/naavik-ops memory promote-lesson`. Consent flow + auto-slugging + knowledge stub template. |
 
 ### Commands (slash command surface)
 
 | Command | Wave | Purpose |
 |---|---|---|
-| `/memory <list\|query\|knowledge> [args]` | 1 | Read-only inspection of all stores. Delegates to `scripts/agent-memory.sh list` / `query`. |
+| `/memory <list\|query\|knowledge> [args]` | 1 | Read-only inspection of all stores. Delegates to `.claude/naavik-ops memory list` / `query`. |
 | `/learn [N]` | 2 | Manual retrospective. Analyzes last N runs (default 10), mines patterns, surfaces interactive promotion candidates. |
 
 ---
@@ -219,7 +219,7 @@ Procedure (full body in `.claude/skills/naavik-discussion-capture/SKILL.md`):
 1. Scan current run's `manager.log` for `SIDE_TASK`, `BLOCKED`, `OPEN_QUESTION`, `ROADMAP_EDIT row=<new>` events.
 2. Cap candidates at 5 (rank by SIDE_TASK > OPEN_QUESTION > BLOCKED > ROADMAP_EDIT, most recent first).
 3. Surface AskUserQuestion — one row per candidate. Options: file-as-ROADMAP / file-as-memory-only / skip / merge-with-#N.
-4. Apply dispositions via `scripts/agent-memory.sh record-discussion` AND (if filed) `scripts/gh-project.sh create-issue` (single-writer rule).
+4. Apply dispositions via `.claude/naavik-ops memory record-discussion` AND (if filed) `.claude/naavik-ops gh create-issue` (single-writer rule).
 5. Append `DISCUSSION_CAPTURE candidates=<N> filed=<M> skipped=<K> merged=<L>` to `manager.log`.
 
 ---
@@ -258,7 +258,7 @@ The `memory_20250818` API-level tool is not exposed in Claude Code. Revisit if A
 
 ### 6.1 Add a new store
 
-1. Extend `scripts/agent-memory.sh`:
+1. Extend `.claude/naavik_ops/memory.py`:
    - Add a `record-<thing>` subcommand following the `record-decision` pattern (validate, append, atomic).
    - Add the new file path to the constants block at the top.
    - Add the store to the `list` and `query` dispatchers.
@@ -276,7 +276,7 @@ The `memory_20250818` API-level tool is not exposed in Claude Code. Revisit if A
 
 `recurring-patterns.jsonl` aggregates `ERROR step=<X> kind=<Y>` from per-agent logs. To mine on a different event family:
 
-1. Extend `cmd_mine_patterns` in `scripts/agent-memory.sh` with a new event regex.
+1. Extend `cmd_mine_patterns` in `.claude/naavik_ops/memory.py` with a new event regex.
 2. Document the new pattern shape in § 2.4.
 
 ### 6.4 Promote a recurring pattern to a lesson + knowledge entry
@@ -287,18 +287,18 @@ User flow:
 /learn                                              # surface promotion candidates
 /memory query patterns '.occurrence_count >= 5'     # inspect
 # manager invokes via Skill: manager-promote-lesson
-scripts/agent-memory.sh promote-lesson <pattern_id> # threshold-gated
+.claude/naavik-ops memory promote-lesson <pattern_id> # threshold-gated
 ```
 
 Manager surfaces consent via AskUserQuestion before invoking.
 
 ### 6.5 Add an alias to an existing knowledge entry
 
-Wave 3 surfaces alias proposals via `scripts/agent-memory.sh mine-patterns --aliases`. To add an alias manually:
+Wave 3 surfaces alias proposals via `.claude/naavik-ops memory mine-patterns --aliases`. To add an alias manually:
 
 ```bash
 # Read the current entry, copy the body, re-write with merged aliases:
-scripts/agent-memory.sh record-knowledge <slug> <body-file> \
+.claude/naavik-ops memory record-knowledge <slug> <body-file> \
   --aliases "<merged-alias-list>" --overwrite
 ```
 

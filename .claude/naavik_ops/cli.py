@@ -8,8 +8,8 @@ Subcommand groups (per design doc § 10):
            / sync / next-unblocked
   release  cut / dry-run / changelog
   deps     add / remove / list / check
-  gh       (subprocess wrappers around scripts/gh-project.sh during A.29)
-  memory   (subprocess wrappers around scripts/agent-memory.sh during A.29)
+  gh       (subprocess wrappers around .claude/naavik-ops gh during A.29)
+  memory   (subprocess wrappers around .claude/naavik-ops memory during A.29)
 
 Direct: --help, --version
 """
@@ -41,8 +41,8 @@ Groups:
   task      release-version task ops (list / insert / defer / prioritize / move / etc.)
   release   release ceremony (cut / dry-run / changelog)
   deps      cross-task / cross-version dependency graph (add / remove / list / check)
-  gh        GitHub Project + Issue ops (subprocess wraps scripts/gh-project.sh during A.29)
-  memory    agent memory ops (subprocess wraps scripts/agent-memory.sh during A.29)
+  gh        GitHub Project + Issue ops (subprocess wraps .claude/naavik-ops gh during A.29)
+  memory    agent memory ops (subprocess wraps .claude/naavik-ops memory during A.29)
 
 Run `naavik-ops <group> --help` for group-level help.
 

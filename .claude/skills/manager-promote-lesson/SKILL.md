@@ -1,6 +1,6 @@
 ---
-description: Promote a recurring pattern (occurrence_count >= 5) to a lesson + knowledge stub. Consent-gated wrapper around `.claude/naavik-ops memory promote-lesson <pattern_id>` (subprocess-wraps `scripts/agent-memory.sh` during A.29). Use when /learn surfaces a promotion candidate, when manager has user approval to promote a specific pattern, when the user says "promote this pattern" / "make this a lesson" / "this should be a knowledge entry". Triggers on phrases like "promote lesson", "promote pattern", "lesson promotion", "make this a lesson", "knowledge stub from pattern", "threshold 5".
-allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/agent-memory.sh:*), Bash(jq:*), AskUserQuestion
+description: Promote a recurring pattern (occurrence_count >= 5) to a lesson + knowledge stub. Consent-gated wrapper around `.claude/naavik-ops memory promote-lesson <pattern_id>` (subprocess-wraps `.claude/naavik_ops/memory.py` during A.29). Use when /learn surfaces a promotion candidate, when manager has user approval to promote a specific pattern, when the user says "promote this pattern" / "make this a lesson" / "this should be a knowledge entry". Triggers on phrases like "promote lesson", "promote pattern", "lesson promotion", "make this a lesson", "knowledge stub from pattern", "threshold 5".
+allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(jq:*), AskUserQuestion
 ---
 
 # manager-promote-lesson

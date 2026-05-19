@@ -4,7 +4,7 @@ Modules:
   flock        — fcntl.flock context manager (single-writer serialization)
   github_api   — GraphQL wrapper with hasNextPage pagination (fixes the 200-cap)
   jsonl        — atomic JSONL read/write (tempfile + os.replace)
-  roadmap      — ROADMAP.md parser (A.29: wraps scripts/roadmap_parser.py)
+  roadmap      — ROADMAP.md parser (A.29: wraps .claude/naavik_ops/lib/roadmap.py)
   semver       — 4-level semver schema parse/compare/bump
   changelog    — keepachangelog v1.1.0 + Conventional Commits classification
 

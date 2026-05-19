@@ -450,7 +450,7 @@ naavik vault rotate-key --old=...   # see § Rotating SECRET_KEY above
 
 ### Agent memory + learning (Phase A row A.15)
 
-`.claude/memory/` holds decisions, discussions, lessons, knowledge entries, recurring patterns, and per-run analytics — owned by a single writer (`scripts/agent-memory.sh`) mirroring the GitHub state pattern. Slash commands for daily use:
+`.claude/memory/` holds decisions, discussions, lessons, knowledge entries, recurring patterns, and per-run analytics — owned by a single writer (`.claude/naavik_ops/memory.py`) mirroring the GitHub state pattern. Slash commands for daily use:
 
 ```bash
 claude /memory list knowledge                    # see the captured corpus
@@ -544,8 +544,8 @@ Naavik ships with 6 specialized Claude Code subagents and 13 slash commands at `
 ```bash
 gh auth login                                # authenticate gh CLI
 # Create a GitHub Project v2 with Status + Priority fields (see AGENT_OPS.md § 2.2)
-scripts/gh-project.sh init                   # cache project IDs at .claude/github-project.json
-scripts/gh-project.sh bootstrap --apply      # create Milestones + Issues from ROADMAP.md
+.claude/naavik-ops gh init                   # cache project IDs at .claude/github-project.json
+.claude/naavik-ops gh bootstrap --apply      # create Milestones + Issues from ROADMAP.md
 claude /standup                              # confirm system is live
 ```
 
@@ -563,7 +563,7 @@ Commands: `/build`, `/plan`, `/discuss`, `/triage-bug`, `/review-pr`, `/threat-m
 
 - **Tracing:** `./traces/<run-id>/` per agent + `traces/watch.sh` for tmux pane view + `/runs` for history.
 - **Budget:** `.claude/budget.json` caps daily token spend; manager updates `.claude/budget-ledger.json` per run; `/budget` to inspect.
-- **GitHub Projects v2 helper:** `scripts/gh-project.sh` with `init`, `bootstrap`, `sync`, `create-issue`, `milestone-status`, `add-item`, `set-status`, `next-unblocked`, `runs`.
+- **GitHub Projects v2 helper:** `.claude/naavik_ops/gh.py` with `init`, `bootstrap`, `sync`, `create-issue`, `milestone-status`, `add-item`, `set-status`, `next-unblocked`, `runs`.
 - **ROADMAP is authoritative;** the Project board is a one-way operational mirror.
 
 See `docs/AGENT_OPS.md` for the full reference, `AGENTS.md` § Agent System for the workflow integration, `.claude/agents/` for full agent prompts.

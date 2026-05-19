@@ -1,6 +1,6 @@
 ---
 description: Before answering questions about LinkedIn scraping, prepare-commit-msg case sensitivity, hacker self-approval pivots, destructive-rm guard, sandbox post-direct-push denials, or any topic with a captured knowledge entry, check `.claude/memory/knowledge/<topic>.md`. Run `.claude/naavik-ops memory list knowledge` to see the index. Use whenever an agent is about to research a topic that may have been captured before. Triggers on phrases like "have we hit this before", "what did we decide about", "memory lookup", "knowledge entry", "lookup the topic", "is there a knowledge file", "do we know about", "captured pattern", "linkedin scraping", "branch case sensitivity", "self-approval", "destructive rm", "sandbox denial".
-allowed-tools: Read, Glob, Grep, Bash(.claude/naavik-ops:*), Bash(scripts/agent-memory.sh:*), Bash(jq:*)
+allowed-tools: Read, Glob, Grep, Bash(.claude/naavik-ops:*), Bash(jq:*)
 ---
 
 # naavik-memory-lookup
@@ -89,7 +89,7 @@ NEVER use `Edit` / `Write` directly against `.claude/memory/` — single-writer 
 
 - `docs/design/AGENT_MEMORY.md` — architecture + store schemas.
 - `docs/AGENT_OPS.md § 14` — daily workflow integration.
-- `scripts/agent-memory.sh` — single writer.
+- `.claude/naavik_ops/memory.py` — single writer.
 - `.claude/memory/knowledge/` — captured-topics corpus.
 - `~/.claude/projects/<...>/memory/MEMORY.md` — Claude Code's auto-managed personal memory (**read-only**; never write).
 - `CLAUDE.md` — project-level invariants Claude Code reads on cold start.
@@ -102,7 +102,7 @@ NEVER use `Edit` / `Write` directly against `.claude/memory/` — single-writer 
 
 ## Forbidden during invocation
 
-- Do NOT `Edit` / `Write` against `.claude/memory/`. All writes via `scripts/agent-memory.sh`.
+- Do NOT `Edit` / `Write` against `.claude/memory/`. All writes via `.claude/naavik_ops/memory.py`.
 - Do NOT write to `~/.claude/projects/<...>/memory/MEMORY.md`. Claude Code's; read only.
 - Do NOT trust `Confidence: low` entry over the live source it cites — re-read linked `traces/<run-id>/<log>.log` or `docs/plans/archive/<NN>.md` before acting.
 - Do NOT mass-promote knowledge entries inline. Promotion via `/learn` → `.claude/naavik-ops memory promote-lesson` (Wave 3) so audit trail survives.

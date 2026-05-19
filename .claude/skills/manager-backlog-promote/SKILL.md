@@ -1,6 +1,6 @@
 ---
 description: Auto-promote workflow primitive for the manager. When manager detects an empty Todo column (operating-loop step 2 OR `next-unblocked` returns null mid-loop), invoke this skill to surface the top-priority epic in Backlog + its top unblocked items via AskUserQuestion. User picks 1–N items; manager applies `set-status <id> Todo` per pick (one MIRROR per item) and resumes the loop. Triggers on phrases like "todo empty", "auto-promote", "promote backlog item", "next-unblocked returned null", "backlog promotion", "pull backlog into current cycle".
-allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), Bash(jq:*), AskUserQuestion
+allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(jq:*), AskUserQuestion
 ---
 
 # manager-backlog-promote
@@ -69,13 +69,13 @@ Codified A.28 PLAN_GATE 2026-05-17 (Q3 REVERSED): Backlog → Todo promotion is 
 
 ## Canonical references
 
-- `scripts/gh-project.sh` § `cmd_backlog_by_epic` (added A.28) — read-only primitive.
-- `scripts/gh-project.sh` § `cmd_set_status` — Backlog → Todo write.
-- `scripts/gh-project.sh` § `cmd_item_id` — Issue # → project item id.
+- `.claude/naavik_ops/gh.py` § `cmd_backlog_by_epic` (added A.28; ported to native Python in 0.1.1) — read-only primitive.
+- `.claude/naavik_ops/gh.py` § `cmd_set_status` — Backlog → Todo write.
+- `.claude/naavik_ops/gh.py` § `cmd_item_id` — Issue # → project item id.
 - `.claude/agents/manager.md` § Operating loop step 2 — caller.
 - `docs/AGENT_OPS.md § 6.3` — 4-status mapping + asymmetric Backlog convention.
 - `docs/plans/archive/20-A.28-board-restructure.md` § B.6 — design rationale.
-- `AGENTS.md § GitHub state — single writer rule` — all writes via `scripts/gh-project.sh`.
+- `AGENTS.md § GitHub state — single writer rule` — all writes via `.claude/naavik-ops gh`.
 
 ## When NOT to invoke
 
@@ -87,6 +87,6 @@ Codified A.28 PLAN_GATE 2026-05-17 (Q3 REVERSED): Backlog → Todo promotion is 
 ## Forbidden during invocation
 
 - Do NOT auto-promote without AskUserQuestion. User-consent gate is the point.
-- Do NOT bypass `scripts/gh-project.sh` to call `gh api graphql` for set-status — single-writer rule.
+- Do NOT bypass `.claude/naavik_ops/gh.py` to call `gh api graphql` for set-status — single-writer rule.
 - Do NOT promote `blocked`-labelled items. `backlog-by-epic` filter excludes `epic` label, but `blocked` items can be in Backlog; if surfaced, AskUserQuestion before promoting.
 - Do NOT hand-edit `.claude/github-issue-map.json`.

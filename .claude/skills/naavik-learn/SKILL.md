@@ -1,11 +1,11 @@
 ---
 description: Skill mirror of `/learn` slash command (dual-surface convention per AGENT_OPS § 10.2). Use when manager suggests `/learn` at the milestone gate, when the user types `/learn`, when the user says "retrospective" / "analyze last N runs" / "what did we learn this week" / "any recurring failures". Agent-invocable entry point; procedural body lives in `.claude/commands/learn.md`.
-allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/agent-memory.sh:*), Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), Bash(jq:*), Bash(grep:*), Task, AskUserQuestion
+allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(jq:*), Bash(grep:*), Task, AskUserQuestion
 ---
 
 # naavik-learn
 
-Periodic retrospective of agent system itself. Analyzes last N runs (default 10) via `.claude/naavik-ops memory analyze-run` + `mine-patterns`, surfaces failure patterns / drift / token hotspots / skill activation / promotion + ROADMAP candidates, user dispositions each via AskUserQuestion. Read-only on traces; writes via `scripts/agent-memory.sh` per single-writer rule.
+Periodic retrospective of agent system itself. Analyzes last N runs (default 10) via `.claude/naavik-ops memory analyze-run` + `mine-patterns`, surfaces failure patterns / drift / token hotspots / skill activation / promotion + ROADMAP candidates, user dispositions each via AskUserQuestion. Read-only on traces; writes via `.claude/naavik_ops/memory.py` per single-writer rule.
 
 ## When to invoke
 
@@ -52,6 +52,6 @@ High-level shape (full steps in command file):
 
 - Do NOT auto-promote any pattern. Threshold 5 + user consent per pattern (plan 19 § C.4 Q3 + § C.3 Q4).
 - Do NOT write to `~/.claude/projects/<...>/memory/MEMORY.md`. Read-only.
-- Do NOT bypass `scripts/agent-memory.sh` or `scripts/gh-project.sh`. Single-writer rule.
+- Do NOT bypass `.claude/naavik_ops/memory.py` or `.claude/naavik_ops/gh.py`. Single-writer rule.
 - Do NOT bypass AskUserQuestion gates in sections A / E / F / G. Whole point = opt-in retrospective.
 - Do NOT analyze runs older than `--lookback N`. Bounded by N to keep token spend predictable.

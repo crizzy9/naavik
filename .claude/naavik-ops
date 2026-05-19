@@ -6,7 +6,7 @@ Routes <group> <command> [args] to subcommand modules in `.claude/naavik_ops/`.
 Groups: task / release / deps / gh / memory
 
 During the A.29 transition, the `gh` and `memory` groups are subprocess wrappers
-around `scripts/gh-project.sh` + `scripts/agent-memory.sh`. A.30 (0.1.1) inlines
+around `.claude/naavik_ops/gh.py` + `.claude/naavik_ops/memory.py`. A.30 (0.1.1) inlines
 them to native Python. See `docs/design/PHASE_NUMBERING.md § 6 + § 9 + § 10`.
 
 Single-writer rule: `.claude/naavik-ops` is the canonical entry point for all

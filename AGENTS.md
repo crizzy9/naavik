@@ -1,7 +1,8 @@
 # Naavik — Agent Guide
 
 > **This is the canonical reference for AI agents working on Naavik.**
-> **Last updated:** 2026-05-17 (Plan 19 / A.15 EXECUTED — agent memory + learning system. § Agent System infrastructure table adds `.claude/memory/` + `scripts/agent-memory.sh` (single-writer rule per A.15) + 4 memory-aware skills; slash commands table adds `/memory` + `/learn`. Design doc: `docs/design/AGENT_MEMORY.md`. Workflow integration: `docs/AGENT_OPS.md § 14`.)
+> **Last updated:** 2026-05-19 (Plan 25 / `0.1.1` EXECUTED — legacy bash → Python rewrite + 5 mutating `task` subcommands (`insert` / `defer` / `prioritize` / `move` / `renumber`) + CHANGELOG markdown-escape hardening. `.claude/naavik-ops gh` + `memory` no longer subprocess-wrap legacy bash — native Python under `.claude/naavik_ops/{gh,memory}.py`. `scripts/gh-project.sh` + `scripts/agent-memory.sh` + `scripts/roadmap_parser.py` DELETED. Single-writer rule preserved. Design doc: `docs/design/PHASE_NUMBERING.md`.)
+> Earlier line: 2026-05-17 (Plan 19 / A.15 EXECUTED — agent memory + learning system. § Agent System infrastructure table adds `.claude/memory/` + `.claude/naavik_ops/memory.py` (single-writer rule per A.15) + 4 memory-aware skills; slash commands table adds `/memory` + `/learn`. Design doc: `docs/design/AGENT_MEMORY.md`. Workflow integration: `docs/AGENT_OPS.md § 14`.)
 > Earlier line: 2026-05-10 (§ Key Conventions § CLI — both the `naavik` script AND the encrypted vault are on a sunset track per ROADMAP § Phase 2 tasks 2.12 (vault → env-based secrets) and 2.11 (CLI deletion, sequenced after 2.12). Do NOT extend either; new operator features ship as Settings UI or `.env.example` slots.)
 > **Always read this before starting work.**
 
@@ -395,13 +396,13 @@ The plan stays rich; ROADMAP stays current.
 
 ### GitHub state — single writer rule (codified 2026-05-16; updated 2026-05-18 for A.29 dispatcher)
 
-`ROADMAP.md` is the authoritative ledger; the GitHub Project v2 board mirrors it. To keep the mirror deterministic, **`.claude/naavik-ops gh`** (Python dispatcher; subprocess-wraps `scripts/gh-project.sh` during the A.29 transition, native Python in A.30) is the **sole writer entry point** to GitHub Issues, Milestones, Project items, and `.claude/github-issue-map.json` (the persistent `{phase → epic#, task_id → issue#, phase → milestone#}` association cache).
+`ROADMAP.md` is the authoritative ledger; the GitHub Project v2 board mirrors it. To keep the mirror deterministic, **`.claude/naavik-ops gh`** (Python dispatcher; subprocess-wraps `.claude/naavik_ops/gh.py` during the A.29 transition, native Python in A.30) is the **sole writer entry point** to GitHub Issues, Milestones, Project items, and `.claude/github-issue-map.json` (the persistent `{phase → epic#, task_id → issue#, phase → milestone#}` association cache).
 
 **Why this exists.** The GitHub search API is eventually consistent (~30s–2min indexing lag) and rate-limited. Pre-2026-05-16 the script's idempotency check (`find_issue_by_prefix`) queried that API and silently treated indexing-lag misses as "doesn't exist," producing duplicate issues (e.g. `#46` dup `#6` for `[Epic] Pre-Phase-2 paper cuts`, `#47` dup `#7` for `[PC.5]`). The map cache eliminates the race: every create writes to the map, every existence check reads it first.
 
 **Operational rules:**
 
-- All `gh issue create` / `gh issue close` / Project field writes go through `.claude/naavik-ops gh` subcommands (`create-issue`, `create-epic`, `set-status`, `set-priority`, `set-effort`, `add-subissue`). The dispatcher subprocess-wraps `scripts/gh-project.sh` during A.29; A.30 (0.1.1) inlines native Python. Never call `gh` or `gh api graphql` for those operations from agent prompts or scripts.
+- All `gh issue create` / `gh issue close` / Project field writes go through `.claude/naavik-ops gh` subcommands (`create-issue`, `create-epic`, `set-status`, `set-priority`, `set-effort`, `add-subissue`). The dispatcher subprocess-wraps `.claude/naavik_ops/gh.py` during A.29; A.30 (0.1.1) inlines native Python. Never call `gh` or `gh api graphql` for those operations from agent prompts or scripts.
 - Never hand-edit `.claude/github-issue-map.json`. It's machine-managed.
 - If manual UI edits drift the map (someone renames/closes/deletes an issue in github.com), run `.claude/naavik-ops gh refresh-map` to reconcile from authoritative GitHub state. Collisions on title prefix resolve to (open, lowest-#).
 - The `manager` agent is the sole entry point for delivery-loop state mutations. Other agents (architect, engineer, hacker, devops, designer) may invoke `.claude/naavik-ops gh create-issue` for plan-driven issue creation, but must not write the Project board's Status column directly — that's manager's job during step 9 (mirror) of the workflow.
@@ -524,22 +525,22 @@ Naavik uses 6 specialized Claude Code subagents and 13 slash commands at project
 
 ### Infrastructure
 
-- `scripts/gh-project.sh` — GitHub Projects v2 helper (init / bootstrap / refresh-map / sync / create-issue / create-epic / milestone-status / add-item / set-status / set-priority / set-effort / next-unblocked / runs). **Sole writer for Issue / Milestone / Project state** per § GitHub state — single writer rule.
-- `scripts/agent-memory.sh` — agent memory single writer (init / record-decision / record-discussion / record-knowledge / record-lesson / list / query / analyze-run / mine-patterns / promote-lesson). **Sole writer for `.claude/memory/` stores** per Phase A row A.15 design (`docs/design/AGENT_MEMORY.md`).
-- `scripts/roadmap_parser.py` — parses ROADMAP.md task tables to JSONL (used by bootstrap + sync).
+- `.claude/naavik_ops/gh.py` — GitHub Projects v2 helper (init / bootstrap / refresh-map / sync / create-issue / create-epic / milestone-status / add-item / set-status / set-priority / set-effort / next-unblocked / runs). **Sole writer for Issue / Milestone / Project state** per § GitHub state — single writer rule.
+- `.claude/naavik_ops/memory.py` — agent memory single writer (init / record-decision / record-discussion / record-knowledge / record-lesson / list / query / analyze-run / mine-patterns / promote-lesson). **Sole writer for `.claude/memory/` stores** per Phase A row A.15 design (`docs/design/AGENT_MEMORY.md`).
+- `.claude/naavik_ops/lib/roadmap.py` — parses ROADMAP.md task tables to JSONL (used by bootstrap + sync).
 - `traces/<run-id>/` — per-run agent logs + MANIFEST.json. Run-id format: `YYYY-MM-DDTHH-MM-SS_<6hex>`.
 - `traces/watch.sh` — tmux session, one pane per agent log.
 - `traces/runs.log` — append-only run index.
 - `.claude/agents/` — 6 subagent prompts (manager, architect, engineer, devops, hacker, designer).
 - `.claude/commands/` — 15 slash command prompts (/build, /plan, /discuss, /triage-bug, /review-pr, /threat-model, /design-screen, /groom, /standup, /bootstrap, /sync-roadmap, /budget, /runs, /memory, /learn).
 - `.claude/skills/` — project-level auto-trigger skills, one directory per skill (`<name>/SKILL.md`). **Shipped by Phase A.11 Phase 1** (`naavik-cold-start`) + Phase 2 (per-agent suites) + **A.15** (`naavik-memory-lookup`, `naavik-discussion-capture`, `naavik-learn`, `manager-promote-lesson`). One directory per skill (`<name>/SKILL.md`). Six agent prefixes (`manager-*`, `architect-*`, etc.) + shared `naavik-*` prefix for cross-agent skills.
-- `.claude/memory/` — agent memory stores (decisions / discussions / lessons / knowledge / recurring-patterns / runs-analysis). Sole writer: `scripts/agent-memory.sh`. Gitignored per-fork EXCEPT `.keep` + `knowledge/*.md` (committed as shared corpus). Design doc: `docs/design/AGENT_MEMORY.md`; daily workflow: `docs/AGENT_OPS.md § 14`.
+- `.claude/memory/` — agent memory stores (decisions / discussions / lessons / knowledge / recurring-patterns / runs-analysis). Sole writer: `.claude/naavik_ops/memory.py`. Gitignored per-fork EXCEPT `.keep` + `knowledge/*.md` (committed as shared corpus). Design doc: `docs/design/AGENT_MEMORY.md`; daily workflow: `docs/AGENT_OPS.md § 14`.
 - `.claude/hooks/` — Claude Code SessionStart hook + git hooks. **Shipped by Phase A.11 Phase 1.** Holds `cold-start.sh` (SessionStart, injects required-reading context) and `git/prepare-commit-msg` (auto-appends `Closes #N` from branch name using `.claude/github-issue-map.json`). Git hook installed via symlink (see `docs/AGENT_OPS.md` § 2.8).
 - `.claude/settings.json` — Claude Code config (hooks registration, permissions, env vars).
 - `.claude/budget.json` — daily ceiling + per-agent caps.
 - `.claude/budget-ledger.json` — manager-managed daily spend ledger (gitignored).
 - `.claude/github-project.json` — Project ID + field IDs cache (gitignored).
-- `.claude/github-issue-map.json` — persistent {phase → epic#, task_id → issue#, phase → milestone#} association cache (gitignored, per-fork). Sole writer: `scripts/gh-project.sh`. Reconcile with `refresh-map`.
+- `.claude/github-issue-map.json` — persistent {phase → epic#, task_id → issue#, phase → milestone#} association cache (gitignored, per-fork). Sole writer: `.claude/naavik_ops/gh.py`. Reconcile with `refresh-map`.
 - `docs/prompts/` — session-kickoff prompts (`docs/prompts/README.md` for the convention). Architect-authored for plan-execution prompts; archives alongside plans.
 - `docs/plans/` — implementation plans (archived to `docs/plans/archive/` when shipped + deviations section written).
 - `docs/design/` — visual contract + design docs + mockups + componentization specs.
