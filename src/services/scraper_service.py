@@ -77,7 +77,7 @@ async def run_scraper(
                     user_id=user_id,
                     source=raw_job.source,
                     external_id=raw_job.external_id,
-                    raw=raw_job.model_dump(exclude_unset=True),
+                    raw=raw_job.to_upsert_payload(),
                     scrape_run_id=run.id,
                 )
                 if created:

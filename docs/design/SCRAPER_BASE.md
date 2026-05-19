@@ -130,9 +130,9 @@ Pydantic v2's `extra="forbid"` raises `ValidationError` at construction time on 
 1. **Scraper authors can't pass fields that don't map to `Job` silently.** Adding a new structured field forces an explicit `RawJob` schema update + matching `Job` field mapping.
 2. **`raw_meta` is the only escape hatch.** Source-specific extras (`{"linkedin_apply_url": "..."}`, `{"workday_req_id": "..."}`) go in `raw_meta` JSONB. Soft cap `< 4KB` per RawJob — runaway growth is a Phase 6 monitoring concern, not a `0.2.0.06` blocker.
 
-### D.4 `model_dump(exclude_unset=True)` is the hand-off shape
+### D.4 `RawJob.to_upsert_payload()` is the hand-off shape
 
-`scraper_service.run_scraper` calls `job_service.upsert_job(... raw=raw_job.model_dump(exclude_unset=True))`. Pydantic's `exclude_unset=True` omits defaults the scraper didn't touch; `_create_payload` in `job_service` projects onto Job-creatable fields and supplies typed defaults (`RemotePolicy.UNKNOWN`, `VisaRestriction.NOT_MENTIONED`, etc.) per `JOB_MODEL.md § F.2`.
+`scraper_service.run_scraper` calls `job_service.upsert_job(... raw=raw_job.to_upsert_payload())`. The adapter exists because `RawJob` field names don't all match `Job` column names — `source_url`, `company_name`, `position_title`, `location_raw`, `description_text`, and the `*_hint` enum trio are scraper-side names that map onto `Job.url` / `Job.company` / `Job.role` / `Job.location` / `Job.description` / `Job.remote_policy` / `Job.visa_restrictions` / `Job.seniority_level` per `JOB_MODEL.md § F.1`'s required-keys contract. A bare `model_dump(exclude_unset=True)` would emit `RawJob`-shape keys, every one of which `_create_payload` silently drops (it filters against `_JOB_CREATE_FIELDS` keyed by `Job` column names), leaving the constructed `Job(...)` missing NOT-NULL fields. Postgres catches this on insert; the in-memory test session does not, so the bug only surfaces under live DB. `to_upsert_payload()` does the rename explicitly: hints fill the corresponding `Job` enum columns (and AI extraction in `0.2.0.08` overwrites with authoritative reads), `salary_raw` lands under `raw_meta` for the same AI step to parse, and `_create_payload` supplies typed defaults (`RemotePolicy.UNKNOWN`, `VisaRestriction.NOT_MENTIONED`, etc.) for whatever the hint trio didn't fill.
 
 ---
 
@@ -203,7 +203,7 @@ async def run_scraper(
 1. **Open the run.** `job_service.record_scrape_run(... status=RUNNING, triggered_by, raw_meta={"scraper_name": scraper.name, "query": query.model_dump()})` writes a JobScrapeRun row + returns it.
 2. **Stream RawJobs.** `async for raw_job in scraper.scrape(query):`
    - `listings_returned += 1`
-   - Try `job_service.upsert_job(session, user_id, source=raw_job.source, external_id=raw_job.external_id, raw=raw_job.model_dump(exclude_unset=True), scrape_run_id=run.id)`.
+   - Try `job_service.upsert_job(session, user_id, source=raw_job.source, external_id=raw_job.external_id, raw=raw_job.to_upsert_payload(), scrape_run_id=run.id)` (see § D.4 for the adapter rationale).
    - On `(_, True)` (created) → `new_jobs += 1`. On `(_, False)` (existing) → `updated_jobs += 1`.
    - On per-listing exception → append `stage=upsert url=<source_url> kind=upsert_failure msg=<exc>` to `errors`; continue.
 3. **Drain scraper-internal errors.** Post-stream: `errors.extend(getattr(scraper, '_errors', []))` so per-listing errors collected during `scrape()` propagate to the run row.

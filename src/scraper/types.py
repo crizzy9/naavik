@@ -3,7 +3,7 @@
 Per docs/design/SCRAPER_BASE.md § D (graduated from plan 29 § D.2). Lives at
 the scraper -> service boundary. Scraper subclasses fill the fields they can
 from source HTML; `scraper_service.run_scraper` maps to `Job` via
-`job_service.upsert_job(... raw=raw_job.model_dump(exclude_unset=True))`.
+`job_service.upsert_job(... raw=raw_job.to_upsert_payload())`.
 
 AI extraction (0.2.0.08) takes over for missing structured fields by
 re-parsing `description_html` and overwriting `*_hint` values with
@@ -65,6 +65,49 @@ class RawJob(BaseModel):
     # Source-specific extras kept in JSONB for diagnostics + audit. Soft cap
     # `< 4KB` per RawJob; runaway growth is a Phase 6 monitoring concern.
     raw_meta: dict[str, Any] = Field(default_factory=dict)
+
+    def to_upsert_payload(self) -> dict[str, Any]:
+        """Map `RawJob` field names onto `job_service.upsert_job`'s `raw` dict.
+
+        `_JOB_CREATE_FIELDS` in `job_service` is keyed by `Job` column names
+        (`url`, `company`, `role`, `description`, `remote_policy`, ...), not
+        `RawJob` names (`source_url`, `company_name`, `position_title`,
+        `description_text`, `remote_policy_hint`, ...). `model_dump()` alone
+        produces the wrong shape and `_create_payload` silently drops every
+        unmatched key, so the resulting `Job(...)` is missing NOT-NULL fields
+        and only fails when Postgres enforces the constraint — which the
+        in-memory test session bypasses.
+
+        Hints map into the matching `Job` column verbatim (e.g.
+        `remote_policy_hint` -> `Job.remote_policy`); AI extraction
+        (`0.2.0.08`) overwrites with the authoritative read from the JD body.
+        `salary_raw` has no `Job` counterpart — preserved under `raw_meta`
+        for the same AI extraction step to parse.
+        """
+        raw_meta = dict(self.raw_meta)
+        if self.salary_raw is not None:
+            raw_meta.setdefault("salary_raw", self.salary_raw)
+
+        payload: dict[str, Any] = {
+            "board": self.board,
+            "url": self.source_url,
+            "url_type": self.url_type,
+            "company": self.company_name,
+            "role": self.position_title,
+            "location": self.location_raw,
+            "description": self.description_text or "",
+            "description_html": self.description_html,
+            "posted_at": self.posted_at,
+            "posted_at_text": self.posted_at_text,
+            "raw_meta": raw_meta,
+        }
+        if self.remote_policy_hint is not None:
+            payload["remote_policy"] = self.remote_policy_hint
+        if self.visa_restriction_hint is not None:
+            payload["visa_restrictions"] = self.visa_restriction_hint
+        if self.seniority_level_hint is not None:
+            payload["seniority_level"] = self.seniority_level_hint
+        return payload
 
 
 class ScrapeQuery(BaseModel):
