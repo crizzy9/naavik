@@ -26,7 +26,7 @@ from crawl4ai import (
 )
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 
-from scraper.redaction import safe_exc, safe_url
+from scraper.redaction import safe_exc, safe_msg, safe_url
 
 log = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class Crawl4AIClient:
             log.warning(
                 "crawl4ai fetch failed: url=%s err=%s",
                 safe_url(url),
-                result.error_message,
+                safe_msg(result.error_message),
             )
             return None
         return result.html
@@ -110,7 +110,23 @@ class Crawl4AIClient:
         Uses Crawl4AI's native streaming dispatcher. `max_session_permit` is
         sized off `rate_limit_per_minute` so a 30/min cap maps to ~5 concurrent
         sessions — gentle enough that bursting doesn't break the cap.
+
+        URLs validate per-item through `pydantic.HttpUrl` (same gate as
+        `fetch_html`); rejected URLs log + skip without yielding. Per plan 32
+        D.1.
         """
+        validated: list[str] = []
+        for raw in urls:
+            try:
+                validated.append(str(_HTTP_URL_ADAPTER.validate_python(raw)))
+            except ValidationError as exc:
+                log.warning(
+                    "crawl4ai stream-many rejected: url=%s reason=%s",
+                    safe_url(raw),
+                    safe_exc(exc),
+                )
+        if not validated:
+            return
         streaming_config = self._run_config.clone(stream=True)
         dispatcher = MemoryAdaptiveDispatcher(
             memory_threshold_percent=85.0,
@@ -119,7 +135,7 @@ class Crawl4AIClient:
 
         async with AsyncWebCrawler(config=self._browser_config) as crawler:
             async for result in await crawler.arun_many(
-                urls=urls,
+                urls=validated,
                 config=streaming_config,
                 dispatcher=dispatcher,
             ):
@@ -129,7 +145,7 @@ class Crawl4AIClient:
                     log.warning(
                         "crawl4ai stream-result failed: url=%s err=%s",
                         safe_url(result.url),
-                        result.error_message,
+                        safe_msg(result.error_message),
                     )
                     yield (result.url, None)
 

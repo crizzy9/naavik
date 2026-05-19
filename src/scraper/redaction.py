@@ -3,15 +3,30 @@
 Per `docs/design/SCRAPER_BASE.md` § H.4. Both `scraper_service.run_scraper`
 (writes `JobScrapeRun.errors[]`) and `crawl4ai_client.{fetch_html,
 stream_many}` (writes `log.warning`) route URL + exception material through
-`safe_url` + `safe_exc` before persisting or logging.
+`safe_url` + `safe_exc` before persisting or logging. `safe_msg` (plan 32)
+parallels `safe_exc` for raw upstream-message strings (Crawl4AI's
+`result.error_message`) that don't carry a class-name prefix.
 """
 
 from __future__ import annotations
 
+import re
 from urllib.parse import urlsplit, urlunsplit
 
 _MAX_EXC_MSG_LEN = 200
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
+
+# ANSI CSI: ESC '[' params intermediates final-byte. Covers SGR (e.g. \x1b[31m),
+# cursor moves, mode sets. Standard grammar per ECMA-48.
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+# C0 controls except \t (0x09) and \n (0x0a); plus DEL (0x7f). \r is dropped
+# because CRLF in log strings breaks downstream parsers + shippers.
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def _strip_control_chars(s: str) -> str:
+    """Drop ANSI escape sequences + C0 controls + DEL; preserve \\t and \\n."""
+    return _CONTROL_CHARS_RE.sub("", _ANSI_ESCAPE_RE.sub("", s))
 
 
 def safe_url(url: str | None) -> str:
@@ -39,5 +54,22 @@ def safe_exc(exc: BaseException) -> str:
     Drops `__traceback__`, `args` tuple, `__cause__`. Class name preserved
     intact so operator grep stays useful; message slice prevents secret-leak
     from `f"{exc!s}"` dumps of SQL rows / request bodies / 4xx HTML pages.
+    ANSI escapes + C0 controls + DEL stripped via `_strip_control_chars` so
+    log shippers + the `0.2.0.11` operator UI render cleanly.
     """
-    return f"{type(exc).__name__}: {str(exc)[:_MAX_EXC_MSG_LEN]}"
+    msg = _strip_control_chars(str(exc))[:_MAX_EXC_MSG_LEN]
+    return f"{type(exc).__name__}: {msg}"
+
+
+def safe_msg(msg: str | None) -> str:
+    """Truncate a free-form upstream message to 200 chars; strip non-printables.
+
+    Used for Crawl4AI's `result.error_message` and any other untrusted
+    upstream string that lands in `log.warning` or `JobScrapeRun.errors[]`.
+    Parallels `safe_exc` shape — same 200-char cap, same C0/DEL/ANSI strip —
+    but without the `<ClassName>:` prefix since the upstream string has no
+    structured shape.
+    """
+    if not msg:
+        return "<no-msg>"
+    return _strip_control_chars(msg)[:_MAX_EXC_MSG_LEN]
