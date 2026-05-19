@@ -121,5 +121,5 @@ class ScrapeQuery(BaseModel):
     keywords: list[str] = Field(default_factory=list)
     location: str | None = None
     company_filter: list[str] | None = None
-    max_listings: int = 200
+    max_listings: int = Field(default=200, ge=1, le=10_000)
     raw_meta: dict[str, Any] = Field(default_factory=dict)

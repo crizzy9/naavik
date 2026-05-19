@@ -29,6 +29,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import JobScrapeRun, JobScrapeStatus
 from scraper.base import ScraperBase
+from scraper.redaction import safe_exc, safe_url
 from scraper.types import ScrapeQuery
 from services import job_service
 
@@ -86,8 +87,8 @@ async def run_scraper(
                     updated_jobs += 1
             except Exception as exc:  # noqa: BLE001 — per-listing tolerance
                 errors.append(
-                    f"stage=upsert url={raw_job.source_url} "
-                    f"kind=upsert_failure msg={type(exc).__name__}: {exc!s}"
+                    f"stage=upsert url={safe_url(raw_job.source_url)} "
+                    f"kind=upsert_failure msg={safe_exc(exc)}"
                 )
                 log.exception("upsert_job failed for %s", raw_job.source_url)
 
@@ -107,7 +108,7 @@ async def run_scraper(
         raise
     except Exception as exc:  # noqa: BLE001 — top-level scraper failure
         status = JobScrapeStatus.PARTIAL if listings_returned > 0 else JobScrapeStatus.FAILED
-        errors.append(f"stage=invocation kind=fatal msg={type(exc).__name__}: {exc!s}")
+        errors.append(f"stage=invocation kind=fatal msg={safe_exc(exc)}")
         log.exception("scraper %s failed", scraper.name)
     finally:
         finished_at = datetime.now(UTC)
