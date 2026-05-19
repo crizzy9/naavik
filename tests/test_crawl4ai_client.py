@@ -176,7 +176,7 @@ async def test_respect_rate_limit_sleeps_for_min_interval(monkeypatch):
     # Freeze time at 0 then 0 (no elapsed); rate_limit=60 → min_interval=1s.
     fake_loop = MagicMock()
     fake_loop.time.return_value = 0.0
-    monkeypatch.setattr(mod.asyncio, "get_event_loop", lambda: fake_loop)
+    monkeypatch.setattr(mod.asyncio, "get_running_loop", lambda: fake_loop)
 
     client = mod.Crawl4AIClient(
         rate_limit_per_minute=60,
@@ -207,7 +207,7 @@ async def test_respect_rate_limit_no_wait_when_interval_already_elapsed(monkeypa
     monkeypatch.setattr(mod.random, "uniform", lambda lo, hi: 1.2)
     fake_loop = MagicMock()
     fake_loop.time.return_value = 10.0  # 10s after last; well past 1s interval
-    monkeypatch.setattr(mod.asyncio, "get_event_loop", lambda: fake_loop)
+    monkeypatch.setattr(mod.asyncio, "get_running_loop", lambda: fake_loop)
 
     client = mod.Crawl4AIClient(
         rate_limit_per_minute=60,
@@ -228,3 +228,44 @@ def test_constructor_propagates_browser_flags():
     client = Crawl4AIClient(enable_stealth=False, headless=False)
     assert client._browser_config.enable_stealth is False
     assert client._browser_config.headless is False
+
+
+# ── SSRF/LFI scheme allowlist (plan 31 D.1) ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_fetch_html_rejects_file_scheme(monkeypatch, caplog):
+    from scraper.crawl4ai_client import Crawl4AIClient
+
+    fake = _FakeAsyncCrawler(arun_result=_fake_crawl_result(url="x", html="x"))
+    monkeypatch.setattr("scraper.crawl4ai_client.AsyncWebCrawler", lambda **_kw: fake)
+
+    client = Crawl4AIClient(random_delay_seconds=(0.0, 0.0), rate_limit_per_minute=1_000_000)
+    with caplog.at_level("WARNING", logger="scraper.crawl4ai_client"):
+        html = await client.fetch_html("file:///etc/passwd")
+
+    assert html is None
+    assert fake.arun_calls == []
+    assert any("rejected" in rec.message for rec in caplog.records)
+    assert all(
+        "/etc/passwd" not in rec.getMessage() or "scheme-blocked" in rec.getMessage()
+        for rec in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "hostile_url",
+    ["gopher://x:6379/_INFO", "ftp://example.com/jobs", "javascript:alert(1)", "not a url"],
+)
+async def test_fetch_html_rejects_gopher_and_malformed(monkeypatch, hostile_url):
+    from scraper.crawl4ai_client import Crawl4AIClient
+
+    fake = _FakeAsyncCrawler(arun_result=_fake_crawl_result(url="x", html="x"))
+    monkeypatch.setattr("scraper.crawl4ai_client.AsyncWebCrawler", lambda **_kw: fake)
+
+    client = Crawl4AIClient(random_delay_seconds=(0.0, 0.0), rate_limit_per_minute=1_000_000)
+    html = await client.fetch_html(hostile_url)
+
+    assert html is None
+    assert fake.arun_calls == []

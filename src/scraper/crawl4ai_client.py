@@ -24,8 +24,15 @@ from crawl4ai import (
     CrawlerRunConfig,
     MemoryAdaptiveDispatcher,
 )
+from pydantic import HttpUrl, TypeAdapter, ValidationError
+
+from scraper.redaction import safe_exc, safe_url
 
 log = logging.getLogger(__name__)
+
+# Module-level adapter; pydantic.HttpUrl rejects non-http(s) schemes
+# (file/ftp/gopher/data/javascript) — SSRF/LFI block per plan 31 D.1.
+_HTTP_URL_ADAPTER: TypeAdapter[HttpUrl] = TypeAdapter(HttpUrl)
 
 
 class Crawl4AIClient:
@@ -66,18 +73,29 @@ class Crawl4AIClient:
     async def fetch_html(self, url: str) -> str | None:
         """Fetch one URL; return HTML on success, `None` on a non-fatal failure.
 
+        URL validates through `pydantic.HttpUrl`; non-http(s) schemes
+        (file/ftp/gopher/data/javascript) return None without invoking Crawl4AI.
         Crawl4AI errors propagate via `result.success=False`; we log + return
         `None` so scraper subclasses can append to `self._errors` and continue.
         Truly fatal errors (network down, auth invalid) raise — caller's
         responsibility to catch + mark `JobScrapeRun.status=FAILED`.
         """
+        try:
+            validated = _HTTP_URL_ADAPTER.validate_python(url)
+        except ValidationError as exc:
+            log.warning(
+                "crawl4ai fetch rejected: url=%s reason=%s",
+                safe_url(url),
+                safe_exc(exc),
+            )
+            return None
         await self._respect_rate_limit()
         async with AsyncWebCrawler(config=self._browser_config) as crawler:
-            result = await crawler.arun(url=url, config=self._run_config)
+            result = await crawler.arun(url=str(validated), config=self._run_config)
         if not result.success:
             log.warning(
                 "crawl4ai fetch failed: url=%s err=%s",
-                url,
+                safe_url(url),
                 result.error_message,
             )
             return None
@@ -110,18 +128,18 @@ class Crawl4AIClient:
                 else:
                     log.warning(
                         "crawl4ai stream-result failed: url=%s err=%s",
-                        result.url,
+                        safe_url(result.url),
                         result.error_message,
                     )
                     yield (result.url, None)
 
     async def _respect_rate_limit(self) -> None:
         """Sleep so requests/minute stays under the cap; add jitter."""
-        now = asyncio.get_event_loop().time()
+        now = asyncio.get_running_loop().time()
         min_interval = 60.0 / max(1, self._rate_limit_per_minute)
         elapsed = now - self._last_request_at
         if elapsed < min_interval:
             await asyncio.sleep(min_interval - elapsed)
         jitter = random.uniform(*self._random_delay_seconds)
         await asyncio.sleep(jitter)
-        self._last_request_at = asyncio.get_event_loop().time()
+        self._last_request_at = asyncio.get_running_loop().time()

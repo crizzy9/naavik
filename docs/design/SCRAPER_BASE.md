@@ -2,7 +2,7 @@
 
 > **Canonical reference** — graduated from `docs/plans/archive/29-0.2.0.06-crawl4ai-base.md` per `AGENTS.md` § Workflow step 4.
 > **Status:** Active. This is the single source for the `ScraperBase` ABC, the `RawJob` Pydantic DTO, the `Crawl4AIClient` wrapper, the `scraper_service.run_scraper` lifecycle, the rate-limit + anti-detection interface, and the two-tier error model.
-> **Last updated:** 2026-05-19 (plan 29 / `0.2.0.06` shipped).
+> **Last updated:** 2026-05-19 (plan 31 / `0.2.0.06a` — scraper hardening: § E.1 surface notes `pydantic.HttpUrl` validation on `fetch_html(url)`; new § H.4 names the `safe_url` + `safe_exc` redaction helpers in `src/scraper/redaction.py`).
 > **Companion docs:** `docs/design/JOB_MODEL.md` (locked input for `RawJob → Job` mapping via `job_service.upsert_job`), `docs/design/BACKEND.md` § J (pipeline overview), `docs/design/research/LINKEDIN_SCRAPING.md` (source-specific blueprint that will subclass `ScraperBase` in `0.2.0.07`), `docs/ARCHITECTURE.md` § 3.8 (scraper layer rules).
 > **Downstream plans depending on this contract:** `0.2.0.07` (per-source site scrapers), `0.2.0.08` (AI extraction), `0.2.0.09` (dedup), `0.2.0.10` (APScheduler), `0.2.0.11` (Discover UI), `0.2.0.12` (notifications), `0.2.0.13` (rate limiting + anti-detection), `0.2.0.14` (n8n migration).
 
@@ -155,7 +155,11 @@ class Crawl4AIClient:
     ) -> None: ...
 
     async def fetch_html(self, url: str) -> str | None:
-        """Fetch one URL; return HTML on success, None on non-fatal failure."""
+        """Fetch one URL; return HTML on success, None on non-fatal failure.
+
+        URL validates through `pydantic.HttpUrl` (rejects file/ftp/gopher/
+        data/javascript schemes) before invoking Crawl4AI. Per plan 31 D.1.
+        """
 
     async def stream_many(self, urls: list[str]) -> AsyncIterator[tuple[str, str | None]]:
         """Fetch many URLs concurrently; yield (url, html|None) per result."""
@@ -275,6 +279,10 @@ except Exception as exc:  # noqa: BLE001 — top-level scraper failure
 ### H.3 `asyncio.CancelledError` (TIMED_OUT path)
 
 Scheduler-level time budget elapses → `asyncio.CancelledError` raised into the running coroutine. `run_scraper` catches separately, marks `status=TIMED_OUT`, appends `stage=invocation kind=cancelled msg=asyncio.CancelledError` to errors, then re-raises. Structured concurrency demands re-raise so the scheduler can react.
+
+### H.4 Redaction (`safe_url` + `safe_exc`)
+
+Both writer paths — `scraper_service.run_scraper` building `JobScrapeRun.errors[]` strings and `crawl4ai_client.{fetch_html, stream_many}` `log.warning` calls — route URL + exception material through `safe_url` (strips query string + fragment; preserves scheme + host + path; blocks non-http(s) schemes inline) and `safe_exc` (`<ClassName>: <message[:200]>`). Pure functions in `src/scraper/redaction.py`, importable from any scraper-layer or service-layer module. Shipped `0.2.0.06a` per plan 31. Subclasses in `0.2.0.07` building their own error strings MUST use these helpers; `JobScrapeRun.errors[]` is the operator-UI surface and the full traceback still lands in app logs via the existing `log.exception(...)` calls in `scraper_service.py`.
 
 ---
 

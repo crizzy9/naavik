@@ -264,3 +264,16 @@ def test_scrapequery_accepts_keyword_list():
     q = ScrapeQuery(keywords=["python", "platform"], location="Remote")
     assert q.keywords == ["python", "platform"]
     assert q.location == "Remote"
+
+
+def test_scrapequery_max_listings_bounds():
+    """`max_listings` is capped at 10_000 (10× LinkedIn-typical headroom);
+    `ge=1` prevents silent no-op + negative values. Plan 31 D.5."""
+    assert ScrapeQuery(max_listings=10_000).max_listings == 10_000
+    assert ScrapeQuery(max_listings=1).max_listings == 1
+    with pytest.raises(ValidationError):
+        ScrapeQuery(max_listings=10_001)
+    with pytest.raises(ValidationError):
+        ScrapeQuery(max_listings=0)
+    with pytest.raises(ValidationError):
+        ScrapeQuery(max_listings=-1)
