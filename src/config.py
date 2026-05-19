@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # Optional Integrations
     discord_webhook_url: str | None = None
     telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
     portfolio_webhook_url: str | None = None
 
     # Data dir (mirrors production /app/.naavik in Docker, ~/.naavik on NixOS)
