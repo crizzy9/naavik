@@ -8,8 +8,8 @@ Subcommand groups (per design doc § 10):
            / sync / next-unblocked
   release  cut / dry-run / changelog
   deps     add / remove / list / check
-  gh       (subprocess wrappers around scripts/gh-project.sh during A.29)
-  memory   (subprocess wrappers around scripts/agent-memory.sh during A.29)
+  gh       (subprocess wrappers around .claude/naavik-ops gh during A.29)
+  memory   (subprocess wrappers around .claude/naavik-ops memory during A.29)
 
 Direct: --help, --version
 """
@@ -41,13 +41,13 @@ Groups:
   task      release-version task ops (list / insert / defer / prioritize / move / etc.)
   release   release ceremony (cut / dry-run / changelog)
   deps      cross-task / cross-version dependency graph (add / remove / list / check)
-  gh        GitHub Project + Issue ops (subprocess wraps scripts/gh-project.sh during A.29)
-  memory    agent memory ops (subprocess wraps scripts/agent-memory.sh during A.29)
+  gh        GitHub Project + Issue ops (native Python; sole writer to `.claude/github-issue-map.json`)
+  memory    agent memory ops (native Python; sole writer to `.claude/memory/`)
 
 Run `naavik-ops <group> --help` for group-level help.
 
 Design doc: docs/design/PHASE_NUMBERING.md
-Plan:       docs/plans/24-A.29-phase-numbering-system.md
+Plan:       docs/plans/25-0.1.1-bash-to-python.md
 """
 
 

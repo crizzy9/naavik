@@ -1,6 +1,6 @@
 ---
 description: Generate the `/standup` standup-style report — current milestone state, in-flight items, blocked items, ROADMAP-vs-Project drift, recent runs, and today's token spend vs cap. Use when the user invokes `/standup`, asks "what's the status", "where are we", "give me a standup", or "what's happening with the agent system". Use also at the start of a fresh session to orient. Triggers on phrases like "standup", "status report", "where are we", "what's the state", "what's the status of <milestone>", "give me an update".
-allowed-tools: Read, Bash(scripts/gh-project.sh:*), Bash(jq:*), Bash(tail:*)
+allowed-tools: Read, Bash(jq:*), Bash(tail:*)
 ---
 
 # manager-standup-report
@@ -87,7 +87,7 @@ Manager owns standup format. Canonical shape: milestone state + recent activity 
 
 - `.claude/commands/standup.md` — slash-command spec.
 - `.claude/agents/manager.md` § Identity invariant + § GitHub state — single writer rule.
-- `scripts/gh-project.sh` subcommands `milestone-status`, `sync`, `next-unblocked`.
+- `.claude/naavik_ops/gh.py` subcommands `milestone-status`, `sync`, `next-unblocked`.
 - `docs/AGENT_OPS.md` § 8 (Token budget) + § 7.4 (Run index).
 
 ## When NOT to invoke

@@ -1,6 +1,6 @@
 ---
 description: Scan the current run's `manager.log` for deferred items (SIDE_TASK, BLOCKED, OPEN_QUESTION, ROADMAP_EDIT row=<new>) and surface them via AskUserQuestion before closing a PR_REVIEW_GATE or MILESTONE_GATE. Each candidate is dispositioned (file as ROADMAP row / file as memory discussion / skip / merge with existing). Use whenever manager is about to close a gate. Triggers on phrases like "gate approved", "about to merge", "milestone done", "wrapping up", "before we close", "anything we deferred", "discussion capture", "what did we talk about".
-allowed-tools: Read, Grep, Bash(grep:*), Bash(.claude/naavik-ops:*), Bash(scripts/agent-memory.sh:*), Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), AskUserQuestion
+allowed-tools: Read, Grep, Bash(grep:*), Bash(.claude/naavik-ops:*), AskUserQuestion
 ---
 
 # naavik-discussion-capture
@@ -94,7 +94,7 @@ Args:
 ## Forbidden during invocation
 
 - Do NOT auto-file ROADMAP rows without user consent (plan 19 § C.3 — surface-then-ask).
-- Do NOT bypass `scripts/gh-project.sh` for Project mirror. Breaks persistent issue-map cache.
+- Do NOT bypass `.claude/naavik_ops/gh.py` for Project mirror. Breaks persistent issue-map cache.
 - Do NOT skip "Skip" option in AskUserQuestion — operator must dismiss noise without ceremony.
 - Do NOT cap below 5 without recording truncation. Future `/learn` needs full denominator.
 - Do NOT surface ROADMAP_EDIT events as "new" candidates — already filed by definition. Surface for accuracy verification only.

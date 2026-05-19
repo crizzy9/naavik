@@ -1,5 +1,5 @@
 ---
-description: Read-only inspection of `.claude/memory/` stores. List or query JSONL stores; read a knowledge entry by topic slug. Writes go through `.claude/naavik-ops memory` (single writer rule; subprocess-wraps `scripts/agent-memory.sh` during A.29).
+description: Read-only inspection of `.claude/memory/` stores. List or query JSONL stores; read a knowledge entry by topic slug. Writes go through `.claude/naavik-ops memory` (single writer rule; subprocess-wraps `.claude/naavik_ops/memory.py` during A.29).
 argument-hint: <list|query|knowledge> [args]
 ---
 

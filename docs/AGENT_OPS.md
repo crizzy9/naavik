@@ -1,8 +1,8 @@
 # Naavik Agent System — Operations Guide
 
-> **Last updated:** 2026-05-18 (A.29 Waves 1-4 — phase numbering system + `.claude/naavik-ops` Python dispatcher. New § 2.7a documents the dispatcher entry point + subcommand groups + 4-level semver task ID schema. `gh` + `memory` subcommand groups subprocess-wrap the legacy `scripts/gh-project.sh` + `scripts/agent-memory.sh` during A.29 transition; A.30 (0.1.1) inlines natively. Caller references throughout migrated from `scripts/gh-project.sh` → `.claude/naavik-ops gh`. § 2.8 commit-msg hook unchanged scope; Conventional Commits enforcement added per D.18.)
-> Earlier line: 2026-05-17 (A.28 — board restructure. § 6.3 extended to 4-row status table + asymmetric Backlog convention; § 2.2 fields list adds Backlog + Phase 2.5 milestone. New shared skill `manager-backlog-promote` for auto-promote workflow when Todo empties. `scripts/gh-project.sh` gains `add-status` / `create-milestone` / `item-id` / `backlog-by-epic` subcommands; `set-status` accepts `Backlog`; `cmd_sync` preserves Backlog. PLAYBOOK gains "Board status convention (post-A.28)" section.)
-> Earlier line: 2026-05-17 (A.15 SHIPPED — § 14 added: agent memory + learning system. `.claude/memory/` + `scripts/agent-memory.sh` + `naavik-memory-lookup` + `naavik-discussion-capture` + `naavik-learn` + `manager-promote-lesson` skills + `/memory` + `/learn` commands. Manager § PR review gate + § Milestone boundary gate updated to invoke `Skill: naavik-discussion-capture`. Plan: `docs/plans/19-agent-memory-and-learning.md`; design doc: `docs/design/AGENT_MEMORY.md`.)
+> **Last updated:** 2026-05-18 (A.29 Waves 1-4 — phase numbering system + `.claude/naavik-ops` Python dispatcher. New § 2.7a documents the dispatcher entry point + subcommand groups + 4-level semver task ID schema. `gh` + `memory` subcommand groups subprocess-wrap the legacy `.claude/naavik_ops/gh.py` + `.claude/naavik_ops/memory.py` during A.29 transition; A.30 (0.1.1) inlines natively. Caller references throughout migrated from `.claude/naavik_ops/gh.py` → `.claude/naavik-ops gh`. § 2.8 commit-msg hook unchanged scope; Conventional Commits enforcement added per D.18.)
+> Earlier line: 2026-05-17 (A.28 — board restructure. § 6.3 extended to 4-row status table + asymmetric Backlog convention; § 2.2 fields list adds Backlog + Phase 2.5 milestone. New shared skill `manager-backlog-promote` for auto-promote workflow when Todo empties. `.claude/naavik_ops/gh.py` gains `add-status` / `create-milestone` / `item-id` / `backlog-by-epic` subcommands; `set-status` accepts `Backlog`; `cmd_sync` preserves Backlog. PLAYBOOK gains "Board status convention (post-A.28)" section.)
+> Earlier line: 2026-05-17 (A.15 SHIPPED — § 14 added: agent memory + learning system. `.claude/memory/` + `.claude/naavik_ops/memory.py` + `naavik-memory-lookup` + `naavik-discussion-capture` + `naavik-learn` + `manager-promote-lesson` skills + `/memory` + `/learn` commands. Manager § PR review gate + § Milestone boundary gate updated to invoke `Skill: naavik-discussion-capture`. Plan: `docs/plans/19-agent-memory-and-learning.md`; design doc: `docs/design/AGENT_MEMORY.md`.)
 > Earlier line: 2026-05-16 (plan 16 Phase 1 EXECUTED — § 2.7 + § 2.8 added: GitHub Projects v2 workflow rules + git commit-message hook install)
 > **Status:** Active. This is THE single doc for using the agent-driven delivery system. Read it once; reference as needed.
 > **Companion docs:** `AGENTS.md` (workflow + conventions), `ROADMAP.md` § Agent System (task ledger), `.claude/agents/` (full agent prompts), `.claude/commands/` (slash commands).
@@ -41,7 +41,7 @@ Run these ONCE per fork. After bootstrap, you `/build`, `/plan`, `/standup` from
 2. Click **New project** → **Board** layout.
 3. Name it `naavik` (or whatever you prefer; you'll feed the number to `init`).
 4. **Add three single-select custom fields** (Project settings → Fields → "+ New field"):
-   - **Status** (already exists by default) — options: `Todo`, `In Progress`, `Done`, **`Backlog`** (added 2026-05-17 per A.28; deferred-from-current-cycle state — see § 6.3). If your project came with only the first 3, run `scripts/gh-project.sh add-status Backlog --color GRAY` after `init` to add the fourth.
+   - **Status** (already exists by default) — options: `Todo`, `In Progress`, `Done`, **`Backlog`** (added 2026-05-17 per A.28; deferred-from-current-cycle state — see § 6.3). If your project came with only the first 3, run `.claude/naavik-ops gh add-status Backlog --color GRAY` after `init` to add the fourth.
    - **Priority** — options: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`.
    - **Milestone** — options created as you bootstrap (`Phase 0`, `Phase 1`, …, `Phase A`, `Pre-Phase-2 paper cuts`, `Phase 2.5`). You can pre-create or let `bootstrap` add them.
 5. Note the project number from the URL (`.../projects/<N>`).
@@ -49,7 +49,7 @@ Run these ONCE per fork. After bootstrap, you `/build`, `/plan`, `/standup` from
 ### 2.3 Cache the Project IDs
 
 ```bash
-scripts/gh-project.sh init
+.claude/naavik-ops gh init
 ```
 
 You'll be prompted for owner / repo / project number. The script queries GitHub via GraphQL, resolves the Project ID + field IDs + status option IDs, and caches them to `.claude/github-project.json`. This file is gitignored — every fork runs `init` once.
@@ -59,8 +59,8 @@ Re-run `init` any time you rename a field option or add a Project; it's idempote
 ### 2.4 Bootstrap Milestones + Issues from ROADMAP
 
 ```bash
-scripts/gh-project.sh bootstrap                # dry-run — prints what it would create
-scripts/gh-project.sh bootstrap --apply        # actually creates milestones + issues
+.claude/naavik-ops gh bootstrap                # dry-run — prints what it would create
+.claude/naavik-ops gh bootstrap --apply        # actually creates milestones + issues
 ```
 
 What it does:
@@ -73,8 +73,8 @@ What it does:
 After bootstrap:
 
 ```bash
-scripts/gh-project.sh milestone-status         # JSON of items grouped by Status
-scripts/gh-project.sh next-unblocked           # next Todo item, highest priority
+.claude/naavik-ops gh milestone-status         # JSON of items grouped by Status
+.claude/naavik-ops gh next-unblocked           # next Todo item, highest priority
 ```
 
 ### 2.5 Confirm the system is live
@@ -116,7 +116,7 @@ After this is set, the per-task delivery flow collapses to:
 - PR merge → GitHub auto-closes issue #7 → Project Status moves to `Done`.
 - Manager only needs to flip the ROADMAP row to `[x]` + archive the plan.
 
-If you change Project ID later, re-run `scripts/gh-project.sh init` so the
+If you change Project ID later, re-run `.claude/naavik-ops gh init` so the
 field option IDs cache stays current. Workflow rules survive this; they live
 on the Project itself.
 
@@ -136,14 +136,14 @@ atomically), `deps` (cross-task dependency graph), `gh` (GitHub Project + Issue 
 .claude/naavik-ops task bump patch                         # preview release bump
 .claude/naavik-ops release dry-run 0.1.0                   # preview release ceremony
 .claude/naavik-ops deps add 0.2.0.06 0.2.0.05              # record cross-task dep edge
-.claude/naavik-ops gh next-unblocked                       # legacy: scripts/gh-project.sh next-unblocked
-.claude/naavik-ops memory list discussions                 # legacy: scripts/agent-memory.sh list discussions
+.claude/naavik-ops gh next-unblocked                       # legacy: .claude/naavik-ops gh next-unblocked
+.claude/naavik-ops memory list discussions                 # legacy: .claude/naavik-ops memory list discussions
 ```
 
 **Single-writer rule** (extends `AGENTS.md § GitHub state — single writer rule`): all
 agent prompts MUST route through `.claude/naavik-ops` for state mutations. During the
 A.29 transition the `gh` and `memory` groups subprocess-wrap the legacy
-`scripts/gh-project.sh` + `scripts/agent-memory.sh` — both paths preserve the
+`.claude/naavik_ops/gh.py` + `.claude/naavik_ops/memory.py` — both paths preserve the
 single-writer invariant. A.30 (0.1.1) inlines native Python + deletes the bash scripts.
 
 **Lock:** `~/.naavik/naavik-ops.lock` (fcntl.flock; serializes concurrent mutations).
@@ -229,7 +229,7 @@ weekly:     /groom           → reconcile board priorities with ROADMAP
 You should never need to manually:
 
 - Mark a ROADMAP row `[~]` / `[x]` — manager does it during `/build`.
-- Update a Project Status column — manager does it via `.claude/naavik-ops gh set-status` (subprocess-wraps `scripts/gh-project.sh` during A.29).
+- Update a Project Status column — manager does it via `.claude/naavik-ops gh set-status` (subprocess-wraps `.claude/naavik_ops/gh.py` during A.29).
 - Open a GitHub Issue for a planned task — architect does it via `/plan` (which calls `.claude/naavik-ops gh create-issue`).
 - Write a `## Deviations from plan` section — engineer + manager assemble it from `traces/<run-id>/engineer-deviations.log`.
 
@@ -325,7 +325,7 @@ Bootstrapped from ROADMAP.md § Phase <N> task <id>.
 <Notes column verbatim>
 
 ---
-Auto-managed by `scripts/gh-project.sh`. ROADMAP.md is authoritative.
+Auto-managed by `.claude/naavik_ops/gh.py`. ROADMAP.md is authoritative.
 ```
 
 **Labels:**
@@ -344,9 +344,9 @@ The board carries **four** Status options (post-A.28, 2026-05-17). Three of them
 | `[x]` | `Done` (Issue also closed) |
 | (no ROADMAP-checkbox equivalent) | `Backlog` — Project-only status for items deferred from current cycle |
 
-**Asymmetric `Backlog` semantics.** ROADMAP rows for Backlog items stay `[ ]` (they're not "in progress" or "done"); the `Backlog` status lives only on the Project. The mapping is asymmetric: `[ ]` can mean Todo OR Backlog, distinguished by the Project Status column. Sync direction stays ROADMAP → Project; `/sync-roadmap --apply` does NOT touch Backlog status (it only flips `[ ]/[~]/[x]` → Todo/In Progress/Done; it never knows what to do with Backlog because Backlog is a board-only decision). To move a Project item from Todo → Backlog, use `scripts/gh-project.sh set-status <item-id> Backlog` directly; the change is board-only and ROADMAP doesn't reflect it. To promote a Backlog item back into the current cycle, run `set-status <item-id> Todo` explicitly (or invoke the `manager-backlog-promote` skill for the consent-gated auto-promote flow).
+**Asymmetric `Backlog` semantics.** ROADMAP rows for Backlog items stay `[ ]` (they're not "in progress" or "done"); the `Backlog` status lives only on the Project. The mapping is asymmetric: `[ ]` can mean Todo OR Backlog, distinguished by the Project Status column. Sync direction stays ROADMAP → Project; `/sync-roadmap --apply` does NOT touch Backlog status (it only flips `[ ]/[~]/[x]` → Todo/In Progress/Done; it never knows what to do with Backlog because Backlog is a board-only decision). To move a Project item from Todo → Backlog, use `.claude/naavik-ops gh set-status <item-id> Backlog` directly; the change is board-only and ROADMAP doesn't reflect it. To promote a Backlog item back into the current cycle, run `set-status <item-id> Todo` explicitly (or invoke the `manager-backlog-promote` skill for the consent-gated auto-promote flow).
 
-Within Backlog, items are unprioritized at the item level — only the **epics** within Backlog carry priority via their own Priority field on the epic Issue. Promotion ordering uses epic priority, not individual item priority. Use `scripts/gh-project.sh backlog-by-epic --top N` to surface deferred work grouped by parent epic, ordered by epic priority.
+Within Backlog, items are unprioritized at the item level — only the **epics** within Backlog carry priority via their own Priority field on the epic Issue. Promotion ordering uses epic priority, not individual item priority. Use `.claude/naavik-ops gh backlog-by-epic --top N` to surface deferred work grouped by parent epic, ordered by epic priority.
 
 **`next-unblocked` skips Backlog.** Operating-loop step 2 ignores Backlog items. When Todo is empty mid-loop, manager invokes `Skill: manager-backlog-promote` for the user-consent gate (per A.28 PLAN_GATE Q3 lock).
 
@@ -358,7 +358,7 @@ The Priority column in ROADMAP tables (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) maps
 
 ### 6.5 Sync direction
 
-Always: **ROADMAP → Project.** Manager edits ROADMAP first (mark `[~]` on start, `[x]` on done), then runs `scripts/gh-project.sh set-status` to push to Project. `/sync-roadmap` is the bulk-reconcile.
+Always: **ROADMAP → Project.** Manager edits ROADMAP first (mark `[~]` on start, `[x]` on done), then runs `.claude/naavik-ops gh set-status` to push to Project. `/sync-roadmap` is the bulk-reconcile.
 
 If the Project drifts from ROADMAP (e.g., someone manually moved an Issue), `/sync-roadmap --apply` overwrites the Project to match ROADMAP. Never the reverse — the Markdown ledger wins.
 
@@ -377,16 +377,16 @@ If the Project drifts from ROADMAP (e.g., someone manually moved an Issue), `/sy
 
 **Why.** The GitHub `search/issues` API is eventually consistent (~30s–2min indexing lag). Pre-cache, bootstrap's `find_issue_by_prefix` queried that API and treated indexing lag as "issue doesn't exist," creating duplicates (`#46` dup `#6`, `#47` dup `#7`). The map gives bootstrap + plan-driven creates instant, deterministic idempotency: every create writes the new number to the map, every existence check reads the map first.
 
-**Sole writer:** `scripts/gh-project.sh`. Subcommands `create-issue`, `create-epic`, and `bootstrap` write to the map on success; `find_issue_by_prefix` and `ensure_milestone` consult the map before falling back to the API.
+**Sole writer:** `.claude/naavik_ops/gh.py`. Subcommands `create-issue`, `create-epic`, and `bootstrap` write to the map on success; `find_issue_by_prefix` and `ensure_milestone` consult the map before falling back to the API.
 
-**Reconciler:** `scripts/gh-project.sh refresh-map` rebuilds the map from authoritative GitHub state. Collisions on title prefix (e.g. two open issues both titled `[PC.5] …`) resolve to (open, lowest-issue-number). Run after any manual UI edit (rename/close/delete an issue, rename a milestone) or whenever you suspect drift.
+**Reconciler:** `.claude/naavik-ops gh refresh-map` rebuilds the map from authoritative GitHub state. Collisions on title prefix (e.g. two open issues both titled `[PC.5] …`) resolve to (open, lowest-issue-number). Run after any manual UI edit (rename/close/delete an issue, rename a milestone) or whenever you suspect drift.
 
 **Operational rules:**
 
-- All `gh issue create` / `gh issue close` / Project field writes go through `scripts/gh-project.sh` subcommands. Don't call `gh` or `gh api graphql` for those from agent prompts or one-off scripts.
+- All `gh issue create` / `gh issue close` / Project field writes go through `.claude/naavik_ops/gh.py` subcommands. Don't call `gh` or `gh api graphql` for those from agent prompts or one-off scripts.
 - Don't hand-edit the map; it's machine-managed. If you must inspect, `jq '.epics' .claude/github-issue-map.json` is read-safe.
-- The dry-run (`scripts/gh-project.sh bootstrap` without `--apply`) reads the map and reports `exists` vs `PLAN` for milestones, epics, AND child issues. If a dry-run shows `PLAN` for something you suspect exists, run `refresh-map` and re-dry-run before applying — the map may be stale.
-- The `manager` agent is the sole entry point for delivery-loop state mutations (status moves during step 9/12 of the operating loop). Other agents may invoke `scripts/gh-project.sh create-issue` for plan-driven issue creation, but must never call raw `gh` for Issue/Project state.
+- The dry-run (`.claude/naavik-ops gh bootstrap` without `--apply`) reads the map and reports `exists` vs `PLAN` for milestones, epics, AND child issues. If a dry-run shows `PLAN` for something you suspect exists, run `refresh-map` and re-dry-run before applying — the map may be stale.
+- The `manager` agent is the sole entry point for delivery-loop state mutations (status moves during step 9/12 of the operating loop). Other agents may invoke `.claude/naavik-ops gh create-issue` for plan-driven issue creation, but must never call raw `gh` for Issue/Project state.
 
 ---
 
@@ -420,7 +420,7 @@ Each agent writes one file in the run dir, format frozen per agent's prompt. Thr
   - `[ts] ERROR step=gh-pr-create kind=halt reason='sandbox denied gh subcommand after direct-push' attempt=1/1`
   - `[ts] ERROR step=find-replace kind=pivot reason='plan § C.8 said 25 sites; grep returned 5; pivoting to file PC.6a follow-up' attempt=1/1`
   - `[ts] ERROR step=live-orchestrator-boot kind=pivot reason='auto-mode destructive-rm guard blocked .naavik/db wipe; pivoting to TestClient surrogate' attempt=1/1`
-- **`BUILT` / `REVIEWED`** — one summary line at the end of every dispatch (last line in the agent's log). `BUILT` for agents that produce artifacts (architect, engineer, designer, manager); `REVIEWED` for agents that gate (hacker, devops). One sentence in `summary='...'`. Format frozen across all agents:
+- **`BUILT` / `REVIEWED`** — one summary line at the end of every dispatch (last line in the agent's log). `BUILT` for agents that produce artifacts (architect, engineer, designer, manager) when authoring artifacts; `REVIEWED` for agents that gate (hacker, architect when reviewing, devops when invoked for build-gate verification). Architect emits `BUILT` when authoring a plan/design doc, `REVIEWED` when on PR_REVIEW_GATE duty. One sentence in `summary='...'`. Format frozen across all agents:
   ```
   [ts] BUILT files_added=<n> files_modified=<n> files_deleted=<n> summary='<one-sentence>'
   [ts] BUILT plans=<n> design_docs=<n> research_docs=<n> summary='<one-sentence>'   # architect variant
@@ -565,14 +565,14 @@ claude /budget                     # today's spend, % of cap per agent
 
 ### 9.1 "Project not cached" / "github-project.json missing"
 
-Run `scripts/gh-project.sh init`. The file is gitignored — every fork bootstraps once.
+Run `.claude/naavik-ops gh init`. The file is gitignored — every fork bootstraps once.
 
 ### 9.2 "Status field not found" / "option id is null"
 
 Your Project's Status field uses non-standard names (e.g., `Backlog`/`Ready`/`Done` instead of `Todo`/`In Progress`/`Done`). Either:
 
 - Rename the options in the Project's web UI to `Todo` / `In Progress` / `Done`, or
-- Edit `scripts/gh-project.sh` § `cmd_init` to match your names (search for `Todo` / `In Progress` / `Done`).
+- Edit `.claude/naavik_ops/gh.py` § `cmd_init` to match your names (search for `Todo` / `In Progress` / `Done`).
 
 Re-run `init` after fixing.
 
@@ -582,13 +582,13 @@ Re-run `init` after fixing.
 
 ### 9.4 ROADMAP drift / "Issue says Todo but ROADMAP says `[~]`"
 
-Run `scripts/gh-project.sh sync` (dry-run), confirm the diff, then `--apply`. ROADMAP wins. If you want the Project state to win for a particular row, edit ROADMAP first, then sync — never the reverse, or you'll keep re-introducing drift.
+Run `.claude/naavik-ops gh sync` (dry-run), confirm the diff, then `--apply`. ROADMAP wins. If you want the Project state to win for a particular row, edit ROADMAP first, then sync — never the reverse, or you'll keep re-introducing drift.
 
 ### 9.5 Bootstrap created duplicate issues
 
 Most common cause (before 2026-05-16): `find_issue_by_prefix` queried the GitHub search API, which is eventually consistent (~30s–2min indexing lag). A re-run of bootstrap shortly after the first apply caused the search API to miss freshly-created issues, so bootstrap created them again. **Symptom:** two open issues with identical `[<task-id>]` or `[Epic] <phase>` titles (e.g. `#46` dup of `#6` for `[Epic] Pre-Phase-2 paper cuts`; `#47` dup of `#7` for `[PC.5]`).
 
-**Fix shipped 2026-05-16:** `.claude/github-issue-map.json` persistent association cache + `scripts/gh-project.sh refresh-map` reconciler. Bootstrap now consults the map first and only falls through to the search API on a cache miss. See § 6.6 for the full single-writer rule.
+**Fix shipped 2026-05-16:** `.claude/github-issue-map.json` persistent association cache + `.claude/naavik-ops gh refresh-map` reconciler. Bootstrap now consults the map first and only falls through to the search API on a cache miss. See § 6.6 for the full single-writer rule.
 
 **Cleanup when you find a duplicate:**
 
@@ -603,7 +603,7 @@ gh issue comment <DUP_NUM> --body "Duplicate of #<ORIG>. Closing per CLAUDE.md �
 gh issue close <DUP_NUM> --reason "not planned"
 
 # Reconcile the map so it points to the surviving canonical issue.
-scripts/gh-project.sh refresh-map
+.claude/naavik-ops gh refresh-map
 ```
 
 Other (less common) cause: you renamed a task ID in ROADMAP (e.g. `2.11` → `2.11a`); bootstrap creates a new Issue for the new ID without closing the old. Either close the old Issue manually + `refresh-map`, or revert the rename and add a sub-task instead.
@@ -676,8 +676,8 @@ Append to the agent's tracing-format spec in their `.claude/agents/<name>.md` pr
 ### 10.4 Add a new GitHub Project field
 
 1. Add the field in the Project web UI.
-2. Re-run `scripts/gh-project.sh init` so the cache picks up the new field ID.
-3. Update `scripts/gh-project.sh` GraphQL queries + helper functions to read/write the new field.
+2. Re-run `.claude/naavik-ops gh init` so the cache picks up the new field ID.
+3. Update `.claude/naavik_ops/gh.py` GraphQL queries + helper functions to read/write the new field.
 4. Document the field in AGENT_OPS.md § 6 (GitHub Mirror conventions).
 
 ### 10.5 Adjust the workflow
@@ -723,8 +723,8 @@ The agent system relies on a small set of canonical guides. Each is the single s
 ```
 # First-time setup (once per fork)
 gh auth login
-scripts/gh-project.sh init                     # cache project IDs
-scripts/gh-project.sh bootstrap --apply        # create milestones + open issues
+.claude/naavik-ops gh init                     # cache project IDs
+.claude/naavik-ops gh bootstrap --apply        # create milestones + open issues
 claude /standup                                 # confirm live
 
 # Daily
@@ -765,7 +765,7 @@ Phase A row A.15 (shipped 2026-05-17 via `feat/A.15-agent-memory`) added the age
 ├── knowledge/<topic>.md                       ← long-form markdown corpus (5 seeded; committed)
 └── runs-analysis/<run-id>.md                  ← per-run summary written by /learn
 
-scripts/agent-memory.sh                        ← single writer (subcommands: init, record-*, list, query, analyze-run, mine-patterns, promote-lesson)
+.claude/naavik-ops memory                        ← single writer (subcommands: init, record-*, list, query, analyze-run, mine-patterns, promote-lesson)
 
 .claude/skills/                                ← 4 memory-aware skills
 ├── naavik-memory-lookup/SKILL.md              ← "have we hit this before?" → check knowledge/<topic>.md
@@ -780,7 +780,7 @@ scripts/agent-memory.sh                        ← single writer (subcommands: i
 
 ### 14.2 Invariants
 
-- **Single writer.** `scripts/agent-memory.sh` is the sole writer to `.claude/memory/`. Mirror of `scripts/gh-project.sh` for GitHub state. No `Edit` / `Write` against memory store paths — `hacker-secrets-audit` enforces.
+- **Single writer.** `.claude/naavik_ops/memory.py` is the sole writer to `.claude/memory/`. Mirror of `.claude/naavik_ops/gh.py` for GitHub state. No `Edit` / `Write` against memory store paths — `hacker-secrets-audit` enforces.
 - **Append-only JSONL.** Duplicate ids rejected. `--supersedes <old-id>` is the upgrade path; deletion forbidden.
 - **Atomic writes.** Every write uses `mktemp` + `mv`. Partial files never visible to readers.
 - **Markdown knowledge entries** carry machine-parseable front-matter (`Topic`, `Aliases`, `First captured`, `Last referenced`, `Supersedes`, `Confidence`). Body is free-form prose.
@@ -811,8 +811,8 @@ ad-hoc:
 | `~/.claude/projects/<...>/memory/MEMORY.md` | Claude Code, auto-managed | per-user personal preferences | read-only; never writes (locked Q6 per plan 19) |
 | `.claude/skills/<name>/SKILL.md` | repo, hand-edit | procedural memory (auto-trigger on phrase) | extends — adds memory-aware skills for situational memory |
 | `.claude/budget-ledger.json` | manager, auto-managed | daily token spend | unaffected |
-| `.claude/github-issue-map.json` | `scripts/gh-project.sh`, auto-managed | persistent `{task → issue#}` cache | unaffected |
-| `.claude/memory/**` | `scripts/agent-memory.sh`, auto-managed | decisions / discussions / lessons / knowledge / patterns / runs-analysis | **the new layer** |
+| `.claude/github-issue-map.json` | `.claude/naavik_ops/gh.py`, auto-managed | persistent `{task → issue#}` cache | unaffected |
+| `.claude/memory/**` | `.claude/naavik_ops/memory.py`, auto-managed | decisions / discussions / lessons / knowledge / patterns / runs-analysis | **the new layer** |
 
 ### 14.5 Wave 2 analytics surfaces
 
@@ -825,11 +825,11 @@ ad-hoc:
 - **Knowledge promotion candidates** — patterns with `occurrence_count >= 5` and no `knowledge/` entry yet.
 - **ROADMAP candidates** — discussions in `discussions.jsonl` without `filed_as: #N`.
 
-Each section ends with an AskUserQuestion (promote pattern / file discussion / accept / skip). Backed by `scripts/agent-memory.sh analyze-run <run-id>` + `scripts/agent-memory.sh mine-patterns --lookback N`.
+Each section ends with an AskUserQuestion (promote pattern / file discussion / accept / skip). Backed by `.claude/naavik-ops memory analyze-run <run-id>` + `.claude/naavik-ops memory mine-patterns --lookback N`.
 
 ### 14.6 Wave 3 promotion + alias mining
 
-- **Lesson promotion.** Patterns with `occurrence_count >= 5` are promotable via `scripts/agent-memory.sh promote-lesson <pattern_id>`. Creates a `lessons.jsonl` row + a `knowledge/<auto-slug>.md` stub from the pattern's `proposed_action`. Manager surfaces consent via `Skill: manager-promote-lesson` before invoking.
-- **Alias mining.** `scripts/agent-memory.sh mine-patterns --aliases` scans `manager.log` for `MEMORY_MISS topic=<X> phrase=<Y>` events. Surfaces alias proposals via AskUserQuestion before mutating front-matter on `knowledge/<X>.md`.
-- **Decision supersession.** `scripts/agent-memory.sh record-decision <new-id> ... --supersedes <old-id>` marks the old row as `state: "superseded"` + `superseded_by: <new-id>`. `/memory query decisions` defaults to `state == "active"` filter.
+- **Lesson promotion.** Patterns with `occurrence_count >= 5` are promotable via `.claude/naavik-ops memory promote-lesson <pattern_id>`. Creates a `lessons.jsonl` row + a `knowledge/<auto-slug>.md` stub from the pattern's `proposed_action`. Manager surfaces consent via `Skill: manager-promote-lesson` before invoking.
+- **Alias mining.** `.claude/naavik-ops memory mine-patterns --aliases` scans `manager.log` for `MEMORY_MISS topic=<X> phrase=<Y>` events. Surfaces alias proposals via AskUserQuestion before mutating front-matter on `knowledge/<X>.md`.
+- **Decision supersession.** `.claude/naavik-ops memory record-decision <new-id> ... --supersedes <old-id>` marks the old row as `state: "superseded"` + `superseded_by: <new-id>`. `/memory query decisions` defaults to `state == "active"` filter.
 

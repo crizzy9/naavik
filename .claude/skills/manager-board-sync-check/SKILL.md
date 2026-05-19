@@ -1,6 +1,6 @@
 ---
 description: Diff the persistent issue-map cache (`.claude/github-issue-map.json`) against live GitHub state to detect drift — orphaned map entries, renamed/closed issues not yet reflected, duplicate prefixes, deleted milestones. Use before any `bootstrap` re-run, after any manual GitHub UI edit, or whenever you suspect the map is stale. Triggers on phrases like "board sync", "is the map stale", "issue map drift", "refresh map", "did someone touch GitHub", "before I bootstrap", "verify issue map".
-allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), Bash(jq:*), mcp__plugin_claude-code-home-manager_github__list_issues
+allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(jq:*), mcp__plugin_claude-code-home-manager_github__list_issues
 ---
 
 # manager-board-sync-check
@@ -73,7 +73,7 @@ allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), 
 
 ## Canonical references
 
-- `scripts/gh-project.sh` § `cmd_refresh_map` (lines 1040–1127).
+- `.claude/naavik_ops/gh.py` § `cmd_refresh_map` (lines 1040–1127).
 - `AGENTS.md` § GitHub state — single writer rule (codified 2026-05-16).
 - `CLAUDE.md` § GitHub state — single writer rule.
 - `docs/AGENT_OPS.md` § 6.6 + § 9.5 (duplicate-issue cleanup recipe).
@@ -87,5 +87,5 @@ allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), 
 ## Forbidden during invocation
 
 - Do NOT hand-edit `.claude/github-issue-map.json`. Read-only.
-- Do NOT use `gh issue create` / `gh issue close` to "fix" drift — go through `scripts/gh-project.sh`. Closing a duplicate via raw `gh issue close` is acceptable cleanup, but MUST run `refresh-map` after.
+- Do NOT use `gh issue create` / `gh issue close` to "fix" drift — go through `.claude/naavik_ops/gh.py`. Closing a duplicate via raw `gh issue close` is acceptable cleanup, but MUST run `refresh-map` after.
 - Do NOT run `bootstrap --apply` before drift clears. Stale map → duplicate issues recreated.

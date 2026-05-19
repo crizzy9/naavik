@@ -5,7 +5,7 @@
 > **Last updated:** 2026-05-18 (Wave 4 graduation — skeleton expanded to full prose).
 > **Implements:** A.29 (post-migration ID: `0.1.0.<NN>` per REV-3 single-fold). ROADMAP.md:468. Issue #71.
 > **Canonical plan:** `docs/plans/archive/24-A.29-phase-numbering-system.md` (post-archive).
-> **Sole writer entry:** `.claude/naavik-ops` (Python dispatcher routing task-ID + release-version + Issue/Project/Milestone + memory mutations). During A.29 the `gh` + `memory` groups subprocess-wrap `scripts/gh-project.sh` + `scripts/agent-memory.sh`; A.30 (0.1.1) inlines natively in Python.
+> **Sole writer entry:** `.claude/naavik-ops` (Python dispatcher routing task-ID + release-version + Issue/Project/Milestone + memory mutations). During A.29 the `gh` + `memory` groups subprocess-wrap `.claude/naavik_ops/gh.py` + `.claude/naavik_ops/memory.py`; A.30 (0.1.1) inlines natively in Python.
 
 This doc is the permanent contract for how Naavik tracks tasks, releases, and dependencies. The 4-level semver task-ID schema replaced the legacy two-level scheme (`A.29`, `PC.6a`, `2.12`, `DEF-05`) on 2026-05-18 via the A.29 migration runbook (`.claude/migrations/A.29-phase-renumber.py`). The original plan that produced this contract is archived; this doc supersedes for forward-looking changes.
 
@@ -97,7 +97,7 @@ Archived plans at `docs/plans/archive/NN-*.md` carry the new ID in their `Implem
 7. **`git tag <version>`** — annotated tag with the same body as the release commit.
 8. **Push tag to origin** (`git push origin <version>`).
 9. **`gh release create <version> --notes-from-tag --generate-notes`** — creates GitHub Release; auto-generates additional notes from the PR list.
-10. **Close the version's epic Issue** via composed `naavik-ops gh set-status` (subprocess wrapper → `scripts/gh-project.sh` during A.29; native Python in A.30).
+10. **Close the version's epic Issue** via composed `naavik-ops gh set-status` (subprocess wrapper → `.claude/naavik_ops/gh.py` during A.29; native Python in A.30).
 
 ### Invariants
 
@@ -259,15 +259,15 @@ A.29 Wave 1 ships read-only paths (`list`, `next-unblocked`, `check`, `bump`) + 
 Callers that read the schema (must be updated when § 1 changes):
 
 - **`.claude/naavik-ops`** entry point — Python dispatcher (executable). Routes `<group> <command>` per § 10.
-- **`.claude/naavik_ops/gh.py`** — A.29: subprocess wrappers around `scripts/gh-project.sh`. A.30: native Python rewrite. Sort by 4-level task-ID + priority DESC; drift detection compares title + priority against ROADMAP; gate next-unblocked on deps.
-- **`.claude/naavik_ops/memory.py`** — A.29: subprocess wrappers around `scripts/agent-memory.sh`. A.30: native Python rewrite. Knowledge entries reference task IDs in body; redirects map preserves legacy lookups.
+- **`.claude/naavik_ops/gh.py`** — A.29: subprocess wrappers around `.claude/naavik_ops/gh.py`. A.30: native Python rewrite. Sort by 4-level task-ID + priority DESC; drift detection compares title + priority against ROADMAP; gate next-unblocked on deps.
+- **`.claude/naavik_ops/memory.py`** — A.29: subprocess wrappers around `.claude/naavik_ops/memory.py`. A.30: native Python rewrite. Knowledge entries reference task IDs in body; redirects map preserves legacy lookups.
 - **`.claude/naavik_ops/task.py`** — release-version task ops. Reads `.claude/github-issue-map.json:issues` + `priorities` + `deps`; emits sorted list / next-unblocked / check report.
 - **`.claude/naavik_ops/release.py`** — 10-step ceremony driver (cut / dry-run / changelog).
 - **`.claude/naavik_ops/deps.py`** — cross-task DAG with cycle rejection + flock serialization.
 - **`.claude/naavik_ops/lib/semver.py`** — parse / compare / bump / regex.
 - **`.claude/naavik_ops/lib/changelog.py`** — keepachangelog v1.1.0 reader/writer + Conventional Commits classification.
-- **`.claude/naavik_ops/lib/github_api.py`** — GraphQL helper with **full `hasNextPage` pagination** (fixes the 200-item cap in `scripts/gh-project.sh sync`).
-- **`scripts/gh-project.sh`** (legacy, during A.29 transition) — `cmd_create_issue`, `cmd_next_unblocked`, `cmd_sync`, `cmd_backlog_by_epic` narrowed: `--priority` accepted on 4-level IDs only (warn-skip on 3-level); sort gains priority DESC primary.
+- **`.claude/naavik_ops/lib/github_api.py`** — GraphQL helper with **full `hasNextPage` pagination** (fixes the 200-item cap in `.claude/naavik-ops gh sync`).
+- **`.claude/naavik_ops/gh.py`** (legacy, during A.29 transition) — `cmd_create_issue`, `cmd_next_unblocked`, `cmd_sync`, `cmd_backlog_by_epic` narrowed: `--priority` accepted on 4-level IDs only (warn-skip on 3-level); sort gains priority DESC primary.
 - **`.claude/hooks/git/prepare-commit-msg`** — extended for Conventional Commits regex validation + auto-`Closes #N` from branch name. Branch regex accepts both 2-level (legacy) and 4-level (post-A.29) task IDs.
 - **`pyproject.toml`** `[project] version` — written atomically by `naavik-ops release cut`. `naavik-ops task check` detects manual drift.
 - **`nix/package.nix`** `version` attribute — same atomicity contract.
@@ -358,10 +358,10 @@ Scripts folder convention:
 
 ### Transition state during A.29 (locked per plan D.21)
 
-- `scripts/gh-project.sh` (1469 LOC bash) — STAYS at current path. Subprocess-wrapped by `.claude/naavik_ops/gh.py`.
-- `scripts/agent-memory.sh` (843 LOC bash) — STAYS at current path. Subprocess-wrapped by `.claude/naavik_ops/memory.py`.
+- `.claude/naavik_ops/gh.py` (1469 LOC bash) — STAYS at current path. Subprocess-wrapped by `.claude/naavik_ops/gh.py`.
+- `.claude/naavik_ops/memory.py` (843 LOC bash) — STAYS at current path. Subprocess-wrapped by `.claude/naavik_ops/memory.py`.
 - `scripts/A.28-board-restructure.sh` — MOVED to `.claude/migrations/A.28-board-restructure.sh` in Wave 2 of A.29 (one-shot historic).
-- `scripts/roadmap_parser.py` (304 LOC Python) — STAYS at current path during A.29; A.30 rolls into `.claude/naavik_ops/lib/roadmap.py`.
+- `.claude/naavik_ops/lib/roadmap.py` (304 LOC Python) — STAYS at current path during A.29; A.30 rolls into `.claude/naavik_ops/lib/roadmap.py`.
 
 ### End-state after A.30 ships (0.1.1)
 
@@ -385,10 +385,10 @@ scripts/
 # .claude/naavik_ops/gh.py (A.29 version)
 """GitHub state subcommand group.
 
-During A.29 transition: subprocess wrappers around scripts/gh-project.sh.
+During A.29 transition: subprocess wrappers around .claude/naavik-ops gh.
 A.30 (0.1.1): native Python rewrite — drop these wrappers.
 
-Bash error semantics: scripts/gh-project.sh uses `set -euo pipefail` so any
+Bash error semantics: .claude/naavik-ops gh uses `set -euo pipefail` so any
 non-zero exit propagates via subprocess.run(check=True) → CalledProcessError.
 We re-raise as a Python-native NaavikOpsError with the bash stderr captured.
 """
@@ -403,7 +403,7 @@ class NaavikOpsError(RuntimeError):
 
 
 def _shim_capture(*args: str) -> str:
-    """Invoke scripts/gh-project.sh with args; return stdout."""
+    """Invoke .claude/naavik-ops gh with args; return stdout."""
     try:
         result = subprocess.run(
             ["bash", str(SCRIPT_PATH), *args],
@@ -510,11 +510,11 @@ def main(argv: Sequence[str]) -> int:
 
 ### Single-writer rule extension
 
-`.claude/naavik-ops` is the new single-writer entry point per AGENTS.md § GitHub state — single writer rule. Documented in D.13 caller rewrite for `AGENTS.md`. During A.29, the actual writes still go through `scripts/gh-project.sh` + `scripts/agent-memory.sh` via subprocess; A.30 inlines.
+`.claude/naavik-ops` is the new single-writer entry point per AGENTS.md § GitHub state — single writer rule. Documented in D.13 caller rewrite for `AGENTS.md`. During A.29, the actual writes still go through `.claude/naavik_ops/gh.py` + `.claude/naavik_ops/memory.py` via subprocess; A.30 inlines.
 
 ### Lock file
 
-`~/.naavik/naavik-ops.lock` — `fcntl.flock`-protected pidfile. Mirrors `scripts/agent-memory.sh:.claude/memory/.lock` pattern semantically (single-writer serialization). Different path from agent-memory's lock (no collision). Different path from `~/.naavik/secrets.enc.lock` (vault — Phase 2 task 2.12 sunset).
+`~/.naavik/naavik-ops.lock` — `fcntl.flock`-protected pidfile. Mirrors `.claude/naavik-ops memory:.claude/memory/.lock` pattern semantically (single-writer serialization). Different path from agent-memory's lock (no collision). Different path from `~/.naavik/secrets.enc.lock` (vault — Phase 2 task 2.12 sunset).
 
 Migration lock at `~/.naavik/A.29-migration.lock` is separate from the main `naavik-ops.lock` — one-shot migration apply isolates from day-to-day mutations.
 

@@ -35,13 +35,50 @@ COMMIT_RE = re.compile(
 #: Subjects with these types are dropped from the CHANGELOG (internal noise).
 INTERNAL_TYPES = {"chore", "docs", "refactor", "test", "perf", "build", "ci", "style"}
 
+#: Per A.31 (Issue #74). CommonMark special chars escaped in CHANGELOG entries.
+#: Spec: https://spec.commonmark.org/0.15/ § 2.4 Escape characters.
+_MD_ESCAPABLE = re.compile(r"([\\`*_{}\[\]()#+\-.!|<>])")
+
+
+def _sanitize_changelog_text(text: str) -> str:
+    """Escape CommonMark special chars + collapse whitespace.
+
+    Defends CHANGELOG.md from markdown injection in commit-msg bodies sourced
+    from PR squash titles + auto-classified entries. Newlines (\\n) collapse
+    to a single space; CR (\\r) rejected outright.
+    """
+    if "\r" in text:
+        raise ValueError("CHANGELOG entry contains CR; refuse")
+    collapsed = re.sub(r"\s+", " ", text).strip()
+    return _MD_ESCAPABLE.sub(r"\\\1", collapsed)
+
 
 @dataclass
 class ReleaseEntry:
-    """One entry within a CHANGELOG section."""
+    """One entry within a CHANGELOG section.
+
+    `text` is sanitized at construction (CommonMark escape, whitespace collapse).
+    `parse_changelog` constructs entries from already-rendered (already-sanitized)
+    text — to avoid double-escape, that path goes through `from_rendered`.
+    """
 
     text: str
     commit_sha: str | None = None
+
+    def __post_init__(self) -> None:
+        if not getattr(self, "_skip_sanitize", False):
+            self.text = _sanitize_changelog_text(self.text)
+
+    @classmethod
+    def from_rendered(cls, text: str, commit_sha: str | None = None) -> ReleaseEntry:
+        """Build a ReleaseEntry from already-rendered (already-sanitized) text.
+
+        Used by `parse_changelog` to round-trip without double-escaping.
+        """
+        obj = cls.__new__(cls)
+        obj.text = text
+        obj.commit_sha = commit_sha
+        return obj
 
 
 @dataclass
@@ -193,7 +230,10 @@ def parse_changelog(text: str) -> list[Release]:
         if current_section is not None:
             m_bullet = _BULLET_RE.match(line)
             if m_bullet:
-                current.add(current_section, ReleaseEntry(text=m_bullet.group("text")))
+                current.add(
+                    current_section,
+                    ReleaseEntry.from_rendered(m_bullet.group("text")),
+                )
                 continue
 
         if in_summary:

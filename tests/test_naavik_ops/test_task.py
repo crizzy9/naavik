@@ -128,16 +128,10 @@ class TestBump:
         assert "major|minor|patch" in capsys.readouterr().err
 
 
-class TestMutatingStubs:
-    def test_insert_returns_not_implemented(self, sandbox_task, capsys):
-        rc = sandbox_task.cmd_insert(["0.2.0.05", "Title"])
-        assert rc == 2
-        assert "not implemented during A.29" in capsys.readouterr().err
+class TestRenameReleaseStillStubbed:
+    """Per plan 25 Open Q1: cmd_rename_release stays stubbed in 0.1.1."""
 
-    def test_defer_returns_not_implemented(self, sandbox_task, capsys):
-        rc = sandbox_task.cmd_defer(["0.2.0.05", "--by", "2"])
+    def test_rename_release_returns_2(self, sandbox_task, capsys):
+        rc = sandbox_task.cmd_rename_release(["0.2.0", "0.3.0"])
         assert rc == 2
-
-    def test_move_returns_not_implemented(self, sandbox_task, capsys):
-        rc = sandbox_task.cmd_move(["0.2.0.05", "0.3.0.05"])
-        assert rc == 2
+        assert "stays stubbed" in capsys.readouterr().err

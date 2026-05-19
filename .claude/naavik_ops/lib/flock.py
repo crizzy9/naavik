@@ -1,6 +1,6 @@
 """flock — fcntl.flock context manager for single-writer serialization.
 
-Mirrors the semantics of `scripts/agent-memory.sh:with_lock` (flock -x) so that
+Mirrors the semantics of `.claude/naavik-ops memory:with_lock` (flock -x) so that
 `naavik-ops task insert / defer / prioritize / move / renumber / sync` and the
 release ceremony serialize against concurrent invocations.
 

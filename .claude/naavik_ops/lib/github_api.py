@@ -1,7 +1,7 @@
 """github_api — GraphQL helper wrapping `gh api graphql`.
 
 Implements full hasNextPage pagination — fixes the 200-item cap in
-`scripts/gh-project.sh` (Risk (e) in plan § Risk). A.30 (0.1.1) switches to
+`.claude/naavik_ops/gh.py` (Risk (e) in plan § Risk). A.30 (0.1.1) switches to
 direct httpx GraphQL calls; A.29 wraps the `gh` CLI subprocess.
 
 The Project items endpoint caps at first:100 per page; this helper concatenates

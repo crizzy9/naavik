@@ -1,5 +1,5 @@
 ---
-description: Manual retrospective. Analyze last N runs (default 10), mine recurring patterns from per-agent ERROR events, surface promotion + ROADMAP candidates as interactive AskUserQuestion gates. Reads-only the trace logs; writes go through `.claude/naavik-ops memory` (single writer; subprocess-wraps `scripts/agent-memory.sh` during A.29).
+description: Manual retrospective. Analyze last N runs (default 10), mine recurring patterns from per-agent ERROR events, surface promotion + ROADMAP candidates as interactive AskUserQuestion gates. Reads-only the trace logs; writes go through `.claude/naavik-ops memory` (single writer; subprocess-wraps `.claude/naavik_ops/memory.py` during A.29).
 argument-hint: [N]
 ---
 
@@ -101,7 +101,7 @@ Append to `traces/<run-id>/manager.log` (current run, not analyzed runs):
 
 - Do NOT auto-promote patterns. User consent required per pattern (locked Q3 per plan 19).
 - Do NOT modify `~/.claude/projects/<...>/memory/MEMORY.md` from `/learn`. That file is Claude Code's auto-managed memory.
-- Do NOT bypass `.claude/naavik-ops memory`. All writes to `.claude/memory/` go through single writer (subprocess-wraps `scripts/agent-memory.sh` during A.29).
+- Do NOT bypass `.claude/naavik-ops memory`. All writes to `.claude/memory/` go through single writer (subprocess-wraps `.claude/naavik_ops/memory.py` during A.29).
 - Do NOT bypass `.claude/naavik-ops gh` for ROADMAP-mirror Issue creation. Per single-writer rule.
 
 ### Canonical references

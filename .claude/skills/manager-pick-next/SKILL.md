@@ -1,6 +1,6 @@
 ---
 description: Identify the next unblocked GitHub Project task for the current milestone via `.claude/naavik-ops gh next-unblocked` and the persistent issue-map cache. Use when manager runs the operating-loop step 2 (Pick next), when the user asks "what's next" or "pick the next task" or "what should I work on", or whenever a `/build` run needs the next item after closing the previous one. Triggers on phrases like "next task", "pick next", "what's next", "next unblocked", "what should I work on", "operating loop step 2".
-allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(scripts/gh-project.sh:*), Bash(jq:*)
+allowed-tools: Read, Bash(.claude/naavik-ops:*), Bash(jq:*)
 ---
 
 # manager-pick-next
@@ -46,7 +46,7 @@ Operating loop step 2: find highest-priority unblocked **Todo** issue for curren
 
 ## Canonical references
 
-- `scripts/gh-project.sh` § `cmd_next_unblocked` (lines 713–759) — sort key + label filters.
+- `.claude/naavik_ops/gh.py` § `cmd_next_unblocked` (lines 713–759) — sort key + label filters.
 - `.claude/agents/manager.md` § Operating loop step 2.
 - `docs/AGENT_OPS.md` § 6.6 — issue-map cache structure.
 - `AGENTS.md` § GitHub state — single writer rule.

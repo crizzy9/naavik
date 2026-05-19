@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        This template mirrors the structure auto-created by `scripts/gh-project.sh create-issue` (run by the agent system's `/plan` command). Use it manually only if you're filing an Issue for a plan you authored by hand.
+        This template mirrors the structure auto-created by `.claude/naavik-ops gh create-issue` (run by the agent system's `/plan` command). Use it manually only if you're filing an Issue for a plan you authored by hand.
 
         See `AGENTS.md` § Workflow for the canonical lifecycle and `docs/AGENT_OPS.md` § 6 for the GitHub Mirror conventions.
 

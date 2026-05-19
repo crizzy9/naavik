@@ -57,7 +57,7 @@ For live mirror state (Project Status column, assignments):
 .claude/naavik-ops gh milestone-status "<phase-name>"
 ```
 
-Read-only. Mods via `.claude/naavik-ops gh` (subprocess-wraps `scripts/gh-project.sh` during A.29) per single-writer rule (`AGENTS.md § GitHub state — single writer rule`).
+Read-only. Mods via `.claude/naavik-ops gh` (subprocess-wraps `.claude/naavik_ops/gh.py` during A.29) per single-writer rule (`AGENTS.md § GitHub state — single writer rule`).
 
 ### 4 — Read issue-map for Issue numbers
 

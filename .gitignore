@@ -78,6 +78,9 @@ migrations/versions/__pycache__/
 result
 result-*
 
+# Claude Code per-fork worktrees — local-only scratch dirs created by /worktree skill
+.claude/worktrees/
+
 # Visual QA — local capture output (baseline/ is committed; screenshots/ is ad-hoc)
 tests/visual/screenshots/
 
