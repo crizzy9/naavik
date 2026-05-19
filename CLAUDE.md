@@ -2,7 +2,9 @@
 
 > **For Claude Code sessions.**
 > **Canonical guide:** `AGENTS.md` — always read that first.
-> **Last updated:** 2026-05-19 (Plan 25 / `0.1.1` EXECUTED — legacy bash → Python rewrite + 5 mutating `task` subcommands + CHANGELOG markdown-escape hardening. `.claude/naavik-ops gh` no longer subprocess-wraps `scripts/gh-project.sh`; native Python in `.claude/naavik_ops/gh.py` (18 legacy + 3 new helpers: `update-issue-title` / `close-issue` / `get-issue`). `.claude/naavik-ops memory` no longer subprocess-wraps `scripts/agent-memory.sh`; native Python in `.claude/naavik_ops/memory.py` (12 legacy subcommands; A.17 jq sandbox regex ported byte-for-byte). `.claude/naavik_ops/lib/roadmap.py` inlines the 304-line `scripts/roadmap_parser.py` + adds the writer-half. `.claude/naavik_ops/task.py` implements 5 mutating subcommands (`insert` / `defer` / `prioritize` / `move` / `renumber`) via atomic 3-store mutation under `~/.naavik/naavik-ops.lock` w/ rollback (A.29 deviation 1 closed). CHANGELOG `ReleaseEntry` sanitized per CommonMark spec (Issue #74). **Files deleted**: `scripts/gh-project.sh` + `scripts/agent-memory.sh` + `scripts/roadmap_parser.py` + `tests/test_agent_memory.sh`. Single-writer rule preserved by code path; `.claude/naavik-ops gh` / `memory` are still the sole entry points. Tests: 210 passing in `tests/test_naavik_ops/`.)
+> **Last updated:** 2026-05-19 (Plan 26 / `0.2.0.01` EXECUTED — vault deprecation. `src/services/vault.py` (436 LOC AES-256-GCM/PBKDF2/audit-log) DELETED. `src/cli/{vault,init}.py` (258 LOC) DELETED. Alembic 0004 drops 5 vault-derived `Settings` columns. New `src/services/env_secrets.py` exposes presence indicators sourced from `pydantic-settings`. `PUT /api/v1/settings/{llm,notifications}` reject `api_key` / `discord_webhook_url` / `telegram_bot_token` payloads with 422. Settings UI no longer accepts secret input — env-presence indicator cards instead. `.env.example` rewritten w/ 14 slot rows incl. new `TELEGRAM_CHAT_ID`. `naavik init` + `naavik vault <...>` exit 2 w/ migration hints. On-disk artifacts gone: `~/.naavik/secrets.enc{,.lock,.bak.*}`, `~/.naavik/key.bin`, `~/.naavik/logs/vault-audit.log`. New lint `tests/test_no_vault_imports.py` guards regression. Only surviving CLI subcommand: `naavik serve` (dies in `0.2.0.02`). 0.2.1.03 (Argon2id) closed as moot.)
+>
+> Earlier line: 2026-05-19 (Plan 25 / `0.1.1` EXECUTED — legacy bash → Python rewrite + 5 mutating `task` subcommands + CHANGELOG markdown-escape hardening. `.claude/naavik-ops gh` no longer subprocess-wraps `scripts/gh-project.sh`; native Python in `.claude/naavik_ops/gh.py` (18 legacy + 3 new helpers: `update-issue-title` / `close-issue` / `get-issue`). `.claude/naavik-ops memory` no longer subprocess-wraps `scripts/agent-memory.sh`; native Python in `.claude/naavik_ops/memory.py` (12 legacy subcommands; A.17 jq sandbox regex ported byte-for-byte). `.claude/naavik_ops/lib/roadmap.py` inlines the 304-line `scripts/roadmap_parser.py` + adds the writer-half. `.claude/naavik_ops/task.py` implements 5 mutating subcommands (`insert` / `defer` / `prioritize` / `move` / `renumber`) via atomic 3-store mutation under `~/.naavik/naavik-ops.lock` w/ rollback (A.29 deviation 1 closed). CHANGELOG `ReleaseEntry` sanitized per CommonMark spec (Issue #74). **Files deleted**: `scripts/gh-project.sh` + `scripts/agent-memory.sh` + `scripts/roadmap_parser.py` + `tests/test_agent_memory.sh`. Single-writer rule preserved by code path; `.claude/naavik-ops gh` / `memory` are still the sole entry points. Tests: 210 passing in `tests/test_naavik_ops/`.)
 >
 > Earlier line: 2026-05-18 (Plan 24 / A.29 Waves 1-4 IN FLIGHT — phase numbering system + `.claude/naavik-ops` Python dispatcher. New executable entry point `.claude/naavik-ops` routes `<group> <command>` to `.claude/naavik_ops/` package (5 groups: `task` / `release` / `deps` / `gh` / `memory`). `gh` + `memory` groups subprocess-wrap the legacy `.claude/naavik_ops/gh.py` + `.claude/naavik_ops/memory.py` during A.29; A.30 (0.1.1) inlines natively. 4-level semver task IDs (`MAJOR.MINOR.PATCH[.POSITION]`); regex `^\d+\.\d+\.\d+(\.\d{2})?$`. Migration runbook `.claude/migrations/A.29-phase-renumber.py` ships dry-run-only this PR; Wave 5 applies post-merge. Single-writer rule now routes through dispatcher entry; AGENTS.md § GitHub state — single writer rule updated accordingly. Design doc: `docs/design/PHASE_NUMBERING.md`. New on-disk paths: `~/.naavik/naavik-ops.lock` (flock), `~/.naavik/A.29-migration.lock` (migration apply, post-merge only), `CHANGELOG.md` (keepachangelog v1.1.0; bootstrap by migration apply).)
 >
@@ -348,17 +350,23 @@ The NixOS module in `nix/module.nix` follows the patterns from `~/lumino/service
 
 ## Environment Variables
 
+Plan 26 (0.2.0.01) made env the sole source of secret material. Copy `.env.example` -> `.env`, chmod 0600, edit. Full slot inventory:
+
 ```bash
 # All vars optional — config.py defaults are sane. Override only what differs.
 DATABASE_URL=postgresql+asyncpg://naavik:password@localhost:5432/naavik
+SECRET_KEY=                      # JWT signing key (>= 32 bytes; required outside nix run .#dev)
 ANTHROPIC_API_KEY=               # For Claude
 OPENAI_API_KEY=                  # For GPT models
 OLLAMA_BASE_URL=http://localhost:11434  # For local models
 DISCORD_WEBHOOK_URL=             # Job notifications
 TELEGRAM_BOT_TOKEN=              # Optional
+TELEGRAM_CHAT_ID=                # Required when TELEGRAM_BOT_TOKEN set
 PORTFOLIO_WEBHOOK_URL=           # Netlify rebuild trigger (optional)
-SECRET_KEY=                      # JWT signing key
-DATA_DIR=.naavik                 # State root (PDFs, secrets.enc, snapshots, logs)
+DATA_DIR=.naavik                 # State root (PDFs, snapshots, logs, dev-credentials)
+NAAVIK_DEBUG=1                   # Local dev only: bypasses SECRET_KEY validators + writes dev-credentials
+NAAVIK_DEV_PASSWORD=             # Optional: pin a stable dev login (mode 0600)
+NAAVIK_PERSISTENCE=db            # Dev orchestrator forces; bare-shell override
 ```
 
 ## Profile Data — Key Facts

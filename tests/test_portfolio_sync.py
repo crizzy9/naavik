@@ -204,14 +204,19 @@ async def test_regenerate_generic_resume_handles_failure(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_trigger_netlify_no_op_when_url_missing():
-    with patch("services.portfolio_sync.vault_svc.get", return_value=None):
-        ok = await trigger_netlify_rebuild()
+async def test_trigger_netlify_no_op_when_url_missing(monkeypatch):
+    """Plan 26: webhook URL is env-loaded via PORTFOLIO_WEBHOOK_URL."""
+    from config import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "portfolio_webhook_url", None)
+    ok = await trigger_netlify_rebuild()
     assert ok is False
 
 
 @pytest.mark.asyncio
-async def test_trigger_netlify_posts_when_configured():
+async def test_trigger_netlify_posts_when_configured(monkeypatch):
+    from config import settings as app_settings
+
     captured = {}
 
     def _handler(req: httpx.Request) -> httpx.Response:
@@ -220,11 +225,10 @@ async def test_trigger_netlify_posts_when_configured():
         return httpx.Response(200)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(_handler))
-    with patch(
-        "services.portfolio_sync.vault_svc.get",
-        return_value="https://api.netlify.com/build_hooks/abc",
-    ):
-        ok = await trigger_netlify_rebuild(http_client=client)
+    monkeypatch.setattr(
+        app_settings, "portfolio_webhook_url", "https://api.netlify.com/build_hooks/abc"
+    )
+    ok = await trigger_netlify_rebuild(http_client=client)
     await client.aclose()
     assert ok is True
     assert captured["url"].endswith("/build_hooks/abc")
@@ -232,16 +236,15 @@ async def test_trigger_netlify_posts_when_configured():
 
 
 @pytest.mark.asyncio
-async def test_trigger_netlify_returns_false_on_5xx():
+async def test_trigger_netlify_returns_false_on_5xx(monkeypatch):
+    from config import settings as app_settings
+
     def _handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(503)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(_handler))
-    with patch(
-        "services.portfolio_sync.vault_svc.get",
-        return_value="https://hook/x",
-    ):
-        ok = await trigger_netlify_rebuild(http_client=client)
+    monkeypatch.setattr(app_settings, "portfolio_webhook_url", "https://hook/x")
+    ok = await trigger_netlify_rebuild(http_client=client)
     await client.aclose()
     assert ok is False
 

@@ -69,7 +69,8 @@ docker compose up -d
 ```
 
 - Migrations run automatically on first start.
-- State persists in named volumes: `naavik-db-data` (Postgres) + `naavik-data` (vault + snapshots + generated PDFs).
+- State persists in named volumes: `naavik-db-data` (Postgres) + `naavik-data` (snapshots, generated PDFs, dev-credentials).
+- Secrets live in `.env` (gitignored, `chmod 0600`); see § Configuration for the slot inventory.
 - To upgrade: `git pull && docker compose pull && docker compose up -d`.
 - To reset: `docker compose down -v` (wipes volumes!).
 - Override config via `docker-compose.override.yml` (gitignored).
@@ -179,10 +180,11 @@ Critical envs to consider in production:
 
 | Var | Why |
 |---|---|
-| `SECRET_KEY` | JWT signing + vault key derivation. Must be ≥ 32 bytes. PyJWT warns on shorter keys. Rotating after vault init requires `naavik vault rotate-key` (see § Operations below). |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OLLAMA_BASE_URL` | At least one LLM provider. Production preference: store in vault via Settings UI; env is a fallback. |
+| `SECRET_KEY` | JWT signing key. Must be >= 32 bytes. PyJWT warns on shorter keys. Plan 26 (0.2.0.01) removed the AES-256-GCM vault; rotating `SECRET_KEY` now just invalidates active sessions. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OLLAMA_BASE_URL` | At least one LLM provider. Plan 26: env-only post-vault. |
+| `DISCORD_WEBHOOK_URL` / `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` / `PORTFOLIO_WEBHOOK_URL` | Optional outbound channels. Plan 26: env-only post-vault. |
 | `DATABASE_URL` | Compose / NixOS provision their own; only override if connecting elsewhere. |
-| `DATA_DIR` | State root for vault + snapshots + PDFs + dev-credentials. Default `.naavik`; production typically `/var/lib/naavik` or `~/.naavik`. |
+| `DATA_DIR` | State root for snapshots + PDFs + dev-credentials. Default `.naavik`; production typically `/var/lib/naavik` or `~/.naavik`. |
 
 ---
 
@@ -190,11 +192,11 @@ Critical envs to consider in production:
 
 Self-hoster checklist + runbooks: **`docs/RUNBOOK.md`**. Highlights:
 
-- **Vault** (encrypted secrets at `~/.naavik/secrets.enc`) — `naavik vault status` + `naavik vault rotate-key`. **Sunset:** Phase 2 task 2.12 deletes this entirely; secrets move to env-only via `.env`.
-- **CLI** (`naavik`, `naavik-alembic`) — **sunset:** Phase 2 task 2.11 deletes `naavik` (post-2.12); `naavik-alembic` stays.
-- **Backups:** restore both `~/.naavik/secrets.enc` AND the `SECRET_KEY` env var that encrypted it. The `key_fingerprint` header makes mismatched restores fail fast.
+- **Secrets via `.env`** (plan 26 / 0.2.0.01) — `cp .env.example .env && chmod 0600 .env`. Settings UI surfaces env-presence indicators (no values rendered). Edit `.env` + restart to rotate.
+- **CLI** (`naavik`, `naavik-alembic`) — only surviving subcommand is `naavik serve`. `naavik init` / `naavik vault <...>` deleted in plan 26 (exit 2 w/ migration hint). Plan `0.2.0.02` (queued) drops `naavik serve` too.
+- **Backups:** back up `.env` alongside the DB dump. `SECRET_KEY` must be preserved to validate JWTs issued before the backup.
 - **Reset dev DB:** `rm -rf .naavik/db` OR `uv run alembic downgrade base && upgrade head && python -m db.seed`.
-- **Migrate `SECRET_KEY`:** `naavik vault rotate-key --old=... --new=...`.
+- **Rotate `SECRET_KEY`:** edit `.env`, restart. Active sessions are invalidated; users re-auth from the UI.
 
 ---
 

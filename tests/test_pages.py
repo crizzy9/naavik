@@ -329,44 +329,70 @@ def test_change_password_page_no_banner_when_not_flagged(client: TestClient):
     assert 'data-must-change-banner="true"' not in body
 
 
-# ── Plan 10b (item 7) — Settings · Deployment vault-locked banner ────────
+# ── Plan 26 (0.2.0.01) — Settings · Deployment vault banner gone ────────
 
 
-def test_settings_deployment_no_banner_when_vault_unlocked(
+def test_settings_deployment_never_renders_vault_locked_banner(
     client: TestClient,
     auth_cookies,
-    monkeypatch,
 ):
-    """Banner stays hidden when the on-disk vault matches SECRET_KEY."""
-    from services import vault as vault_svc
-
-    monkeypatch.setattr(vault_svc, "is_locked", lambda: False)
-    monkeypatch.setattr(vault_svc, "fingerprint", lambda: "deadbeef" * 4)
-    monkeypatch.setattr(vault_svc, "expected_fingerprint", lambda: "deadbeef" * 4)
-
-    r = client.get("/settings/deployment", cookies=auth_cookies)
-    assert r.status_code == 200
-    assert 'data-vault-locked-banner="true"' not in r.text
-    assert "Vault locked" not in r.text
-
-
-def test_settings_deployment_renders_vault_locked_banner(
-    client: TestClient,
-    auth_cookies,
-    monkeypatch,
-):
-    """Banner shows fingerprints when SECRET_KEY no longer matches the vault."""
-    from services import vault as vault_svc
-
-    monkeypatch.setattr(vault_svc, "is_locked", lambda: True)
-    monkeypatch.setattr(vault_svc, "fingerprint", lambda: "1111aaaa" * 4)
-    monkeypatch.setattr(vault_svc, "expected_fingerprint", lambda: "2222bbbb" * 4)
-
+    """Plan 26: vault deleted; the rose vault-locked banner is gone forever."""
     r = client.get("/settings/deployment", cookies=auth_cookies)
     assert r.status_code == 200
     body = r.text
-    assert 'data-vault-locked-banner="true"' in body
-    assert "Vault locked — SECRET_KEY mismatch" in body
-    assert "1111aaaa" * 4 in body
-    assert "2222bbbb" * 4 in body
-    assert "naavik vault rotate-key" in body
+    assert 'data-vault-locked-banner="true"' not in body
+    assert "Vault locked" not in body
+    assert "SECRET_KEY mismatch" not in body
+    assert "naavik vault rotate-key" not in body
+    assert "~/.naavik/secrets.enc" not in body
+
+
+def test_settings_deployment_on_disk_panel_lists_env_not_vault(
+    client: TestClient,
+    auth_cookies,
+):
+    """`_ON_DISK` panel surfaces .env instead of ~/.naavik/secrets.enc."""
+    r = client.get("/settings/deployment", cookies=auth_cookies)
+    assert r.status_code == 200
+    body = r.text
+    # No SECRETS row referencing the gone vault.
+    assert "aes-256-gcm" not in body
+    assert "secrets.enc" not in body
+    # CONFIG row now points at .env.
+    assert "env-loaded" in body
+
+
+def test_settings_llm_tab_renders_env_indicators_not_api_key_input(
+    client: TestClient,
+    auth_cookies,
+):
+    """Plan 26: API-key password input removed; env-presence indicators rendered."""
+    r = client.get("/settings/llm-provider", cookies=auth_cookies)
+    assert r.status_code == 200
+    body = r.text
+    # No password input or hidden api_key form field.
+    assert 'name="api_key"' not in body
+    assert 'name="ollama_base_url"' not in body
+    # New env indicators present.
+    assert 'data-env-indicator="anthropic"' in body
+    assert "ANTHROPIC_API_KEY" in body
+    assert "OPENAI_API_KEY" in body
+    assert "OLLAMA_BASE_URL" in body
+
+
+def test_settings_notifications_tab_renders_env_indicators_not_inputs(
+    client: TestClient,
+    auth_cookies,
+):
+    """Plan 26: Discord/Telegram inputs removed; env-presence indicators rendered."""
+    r = client.get("/settings/notifications", cookies=auth_cookies)
+    assert r.status_code == 200
+    body = r.text
+    # No password input or text input for the secret values.
+    assert 'name="discord_webhook_url"' not in body
+    assert 'name="telegram_bot_token"' not in body
+    # Indicators + env-var hints present.
+    assert 'data-channel="discord"' in body
+    assert 'data-channel="telegram"' in body
+    assert "DISCORD_WEBHOOK_URL" in body
+    assert "TELEGRAM_BOT_TOKEN" in body

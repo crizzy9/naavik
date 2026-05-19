@@ -201,8 +201,8 @@ With `NAAVIK_DEV_PASSWORD` set, the `dev-credentials` file is NOT written — op
 Then:
 
 1. Visit <http://localhost:8000/login>, sign in with the seeded email + password — JWT cookie is set, you land on Overview.
-2. Visit `/settings/llm-provider`, pick a provider (Anthropic / OpenAI / Ollama), paste your API key, hit **Save**. Test the connection. Cost cards begin populating once real generations run.
-3. Your API key flows through the encrypted vault at `~/.naavik/secrets.enc`; the Settings DB row holds only its SHA-256 fingerprint.
+2. Set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` / `OLLAMA_BASE_URL`) in your `.env` file (`chmod 0600 .env`), restart the server.
+3. Visit `/settings/llm-provider`, confirm the green env-presence indicator next to your chosen provider, pick it as Active, hit **Save**. Test the connection. Cost cards begin populating once real generations run.
 4. Edit your profile via `/profile/edit`. Per-field autosave persists changes to Postgres immediately — verify with `psql -h 127.0.0.1 -p 5433 -U naavik -d naavik -c "SELECT headline FROM profile WHERE user_id=1"`.
 
 #### Signup (multi-user / fresh-install)
@@ -219,7 +219,7 @@ Same brute-force rate limit as `/login` (5 attempts / 15 min / IP).
 
 The long-form path: Postgres + migrations + FastAPI dev with no Nix orchestrator and no Docker. Use this when you want fine-grained control over each step, or when `nix run .#dev` errors out and you need to bisect what failed.
 
-> **As of plan 10b (2026-05-03)**, the backend substrate is live (20+ SQLModel entities, two Alembic migrations, bcrypt+JWT auth + signup endpoint, AES-256-GCM vault, LLM provider abstraction with form-driven Settings UI, Typst document generator + ATS adapters + APScheduler crons). Steps **4–6** below are required for any DB-backed route. Steps **1–3** still work for the static / template-only routes.
+> **As of plan 26 (0.2.0.01, 2026-05-19)**, the backend substrate is live (20+ SQLModel entities, four Alembic migrations, bcrypt+JWT auth + signup endpoint, env-loaded secrets via `.env` + pydantic-settings, LLM provider abstraction with form-driven Settings UI, Typst document generator + ATS adapters + APScheduler crons). Steps **4–6** below are required for any DB-backed route. Steps **1–3** still work for the static / template-only routes. (The AES-256-GCM vault was deleted in plan 26 — secrets now live in env.)
 
 **Prerequisites:**
 
@@ -310,16 +310,18 @@ uv run python -m db.seed         # populates the seeded fixture set (372 rows; i
 
 The seed prints the dev-user credential — capture it on first run (or pin it via `NAAVIK_DEV_PASSWORD`). On re-runs against an existing DB, the credential stays unchanged and the seed prints a hint about how to reset.
 
-**7 · (Optional) Initialize the encrypted vault**
+**7 · Configure secrets via `.env`**
 
-If you're not seeding (truly bare install) and want to bootstrap the vault yourself:
+Plan 26 (0.2.0.01) replaced the encrypted vault with standard env-loading. Copy `.env.example` to `.env`, fill in values, and `chmod 0600 .env`:
 
 ```bash
-naavik init                      # prompts for SECRET_KEY, writes ~/.naavik/key.bin (mode 0600), creates empty vault
-naavik vault status              # confirms path + fingerprint + scope summary (no secret values)
+cp .env.example .env
+chmod 0600 .env
+# Edit .env: set SECRET_KEY (>= 32 bytes), ANTHROPIC_API_KEY (or OPENAI_API_KEY / OLLAMA_BASE_URL),
+# DISCORD_WEBHOOK_URL / TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / PORTFOLIO_WEBHOOK_URL as needed.
 ```
 
-`naavik init` refuses to overwrite an existing vault — use `naavik vault rotate-key` to change keys instead.
+Filesystem permissions on `.env` (`chmod 0600`) are the operative defense; the Settings UI surfaces presence indicators (green ✓ / gray dash) without exposing values.
 
 After model changes, generate a new revision:
 
@@ -341,32 +343,33 @@ All env vars are **optional**. `src/config.py` provides working defaults; overri
 # Database (Compose / NixOS provision their own; only override if connecting elsewhere)
 DATABASE_URL=postgresql+asyncpg://naavik:password@localhost:5432/naavik
 
-# Override in production! Must be ≥ 32 bytes — JWT (HS256) and the vault
-# (PBKDF2 → AES-256-GCM) both derive from this. PyJWT warns on shorter keys;
-# rotating it after the vault is initialized requires `naavik vault rotate-key`
-# (see § Operations).
+# Override in production! Must be >= 32 bytes — JWT (HS256) signs cookies
+# with this. PyJWT warns on shorter keys. Plan 26 (0.2.0.01) removed the
+# AES-256-GCM vault that previously also derived from SECRET_KEY; rotating
+# SECRET_KEY now just invalidates active sessions.
 SECRET_KEY=<long-random-string-32-bytes-or-more>
 
-# LLM providers (at least one for AI features)
-# In production, prefer storing keys in the vault via Settings · LLM Provider
-# rather than env. Env-var keys are read as a one-time fallback when the vault
-# entry is missing.
+# LLM providers (at least one for AI features). Plan 26 (0.2.0.01): these
+# are now env-only. Settings UI shows configured-via-env indicators (no
+# values rendered). Edit .env + restart to rotate.
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 OLLAMA_BASE_URL=http://localhost:11434
 
-# Optional integrations (preferred path: Settings · Notifications + vault)
+# Optional integrations — env-only post-vault.
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
 PORTFOLIO_WEBHOOK_URL=...    # Netlify/Vercel rebuild trigger
 
 # Data dir (mirrors production /app/.naavik in Docker, ~/.naavik on NixOS)
-# Holds: secrets.enc (encrypted vault), secrets.enc.lock (concurrency lockfile),
-# secrets.enc.bak.YYYY-MM-DD-HH-MM (rotate-key backups), logs/vault-audit.log,
+# Holds:
 # data/documents/<app_id>/{resume,cover-letter}.pdf — per-application bundle PDFs (Wave 6)
 # data/documents/portfolio/resume.pdf — cached generic resume served by /api/portfolio/resume.pdf
 # data/snapshots/snapshot-YYYY-MM-DD.marker — daily DB snapshot markers (Phase 6 will replace)
 # dev-credentials — plaintext dev login (mode 0600, debug + SELF_HOSTED + generated-password only — plan 10c)
+# (~/.naavik/secrets.enc, secrets.enc.lock, secrets.enc.bak.*, logs/vault-audit.log
+#  were deleted in plan 26 / 0.2.0.01; if upgrading from 0.1.x, see § Upgrading from 0.1.x.)
 DATA_DIR=.naavik
 ```
 
@@ -388,41 +391,50 @@ Auth is form-based (email + password) in v1. OIDC support for self-hosted (Authe
 
 Self-hoster checklist for the things plan 10 § B introduced.
 
-### Vault — encrypted secrets at `~/.naavik/secrets.enc`
+### Secrets via `.env` (plan 26 / 0.2.0.01)
 
-The DB stores no secret material. Every API key, OAuth refresh token, IMAP password, ATS cookie, Discord webhook URL, Telegram bot token, and Netlify rebuild hook lives in `~/.naavik/secrets.enc` — AES-256-GCM, master key derived from `SECRET_KEY` via PBKDF2-HMAC-SHA256 (100k iterations). DB rows store fingerprints + `*_configured` booleans only.
+Plan 26 deleted the encrypted vault. Every API key, webhook URL, and bot token is now configured via env vars consumed by pydantic-settings in `src/config.py`. The Settings UI surfaces presence indicators (configured / not set) sourced from `services/env_secrets.py`; values never appear in the response or template context.
 
-The file's plaintext header carries a 32-byte `key_fingerprint = sha256(master_key)[:32]` so the server can detect a `SECRET_KEY` mismatch at startup and refuse to boot in vault-locked mode (writes rejected, secret-dependent reads return 503) instead of silently corrupting the file.
+```bash
+cp .env.example .env
+chmod 0600 .env       # filesystem permissions are the operative defense
+# Edit .env with your values; restart the server.
+```
 
-**Backup discipline:** restore both `~/.naavik/secrets.enc` AND the `SECRET_KEY` env var that encrypted it together. The `key_fingerprint` header makes mismatched restores fail fast with a clear error.
+Rotating a secret is `edit .env + restart`. No automated rotation; standard self-hosted-app pattern.
+
+**Backup discipline:** back up `.env` alongside your `DATABASE_URL` / DB dump. `SECRET_KEY` is required to validate JWTs issued before the backup; preserve it.
 
 ### Rotating `SECRET_KEY`
 
-Rotating `SECRET_KEY` without re-encrypting the vault bricks it. Use the CLI:
+Rotating `SECRET_KEY` invalidates active sessions (JWTs signed with the old key fail validation). It does NOT brick any on-disk state — the vault is gone. Steps:
 
 ```bash
-naavik vault rotate-key --old="$OLD_SECRET_KEY" --new="$NEW_SECRET_KEY"
-# [vault] reading ~/.naavik/secrets.enc (current fingerprint: 5ecfe49bab37c143...)
-# [vault] decrypting 12 entries across 5 scopes (ats, integrations, llm, misc, notifications)
-# [vault] re-encrypting with new key (new fingerprint: 3ced9ad7...)
-# [vault] writing ~/.naavik/secrets.enc (atomic rename complete)
-# [vault] backup at ~/.naavik/secrets.enc.bak.2026-05-02-12-06
-# [vault] done. update SECRET_KEY env to the new value before next start.
+# 1. Generate a new key
+python -c 'import secrets; print(secrets.token_urlsafe(48))'
+# 2. Edit .env to update SECRET_KEY; chmod 0600 .env
+# 3. Restart
+nix run .#dev    # or `docker compose up -d --force-recreate naavik`
+# 4. Re-authenticate from the UI (existing cookies will be rejected with 401)
 ```
 
-The rotation reads with the old key, re-derives the master key from the new key against a **fresh salt**, re-encrypts atomically, and writes a `.bak.YYYY-MM-DD-HH-MM` for safety. Pass `--no-backup` for CI runs that don't need the backup file.
+### Upgrading from 0.1.x with a populated vault
 
-After running, update `SECRET_KEY` in your environment (`.env`, NixOS `sops.secrets`, Docker secrets, etc.) before the next `nix run .#dev` / `docker compose up`. Settings · Deployment shows a banner if it detects a fingerprint mismatch.
+If you previously used Settings UI to save an LLM API key or webhook URL, those values lived encrypted in `~/.naavik/secrets.enc`. Plan 26 deleted the vault module + CLI subcommands; there is no automated migration. Capture the scope list before upgrading:
 
-### Vault audit log
-
-Every `get` / `set` / `delete` / `list` / `rotate-key` writes a JSON line to `~/.naavik/logs/vault-audit.log`:
-
-```json
-{"caller":"settings_service","key":"anthropic","op":"set","scope":"llm","ts":"2026-05-02T12:06:34.281+00:00"}
+```bash
+# BEFORE upgrading (on 0.1.x):
+naavik vault status      # capture your scope list / key names
+# AFTER upgrading (on 0.2.0):
+cp .env.example .env && chmod 0600 .env
+# Edit .env with the values from the captured scope list. Then:
+rm -f ~/.naavik/secrets.enc ~/.naavik/key.bin
+rm -f ~/.naavik/secrets.enc.lock ~/.naavik/secrets.enc.bak.*
+rm -rf ~/.naavik/logs/vault-audit.log
+# Restart your deployment.
 ```
 
-Secret values **never** appear in the audit log — only operation, scope, key name, and caller. Tail it during incident response.
+The app boots fine if you skip the migration — LLM calls fail with provider 401 until you set the env var. See `CHANGELOG.md` ## [0.2.0] § Operations.
 
 ### Reset the dev DB
 
@@ -434,19 +446,17 @@ uv run alembic downgrade base && uv run alembic upgrade head && uv run python -m
 
 ### `naavik` CLI
 
-> **Sunset track — do not extend.** The `naavik` script and the encrypted vault it mostly serves are scheduled for removal in Phase 2 (see `ROADMAP.md` § Phase 2 task **2.12** for the vault → env-only-secrets switch, then task **2.11** for the CLI deletion). New operator capabilities — secret rotation, dev-credential retrieval, etc. — ship as Settings UI surfaces or `.env`-based config, not new CLI subcommands. Plan 10c specifically chose `cat ~/.naavik/dev-credentials` over a `naavik dev creds` subcommand for this reason.
-
-Plan 10b promotes the `naavik` script from a 1-line uvicorn launcher to a subcommand-based CLI:
+> **Sunset track — do not extend.** Plan 26 (0.2.0.01, 2026-05-19) deleted `naavik init` + `naavik vault <...>` along with the encrypted vault. The remaining surface is `naavik` (bare) and `naavik serve`; plan `0.2.0.02` (queued) removes those too. New operator capabilities ship as Settings UI surfaces or `.env`-based config per AGENTS.md § Key Conventions § CLI.
 
 ```bash
 naavik                              # default: serve (back-compat)
 naavik serve                        # explicit alias for default
-naavik init                         # generate SECRET_KEY, write ~/.naavik/key.bin (mode 0600), init empty vault
-naavik vault status                 # path + fingerprint + per-scope key counts (NEVER values)
-naavik vault rotate-key --old=...   # see § Rotating SECRET_KEY above
+naavik init                         # DEPRECATED in 0.2.0 — prints migration hint + exits 2
+naavik vault status                 # DEPRECATED in 0.2.0 — prints migration hint + exits 2
+naavik vault rotate-key --old=...   # DEPRECATED in 0.2.0 — prints migration hint + exits 2
 ```
 
-`naavik init` refuses to overwrite an existing vault — the operator must run `naavik vault rotate-key` to change keys, or remove `~/.naavik/secrets.enc` manually for a hard reset. `naavik vault status` prints the stored + expected fingerprints; mismatch means the vault is locked (Settings · Deployment surfaces a rose banner alongside).
+The deprecated subcommands surface a hint pointing at `.env` config + `CHANGELOG.md ## [0.2.0]`. `naavik-alembic` (alembic's own CLI) is unaffected.
 
 ### Agent memory + learning (Phase A row A.15)
 
@@ -467,14 +477,9 @@ Manager auto-invokes `Skill: naavik-discussion-capture` at every PR_REVIEW_GATE 
 
 If you see `the greenlet library is required to use this function` or `libstdc++.so.6: cannot open shared object file` on the first DB write, your `flake.nix` is older than plan 10b. SQLAlchemy's greenlet bridge dlopens `libstdc++.so.6` and NixOS' Python venv doesn't ship it on the loader path. Pull the latest `flake.nix` (the orchestrator now exports `LD_LIBRARY_PATH=${pkgs.stdenv.cc.cc.lib}/lib`) — same fix `nix/devshell.nix` has had since plan 09.
 
-#### `SECRET_KEY` mismatch / vault locked
+#### `SECRET_KEY` rotation invalidates active sessions
 
-If the on-disk vault was encrypted with a `SECRET_KEY` that no longer matches your env, the Settings · Deployment tab renders a rose **Vault locked** banner showing the stored vs expected fingerprint. Two recoveries:
-
-1. Restore the original `SECRET_KEY` env var (the value used when the vault was first created), or
-2. Run `naavik vault rotate-key --old="$OLD" --new="$NEW"` to re-encrypt the vault with the new key, then update your env.
-
-`naavik vault status` shows the same fingerprints from the CLI without standing up the server.
+Plan 26 (0.2.0.01) deleted the encrypted vault that previously tied `SECRET_KEY` to AES master-key derivation. Rotating `SECRET_KEY` now invalidates only active JWT cookies — there is no "vault locked" state to recover from. After rotation, re-authenticate from the UI. The cookie is HTTP-only; client-side state is unaffected.
 
 #### UI shows mock-looking data after `nix run .#dev`
 

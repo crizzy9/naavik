@@ -68,7 +68,7 @@ Every test green. Expected test files (post-Wave-6):
 - `tests/test_models.py` — SQLModel instantiation + relationships + CHECK constraints (incl. discarded-DRAFT corner case)
 - `tests/test_seed.py` — clean DB seeded; round-trip via SQLModel matches fixtures
 - `tests/test_auth.py` — bcrypt + JWT + cookie flags + CSRF + brute-force rate limit
-- `tests/test_vault.py` — AES-GCM round-trip + PBKDF2 + key fingerprint mismatch + audit log + rotate-key CLI
+- ~~`tests/test_vault.py`~~ — DELETED in plan 26 (0.2.0.01); vault module + AES-GCM machinery removed. Coverage now lives in `tests/test_env_secrets.py` (env-presence indicators) + `tests/test_no_vault_imports.py` (regression lint).
 - `tests/test_llm_provider.py` — every provider's methods + cost estimate + retry policy
 - `tests/test_application_service.py` — DRAFT lifecycle + state-transition enforcement + service-layer computed state
 - `tests/test_document_generator.py` — resume + cover letter + screeners + DRAFT reuse heuristic + cost-cap enforcement
@@ -102,12 +102,12 @@ Run the 12-step end-to-end smoke listed at the top of this doc. Every step shoul
 Run `security-review` skill against the entire branch. Pay special attention to:
 
 - Auth path — JWT cookie flags, CSRF rotation policy, brute-force rate limit
-- Vault — AES-GCM, PBKDF2 iterations (100k), key fingerprint detection, audit log completeness, file-lock concurrency
+- ~~Vault~~ — DELETED in plan 26 (0.2.0.01); secrets are env-loaded via `pydantic-settings`. Defense is `chmod 0600 .env` + filesystem permissions.
 - ATS adapters — input sanitization for ATS POST bodies (especially screener answer text — possible XSS into board UI)
 - Document generator — Typst template injection from untrusted JD input; the Typst compile process should run with restricted filesystem access
 - Portfolio public API — info leak (no email / phone / EEO / visa / salary)
 - Cron — rate-limit guards on outbound integrations (LinkedIn 50/day, scraping per-source backoff)
-- Logging — `vault-audit.log` never logs secret values; access log scrubs `Authorization` headers + cookies
+- Logging — access log scrubs `Authorization` headers + cookies (vault-audit log retired with the vault in plan 26)
 
 Any HIGH / CRITICAL → fix before declaring Phase 1 done.
 
@@ -177,7 +177,7 @@ These are operational concerns, not discrete tasks. Watch them as you ship Phase
 4. **n8n decommission.** After Phase 2 ships and runs clean for 1 week, disable the n8n Main Workflow. Don't forget. (See `ROADMAP.md` § n8n Migration Strategy.)
 5. **Portfolio site dependency.** `crypticsoul.dev`'s `cv.astro` build-time fetches `/api/portfolio/cv`. Any contract change to that endpoint must coordinate with the portfolio repo (separate codebase). Currently zero versioning — Phase 2+ adds `?version=v1` (tracked in ROADMAP § Phase 1 deferred).
 6. **Multi-user readiness.** Every entity already has `user_id`; the multi-tenant cloud tier is unblocked at the model layer. But cron jobs assume single-user (`user_id=1`) — the `applications.auto_apply` cron, `tracking.sync_gmail`, etc. all need a `for user in users` loop wrapping their existing logic. Convert to a ROADMAP task when the cloud tier ships multi-tenant.
-7. **Backups.** `~/.naavik/data/snapshots/` daily SQL gzip — but no off-site backup story yet. Document for self-hosters: the vault + snapshots dir together is the full backup; off-site to S3 / Backblaze / etc. is the user's responsibility.
+7. **Backups.** `~/.naavik/data/snapshots/` daily SQL gzip — but no off-site backup story yet. Document for self-hosters: `.env` + snapshots dir together are the full backup; off-site to S3 / Backblaze / etc. is the user's responsibility. (The encrypted vault was deleted in plan 26; secrets live in `.env`.)
 8. **Visual regression as PR gate (CI-side).** Depends on the Pre-Phase-2 paper cut PC.3 landing first (local capture must work on NixOS before CI can run it). Once the local baseline is committed AND snapshots stabilize across 2-3 Phase 2-6 plans, wire a Playwright + pixelmatch (or Percy / similar) diff step into CI: capture per-PR snapshots, compare against `tests/visual/screenshots/` baseline, fail on > 1 % per-screen pixel delta. Convert to a ROADMAP task when PC.3 ships and snapshots stabilize.
 
 ---

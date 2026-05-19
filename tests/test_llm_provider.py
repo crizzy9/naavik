@@ -3,7 +3,7 @@
 Coverage:
 - `estimate_cost` per provider (Anthropic + OpenAI + Ollama=0).
 - Factory routes correctly via `Settings.llm_provider`.
-- Vault-backed key resolution.
+- Env-backed key resolution (plan 26 / 0.2.0.01: vault replaced by env).
 - `tracked_call` wrapper logs to `ApiUsage` (with mock session).
 - Retry policy: rate_limit → exponential backoff up to 3; timeout → retry
   once; schema_validation → re-prompt once; provider_error → fallback if set.
@@ -14,7 +14,7 @@ mock async clients that mimic the SDK shape.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import BaseModel
@@ -27,6 +27,17 @@ from llm.base import (
 )
 from models import LLMProvider as LLMProviderEnum
 from models import Settings
+
+
+@pytest.fixture
+def env_keys(monkeypatch):
+    """Provide Anthropic + OpenAI env keys for factory tests."""
+    from config import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "anthropic_api_key", "sk-ant-test-redacted")
+    monkeypatch.setattr(app_settings, "openai_api_key", "sk-openai-test-redacted")
+    return app_settings
+
 
 # ── Cost estimation ────────────────────────────────────────────────────
 
@@ -89,15 +100,14 @@ def test_provider_rejects_empty_api_key() -> None:
 # ── Factory ────────────────────────────────────────────────────────────
 
 
-def test_factory_anthropic() -> None:
+def test_factory_anthropic(env_keys) -> None:
     from llm import get_provider
 
     settings = Settings(
         user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="claude-3.5-sonnet-20250219"
     )
 
-    with patch("services.vault.get", return_value="sk-from-vault"):
-        provider = get_provider(settings)
+    provider = get_provider(settings)
 
     from llm.anthropic import AnthropicProvider
 
@@ -105,25 +115,25 @@ def test_factory_anthropic() -> None:
     assert provider.model_name == "claude-3.5-sonnet-20250219"
 
 
-def test_factory_openai() -> None:
+def test_factory_openai(env_keys) -> None:
     from llm import get_provider
 
     settings = Settings(user_id=1, llm_provider=LLMProviderEnum.OPENAI, llm_model="gpt-4o")
 
-    with patch("services.vault.get", return_value="sk-from-vault"):
-        provider = get_provider(settings)
+    provider = get_provider(settings)
 
     from llm.openai import OpenAIProvider
 
     assert isinstance(provider, OpenAIProvider)
 
 
-def test_factory_ollama_no_vault_lookup() -> None:
+def test_factory_ollama_does_not_require_api_key() -> None:
     from llm import get_provider
 
     settings = Settings(user_id=1, llm_provider=LLMProviderEnum.OLLAMA, llm_model="llama3.1:70b")
 
-    # Ollama doesn't need an api key — vault not consulted.
+    # Ollama doesn't need an api key (env-based now; OLLAMA_BASE_URL defaults
+    # to http://localhost:11434).
     provider = get_provider(settings)
 
     from llm.ollama import OllamaProvider
@@ -131,7 +141,7 @@ def test_factory_ollama_no_vault_lookup() -> None:
     assert isinstance(provider, OllamaProvider)
 
 
-def test_factory_fallback() -> None:
+def test_factory_fallback(env_keys) -> None:
     from llm import get_provider
 
     settings = Settings(
@@ -140,12 +150,24 @@ def test_factory_fallback() -> None:
         llm_fallback_provider=LLMProviderEnum.OLLAMA,
     )
 
-    with patch("services.vault.get", return_value="sk-from-vault"):
-        primary = get_provider(settings)
+    primary = get_provider(settings)
     fallback = get_provider(settings, fallback=True)
 
     assert primary.provider_id == "anthropic"
     assert fallback.provider_id == "ollama"
+
+
+def test_factory_anthropic_missing_env_key_raises(monkeypatch) -> None:
+    """Plan 26: factory no longer falls back to vault; empty env -> empty key -> error."""
+    from config import settings as app_settings
+    from llm import get_provider
+
+    monkeypatch.setattr(app_settings, "anthropic_api_key", None)
+    settings = Settings(
+        user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="claude-3.5-sonnet-20250219"
+    )
+    with pytest.raises(LLMProviderError):
+        get_provider(settings)
 
 
 # ── tracked_call ───────────────────────────────────────────────────────
