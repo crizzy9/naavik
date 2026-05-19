@@ -1,6 +1,6 @@
 [project]
 name = "naavik"
-version = "0.1.0"
+version = "0.1.1"
 description = "Open-source, self-hosted career automation platform"
 readme = "README.md"
 license = { text = "AGPL-3.0" }
