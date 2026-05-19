@@ -288,24 +288,92 @@ class TestPrioritize:
 
 
 class TestMove:
-    def test_cross_release_move(self, sandbox_mutating):
-        rc = sandbox_mutating["task"].cmd_move(["0.2.0.05", "0.3.0.02"])
+    def test_cross_release_move_leaves_src_gap(self, sandbox_mutating):
+        # Move 0.2.0.05 to a FREE dest slot (0.3.0.05 — not 0.3.0.02 which is
+        # now reject-on-collision). Source section retains all siblings
+        # unchanged; destination section gets the new row at exactly 0.3.0.05.
+        rc = sandbox_mutating["task"].cmd_move(["0.2.0.05", "0.3.0.05"])
         assert rc == 0
         text = sandbox_mutating["roadmap_file"].read_text(encoding="utf-8")
-        # 0.2.0.05 vanishes from source section.
+        # 0.2.0.05 vanishes from source section (gap left behind).
         assert "| 0.2.0.05 |" not in text
-        # 0.3.0.02 in dest now is the moved task.
-        assert "| 0.3.0.02 | Auth hardening | [ ]" in text
-        # Old 0.3.0.02 (Auth gate) shifted to 0.3.0.03.
-        assert "| 0.3.0.03 | Auth gate | [ ]" in text
+        # Source siblings KEEP their IDs — no auto-renumber.
+        assert "| 0.2.0.01 | Sunset vault | [ ]" in text
+        assert "| 0.2.0.02 | Sunset CLI | [ ]" in text
+        assert "| 0.2.0.08 |" in text  # done row preserved
+        # 0.3.0.05 in dest is the moved task with priority preserved.
+        assert "| 0.3.0.05 | Auth hardening | [ ] | MEDIUM" in text
+        # Destination siblings KEEP their IDs — no auto-renumber.
+        assert "| 0.3.0.01 | HTMX scaffolds | [ ]" in text
+        assert "| 0.3.0.02 | Auth gate | [ ]" in text
 
         map_data = json.loads(sandbox_mutating["issue_map"].read_text(encoding="utf-8"))
-        # Issue # 15 (was 0.2.0.05) now keyed under 0.3.0.02.
-        assert map_data["issues"]["0.3.0.02"] == 15
+        # Issue # 15 (was 0.2.0.05) now keyed under 0.3.0.05.
+        assert map_data["issues"]["0.3.0.05"] == 15
         # Old key dropped.
         assert "0.2.0.05" not in map_data["issues"]
-        # Redirects record.
-        assert map_data["redirects"]["0.2.0.05"] == "0.3.0.02"
+        # Sibling issue numbers unchanged.
+        assert map_data["issues"]["0.3.0.01"] == 30
+        assert map_data["issues"]["0.3.0.02"] == 31
+        assert map_data["issues"]["0.2.0.01"] == 20
+        assert map_data["issues"]["0.2.0.02"] == 21
+        # Redirects record only the moved task.
+        assert map_data["redirects"]["0.2.0.05"] == "0.3.0.05"
+
+        # Title log: ONLY #15 (the moved task) got retitled. Sibling issue
+        # numbers (#20, #21, #30, #31) are NOT in the log.
+        title_log = sandbox_mutating["title_log"]
+        retitled_issue_nums = {n for n, _ in title_log}
+        assert 15 in retitled_issue_nums
+        assert 20 not in retitled_issue_nums
+        assert 21 not in retitled_issue_nums
+        assert 30 not in retitled_issue_nums
+        assert 31 not in retitled_issue_nums
+        assert (15, "[0.3.0.05] Auth hardening") in title_log
+
+    def test_cross_release_move_rejects_occupied_dest(self, sandbox_mutating):
+        # 0.3.0.02 is occupied by "Auth gate" — reject with helpful error.
+        with pytest.raises(NaavikOpsError, match="already occupied"):
+            sandbox_mutating["task"].cmd_move(["0.2.0.05", "0.3.0.02"])
+
+        # ROADMAP must NOT have been mutated.
+        text = sandbox_mutating["roadmap_file"].read_text(encoding="utf-8")
+        assert "| 0.2.0.05 | Auth hardening | [ ]" in text
+        assert "| 0.3.0.02 | Auth gate | [ ]" in text
+
+        # Map cache unchanged: no redirect, source key still mapped.
+        map_data = json.loads(sandbox_mutating["issue_map"].read_text(encoding="utf-8"))
+        assert map_data["issues"]["0.2.0.05"] == 15
+        assert map_data["issues"]["0.3.0.02"] == 31
+        assert "redirects" not in map_data or "0.2.0.05" not in (map_data.get("redirects") or {})
+
+        # No title edits performed.
+        assert sandbox_mutating["title_log"] == []
+
+    def test_cross_release_move_rejects_dest_done_row(self, sandbox_mutating, tmp_path):
+        # Add a done row in 0.3.0 at position 05; attempt to move 0.2.0.05 there.
+        denser = textwrap.dedent(
+            """\
+            # Roadmap
+
+            ### 0.2.0 — Phase 2 Core Backend
+
+            | # | Task | Status | Priority | Notes |
+            |---|---|---|---|---|
+            | 0.2.0.01 | Sunset vault | [ ] | HIGH | env-based secrets |
+            | 0.2.0.05 | Auth hardening | [ ] | MEDIUM | post-sunset cleanup |
+
+            ### 0.3.0 — Phase 3 Frontend
+
+            | # | Task | Status | Priority | Notes |
+            |---|---|---|---|---|
+            | 0.3.0.01 | HTMX scaffolds | [ ] | HIGH | mockups in docs/design |
+            | 0.3.0.05 | Discover shipped | [x] | LOW | frozen done row |
+            """
+        )
+        sandbox_mutating["roadmap_file"].write_text(denser, encoding="utf-8")
+        with pytest.raises(NaavikOpsError, match="already occupied"):
+            sandbox_mutating["task"].cmd_move(["0.2.0.05", "0.3.0.05"])
 
     def test_within_section_move_delegates_to_defer(self, sandbox_mutating):
         rc = sandbox_mutating["task"].cmd_move(["0.2.0.01", "0.2.0.03"])
@@ -328,6 +396,28 @@ class TestMove:
         sandbox_mutating["task"].cmd_move(["0.2.0.01", "0.3.0.05"])
         text = sandbox_mutating["roadmap_file"].read_text(encoding="utf-8")
         assert "| 0.3.0.05 | Sunset vault | [ ] | HIGH" in text
+
+    def test_cross_release_move_updates_only_moved_issue_milestone(
+        self, sandbox_mutating, monkeypatch
+    ):
+        # Capture the gh CLI invocations to assert only the moved Issue's
+        # milestone gets edited (no side-effect on siblings).
+        gh_calls: list[tuple] = []
+
+        def _record_gh(*args, **kwargs):
+            gh_calls.append((args, kwargs))
+            return ""
+
+        monkeypatch.setattr(gh, "_gh", _record_gh)
+        sandbox_mutating["task"].cmd_move(["0.2.0.05", "0.3.0.05"])
+
+        # Exactly one milestone edit, targeting issue #15 (the moved task), to
+        # milestone 0.3.0.
+        milestone_calls = [c for c in gh_calls if "issue" in c[0] and "--milestone" in c[0]]
+        assert len(milestone_calls) == 1
+        args = milestone_calls[0][0]
+        assert "15" in args  # moved Issue #
+        assert "0.3.0" in args  # new milestone
 
 
 # ---------------------------------------------------------------------------
