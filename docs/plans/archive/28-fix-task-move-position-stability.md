@@ -1,8 +1,9 @@
 ---
-Status: APPROVED
+Status: EXECUTED
 Type: execution
 Authored: 2026-05-19
 Approved: 2026-05-19 (auto-approved by manager per user directive; all 5 open questions accepted at architect's recommended defaults)
+Shipped: 2026-05-19 (PR #94 squash `70ee0d3`)
 Last updated: 2026-05-19
 Depends on: 26 (0.2.0.01 EXECUTED — vault deprecation cleared the Settings layer; not a strict code dep, but contextual)
 Supersedes: `.claude/naavik_ops/task.py:cmd_move` pre-fix behavior (auto-renumber siblings)
@@ -567,4 +568,38 @@ The user ticks these before the architect calls `.claude/naavik-ops gh create-is
 
 ## Deviations from plan
 
-(empty; populated by engineer in their hand-back per `AGENTS.md § Workflow step 7`)
+Promoted from `traces/2026-05-19T05-40-56_194aa5/engineer-deviations.log` at archive time per `AGENTS.md § Workflow step 7`. 3 entries, all process / mechanical:
+
+1. **W3 commit is `--allow-empty` (audit anchor only; no in-repo diff).**
+   - **Why:** `.claude/github-issue-map.json` is gitignored per-fork. The W3 `update-issue-title` writes mutate GH state + the map cache atomically, but neither produces a committable file change.
+   - **Impact:** W3 stays as an audit-trail commit with a detailed message body listing all 12 restorations. PR reviewers verify the restoration via live `gh issue view` queries (architect did exactly this in the review).
+
+2. **`#21` stays at `[0.2.1.05]` — not restored to `[0.2.0.02]` as plan body's Track D-1 suggested.**
+   - **Why:** Manager's engineer dispatch prompt explicitly overrode plan body's Track D-1 commands list: "DO NOT restore #21; leave it at `[0.2.1.05]`. The plan's Track D-1 spec mentions 'restoring #21 to [0.2.0.02]' but that contradicts the user's intent (CLI sunset belongs in 0.2.1)."
+   - **Impact:** User-intended move of CLI sunset to `0.2.1.05` is preserved. ROADMAP row `0.7.0.13` description reflects this. Plan body's Track D-1 text wasn't updated; this is a doc-vs-impl drift that future plan authors should flag.
+
+3. **External branch-switching watchdog required defensive re-apply of W2 doc edits.**
+   - **Why:** A parallel session (the plan 27 W2-W5 engineer continuation) checked out `feat/0.2.0.05-job-models` mid-W2-edit, reverting 4 of 5 W2 doc files in the working tree once during the first attempt.
+   - **Impact:** W2 required one re-apply after branch switch. W1 required restoring staging with explicit pathspec after 10 stray files from the parallel branch got staged. No data loss. Engineer's defenses for future cross-branch concurrent work: (a) push branch upstream after each commit; (b) `git rev-parse --abbrev-ref HEAD` before each commit; (c) explicit `git commit -- <pathspec>`. **Lesson candidate** for `.claude/memory/recurring-patterns/`: cross-branch session interference in same workspace.
+
+### Operational surface added
+
+- **`naavik-ops gh clear-priority <item-id>`** — new subcommand. Unsets Project Priority field via `clearProjectV2ItemFieldValue` GraphQL mutation. Single-writer rule preserved (closes the prior gap where operators had to bypass dispatcher with raw `gh api graphql`).
+- **5 docs codify patch-position-stability principle** with cross-links to `.claude/memory/knowledge/patch-version-position-stability.md` (knowledge entry recorded 2026-05-19 in this run).
+- **12 GH issue titles restored** to canonical ROADMAP IDs: `#62→[0.2.0.03]`, `#70→[0.2.0.04]`, `#15→[0.2.0.05]`, `#10→[0.2.0.06]` through `#19→[0.2.0.14]` in sequence. `#21` correctly at `[0.2.1.05]` (intentional CLI sunset move).
+
+### Downstream impact
+
+- Future `task move <task-id> <new-version>.<new-pos>` calls will leave source gaps; reject on dest collision with operator-friendly error. No more buggy renumbers.
+- `task insert` symmetry deferred to follow-up per locked decision Q2.
+- `clear-effort` symmetry deferred to follow-up per locked decision Q5.
+
+### Hacker findings (deferred)
+
+Both reviewers cleared at APPROVE. Hacker findings:
+- **[INFO]** `task.py:993-1005` — `gh._gh "issue edit --milestone"` runs outside the flock after `_apply_atomic_3store` returns. `dest_version` is injection-safe (derived from `semver.format(int,int,int)`). Existing try/except tolerates failure. Not exploitable in single-operator tooling.
+- **[INFO]** `update_issue_title` (already-shipped helper) uses list-form subprocess — safe against title-content injection. Observation only.
+
+Architect findings:
+- **[INFO]** `_QUERY_CLEAR_SELECT` / `_clear_select()` naming refinement (plan said `_QUERY_CLEAR_FIELD` / `_clear_field()`; shipped names track sibling `_set_select()` convention — arguably better; non-blocking).
+
