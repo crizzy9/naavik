@@ -30,6 +30,7 @@ dispatcher exactly as before.
   item-id <issue-num>                    Resolve Issue # → Project item id.
   set-status <item-id> <status>          Project Status field write.
   set-priority <item-id> <pri>           Project Priority field write.
+  clear-priority <item-id>               Project Priority field clear (unset).
   set-effort <item-id> <effort>          Project Effort field write.
   add-status <name> [--color C]          Add option to Status single-select.
   next-unblocked                         Highest-priority unblocked Todo item.
@@ -181,6 +182,26 @@ def _set_select(project_id: str, item_id: str, field_id: str, option_id: str) ->
     gh_graphql(
         _QUERY_SET_SELECT,
         variables={"p": project_id, "i": item_id, "f": field_id, "o": option_id},
+    )
+
+
+_QUERY_CLEAR_SELECT = """
+mutation($p:ID!, $i:ID!, $f:ID!) {
+  clearProjectV2ItemFieldValue(input:{
+    projectId:$p, itemId:$i, fieldId:$f
+  }) { projectV2Item { id } }
+}
+""".strip()
+
+
+def _clear_select(project_id: str, item_id: str, field_id: str) -> None:
+    # Single-select / iteration / number / text fields clear via this mutation.
+    # Field-not-configured = tolerant no-op (same pattern as _set_select).
+    if not field_id:
+        return
+    gh_graphql(
+        _QUERY_CLEAR_SELECT,
+        variables={"p": project_id, "i": item_id, "f": field_id},
     )
 
 
@@ -481,6 +502,29 @@ def cmd_set_priority(rest: Sequence[str]) -> int:
     return 0
 
 
+def cmd_clear_priority(rest: Sequence[str]) -> int:
+    """clear-priority <item-id> — unset the Project Priority field on an item.
+
+    Closes the single-writer-rule gap surfaced during the plan-28 recovery:
+    cmd_set_priority can only set; without this, clearing required raw
+    `gh api graphql clearProjectV2ItemFieldValue` calls — bypassing the
+    dispatcher. Idempotent: clearing an already-clear field is a no-op on
+    the GraphQL side.
+    """
+    if len(rest) < 1:
+        sys.stderr.write("usage: naavik-ops gh clear-priority <item-id>\n")
+        return 2
+    cache = _load_cache()
+    field_id = cache.get("priority_field_id") or ""
+    if not field_id:
+        sys.stderr.write("warning: Priority field not configured — skipping\n")
+        return 0
+    item_id = rest[0]
+    _clear_select(cache["project_id"], item_id, field_id)
+    sys.stdout.write("priority cleared\n")
+    return 0
+
+
 def cmd_set_effort(rest: Sequence[str]) -> int:
     if len(rest) < 2:
         sys.stderr.write("usage: naavik-ops gh set-effort <item-id> <effort>\n")
@@ -506,6 +550,10 @@ def set_status(item_id: str, status: str) -> None:
 
 def set_priority(item_id: str, priority: str) -> None:
     cmd_set_priority([item_id, priority])
+
+
+def clear_priority(item_id: str) -> None:
+    cmd_clear_priority([item_id])
 
 
 def set_effort(item_id: str, effort: str) -> None:

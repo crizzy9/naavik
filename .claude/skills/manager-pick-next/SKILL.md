@@ -57,6 +57,10 @@ Operating loop step 2: find highest-priority unblocked **Todo** issue for curren
 - User already named task (`claude /build "PC.5"`) — task is given.
 - Compaction events.
 
+## Notes
+
+- **Gap-preservation expected.** `naavik-ops task next-unblocked <version>` iterates tasks in `priority DESC → position ASC` order; gaps in position numbering are normal (a task moved out of the patch leaves a gap). Skip the missing slot; don't surface it as a drift warning. Codified in `.claude/memory/knowledge/patch-version-position-stability.md` + enforced in `naavik-ops task move` from 0.7.0.13 (plan 28).
+
 ## Forbidden during invocation
 
 - Do NOT call `gh issue list` / `gh api graphql` directly — helper is sole reader/writer; bypassing it re-introduces the duplicate-issue race (`AGENTS.md § GitHub state — single writer rule`).

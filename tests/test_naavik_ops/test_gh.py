@@ -210,6 +210,56 @@ class TestSetPriority:
             sandbox_gh.cmd_set_priority(["item", "MEDIUMHIGH"])
 
 
+class TestClearPriority:
+    def test_invokes_graphql_with_clear_mutation(self, sandbox_gh, monkeypatch):
+        captured = []
+
+        def _record(query, variables=None):
+            captured.append((query, variables))
+            return {}
+
+        monkeypatch.setattr(sandbox_gh, "gh_graphql", _record)
+        rc = sandbox_gh.cmd_clear_priority(["PVT_item_42"])
+        assert rc == 0
+        assert len(captured) == 1
+        query, variables = captured[0]
+        assert "clearProjectV2ItemFieldValue" in query
+        assert variables == {"p": "PVT_x", "i": "PVT_item_42", "f": "F_priority"}
+
+    def test_no_op_when_priority_field_not_configured(self, sandbox_gh, monkeypatch, capsys):
+        # Strip priority_field_id from the cache.
+        cache_data = json.loads(sandbox_gh.CACHE_PATH.read_text(encoding="utf-8"))
+        cache_data["priority_field_id"] = ""
+        sandbox_gh.CACHE_PATH.write_text(json.dumps(cache_data), encoding="utf-8")
+
+        # Network must NOT be called when the field is unconfigured.
+        called = []
+        monkeypatch.setattr(sandbox_gh, "gh_graphql", lambda *a, **kw: called.append((a, kw)) or {})
+
+        rc = sandbox_gh.cmd_clear_priority(["PVT_item_42"])
+        assert rc == 0
+        assert called == []
+        assert "Priority field not configured" in capsys.readouterr().err
+
+    def test_missing_args_returns_2(self, sandbox_gh, capsys):
+        rc = sandbox_gh.cmd_clear_priority([])
+        assert rc == 2
+        assert "usage" in capsys.readouterr().err
+
+    def test_programmatic_helper_matches_cli(self, sandbox_gh, monkeypatch):
+        captured = []
+
+        def _record(query, variables=None):
+            captured.append((query, variables))
+            return {}
+
+        monkeypatch.setattr(sandbox_gh, "gh_graphql", _record)
+        sandbox_gh.clear_priority("PVT_item_99")
+        assert len(captured) == 1
+        assert "clearProjectV2ItemFieldValue" in captured[0][0]
+        assert captured[0][1]["i"] == "PVT_item_99"
+
+
 class TestSetEffort:
     def test_routes_xs(self, sandbox_gh, monkeypatch):
         captured = []

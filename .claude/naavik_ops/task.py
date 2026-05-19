@@ -819,6 +819,20 @@ def cmd_prioritize(rest: Sequence[str]) -> int:
 
 # ---------------------------------------------------------------------------
 # cmd_move
+#
+# Cross-release semantics (post-plan-28 / 0.7.0.13):
+#   - Source-section siblings are NEVER renumbered on cross-release move. The
+#     source slot becomes a permanent gap; operator runs
+#     `naavik-ops task renumber <src-version>` separately if cosmetic
+#     compaction is desired. Principle: patch-version positions are sort keys,
+#     not stable identifiers — but moving a task out of a patch leaves a
+#     deliberate gap that preserves referential integrity for siblings.
+#     See `.claude/memory/knowledge/patch-version-position-stability.md`.
+#   - Destination-section collisions REJECT with an error. Pick a free slot;
+#     `task list <dest-version>` shows occupancy.
+#   - Within-section moves (src_version == dest_version) still delegate to
+#     `cmd_defer`. Defer's whole purpose IS shifting siblings within a patch;
+#     that's a different operation from cross-release migration.
 # ---------------------------------------------------------------------------
 
 
@@ -857,70 +871,28 @@ def cmd_move(rest: Sequence[str]) -> int:
     if src_row.status == "x":
         raise NaavikOpsError(f"{src_id} is [x] (done); cannot move")
 
-    dest_rows = (
-        roadmap.parse_release_section(dest_version) if src_version != dest_version else src_rows
-    )
-    dest_occupy = next((r for r in dest_rows if r.position == dpos), None)
-    if dest_occupy is not None and dest_occupy.status == "x":
-        raise NaavikOpsError(f"dest position {dpos:02d} is a [x] done row ({dest_occupy.task_id})")
-
     # Two-section build.
     if src_version == dest_version:
         # Within-section: same shape as defer.
         new_args = [src_id, "--to", str(dpos)]
         return cmd_defer(new_args)
 
-    # CROSS-RELEASE: src section shifts UP (close the gap), dest section
-    # shifts DOWN (open the gap).
-    new_src_rows: list[roadmap.ReleaseRow] = []
-    rename_pairs_src: list[tuple[str, str]] = []
-    for r in src_rows:
-        if r.task_id == src_id:
-            continue
-        if r.status == "x":
-            new_src_rows.append(r)
-            continue
-        if r.position > spos:
-            new_pos = r.position - 1
-            new_id = semver.format(sj, smin, sp, new_pos)
-            rename_pairs_src.append((r.task_id, new_id))
-            new_src_rows.append(
-                roadmap.ReleaseRow(
-                    task_id=new_id,
-                    position=new_pos,
-                    status=r.status,
-                    title=r.title,
-                    priority=r.priority,
-                    notes=r.notes,
-                    raw_line="",
-                )
-            )
-        else:
-            new_src_rows.append(r)
+    dest_rows = roadmap.parse_release_section(dest_version)
+    dest_occupy = next((r for r in dest_rows if r.position == dpos), None)
+    if dest_occupy is not None:
+        raise NaavikOpsError(
+            f"dest position {dpos:02d} in {dest_version} already occupied by "
+            f"{dest_occupy.task_id} ({dest_occupy.title!r}). Pick a free slot — "
+            f"see `naavik-ops task list {dest_version}` for occupancy."
+        )
 
-    new_dest_rows: list[roadmap.ReleaseRow] = []
+    # CROSS-RELEASE: source-section siblings unchanged; only drop the moved
+    # row + leave the slot empty. Destination-section siblings unchanged; the
+    # collision check above guarantees dpos is free.
+    new_src_rows = [r for r in src_rows if r.task_id != src_id]
+    rename_pairs_src: list[tuple[str, str]] = []
+    new_dest_rows = list(dest_rows)
     rename_pairs_dest: list[tuple[str, str]] = []
-    for r in dest_rows:
-        if r.status == "x":
-            new_dest_rows.append(r)
-            continue
-        if r.position >= dpos:
-            new_pos = r.position + 1
-            new_id = semver.format(dj, dmin, dp, new_pos)
-            rename_pairs_dest.append((r.task_id, new_id))
-            new_dest_rows.append(
-                roadmap.ReleaseRow(
-                    task_id=new_id,
-                    position=new_pos,
-                    status=r.status,
-                    title=r.title,
-                    priority=r.priority,
-                    notes=r.notes,
-                    raw_line="",
-                )
-            )
-        else:
-            new_dest_rows.append(r)
 
     # Insert the moved row in dest. Priority follows the task (per Open Q5).
     new_dest_rows.append(
