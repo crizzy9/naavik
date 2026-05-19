@@ -1,15 +1,19 @@
-"""Settings · LLM Provider form-wiring tests — plan 10b (item 6, 2026-05-03).
+"""Settings · LLM Provider form-wiring tests.
 
-Coverage:
-- `GET /_fragments/settings/llm/model-options?provider=…` returns the per-provider
-  model `<select>` options.
-- `GET /_fragments/settings/llm/api-key-field?provider=…` returns the per-provider
-  api-key (or Ollama base URL) field.
-- The LLM tab template renders inside a `<form hx-put="/api/v1/settings/llm">`
-  with the radio HTMX wiring intact (no dead `?create=1` link, no hardcoded
-  Claude-only model list).
-- `PUT /api/v1/settings/llm` accepts form data and returns rendered HTML
-  (the live-DB round-trip is gated via NAAVIK_LIVE_DB).
+Plan 26 (0.2.0.01, 2026-05-19): the encrypted vault was deleted; API keys
+are configured via env vars. The `/_fragments/settings/llm/api-key-field`
+endpoint is gone with its template, and the form no longer accepts an
+`api_key` value (422 if posted). Coverage retained:
+
+- `/_fragments/settings/llm/model-options?provider=…` returns the per-provider
+  model dropdown.
+- The LLM tab renders inside `<form hx-put="/api/v1/settings/llm">` with
+  the radio HTMX wiring intact.
+- The page surfaces env-presence indicators (`data-env-indicator`).
+- `PUT /api/v1/settings/llm` rejects `api_key` payloads with 422.
+- `PUT /api/v1/settings/llm` accepts form data carrying only provider /
+  model and returns rendered HTML (live-DB round-trip gated via
+  NAAVIK_LIVE_DB).
 """
 
 from __future__ import annotations
@@ -77,61 +81,16 @@ def test_model_options_rejects_unknown_provider(client: TestClient, auth_cookies
     assert r.status_code == 400
 
 
-def test_api_key_field_anthropic_shows_password_input(client: TestClient, auth_cookies):
+def test_api_key_field_fragment_endpoint_deleted(client: TestClient, auth_cookies):
+    """Plan 26: `/_fragments/settings/llm/api-key-field` is gone (404)."""
     r = client.get(
         "/_fragments/settings/llm/api-key-field?provider=anthropic",
         cookies=auth_cookies,
     )
-    assert r.status_code == 200
-    body = r.text
-    assert 'id="llm-api-key"' in body
-    assert 'placeholder="sk-ant-…"' in body
-    # Anthropic does NOT show the Ollama base URL field
-    assert "OLLAMA BASE URL" not in body
-    assert "ollama_base_url" not in body
+    assert r.status_code == 404
 
 
-def test_api_key_field_openai_shows_password_input(client: TestClient, auth_cookies):
-    r = client.get(
-        "/_fragments/settings/llm/api-key-field?provider=openai",
-        cookies=auth_cookies,
-    )
-    assert r.status_code == 200
-    body = r.text
-    assert 'id="llm-api-key"' in body
-    assert 'placeholder="sk-…"' in body
-    assert "OLLAMA BASE URL" not in body
-
-
-def test_api_key_field_ollama_swaps_to_base_url_input(client: TestClient, auth_cookies):
-    """Ollama is local — show OLLAMA_BASE_URL input, hide the API key field."""
-    r = client.get(
-        "/_fragments/settings/llm/api-key-field?provider=ollama",
-        cookies=auth_cookies,
-    )
-    assert r.status_code == 200
-    body = r.text
-    assert "OLLAMA BASE URL" in body
-    assert 'name="ollama_base_url"' in body
-    assert "Local provider" in body
-    assert "no API key required" in body
-    # The visible password input must NOT be present.
-    assert 'id="llm-api-key"' not in body
-    # And the form keeps an api_key=<empty> hidden input so the PUT handler
-    # treats it as "no change" rather than "field missing".
-    assert 'name="api_key"' in body
-    assert 'type="hidden"' in body
-
-
-def test_api_key_field_rejects_unknown_provider(client: TestClient, auth_cookies):
-    r = client.get(
-        "/_fragments/settings/llm/api-key-field?provider=hax",
-        cookies=auth_cookies,
-    )
-    assert r.status_code == 400
-
-
-# ── LLM tab page renders the form-wrap + radio HTMX wiring ───────────────
+# ── LLM tab page renders the form-wrap + env indicators ─────────────────
 
 
 def test_llm_tab_renders_form_wrap(client: TestClient, auth_cookies):
@@ -144,12 +103,76 @@ def test_llm_tab_renders_form_wrap(client: TestClient, auth_cookies):
     assert "/_fragments/settings/llm/model-options?provider=anthropic" in body
     assert "/_fragments/settings/llm/model-options?provider=openai" in body
     assert "/_fragments/settings/llm/model-options?provider=ollama" in body
-    # Containers used as swap targets exist
+    # Model dropdown swap target survives.
     assert 'id="llm-model-container"' in body
-    assert 'id="llm-api-key-container"' in body
+    # Old api-key container is GONE.
+    assert 'id="llm-api-key-container"' not in body
+    # No API-key input field renders.
+    assert 'name="api_key"' not in body
+    assert 'name="ollama_base_url"' not in body
+    # New env-presence indicators present.
+    assert 'data-env-indicator="anthropic"' in body
+    assert 'data-env-indicator="openai"' in body
+    assert 'data-env-indicator="ollama"' in body
     # The dead `?create=1` link from plan 10 lives on the login page; ensure
     # we didn't accidentally bring it into Settings.
     assert "?create=1" not in body
+
+
+# ── PUT rejects secret-carrying payloads ─────────────────────────────────
+
+
+def test_put_llm_rejects_api_key_in_json_body(client: TestClient, auth_cookies):
+    r = client.put(
+        "/api/v1/settings/llm",
+        json={"api_key": "sk-ant-test"},
+        cookies=auth_cookies,
+    )
+    assert r.status_code == 422
+    body = r.json()
+    detail = body.get("detail", "")
+    assert "env" in detail.lower()
+    assert ".env" in detail
+
+
+def test_put_llm_rejects_ollama_base_url_in_json_body(client: TestClient, auth_cookies):
+    r = client.put(
+        "/api/v1/settings/llm",
+        json={"ollama_base_url": "http://other:11434"},
+        cookies=auth_cookies,
+    )
+    assert r.status_code == 422
+
+
+def test_put_notifications_rejects_discord_webhook_url(client: TestClient, auth_cookies):
+    r = client.put(
+        "/api/v1/settings/notifications",
+        json={"discord_webhook_url": "https://discord/x"},
+        cookies=auth_cookies,
+    )
+    assert r.status_code == 422
+
+
+def test_put_notifications_rejects_telegram_bot_token(client: TestClient, auth_cookies):
+    r = client.put(
+        "/api/v1/settings/notifications",
+        json={"telegram_bot_token": "123:ABC"},
+        cookies=auth_cookies,
+    )
+    assert r.status_code == 422
+
+
+def test_put_notifications_rejects_telegram_chat_id(client: TestClient, auth_cookies):
+    r = client.put(
+        "/api/v1/settings/notifications",
+        json={"telegram_chat_id": "987654321"},
+        cookies=auth_cookies,
+    )
+    assert r.status_code == 422
+    body = r.json()
+    detail = body.get("detail", "")
+    assert "TELEGRAM_CHAT_ID" in detail
+    assert ".env" in detail
 
 
 # ── Live-DB round-trip (opt-in) ──────────────────────────────────────────
@@ -163,10 +186,10 @@ _LIVE = os.environ.get("NAAVIK_LIVE_DB", "").strip().lower() in {"1", "true", "y
     reason="set NAAVIK_LIVE_DB=1 (and DATABASE_URL) to run live-DB form round-trip",
 )
 def test_put_llm_form_round_trip_persists_provider(client: TestClient, auth_cookies):
-    """PUT /api/v1/settings/llm via form data → returns HTML, persists provider."""
+    """PUT /api/v1/settings/llm via form data -> returns HTML, persists provider."""
     r = client.put(
         "/api/v1/settings/llm",
-        data={"llm_provider": "ollama", "llm_model": "llama3.1:8b", "api_key": ""},
+        data={"llm_provider": "ollama", "llm_model": "llama3.1:8b"},
         cookies=auth_cookies,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
@@ -181,6 +204,10 @@ def test_put_llm_form_round_trip_persists_provider(client: TestClient, auth_cook
     body = r2.json()
     assert body["llm_provider"] == "ollama"
     assert body["llm_model"] == "llama3.1:8b"
+    assert "env_indicators" in body
+    assert set(body["env_indicators"].keys()) == {"anthropic", "openai", "ollama"}
+    # Make sure the old fingerprint key doesn't leak back in.
+    assert "llm_api_key_fingerprint" not in body
 
     # Reset for hygiene
     client.put(
@@ -188,7 +215,6 @@ def test_put_llm_form_round_trip_persists_provider(client: TestClient, auth_cook
         data={
             "llm_provider": "anthropic",
             "llm_model": "claude-3.5-sonnet-20250219",
-            "api_key": "",
         },
         cookies=auth_cookies,
         headers={"Content-Type": "application/x-www-form-urlencoded"},

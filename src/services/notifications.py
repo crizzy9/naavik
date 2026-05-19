@@ -3,8 +3,10 @@
 Per BACKEND.md § L.3, § L.4, § H.1 + plan 10 § C.5.
 
 Wave 6 ships outbound. Telegram inbound + Discord moderation are Phase 5.
-All credentials live in the encrypted vault under `scope="notifications"`.
-Per-event toggles live in `Settings.notifications_enabled` (JSON dict).
+Plan 26 (0.2.0.01): credentials moved from the encrypted vault to env vars
+(`DISCORD_WEBHOOK_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) consumed
+by pydantic-settings in `src/config.py`. Per-event toggles still live in
+`Settings.notifications_enabled` (JSON dict).
 """
 
 from __future__ import annotations
@@ -19,16 +21,10 @@ from typing import Any
 
 import httpx
 
+from config import settings as app_settings
 from models import Application, Job, Settings
-from services import vault as vault_svc
 
 log = logging.getLogger(__name__)
-
-# Vault scope keys
-_SCOPE = "notifications"
-_DISCORD_KEY = "discord_webhook_url"
-_TELEGRAM_TOKEN_KEY = "telegram_bot_token"
-_TELEGRAM_CHAT_KEY = "telegram_chat_id"
 
 # Per-event toggle keys (matching Settings.notifications_enabled JSON shape).
 EVENT_NEW_HIGH_SCORE = "new_high_score_job"
@@ -80,8 +76,8 @@ async def stream_toasts() -> AsyncIterator[str]:
 # ── Discord webhook ────────────────────────────────────────────────────
 
 
-def _discord_url(caller: str = "notifications") -> str | None:
-    return vault_svc.get(_SCOPE, _DISCORD_KEY, caller=caller)
+def _discord_url() -> str | None:
+    return app_settings.discord_webhook_url or None
 
 
 def _embed_for_event(
@@ -198,12 +194,12 @@ async def send_discord(
 # ── Telegram outbound ──────────────────────────────────────────────────
 
 
-def _telegram_token(caller: str = "notifications") -> str | None:
-    return vault_svc.get(_SCOPE, _TELEGRAM_TOKEN_KEY, caller=caller)
+def _telegram_token() -> str | None:
+    return app_settings.telegram_bot_token or None
 
 
-def _telegram_chat_id(caller: str = "notifications") -> str | None:
-    return vault_svc.get(_SCOPE, _TELEGRAM_CHAT_KEY, caller=caller)
+def _telegram_chat_id() -> str | None:
+    return app_settings.telegram_chat_id or None
 
 
 def _telegram_text_for_event(

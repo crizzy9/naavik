@@ -867,8 +867,7 @@
     <div class="max-w-4xl">
       {% with paths=[
         {"label": "DATA DIR",  "path": "~/.naavik/data",         "sub": "12 MB · 47 jobs · 12 applications", "icon": "database"},
-        {"label": "SECRETS",   "path": "~/.naavik/secrets.enc",   "sub": "aes-256-gcm · 3 keys",            "icon": "lock"},
-        {"label": "CONFIG",    "path": "~/.naavik/config.toml",   "sub": "last edited 4d ago",              "icon": "file-text"},
+        {"label": "CONFIG",    "path": ".env",                    "sub": "env-loaded · gitignored",         "icon": "file-cog"},
         {"label": "SNAPSHOTS", "path": "~/.naavik/snapshots/",    "sub": "12 daily · auto-prune at 30",     "icon": "archive"},
       ] %}{% include "components/on_disk_card.html" %}{% endwith %}
     </div>

@@ -1,16 +1,16 @@
 """Settings service — Wave 4 of plan 10 § B.8.
 
-DB-backed CRUD for the per-user `Settings` singleton. Secrets (API keys,
-OAuth tokens, webhook URLs) flow through the vault — never stored on the
-Settings row directly.
-
-Wave 4 ships: get/upsert + per-tab updates. Scheduler reschedule on sources
-save is a stub here (the APScheduler integration ships in Wave 6).
+DB-backed CRUD for the per-user `Settings` singleton. Plan 26 (0.2.0.01)
+deleted the encrypted vault: every secret (LLM API keys, OAuth refresh
+tokens, IMAP passwords, ATS cookies, Discord webhook URL, Telegram bot
+token, Netlify build hook) now flows through env vars consumed by
+`pydantic-settings` in `src/config.py`. Settings stores no secret material
+and exposes no presence indicators — those are runtime-derived via
+`services/env_secrets.py`.
 """
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime
 from typing import Any
 
@@ -19,12 +19,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import LLMProvider as LLMProviderEnum
 from models import Settings
-from services import vault as vault_svc
-
-# Vault scope keys
-_LLM_SCOPE = "llm"
-_NOTIFICATIONS_SCOPE = "notifications"
-_INTEGRATIONS_SCOPE = "integrations"
 
 
 async def get_or_create(session: AsyncSession, user_id: int) -> Settings:
@@ -38,10 +32,6 @@ async def get_or_create(session: AsyncSession, user_id: int) -> Settings:
     return row
 
 
-def _fingerprint_for_key(api_key: str) -> str:
-    return "sha256:" + hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:32]
-
-
 # ── Per-tab updates ──────────────────────────────────────────────────────
 
 
@@ -51,7 +41,6 @@ async def update_llm(
     *,
     provider: LLMProviderEnum | None = None,
     model: str | None = None,
-    api_key: str | None = None,
     fallback_provider: LLMProviderEnum | None = None,
 ) -> Settings:
     s = await get_or_create(session, user_id)
@@ -61,11 +50,6 @@ async def update_llm(
         s.llm_model = model
     if fallback_provider is not None:
         s.llm_fallback_provider = fallback_provider
-    if api_key is not None:
-        # Route the actual key through the vault — DB stores fingerprint only.
-        target_provider = (provider or s.llm_provider).value
-        vault_svc.set(_LLM_SCOPE, target_provider, api_key, caller="settings_service")
-        s.llm_api_key_fingerprint = _fingerprint_for_key(api_key)
     s.updated_at = datetime.now(UTC)
     session.add(s)
     await session.flush()
@@ -128,8 +112,6 @@ async def update_notifications(
     notify_threshold: float | None = None,
     notify_on_errors: bool | None = None,
     notifications_enabled: dict[str, bool] | None = None,
-    discord_webhook_url: str | None = None,
-    telegram_bot_token: str | None = None,
 ) -> Settings:
     s = await get_or_create(session, user_id)
     if notify_threshold is not None:
@@ -138,30 +120,6 @@ async def update_notifications(
         s.notify_on_errors = notify_on_errors
     if notifications_enabled is not None:
         s.notifications_enabled = notifications_enabled
-    if discord_webhook_url is not None:
-        if discord_webhook_url:
-            vault_svc.set(
-                _NOTIFICATIONS_SCOPE,
-                "discord_webhook_url",
-                discord_webhook_url,
-                caller="settings_service",
-            )
-            s.discord_webhook_configured = True
-        else:
-            vault_svc.delete(_NOTIFICATIONS_SCOPE, "discord_webhook_url", caller="settings_service")
-            s.discord_webhook_configured = False
-    if telegram_bot_token is not None:
-        if telegram_bot_token:
-            vault_svc.set(
-                _NOTIFICATIONS_SCOPE,
-                "telegram_bot_token",
-                telegram_bot_token,
-                caller="settings_service",
-            )
-            s.telegram_bot_configured = True
-        else:
-            vault_svc.delete(_NOTIFICATIONS_SCOPE, "telegram_bot_token", caller="settings_service")
-            s.telegram_bot_configured = False
     s.updated_at = datetime.now(UTC)
     session.add(s)
     await session.flush()
@@ -198,37 +156,14 @@ async def update_account_password(
 async def get_deployment_info(session: AsyncSession, user_id: int) -> dict[str, Any]:
     """Return the bundle Settings · Deployment renders.
 
-    Plan 10b (item 7, 2026-05-03): also exposes the vault status as top-level
-    `vault_locked`, `vault_fingerprint_stored`, `vault_fingerprint_expected`
-    fields so the rendered Jinja template can read them without dereffing
-    a nested dict. The legacy nested `vault.{...}` block stays for any
-    JSON consumer that already pinned to it.
+    Plan 26 (0.2.0.01): the vault status triplet (`vault_locked`,
+    `vault_fingerprint_stored`, `vault_fingerprint_expected`) is removed
+    along with the vault. Self-hosters set secrets via `.env`; filesystem
+    permissions are the operative defense.
     """
     s = await get_or_create(session, user_id)
-
-    try:
-        stored = vault_svc.fingerprint()
-    except Exception:  # noqa: BLE001
-        stored = None
-    try:
-        expected = vault_svc.expected_fingerprint()
-    except Exception:  # noqa: BLE001
-        expected = None
-    try:
-        locked = vault_svc.is_locked()
-    except Exception:  # noqa: BLE001
-        locked = False
-
     return {
         "deployment_mode": s.deployment_mode.value,
-        "vault": {
-            "fingerprint": stored,
-            "expected_fingerprint": expected,
-            "is_locked": locked,
-        },
-        "vault_locked": bool(locked),
-        "vault_fingerprint_stored": stored,
-        "vault_fingerprint_expected": expected,
         "debug": s.debug,
         "settings_user_id": s.user_id,
     }

@@ -3,11 +3,12 @@
 # Quick start:
 #   docker compose up -d
 #
-# Optional .env (auto-loaded if present):
-#   cp .env.example .env  # then edit API keys, secrets
+# .env (gitignored; auto-loaded if present):
+#   cp .env.example .env && chmod 0600 .env  # then edit API keys, secrets
 #
 # Migrations run automatically before the app starts.
-# All app state (PDFs, secrets.enc, snapshots) lives in the `naavik-data` volume.
+# All app state (PDFs, snapshots, logs) lives in the `naavik-data` volume.
+# Plan 26 (0.2.0.01) removed the encrypted vault; secrets live in `.env`.
 
 services:
   db:
@@ -56,6 +57,7 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       PORTFOLIO_WEBHOOK_URL: ${PORTFOLIO_WEBHOOK_URL:-}
     ports:
       - "${PORT:-8000}:8000"

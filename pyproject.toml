@@ -50,9 +50,11 @@ dev = [
 ]
 
 [project.scripts]
-# Plan 10b (item 5, 2026-05-03): `naavik` is now a subcommand-based CLI
-# (`naavik serve` / `init` / `vault status` / `vault rotate-key`). Bare
-# `naavik` defaults to `serve` so the old behavior is preserved.
+# Plan 26 (0.2.0.01, 2026-05-19): `naavik init` + `naavik vault <...>`
+# subcommands deleted with the encrypted vault. `naavik` (bare) and
+# `naavik serve` are the only surfaces left; both run uvicorn. Plan
+# 0.2.0.02 (queued) collapses to the bare invocation per AGENTS.md
+# § Key Conventions § CLI sunset directive.
 naavik = "cli.main:main"
 naavik-alembic = "alembic.config:main"
 

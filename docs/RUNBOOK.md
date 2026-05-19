@@ -61,29 +61,17 @@ nix run .#dev
 
 **Fix:** pull latest `flake.nix` — orchestrator now exports `LD_LIBRARY_PATH=${pkgs.stdenv.cc.cc.lib}/lib`. Same fix `nix/devshell.nix` has had since plan 09.
 
-### 2.3 Vault locked — `SECRET_KEY` mismatch
+### 2.3 `SECRET_KEY` rotation (post-vault)
 
-**Symptom:** Settings · Deployment renders a rose **Vault locked** banner. API requests that read encrypted secrets return 503. Boot logs show `key_fingerprint mismatch: stored=<X> expected=<Y>`.
+**Symptom:** after rotating `SECRET_KEY`, users get 401 on requests with stale cookies.
 
-**Root cause:** the env's `SECRET_KEY` no longer matches what encrypted the on-disk vault at `~/.naavik/secrets.enc`. Most common: someone rotated `.env` without running `naavik vault rotate-key` first.
+**Root cause:** plan 26 (0.2.0.01) deleted the encrypted vault. `SECRET_KEY` now signs JWTs only; rotating it invalidates existing cookies (which is the correct behavior — the old signature can't verify under the new key).
 
-**Fix (option A — restore old key):**
-```bash
-# In your shell or .env, restore the SECRET_KEY value that was set when the vault was first created.
-export SECRET_KEY='<the-original-value>'
-# Restart the app.
-```
+**Fix:** users re-authenticate from `/login`. New cookies are issued against the new `SECRET_KEY`.
 
-**Fix (option B — re-encrypt vault with new key):**
-```bash
-naavik vault rotate-key --old="$OLD_SECRET_KEY" --new="$NEW_SECRET_KEY"
-export SECRET_KEY="$NEW_SECRET_KEY"
-# Restart the app.
-```
+**Note:** there is no "vault locked" state to recover from after plan 26. `.env` is the source of truth for secrets. Filesystem permissions (`chmod 0600 .env`) are the operative defense.
 
-**Verify:** `naavik vault status` — stored + expected fingerprints match. Banner disappears in Settings · Deployment.
-
-**Important:** Phase 2 task 2.12 deletes the vault entirely. Secrets move to env-var-only via gitignored `.env`. Don't add new vault scopes (AGENTS.md § Key Conventions § CLI).
+**Important:** the vault was deleted. Don't reintroduce encrypted-at-rest secret stores; `tests/test_no_vault_imports.py` lints against regressions. New secret-handling code uses env vars via `pydantic-settings` in `src/config.py`.
 
 ### 2.4 Port 5432 in use / "the orchestrator can't start Postgres"
 
@@ -171,15 +159,15 @@ ls tests/visual/baseline/  # should have 20+ PNGs
 
 **Diagnose:**
 ```bash
-# Check vault has a key for this provider.
-naavik vault status   # shows scope counts, not values
+# Plan 26 (0.2.0.01): secrets are env-only. Confirm env vars are set.
+env | grep -E '^(ANTHROPIC|OPENAI|OLLAMA)' | head -5
 
-# Check the Settings row.
+# Check the Settings row for active provider.
 psql -h 127.0.0.1 -p 5433 -U naavik -d naavik -c \
-  "SELECT llm_provider, anthropic_configured, openai_configured FROM settings WHERE user_id=1;"
+  "SELECT llm_provider, llm_model FROM settings WHERE user_id=1;"
 ```
 
-**Fix:** re-enter the API key via Settings · LLM Provider in the UI. The form-driven flow runs the key through the vault (plan 10b § B.11). If using env fallback (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`), confirm the var is set in the process environment.
+**Fix:** set the relevant env var in `.env` (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OLLAMA_BASE_URL`), `chmod 0600 .env`, restart the server. The Settings · LLM Provider tab surfaces a green indicator next to the configured provider; gray indicators mean the env var is unset.
 
 ### 2.10 APScheduler job not firing
 
@@ -266,13 +254,13 @@ ORDER BY next_run_time NULLS LAST;
 
 `next_run_time` NULL → job is paused. `next_run_time` in the past → scheduler is wedged.
 
-### 3.5 Inspect vault audit log
+### 3.5 Inspect secret usage
+
+Plan 26 (0.2.0.01) deleted `~/.naavik/logs/vault-audit.log`. Secret material is env-loaded; access-log scrubbing for `Authorization` / `Cookie` headers + the request-tracing pipeline (Phase 2.5) replace the per-key audit trail. For "is this env var set" inspection:
 
 ```bash
-tail -n 50 ~/.naavik/logs/vault-audit.log | jq .
+env | grep -E '^(ANTHROPIC|OPENAI|OLLAMA|DISCORD|TELEGRAM|PORTFOLIO)' | sed 's/=.*$/=<redacted>/'
 ```
-
-Each line: `{caller, key, op, scope, ts}`. Values **never** appear. Use to trace "when was key X last rotated" or "why did read fail at time T".
 
 ### 3.6 Inspect a trace run
 
@@ -317,20 +305,17 @@ uv run python -m db.seed
 
 Both: ~10s on a warm machine.
 
-### 4.2 Recover from corrupted vault
+### 4.2 Recover from a missing `.env`
+
+Plan 26 (0.2.0.01) deleted the encrypted vault. Secrets live in `.env`. Recovery is restore-from-backup:
 
 ```bash
-ls -lt ~/.naavik/secrets.enc.bak.*  # most recent backup first
-cp ~/.naavik/secrets.enc.bak.<latest> ~/.naavik/secrets.enc
-# Restart the app with the SECRET_KEY that encrypted that backup.
+# 1. Restore .env from your backup (any standard tool: tarball, rsync, etc.).
+# 2. chmod 0600 .env
+# 3. Restart the app.
 ```
 
-If no backup exists, the secrets are unrecoverable — start fresh:
-```bash
-rm ~/.naavik/secrets.enc ~/.naavik/key.bin
-naavik init     # generates a fresh key + empty vault
-# Re-enter secrets via Settings · LLM Provider / Settings · Notifications.
-```
+If no backup exists, regenerate the secrets from each provider's console (Anthropic / OpenAI / Discord / Telegram) and write them to a fresh `.env`. Settings UI shows green indicators once env vars are present.
 
 ### 4.3 Restore from daily snapshot
 
@@ -406,10 +391,10 @@ SELECT id, EXTRACT(EPOCH FROM (now() - next_run_time)) AS overdue_seconds
 FROM apscheduler_jobs WHERE next_run_time < now() - interval '5 minutes';
 -- Healthy: empty result set.
 
--- 5. Vault audit anomaly
+-- 5. .env permissions (plan 26 post-vault check)
 -- (shell)
-tail -n 200 ~/.naavik/logs/vault-audit.log | jq -r '.op' | sort | uniq -c
--- Healthy: mostly `get` ops, few `set`, very few `delete` or `rotate-key`.
+stat -c '%a %U:%G %n' "${DATA_DIR:-.}/.env" .env 2>/dev/null | head -1
+-- Healthy: `600 <user>:<group> .env`.
 ```
 
 ### Per-incident response template
@@ -432,9 +417,9 @@ tail -n 200 ~/.naavik/logs/vault-audit.log | jq -r '.op' | sort | uniq -c
 - **Patch the symptom while the root cause lives.** A `try/except` swallowing a real error is worse than the crash it hides.
 - **Skip the failing test.** `pytest.skip` without an issue link is a debt you'll inherit.
 - **Bypass `setsid -w`** in the orchestrator to "make it simpler." You'll bring back the SIGTTIN bug.
-- **Add a new vault scope** for a fix. The vault is on the Phase 2 task 2.12 sunset track (AGENTS.md § Key Conventions § CLI). Move the secret to `.env` (post-2.12) or design the equivalent Settings UI surface.
-- **Extend the `naavik` CLI** for a fix. CLI is on the Phase 2 task 2.11 sunset track. Same disposition.
-- **Run `rm -rf ~/.naavik/`** to "reset" without confirming the user. That nukes the vault and dev-credentials file in addition to the DB.
+- **Reintroduce the vault.** Plan 26 (0.2.0.01) deleted `src/services/vault.py`. `tests/test_no_vault_imports.py` lints against regressions. New secrets land in `.env` or in a Settings UI surface backed by env reads.
+- **Extend the `naavik` CLI** for a fix. CLI is on the Phase 2 task `0.2.0.02` sunset track. Same disposition — only `serve` remains, and it's queued for removal.
+- **Run `rm -rf ~/.naavik/`** to "reset" without confirming the user. That nukes the dev-credentials file + snapshots + cached PDFs in addition to the DB.
 - **Run `--no-verify`** on a commit to bypass pre-commit hooks. The hook failed for a reason; fix it.
 - **Close a flaky test** without instrumenting it. Capture the flake's signature in `engineer.log` so the next devops invocation can see the pattern.
 

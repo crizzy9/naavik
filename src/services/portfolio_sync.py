@@ -22,13 +22,8 @@ import httpx
 
 from config import settings as app_settings
 from models import Profile, Settings
-from services import vault as vault_svc
 
 log = logging.getLogger(__name__)
-
-# Vault scope keys
-_VAULT_SCOPE = "misc"
-_NETLIFY_KEY = "portfolio_webhook_url"
 
 DEFAULT_DEBOUNCE_SECONDS = 60.0
 
@@ -199,8 +194,8 @@ async def regenerate_generic_resume(
 
 
 async def trigger_netlify_rebuild(*, http_client: httpx.AsyncClient | None = None) -> bool:
-    """Fire the Netlify build hook stored in the vault (`scope=misc`)."""
-    url = vault_svc.get(_VAULT_SCOPE, _NETLIFY_KEY, caller="portfolio_sync")
+    """Fire the Netlify build hook configured via `PORTFOLIO_WEBHOOK_URL` env."""
+    url = app_settings.portfolio_webhook_url
     if not url:
         return False
     client = http_client or httpx.AsyncClient(timeout=10.0)
