@@ -41,13 +41,13 @@ Groups:
   task      release-version task ops (list / insert / defer / prioritize / move / etc.)
   release   release ceremony (cut / dry-run / changelog)
   deps      cross-task / cross-version dependency graph (add / remove / list / check)
-  gh        GitHub Project + Issue ops (subprocess wraps .claude/naavik-ops gh during A.29)
-  memory    agent memory ops (subprocess wraps .claude/naavik-ops memory during A.29)
+  gh        GitHub Project + Issue ops (native Python; sole writer to `.claude/github-issue-map.json`)
+  memory    agent memory ops (native Python; sole writer to `.claude/memory/`)
 
 Run `naavik-ops <group> --help` for group-level help.
 
 Design doc: docs/design/PHASE_NUMBERING.md
-Plan:       docs/plans/24-A.29-phase-numbering-system.md
+Plan:       docs/plans/25-0.1.1-bash-to-python.md
 """
 
 

@@ -1,32 +1,26 @@
 # scripts/
 
 This directory is reserved for **project-wide user-runnable scripts** — build
-wrappers, deploy helpers, test orchestrators that the maintainer invokes
-directly. It is NOT for agent-system tooling.
+wrappers, deploy helpers, test orchestrators that the maintainer or end-users
+invoke directly. It is NOT for agent-system tooling.
+
+After `0.1.1` shipped (plan 25), this directory is empty except for this
+README. The agent-system tooling that previously lived here
+(`gh-project.sh`, `agent-memory.sh`, `roadmap_parser.py`) has been ported to
+native Python under `.claude/naavik_ops/`. Invoke through the dispatcher:
+
+```bash
+.claude/naavik-ops gh next-unblocked
+.claude/naavik-ops memory list discussions
+.claude/naavik-ops task list 0.2.0
+```
 
 ## Agent-system tooling lives at `.claude/naavik_ops/`
 
-Agent dispatcher: `.claude/naavik-ops` (executable Python entry point).
+Entry point: `.claude/naavik-ops` (executable Python).
 See `docs/AGENT_OPS.md § 2.7a` for the operator surface.
 
-## During A.29 transition (until A.30 ships as 0.1.1)
-
-The following bash scripts temporarily live here as subprocess targets for the
-Python dispatcher:
-
-- `gh-project.sh` (1469 LOC bash) — `.claude/naavik-ops gh` wraps it.
-- `agent-memory.sh` (843 LOC bash) — `.claude/naavik-ops memory` wraps it.
-- `roadmap_parser.py` (304 LOC Python) — `.claude/naavik_ops/lib/roadmap.py`
-  will absorb it in A.30 (0.1.1).
-
-The historic one-shot migration `A.28-board-restructure.sh` has already moved
-to `.claude/migrations/`. The new A.29 migration runbook
-`A.29-phase-renumber.py` lives there as well — both are agent-system internal
-historical artifacts.
-
-After A.30 ships (single-task patch release 0.1.1 themed "Python rewrite of
-legacy bash"), this directory should be empty until a real project-wide script
-lands.
+Historic one-shot migrations live at `.claude/migrations/`.
 
 ## Convention summary (per design doc § 9 + plan § D.21)
 
@@ -39,6 +33,5 @@ lands.
 
 Per the single-writer rule (`AGENTS.md § GitHub state — single writer rule`),
 all GitHub Project + Issue + agent-memory state mutations route through
-`.claude/naavik-ops`. The bash scripts above remain the underlying
-implementation during A.29 transition; subprocess wrappers preserve the
-single-writer invariant.
+`.claude/naavik-ops`. The dispatcher writes natively in Python; there are no
+remaining bash wrappers.
