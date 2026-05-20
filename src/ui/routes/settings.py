@@ -268,14 +268,15 @@ _DEFAULT_SCHEDULES: dict[str, str] = {
 }
 
 _ENV_VAR_FOR_SOURCE = {
-    "workday": "WORKDAY_COMPANIES",
+    # Plan 56 / 0.2.7.04: WORKDAY excluded — Workday uses `Settings.workday_companies`
+    # (per-user DB); the `WORKDAY_COMPANIES` env-slot in `src/config.py` is dead-letter
+    # until 0.2.7.06 wires env→DB seed at boot.
     "greenhouse": "GREENHOUSE_COMPANIES",
     "lever": "LEVER_COMPANIES",
     "ashby": "ASHBY_COMPANIES",
 }
 
 _ENV_EXAMPLE_FOR_SOURCE = {
-    "workday": "WORKDAY_COMPANIES=salesforce/External,adobe/Adobe_Careers",
     "greenhouse": "GREENHOUSE_COMPANIES=anthropic,scale,databricks",
     "lever": "LEVER_COMPANIES=netflix,figma",
     "ashby": "ASHBY_COMPANIES=ramp,vercel",
@@ -364,15 +365,23 @@ async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> 
                 "started_at_label": _format_started_at(run.started_at),
             }
         configure_block: dict
-        if source_value in _ENV_VAR_FOR_SOURCE:
+        if source is JobSource.WORKDAY:
+            # Plan 56 / 0.2.7.04 — Workday's cron reads `Settings.workday_companies`
+            # (per-user DB), not `WORKDAY_COMPANIES` env. The env-slot exists in
+            # config.py but is dead-letter until 0.2.7.06 wires it. Render honest
+            # popover prose under `kind="db-workday"` instead of the misleading
+            # env-kind w/ a CSV example operators copy to .env and see no result.
+            configure_block = {
+                "kind": "db-workday",
+                "companies": list(getattr(settings_obj, "workday_companies", None) or []),
+            }
+        elif source_value in _ENV_VAR_FOR_SOURCE:
             configure_block = {
                 "kind": "env",
                 "env_var": _ENV_VAR_FOR_SOURCE[source_value],
                 "example": _ENV_EXAMPLE_FOR_SOURCE.get(source_value),
             }
-            if source is JobSource.WORKDAY:
-                current = getattr(settings_obj, "workday_companies", None) or []
-            elif source is JobSource.GREENHOUSE:
+            if source is JobSource.GREENHOUSE:
                 current = app_settings.greenhouse_companies or []
             elif source is JobSource.LEVER:
                 current = app_settings.lever_companies or []

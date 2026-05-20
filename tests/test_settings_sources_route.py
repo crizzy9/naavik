@@ -356,3 +356,29 @@ def test_build_sources_view_raises_on_none_session():
 
     with _pytest.raises(RuntimeError, match="AsyncSession"):
         asyncio.run(settings_routes._build_sources_view(None, user_id=1))
+
+
+# ── Plan 56 · item 3 (0.2.7.04) — Workday popover kind = db-workday ──────
+
+
+def test_build_sources_view_workday_kind_is_db_workday(monkeypatch, _patch_route_helpers):
+    """Workday row carries `configure.kind == "db-workday"` + companies list.
+
+    Plan 56 / 0.2.7.04 — README/popover env-var asymmetry fix: Workday is
+    actually per-tenant DB-stored via `Settings.workday_companies`, not env.
+    The popover renders honest prose under `kind="db-workday"` instead of
+    misleading `kind="env"` w/ a dead-letter `WORKDAY_COMPANIES` example.
+    """
+    import asyncio
+
+    from models import JobSource
+    from ui.routes import settings as settings_routes
+
+    _patch_route_helpers["settings"] = _make_settings(
+        workday_companies=["acme/External", "globex/Careers"],
+    )
+
+    rows = asyncio.run(settings_routes._build_sources_view(_NoopSession(), user_id=1))
+    workday = next(r for r in rows if r["source"] == JobSource.WORKDAY.value)
+    assert workday["configure"]["kind"] == "db-workday"
+    assert workday["configure"]["companies"] == ["acme/External", "globex/Careers"]

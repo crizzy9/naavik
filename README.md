@@ -378,6 +378,10 @@ DATA_DIR=.naavik
 GREENHOUSE_COMPANIES=anthropic,scale,databricks
 LEVER_COMPANIES=netflix,figma
 ASHBY_COMPANIES=ramp,vercel
+# WORKDAY_COMPANIES — SLOT RESERVED (0.2.7.04). The env var exists in src/config.py
+# but Workday's cron reads `Settings.workday_companies` (per-user DB) instead.
+# Update the watchlist via the Settings · Sources UI; env→DB seed wiring is
+# planned for 0.2.7.06.
 WORKDAY_COMPANIES=salesforce/External,adobe/Adobe_Careers
 SCRAPER_RSSHUB_URL=                        # optional LinkedIn RSShub fallback base URL
 ```

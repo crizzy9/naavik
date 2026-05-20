@@ -142,6 +142,22 @@
               Location: <span class="font-mono text-slate-200">{{ v.configure.location }}</span>
             </p>
           {% endif %}
+        {% elif v.configure.kind == "db-workday" %}
+          {# Plan 56 / 0.2.7.04 — Workday is per-tenant DB-stored (Settings.workday_companies);
+             the WORKDAY_COMPANIES env-slot in src/config.py is dead-letter until 0.2.7.06. #}
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            Workday companies are per-user. Update via
+            <code class="font-mono text-slate-200">PUT /api/v1/settings/sources</code>
+            (writable editor lands in <code class="font-mono">0.2.7.06</code>).
+          </p>
+          {% if v.configure.companies %}
+            <p class="mt-1.5 text-[11px] text-slate-300">
+              Tracking:
+              <span class="font-mono text-slate-200">{{ v.configure.companies | join(", ") }}</span>
+            </p>
+          {% else %}
+            <p class="mt-1.5 text-[11px] text-slate-500 italic">No companies set.</p>
+          {% endif %}
         {% endif %}
       </div>
     </details>
