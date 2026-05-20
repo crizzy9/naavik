@@ -205,13 +205,13 @@ async def _ctx_for_tab(
 
     if tab == "sources":
         ctx["sources_view"] = await _build_sources_view(session, user_id=user_id)
-        ctx["recent_scrape_runs"] = await _recent_scrape_runs_view(session)
+        ctx["recent_scrape_runs"] = await _recent_scrape_runs_view(session, user_id=user_id)
 
     if tab == "submissions":
-        ctx["submission_failures"] = await _submission_failures_view(session)
+        ctx["submission_failures"] = await _submission_failures_view(session, user_id=user_id)
 
     if tab == "llm-provider":
-        today_cost, cap = await _llm_cost_cap_view(session, settings)
+        today_cost, cap = await _llm_cost_cap_view(session, settings, user_id=user_id)
         ctx["today_cost_usd"] = today_cost
         ctx["cost_cap_usd"] = cap
 
@@ -221,27 +221,45 @@ async def _ctx_for_tab(
 # ── Plan 54 / 0.2.5 dashboard views ────────────────────────────────────
 
 
-async def _recent_scrape_runs_view(session: AsyncSession | None) -> list[JobScrapeRunRead]:
-    """List recent JobScrapeRun rows projected via JobScrapeRunRead."""
+async def _recent_scrape_runs_view(
+    session: AsyncSession | None, *, user_id: int
+) -> list[JobScrapeRunRead]:
+    """List recent JobScrapeRun rows projected via JobScrapeRunRead.
+
+    Plan 57 / 0.2.7.23 — threads `user_id` through (closes the sibling IDOR
+    after plan 56 fixed `_build_sources_view`).
+    """
     if session is None:
         return []
-    runs = await job_service.list_recent_scrape_runs(session, user_id=1, limit=50)
+    runs = await job_service.list_recent_scrape_runs(session, user_id=user_id, limit=50)
     return [JobScrapeRunRead.model_validate(r, from_attributes=True) for r in runs]
 
 
-async def _submission_failures_view(session: AsyncSession | None) -> list[dict]:
-    """Per-(board, failure_kind) Application failure aggregates."""
+async def _submission_failures_view(
+    session: AsyncSession | None, *, user_id: int
+) -> list[dict]:
+    """Per-(board, failure_kind) Application failure aggregates.
+
+    Plan 57 / 0.2.7.23 — threads `user_id` through (closes the sibling IDOR
+    after plan 56 fixed `_build_sources_view`).
+    """
     if session is None:
         return []
-    return await application_service.aggregate_submission_failures(session, user_id=1)
+    return await application_service.aggregate_submission_failures(session, user_id=user_id)
 
 
-async def _llm_cost_cap_view(session: AsyncSession | None, settings) -> tuple[float, float | None]:
-    """Today's spend + the configured daily cap (None if unset)."""
+async def _llm_cost_cap_view(
+    session: AsyncSession | None, settings, *, user_id: int
+) -> tuple[float, float | None]:
+    """Today's spend + the configured daily cap (None if unset).
+
+    Plan 57 / 0.2.7.23 — threads `user_id` through (closes the sibling IDOR
+    after plan 56 fixed `_build_sources_view`).
+    """
     cap = getattr(settings, "daily_llm_cost_cap_usd", None) if settings else None
     if session is None:
         return 0.0, cap
-    today = await llm_tracker.today_cost_usd(session, user_id=1)
+    today = await llm_tracker.today_cost_usd(session, user_id=user_id)
     return today, cap
 
 
@@ -474,9 +492,12 @@ async def get_settings_submissions(
 
     Aggregated failure-kind dashboard per ATS adapter. Gated by
     `require_authed_session` mirroring the Sources sub-tab pattern;
-    `Depends(get_session)` is the canonical entry.
+    `Depends(get_session)` is the canonical entry. Plan 57 / 0.2.7.23 —
+    threads `_effective_user_id` to close sibling IDOR.
     """
-    ctx = await _ctx_for_tab(request, "submissions", session=session)
+    ctx = await _ctx_for_tab(
+        request, "submissions", session=session, user_id=_effective_user_id(_user)
+    )
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(request, "pages/_settings_submissions.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
@@ -498,9 +519,12 @@ async def get_settings_llm_provider(
     without changing the catch-all's signature (existing tests rely on it being
     DB-free). Plan 56 / 0.2.7.20 — gated by `require_authed_session` matching the
     Sources + Submissions sub-tabs; the daily-cost widget aggregates per-user
-    ApiUsage rows and shouldn't leak unauth.
+    ApiUsage rows and shouldn't leak unauth. Plan 57 / 0.2.7.23 — threads
+    `_effective_user_id` to close sibling IDOR.
     """
-    ctx = await _ctx_for_tab(request, "llm-provider", session=session)
+    ctx = await _ctx_for_tab(
+        request, "llm-provider", session=session, user_id=_effective_user_id(_user)
+    )
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(request, "pages/_settings_llm.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
