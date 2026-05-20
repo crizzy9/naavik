@@ -2,7 +2,7 @@
 
 > **Single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. Tracking-only (per `AGENTS.md` § Single-doc-tracking).
 >
-> **Last updated:** 2026-05-20. (0.2.x sweep COMPLETE — 10 PRs in single session: #146/147/148/149/150/151/152/153/154/155 covering 0.2.0.07b/08a/10a/10b/11c/12a/16/17 + 0.2.1.04+05 + 0.2.2.02+03+04 + 0.2.3.02 + 0.2.4.01-04 + 0.2.5.02+03+04 + 0.2.6.06+07+08+09. ✅ 0.2.0 + 0.2.1 + 0.2.2 + 0.2.3 + 0.2.4 + 0.2.5 + 0.2.6 ALL COMPLETE. 22 ROADMAP rows shipped. 22 follow-ups filed in 0.2.7 catch-all. Plans 46-55 archived. Next: 0.2.6 tag cut.)
+> **Last updated:** 2026-05-20. (0.2.x SWEEP COMPLETE + RELEASE CUT — 10 PRs + tag `0.2.6` published via `naavik-ops release cut 0.2.6 --apply` + GH release at https://github.com/crizzy9/naavik/releases/tag/0.2.6. PRs #146/147/148/149/150/151/152/153/154/155 cover 0.2.0.07b/08a/10a/10b/11c/12a/16/17 + 0.2.1.04+05 + 0.2.2.02+03+04 + 0.2.3.02 + 0.2.4.01-04 + 0.2.5.02+03+04 + 0.2.6.06+07+08+09. ✅ 0.2.0+0.2.1+0.2.2+0.2.3+0.2.4+0.2.5+0.2.6 ALL COMPLETE. 22 ROADMAP rows shipped. 22 follow-ups filed in 0.2.7 catch-all. Plans 46-55 archived. pyproject.toml + nix/package.nix bumped to 0.2.6.)
 
 ---
 
