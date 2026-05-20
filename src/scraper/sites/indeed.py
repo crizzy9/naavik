@@ -3,8 +3,10 @@
 Per docs/design/SCRAPER_SITES.md § Indeed (graduated from plan 33 § D.6.5).
 
 Indeed is aggressively anti-bot (Cloudflare WAF + fingerprinting). Crawl4AI
-stealth is the front-line defense; `UndetectedAdapter` engagement reserved
-for `0.2.0.13` if measured 403-rate exceeds ~5%.
+stealth is the front-line defense. Plan 38 (`0.2.0.13`) shipped the
+`UndetectedAdapter` wiring + per-source telemetry; the class-attr stays
+`use_undetected_adapter = False` until `0.2.0.13c` flips it on after
+observed 403-rate exceeds ~5%.
 
 URL composition:
 - Search: ``https://www.indeed.com/jobs?q={kw}&l={loc}`` (HTML listing)
@@ -14,7 +16,8 @@ External-ID rule: ``jk`` query-param from listing-card link. Regex
 ``[?&]jk=([a-f0-9]+)``.
 
 Rate limit: 2 req/min (1 req per 30s) per BACKEND.md § J.2. Random delay
-20-40s. If 403-rate exceeds 5% on real runs, file `0.2.0.13` follow-up.
+20-40s. Per-source operator overrides via `Settings.scraper_rate_limits`
+(plan 38). If 403-rate exceeds 5% on real runs, file `0.2.0.13c` follow-up.
 """
 
 from __future__ import annotations

@@ -42,10 +42,17 @@ class ScraperBase(ABC):
     source: JobSource
     board: ApplicationBoard
 
-    # Rate-limit hooks (plan 29 § D.6). Class-level defaults are conservative;
-    # LinkedIn's subclass overrides to (<=24/hour) when 0.2.0.07 ships.
-    rate_limit_per_minute: int = 30
+    # Rate-limit hooks (plan 29 § D.6). `float` per plan 38 § D.8 — LinkedIn's
+    # 0.4 req/min (24/hour) is now expressible without int-floor flooring it
+    # to 1. Operator overrides live in `Settings.scraper_rate_limits` (plan
+    # 38 § D.1); class attrs are the fallback table.
+    rate_limit_per_minute: float = 30.0
     random_delay_seconds: tuple[float, float] = (1.0, 3.0)
+
+    # Crawl4AI's `UndetectedAdapter` (more aggressive fingerprint patching
+    # than stealth-mode). Engagement deferred to `0.2.0.13c` follow-up gated
+    # on observed 403-rate per plan 38 § D.4; wiring + telemetry ship here.
+    use_undetected_adapter: bool = False
 
     def __init__(
         self,
@@ -61,6 +68,7 @@ class ScraperBase(ABC):
             client = Crawl4AIClient(
                 rate_limit_per_minute=self.rate_limit_per_minute,
                 random_delay_seconds=self.random_delay_seconds,
+                use_undetected_adapter=self.use_undetected_adapter,
             )
         self._client = client
         # AI extraction context (plan 33 § D.3 / D.4). All optional so substrate

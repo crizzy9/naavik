@@ -34,6 +34,7 @@ from llm import get_provider as llm_get_provider
 from llm.base import LLMProviderError
 from models import JobScrapeStatus, JobSource, Settings
 from scraper.crawl4ai_client import Crawl4AIClient
+from scraper.rate_limit import resolve_rate_limit
 from scraper.sites import scrapers as scraper_registry
 from scraper.types import ScrapeQuery
 from services.notifications import notify_admin_error
@@ -149,9 +150,15 @@ async def _scrape_one_user(session, *, settings: Settings, source: JobSource) ->
         provider = None
 
     scraper_cls = scraper_registry[source.value]
+    # Plan 38 § D.1: operator overrides in Settings.scraper_rate_limits win
+    # over class-attr defaults. resolve_rate_limit returns the class-attr
+    # fallback when no operator override exists or when the override fails
+    # validation.
+    rl_config = resolve_rate_limit(settings, source)
     client = Crawl4AIClient(
-        rate_limit_per_minute=scraper_cls.rate_limit_per_minute,
-        random_delay_seconds=scraper_cls.random_delay_seconds,
+        rate_limit_per_minute=rl_config.rpm,
+        random_delay_seconds=(rl_config.delay_lo, rl_config.delay_hi),
+        use_undetected_adapter=scraper_cls.use_undetected_adapter,
     )
     scraper = scraper_cls(
         client=client,

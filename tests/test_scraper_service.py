@@ -480,3 +480,106 @@ async def test_run_scraper_notify_failure_does_not_block_lifecycle():
     # Run lifecycle stayed SUCCESS; notify failure is best-effort.
     assert run.status is JobScrapeStatus.SUCCESS
     assert run.new_jobs == 3
+
+
+# ── Plan 38 § D.7 — rate-limit telemetry in JobScrapeRun.raw_meta ────────
+
+
+@pytest.mark.asyncio
+async def test_run_scraper_writes_rate_limit_telemetry_to_raw_meta():
+    """Plan 38: rate_limit_hits + backoff_total_s + ua land in raw_meta."""
+    scraper = SampleScraper(client=_client_no_sleep())
+    session = _setup_session_for_sample(scraper, all_new=True)
+    # Simulate the client recorded one 429 during the stream.
+    scraper._client.rate_limit_hits = 2
+    scraper._client.backoff_total_s = 4.5
+
+    run = await scraper_service.run_scraper(
+        session,  # type: ignore[arg-type]
+        scraper=scraper,
+        user_id=1,
+        notify=False,
+    )
+
+    assert run.status is JobScrapeStatus.SUCCESS
+    rl = run.raw_meta.get("rate_limit")
+    assert rl is not None
+    assert rl["hits"] == 2
+    assert rl["backoff_total_s"] == 4.5
+    assert rl["ua"] == scraper._client.user_agent
+
+
+@pytest.mark.asyncio
+async def test_run_scraper_writes_adapter_used_telemetry():
+    """`raw_meta['adapter_used']` reflects scraper.use_undetected_adapter."""
+    scraper = SampleScraper(client=_client_no_sleep())
+    session = _setup_session_for_sample(scraper, all_new=True)
+
+    run = await scraper_service.run_scraper(
+        session,  # type: ignore[arg-type]
+        scraper=scraper,
+        user_id=1,
+        notify=False,
+    )
+
+    # SampleScraper inherits ScraperBase default (use_undetected_adapter=False).
+    assert run.raw_meta.get("adapter_used") == "stealth"
+
+
+@pytest.mark.asyncio
+async def test_run_scraper_adapter_used_telemetry_when_undetected():
+    """Class-attr `use_undetected_adapter=True` surfaces as 'undetected' in raw_meta."""
+
+    class _UndetectedSampleScraper(SampleScraper):
+        use_undetected_adapter = True
+
+    scraper = _UndetectedSampleScraper(client=_client_no_sleep())
+    session = _setup_session_for_sample(scraper, all_new=True)
+
+    run = await scraper_service.run_scraper(
+        session,  # type: ignore[arg-type]
+        scraper=scraper,
+        user_id=1,
+        notify=False,
+    )
+
+    assert run.raw_meta.get("adapter_used") == "undetected"
+
+
+@pytest.mark.asyncio
+async def test_run_scraper_preserves_existing_raw_meta_keys():
+    """Existing raw_meta keys (scraper_name, query) survive the telemetry write."""
+    scraper = SampleScraper(client=_client_no_sleep())
+    session = _setup_session_for_sample(scraper, all_new=True)
+
+    run = await scraper_service.run_scraper(
+        session,  # type: ignore[arg-type]
+        scraper=scraper,
+        user_id=1,
+        notify=False,
+    )
+
+    # record_scrape_run set these initially; finally block must not nuke them.
+    assert run.raw_meta["scraper_name"] == "SampleScraper"
+    assert "query" in run.raw_meta
+    # Plan 38 added these.
+    assert "rate_limit" in run.raw_meta
+    assert "adapter_used" in run.raw_meta
+
+
+@pytest.mark.asyncio
+async def test_run_scraper_telemetry_works_when_failed():
+    """FAILED runs still carry telemetry (operator wants RL data for failures)."""
+    scraper = _RaisingScraper(yield_before=0, exc=RuntimeError("auth invalid"))
+    scraper._client.rate_limit_hits = 1
+
+    session = _FakeSession()
+    run = await scraper_service.run_scraper(
+        session,  # type: ignore[arg-type]
+        scraper=scraper,
+        user_id=1,
+    )
+
+    assert run.status is JobScrapeStatus.FAILED
+    assert run.raw_meta["rate_limit"]["hits"] == 1
+    assert run.raw_meta["adapter_used"] == "stealth"

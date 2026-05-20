@@ -31,8 +31,9 @@ from __future__ import annotations
 import ipaddress
 import logging
 import socket
-from functools import lru_cache
 from urllib.parse import urlsplit
+
+from cachetools import TTLCache
 
 from config import settings as _settings
 
@@ -55,21 +56,32 @@ _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
-@lru_cache(maxsize=256)
+# Bounded TTL DNS cache (plan 38 § D.6; closes 0.2.0.13a Issue #105). 60s TTL
+# bounds the DNS-rebind TOCTOU window to <=60s; LRU eviction at 256 entries
+# matches the per-process cron load (~100 listings/hour, far fewer hosts).
+# Single-process + single-asyncio-loop usage today; if multi-process workers
+# ship in Phase 2+, add a `threading.Lock` around get/set.
+_DNS_CACHE: TTLCache[str, tuple[str, ...]] = TTLCache(maxsize=256, ttl=60.0)
+
+
 def _resolve_host(host: str) -> tuple[str, ...]:
-    """DNS resolution with LRU cache.
+    """DNS resolution with bounded-TTL cache.
 
     Returns a tuple of resolved IP strings (deduplicated). Empty tuple on
     `gaierror` so the caller can reject explicitly rather than accept by
-    default. LRU rotates by access pattern — adequate for the cron-driven
-    scraping load this plan targets (~100 listings/hour aggregate).
+    default. Re-resolves every 60s per host to bound the rebind window.
     """
+    cached = _DNS_CACHE.get(host)
+    if cached is not None:
+        return cached
     try:
         info = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
     except OSError as exc:
         log.debug("DNS resolution failed: host=%s err=%s", host, exc)
         return ()
-    return tuple({addr[4][0] for addr in info})
+    addrs = tuple({addr[4][0] for addr in info})
+    _DNS_CACHE[host] = addrs
+    return addrs
 
 
 def is_safe_destination(url: str) -> tuple[bool, str | None]:

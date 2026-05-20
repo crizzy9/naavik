@@ -15,10 +15,10 @@ from scraper.url_guard import is_safe_destination
 
 @pytest.fixture(autouse=True)
 def _reset_resolve_cache():
-    """Clear the LRU between tests so monkeypatched DNS doesn't leak."""
-    url_guard._resolve_host.cache_clear()
+    """Clear the TTL cache between tests so monkeypatched DNS doesn't leak."""
+    url_guard._DNS_CACHE.clear()
     yield
-    url_guard._resolve_host.cache_clear()
+    url_guard._DNS_CACHE.clear()
 
 
 def _patch_dns(monkeypatch, host_to_addrs: dict[str, tuple[str, ...]]) -> None:
@@ -108,3 +108,49 @@ def test_non_http_scheme_rejected():
     safe, reason = is_safe_destination("file:///etc/passwd")
     assert safe is False
     assert reason == "scheme_not_allowed:file"
+
+
+# ── Plan 38 § D.6 — TTL cache bounds DNS-rebind TOCTOU window ────────────
+
+
+def test_dns_cache_is_ttl_bounded():
+    """`_DNS_CACHE` is a `cachetools.TTLCache` with ttl=60 + maxsize=256."""
+    from cachetools import TTLCache
+
+    assert isinstance(url_guard._DNS_CACHE, TTLCache)
+    assert url_guard._DNS_CACHE.maxsize == 256
+    assert url_guard._DNS_CACHE.ttl == 60.0
+
+
+def test_dns_resolution_is_cached_within_ttl(monkeypatch):
+    """Repeated `_resolve_host` calls within the TTL hit the cache."""
+    call_count = {"n": 0}
+
+    def fake_getaddrinfo(host, *_a, **_kw):
+        call_count["n"] += 1
+        return [(None, None, None, None, ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(url_guard.socket, "getaddrinfo", fake_getaddrinfo)
+    url_guard._DNS_CACHE.clear()
+
+    a = url_guard._resolve_host("example.com")
+    b = url_guard._resolve_host("example.com")
+    assert a == b
+    assert call_count["n"] == 1
+
+
+def test_dns_cache_clear_forces_re_resolution(monkeypatch):
+    """Clearing the cache (or TTL expiry) forces a new DNS lookup."""
+    call_count = {"n": 0}
+
+    def fake_getaddrinfo(host, *_a, **_kw):
+        call_count["n"] += 1
+        return [(None, None, None, None, ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(url_guard.socket, "getaddrinfo", fake_getaddrinfo)
+    url_guard._DNS_CACHE.clear()
+
+    url_guard._resolve_host("example.com")
+    url_guard._DNS_CACHE.clear()  # Simulate TTL expiry / explicit reset.
+    url_guard._resolve_host("example.com")
+    assert call_count["n"] == 2

@@ -2,7 +2,7 @@
 
 > **Canonical reference** — graduated from `docs/plans/archive/33-0.2.0.07-site-scrapers.md` per `AGENTS.md` § Workflow step 4.
 > **Status:** Active. This is the single source for per-source URL patterns, rate-limit overrides, `external_id` derivation, and the parse contract every site scraper inherits from `_BaseSiteScraper`.
-> **Last updated:** 2026-05-19 (plan 33 / `0.2.0.07` EXECUTED — initial graduation).
+> **Last updated:** 2026-05-19 (plan 38 / `0.2.0.13` — § E LinkedIn rpm `1` → `0.4` (int→float fold); § E.4 Indeed adapter column added + cross-ref to `SCRAPER_BASE.md § G`; § H notes the new `scraper_rate_limits` Settings column).
 > **Companion docs:** `docs/design/SCRAPER_BASE.md` (substrate; `_BaseSiteScraper` extends `ScraperBase`), `docs/design/JOB_MODEL.md` (`RawJob → Job` upsert contract), `docs/design/research/LINKEDIN_SCRAPING.md` (LinkedIn-specific blueprint that this doc locks).
 > **Downstream plans depending on this contract:** `0.2.0.08` (AI extraction wires into `_maybe_enrich`), `0.2.0.10` (APScheduler cron registers per-source from `scrapers` registry), `0.2.0.11` (Discover UI surfaces persisted Jobs), `0.2.0.13` (per-source rate-limit tuning via Settings).
 
@@ -91,14 +91,16 @@ The guard is called twice on every URL:
 
 ## E · Per-source reference table
 
-| Source | source / board enum | Listing URL | Detail URL | `external_id` rule | rate_limit_per_minute | random_delay_seconds |
-|---|---|---|---|---|---|---|
-| **LinkedIn** | `LINKEDIN` / `LINKEDIN` | `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={kw}&location={loc}&start=0&f_TPR=r604800` | `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}` | `urn:li:jobPosting:(\d+)` from card; `/jobs/view/(\d+)` fallback | **1** (Crawl4AIClient minimum; effective <=24/hr via jitter) | `(3.0, 7.0)` |
-| **Workday** | `WORKDAY` / `WORKDAY` | `https://{tenant}.wd1.myworkdayjobs.com/{site}` | `https://{tenant}.wd1.myworkdayjobs.com/{site}/job/{loc}/{title}_{R-XXXXXX}` | `/job/[^/]+/[^/]+_([A-Z]+[-_]?\d+)` from URL path | **2** | `(20.0, 40.0)` |
-| **Greenhouse** | `GREENHOUSE` / `GREENHOUSE` | `https://boards.greenhouse.io/embed/job_board?for={company}&format=json` (JSON-API) | `https://boards.greenhouse.io/{company}/jobs/{id}` (HTML) | `str(row["id"])` | **20** | `(1.5, 3.0)` |
-| **Lever** | `LEVER` / `LEVER` | `https://api.lever.co/v0/postings/{company}?mode=json` (JSON-API) | `row["hostedUrl"]` (inlined in JSON) | `row["id"]` (UUID) | **20** | `(1.5, 3.0)` |
-| **Ashby** | `ASHBY` / `ASHBY` | `https://api.ashbyhq.com/posting-api/job-board/{company}?includeCompensation=true` | `row["jobUrl"]` (inlined) | `row["id"]` (UUID) | **20** | `(1.5, 3.0)` |
-| **Indeed** | `INDEED` / `INDEED` | `https://www.indeed.com/jobs?q={kw}&l={loc}` | `https://www.indeed.com/viewjob?jk={jk}` | `data-jk` attr; `[?&]jk=([a-f0-9]+)` fallback | **2** | `(20.0, 40.0)` |
+All `rate_limit_per_minute` values below are the class-attr fallbacks; operators tune per source via `Settings.scraper_rate_limits` per `SCRAPER_BASE.md § G.1`. All sources ship with `use_undetected_adapter = False`; engagement on Indeed (and possibly LinkedIn) deferred to `0.2.0.13c` per `SCRAPER_BASE.md § G.6`.
+
+| Source | source / board enum | Listing URL | Detail URL | `external_id` rule | rate_limit_per_minute | random_delay_seconds | adapter |
+|---|---|---|---|---|---|---|---|
+| **LinkedIn** | `LINKEDIN` / `LINKEDIN` | `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={kw}&location={loc}&start=0&f_TPR=r604800` | `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}` | `urn:li:jobPosting:(\d+)` from card; `/jobs/view/(\d+)` fallback | **0.4** (effective <=24/hr; plan 38 § D.8 int→float fold) | `(3.0, 7.0)` | stealth |
+| **Workday** | `WORKDAY` / `WORKDAY` | `https://{tenant}.wd1.myworkdayjobs.com/{site}` | `https://{tenant}.wd1.myworkdayjobs.com/{site}/job/{loc}/{title}_{R-XXXXXX}` | `/job/[^/]+/[^/]+_([A-Z]+[-_]?\d+)` from URL path | **2** | `(20.0, 40.0)` | stealth |
+| **Greenhouse** | `GREENHOUSE` / `GREENHOUSE` | `https://boards.greenhouse.io/embed/job_board?for={company}&format=json` (JSON-API) | `https://boards.greenhouse.io/{company}/jobs/{id}` (HTML) | `str(row["id"])` | **20** | `(1.5, 3.0)` | stealth |
+| **Lever** | `LEVER` / `LEVER` | `https://api.lever.co/v0/postings/{company}?mode=json` (JSON-API) | `row["hostedUrl"]` (inlined in JSON) | `row["id"]` (UUID) | **20** | `(1.5, 3.0)` | stealth |
+| **Ashby** | `ASHBY` / `ASHBY` | `https://api.ashbyhq.com/posting-api/job-board/{company}?includeCompensation=true` | `row["jobUrl"]` (inlined) | `row["id"]` (UUID) | **20** | `(1.5, 3.0)` | stealth |
+| **Indeed** | `INDEED` / `INDEED` | `https://www.indeed.com/jobs?q={kw}&l={loc}` | `https://www.indeed.com/viewjob?jk={jk}` | `data-jk` attr; `[?&]jk=([a-f0-9]+)` fallback | **2** | `(20.0, 40.0)` | stealth (undetected pending `0.2.0.13c`) |
 
 ### E.1 LinkedIn
 
@@ -114,7 +116,7 @@ Three near-identical JSON-API scrapers. Each reads `Settings.{ats}_companies: li
 
 ### E.4 Indeed
 
-Aggressively anti-bot (Cloudflare WAF + fingerprinting). Crawl4AI `enable_stealth=True` is the front-line defense. Conservative 2/min cap + 20-40s jitter. If real-run 403-rate exceeds ~5%, file `0.2.0.13` follow-up to engage `UndetectedAdapter` per `SCRAPER_BASE.md § G`.
+Aggressively anti-bot (Cloudflare WAF + fingerprinting). Crawl4AI `enable_stealth=True` is the front-line defense. Conservative 2/min cap + 20-40s jitter. Plan 38 shipped the `UndetectedAdapter` wiring + telemetry — `IndeedScraper.use_undetected_adapter` stays `False` here; engagement deferred to `0.2.0.13c` after the cron observes real-world 403-rate exceeding ~5% (operator-visible via `JobScrapeRun.raw_meta["rate_limit"]["hits"]` per `SCRAPER_BASE.md § G.7`).
 
 ---
 
@@ -153,7 +155,7 @@ Lint guards:
 
 ---
 
-## H · Settings env-var slots
+## H · Settings env-var slots + DB-backed dials
 
 All optional. Cron skips a source silently when its company list is unset.
 
@@ -166,6 +168,8 @@ All optional. Cron skips a source silently when its company list is unset.
 | `SCRAPER_RSSHUB_URL` | str / URL | Opt-in LinkedIn RSShub fallback base URL |
 
 Per `AGENTS.md § Key Conventions § CLI` — these are env-loaded via `pydantic-settings` in `src/config.py:Settings` (post-vault, post-CLI sunset pattern). No new `naavik` subcommand, no vault scope.
+
+Plan 38 (`0.2.0.13`) added a DB-backed dial: `Settings.scraper_rate_limits: dict[str, dict[str, float]]` (JSONB) keyed by `JobSource.value` with nested `{"rpm", "delay_lo", "delay_hi"}` shape. Operator tunes per source via Settings · Sources UI (Phase 6+); empty `{}` (default) → class-attr fallback per `SCRAPER_BASE.md § G.1`. No new env var — DB column is the per-user knob.
 
 ---
 

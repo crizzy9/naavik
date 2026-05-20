@@ -1,8 +1,8 @@
 # Naavik · Scraper Base Contract
 
 > **Canonical reference** — graduated from `docs/plans/archive/29-0.2.0.06-crawl4ai-base.md` per `AGENTS.md` § Workflow step 4.
-> **Status:** Active. This is the single source for the `ScraperBase` ABC, the `RawJob` Pydantic DTO, the `Crawl4AIClient` wrapper, the `scraper_service.run_scraper` lifecycle, the rate-limit + anti-detection interface, and the two-tier error model.
-> **Last updated:** 2026-05-19 (plan 31 / `0.2.0.06a` — scraper hardening: § E.1 surface notes `pydantic.HttpUrl` validation on `fetch_html(url)`; new § H.4 names the `safe_url` + `safe_exc` redaction helpers in `src/scraper/redaction.py`).
+> **Status:** Active. This is the single source for the `ScraperBase` ABC, the `RawJob` Pydantic DTO, the `Crawl4AIClient` wrapper, the `scraper_service.run_scraper` lifecycle, the rate-limit + anti-detection contract, and the two-tier error model.
+> **Last updated:** 2026-05-19 (plan 38 / `0.2.0.13` — rate limiting + anti-detection graduated: § G replaces the "interface only" stub with G.1–G.12 — operator-tunable `Settings.scraper_rate_limits`, `crawl4ai.RateLimiter` integration for 429/503 backoff, curated 8-UA round-robin pool, `UndetectedAdapter` wiring + telemetry deferred to `0.2.0.13c`, robots.txt explicit no-honor policy, `cachetools.TTLCache` DNS-rebind fix folding 0.2.0.13a, `JobScrapeRun.raw_meta` telemetry. `ScraperBase.rate_limit_per_minute: int → float`).
 > **Companion docs:** `docs/design/JOB_MODEL.md` (locked input for `RawJob → Job` mapping via `job_service.upsert_job`), `docs/design/BACKEND.md` § J (pipeline overview), `docs/design/research/LINKEDIN_SCRAPING.md` (source-specific blueprint that will subclass `ScraperBase` in `0.2.0.07`), `docs/ARCHITECTURE.md` § 3.8 (scraper layer rules).
 > **Downstream plans depending on this contract:** `0.2.0.07` (per-source site scrapers), `0.2.0.08` (AI extraction), `0.2.0.09` (dedup), `0.2.0.10` (APScheduler), `0.2.0.11` (Discover UI), `0.2.0.12` (notifications), `0.2.0.13` (rate limiting + anti-detection), `0.2.0.14` (n8n migration).
 
@@ -52,11 +52,24 @@ class ScraperBase(ABC):
     source: JobSource           # which JobSource enum value this scraper emits
     board: ApplicationBoard     # which ATS adapter the resulting Jobs route to
 
-    # Rate-limit hooks (interface only; impl in 0.2.0.13)
-    rate_limit_per_minute: int = 30
+    # Rate-limit hooks (plan 38 § D.8 promoted int → float so LinkedIn's
+    # 0.4 rpm no longer floors to 1). Operators tune per-source via
+    # Settings.scraper_rate_limits (§ G.1); class attrs are the fallback.
+    rate_limit_per_minute: float = 30.0
     random_delay_seconds: tuple[float, float] = (1.0, 3.0)
 
-    def __init__(self, client: Crawl4AIClient | None = None) -> None: ...
+    # UndetectedAdapter engagement toggle; default False — engagement
+    # deferred to 0.2.0.13c follow-up (§ G.6).
+    use_undetected_adapter: bool = False
+
+    def __init__(
+        self,
+        *,
+        client: Crawl4AIClient | None = None,
+        session: AsyncSession | None = None,
+        user_id: int | None = None,
+        provider: LLMProvider | None = None,
+    ) -> None: ...
 
     @property
     def name(self) -> str: ...
@@ -69,7 +82,8 @@ class ScraperBase(ABC):
 
 - **MUST set** `source` + `board` class attributes (e.g. `source = JobSource.LINKEDIN`; `board = ApplicationBoard.LINKEDIN`).
 - **MUST implement** `async def scrape(query) -> AsyncIterator[RawJob]` as an async generator (`async def` + `yield`).
-- **MAY override** `rate_limit_per_minute` and `random_delay_seconds` for source-specific tuning. `0.2.0.13` lifts these into `Settings` fields with per-source defaults.
+- **MAY override** `rate_limit_per_minute` (`float`) + `random_delay_seconds` for source-specific tuning. Operator overrides via `Settings.scraper_rate_limits` (per § G.1) win over the class-attr defaults.
+- **MAY override** `use_undetected_adapter: bool = False` for sources where stealth-mode alone is insufficient (no source ships with this `True` today; engagement deferred to `0.2.0.13c` per § G.6).
 - **MAY override** `__init__` if the subclass needs source-specific config (LinkedIn cookies, Workday company list, etc.); should call `super().__init__(client=...)` so the rate-limit + error-buffer wiring stays consistent.
 - **SHOULD honor** `query.max_listings` as an upper bound on yields per invocation.
 - **SHOULD catch** per-listing errors, append to `self._errors`, and continue iterating. The service layer aggregates the buffer into `JobScrapeRun.errors[]` post-stream.
@@ -150,8 +164,10 @@ class Crawl4AIClient:
         enable_stealth: bool = True,
         headless: bool = True,
         page_timeout_ms: int = 30_000,
-        rate_limit_per_minute: int = 30,
+        rate_limit_per_minute: float = 30.0,
         random_delay_seconds: tuple[float, float] = (1.0, 3.0),
+        user_agent: str | None = None,
+        use_undetected_adapter: bool = False,
     ) -> None: ...
 
     async def fetch_html(self, url: str) -> str | None:
@@ -179,7 +195,12 @@ Confirmed via Crawl4AI 0.8.6 `BrowserConfig` signature (`enable_stealth: bool = 
 
 ### E.4 Rate-limit math
 
-`_respect_rate_limit()` enforces `min_interval = 60 / rate_limit_per_minute` between requests then adds `random.uniform(*random_delay_seconds)` jitter. Per-process token-bucket; no shared state across workers. Source-specific tuning (LinkedIn ≤24/hr) ships with `0.2.0.07` subclasses.
+Plan 38 split the rate-limit surface across two layers — see § G.2 + G.3 for the full contract:
+
+- `_enforce_min_interval()` (renamed from `_respect_rate_limit` in plan 38): per-process token-bucket + jitter, fires before every `arun` in `fetch_html`. `min_interval = 60.0 / max(0.1, rate_limit_per_minute)`. The `max(0.1, ...)` floor caps wait time at 600s so a misconfigured Settings entry can't deadlock the cron.
+- `crawl4ai.RateLimiter(...)` (constructed in `__init__`, threaded into `MemoryAdaptiveDispatcher(rate_limiter=...)` in `stream_many`): exponential backoff on 429 / 503. `base_delay=random_delay_seconds`, `max_delay=60.0`, `max_retries=2`, `rate_limit_codes=[429, 503]`.
+
+Per-process; no shared state across workers. Source-specific tuning lives in `Settings.scraper_rate_limits` per § G.1; class-attr fallbacks per `_CLASS_ATTR_FALLBACK`.
 
 ### E.5 `CrawlerRunConfig.clone(stream=True)` (deviation from plan)
 
@@ -234,16 +255,125 @@ async def run_scraper(
 
 ---
 
-## G · Rate limiting + anti-detection (interface only; impl in `0.2.0.13`)
+## G · Rate limiting + anti-detection
 
-Plan 29 ships defaults conservative-by-design. Per `docs/design/research/LINKEDIN_SCRAPING.md` § 5: LinkedIn-specific recommendation is 2.5s mean delay + max 4 search calls/hour. The class default (30/min, 1-3s) is conservative enough for any source; LinkedIn's subclass overrides to (≤24/hour) when `0.2.0.07` ships.
+Plan 38 / `0.2.0.13` graduated the rate-limit + anti-detection contract from "interface only" to fully wired. Six layered controls; operators tune the top layer via Settings, the rest stay in code.
 
-What's reserved for `0.2.0.13`:
+### G.1 — Settings locus: `Settings.scraper_rate_limits`
 
-- Per-source `Settings` field (`Settings.linkedin_rate_limit_per_minute`, etc.) so operators tune without code changes.
-- Burst tolerance + exponential backoff on HTTP 429 (Crawl4AI's `RateLimiter` lift into the wrapper).
-- IP rotation / proxy support (per `Settings.scraper_proxy_url`; Phase 6+ per ROADMAP `0.2.3.03`).
-- `UndetectedAdapter` engagement for sources measured at high 403-rate.
+Single JSONB column on `settings`, keyed by `JobSource.value`, nested per-source dict shape:
+
+```json
+{
+  "linkedin": {"rpm": 0.4, "delay_lo": 3.0, "delay_hi": 7.0},
+  "workday":  {"rpm": 2.0, "delay_lo": 20.0, "delay_hi": 40.0}
+}
+```
+
+`scraper.rate_limit.RateLimitConfig` (Pydantic v2, `extra="forbid"`) validates each per-source entry. `scraper.rate_limit.resolve_rate_limit(settings, source)` returns the operator override when present + valid, else falls back to the class-attr defaults in `_CLASS_ATTR_FALLBACK`. Empty `{}` (post-migration default) → fallback. Misconfigured entry → log + fallback (never raise). Adding a new source = a new key, no migration.
+
+Alembic 0008 `scraper_rate_limits JSONB NOT NULL DEFAULT '{}'`.
+
+`Settings.scraper_proxy_url` (IP rotation; Phase 6+ per ROADMAP `0.2.3.03`) is NOT yet introduced — proxy support waits for that row.
+
+### G.2 — Per-request pacing: `Crawl4AIClient._enforce_min_interval`
+
+Per-process token-bucket with jitter, fires before every `arun` in `fetch_html`. `_min_interval_s = 60.0 / max(0.1, rate_limit_per_minute)`. `random.uniform(*random_delay_seconds)` jitter on top.
+
+Why we keep this layer (rather than delegating entirely to Crawl4AI's `RateLimiter`): in 0.8.6, `AsyncWebCrawler.arun()` does not accept a `rate_limiter=` kwarg — only `MemoryAdaptiveDispatcher` does, and the dispatcher only fires inside `arun_many`. Sub-1-rpm sources (LinkedIn = 0.4 → 150s between requests) need the floor even on single-URL fetches.
+
+### G.3 — 429 / 503 backoff: `crawl4ai.RateLimiter`
+
+`Crawl4AIClient.__init__` constructs `RateLimiter(base_delay=random_delay_seconds, max_delay=60.0, max_retries=2, rate_limit_codes=[429, 503])` and threads it into `MemoryAdaptiveDispatcher(rate_limiter=...)` for `stream_many`. Crawl4AI's exponential backoff fires on 429 / 503 — base_delay × 2^attempt, capped at 60s, up to 2 retries.
+
+Worst-case URL time = base + 2 × 60s. For LinkedIn at 0.4 rpm: 150s base + 120s retries = 270s, within the APScheduler `misfire_grace_time=300`.
+
+### G.4 — User-Agent rotation: `scraper.user_agents.pick_user_agent`
+
+Curated module-level tuple of 8 modern desktop UAs (Chrome / Firefox / Safari / Edge across Windows / macOS / Linux). Round-robin via module-level counter under a `threading.Lock`. `Crawl4AIClient.__init__` calls `pick_user_agent()` when `user_agent=None` (the default).
+
+Per-firing rotation: scheduler constructs a fresh `Crawl4AIClient` per `_scrape_one_user` call; six firings in one sweep see six different UAs.
+
+Pool refresh ~quarterly. `tests/test_user_agents.py` asserts a `# Last refreshed: YYYY-MM-DD` comment exists + is within 365 days (CI forcing function).
+
+Mobile UAs deliberately excluded — LinkedIn / Indeed serve different HTML to mobile clients, which would diverge listing-card selectors.
+
+### G.5 — Stealth: `BrowserConfig(enable_stealth=True)` (default)
+
+Crawl4AI's `enable_stealth=True` patches `navigator.webdriver` + canvas / WebGL / plugin enumeration. Wrapper-level default; subclasses don't override.
+
+### G.6 — `UndetectedAdapter` (engagement deferred to `0.2.0.13c`)
+
+`ScraperBase.use_undetected_adapter: bool = False` is the class-attr toggle. `Crawl4AIClient(use_undetected_adapter=True)` routes via `AsyncWebCrawler(crawler_strategy=AsyncPlaywrightCrawlerStrategy(browser_config=..., browser_adapter=UndetectedAdapter()))`.
+
+Plan 38 ships the wiring + telemetry only; no source flips the flag yet. The follow-up `0.2.0.13c` will engage UndetectedAdapter on Indeed (and possibly LinkedIn) after the cron observes real-world 403-rate exceeding ~5%. Engagement criterion: 403-rate over a 7-day rolling window.
+
+### G.7 — Telemetry: `JobScrapeRun.raw_meta`
+
+`scraper_service.run_scraper` writes two fields into `JobScrapeRun.raw_meta` in the `finally` block:
+
+```json
+{
+  "rate_limit": {
+    "hits": 2,
+    "backoff_total_s": 4.5,
+    "ua": "Mozilla/5.0 ... Chrome/130.0.0.0 ..."
+  },
+  "adapter_used": "stealth"
+}
+```
+
+- `hits` — count of 429 / 503 responses during the run (incremented in `Crawl4AIClient.fetch_html` + `stream_many`).
+- `backoff_total_s` — best-effort upper bound on time spent in retries (wall-clock of `stream_many` batches).
+- `ua` — the UA string this `Crawl4AIClient` instance pinned.
+- `adapter_used` — `"undetected"` if `scraper.use_undetected_adapter`, else `"stealth"`.
+
+Operators surface this via the Discover UI's "View scrape run" detail page (`0.2.0.11`).
+
+### G.8 — DNS-rebind defense: `cachetools.TTLCache`
+
+`scraper.url_guard._DNS_CACHE` is a `cachetools.TTLCache(maxsize=256, ttl=60.0)`. Bounds the DNS-rebind TOCTOU window to ≤60s — a host that resolves to a public IP at URL-composition time can rebind to RFC1918 within 60s and the next `_resolve_host` call re-queries DNS.
+
+Closes Issue #105 (`0.2.0.13a`). Single-process + single-asyncio-loop usage today; if multi-process workers ship in Phase 2+, add a `threading.Lock` around get/set.
+
+### G.9 — Connection between layers
+
+```
+Settings.scraper_rate_limits  ──┐
+                                │ resolve_rate_limit(settings, source)
+                                ▼
+                       RateLimitConfig(rpm, delay_lo, delay_hi)
+                                │
+                                ▼
+                      Crawl4AIClient(
+                          rate_limit_per_minute=rpm,
+                          random_delay_seconds=(delay_lo, delay_hi),
+                          use_undetected_adapter=scraper_cls.use_undetected_adapter,
+                          user_agent=None,  # picks from pool
+                      )
+                                │
+                ┌───────────────┴────────────────┐
+                ▼                                ▼
+       _enforce_min_interval()         RateLimiter(base_delay,
+       (per-request floor)              max_delay=60, max_retries=2,
+                                        rate_limit_codes=[429, 503])
+                                                │
+                                                ▼
+                                MemoryAdaptiveDispatcher
+                                (used by stream_many only)
+```
+
+### G.10 — `robots.txt` policy
+
+Naavik does NOT honor `robots.txt`. Industry precedent for job-discovery tools (Crawlee `JobSpy`, `JobFunnel`, the legacy n8n LinkedIn workflow, Crawl4AI's own LinkedIn demo) is to skip it; LinkedIn / Workday / Indeed all `Disallow: /jobs` in their robots files, and honoring them would ship zero listings for three of six sources. Operating contract: CFAA + the research § 5 trade-off accepted at plan 33. If LinkedIn shifts posture toward unauthenticated-scraping suit, the architectural response is to swap to Phase 5 task 5.12's MCP-based authenticated session, not flip a robots flag.
+
+### G.11 — IP rotation / proxy
+
+Out of scope for `0.2.0.13`. Deferred to `0.2.3.03` (Phase 6+) per ROADMAP. When that row lands, a new `Settings.scraper_proxy_url` field + `Crawl4AIClient(proxy_config=...)` plumbing extends this section.
+
+### G.12 — `consecutive_scrape_failures` interaction
+
+Plan 38 § D.9: counter semantics unchanged from plan 35. SUCCESS / PARTIAL resets the counter regardless of cause (including RL-induced PARTIAL); FAILED increments. If operators want RL-specific alerting in the future, that's a `0.5.0.NN` observability row, not this layer.
 
 ---
 

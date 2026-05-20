@@ -51,6 +51,10 @@ dependencies = [
     # Compiled C++ wheel; manylinux + macOS arm64 prebuilt; nixpkgs ships
     # `python312Packages.rapidfuzz`. token_set_ratio used in services/dedup.py.
     "rapidfuzz>=3.10.0,<4",
+    # TTL cache for `scraper/url_guard._resolve_host` (plan 38, 0.2.0.13;
+    # folds in 0.2.0.13a). Pure-Python; MIT; nixpkgs ships
+    # `python312Packages.cachetools`. Bounds DNS-rebind TOCTOU window to 60s.
+    "cachetools>=5.0,<6",
 ]
 
 [project.optional-dependencies]

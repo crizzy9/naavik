@@ -94,6 +94,7 @@ async def update_sources(
     linkedin_location: str | None = None,
     indeed_keywords: list[str] | None = None,
     indeed_location: str | None = None,
+    scraper_rate_limits: dict[str, dict] | None = None,
 ) -> Settings:
     s = await get_or_create(session, user_id)
     if sources_enabled is not None:
@@ -110,6 +111,13 @@ async def update_sources(
         s.indeed_keywords = indeed_keywords
     if indeed_location is not None:
         s.indeed_location = indeed_location
+    if scraper_rate_limits is not None:
+        from scraper.rate_limit import RateLimitConfig
+
+        validated: dict[str, dict] = {}
+        for source_value, raw in scraper_rate_limits.items():
+            validated[source_value] = RateLimitConfig.model_validate(raw).model_dump()
+        s.scraper_rate_limits = validated
     s.updated_at = datetime.now(UTC)
     session.add(s)
     await session.flush()
