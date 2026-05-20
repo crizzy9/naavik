@@ -4,7 +4,39 @@ All notable changes to Naavik are documented here. Format is based on [Keep a Ch
 
 ## [Unreleased]
 
-(work in progress under `[Epic] 0.2.0`)
+(work in progress under `[Epic] 0.2.0` + `[Epic] 0.2.1`)
+
+### Removed (0.2.1.05 — CLI sunset)
+
+- `src/cli/` (`main.py` + `__init__.py`) — the CLI dispatcher is gone. Plan 26 (0.2.0.01) deleted the `init` + `vault` subcommands along with the encrypted vault; plan 50 (0.2.1.05) completes the sunset by collapsing `naavik` to a uvicorn launcher.
+- `tests/test_cli.py` — argparse-dispatch + bare-invocation routing tests no longer exist with the dispatcher gone. Replaced by `tests/test_main_entry.py::test_main_invokes_uvicorn` (one-line behavioral smoke) + `tests/test_no_cli_imports.py` (regression lint mirroring `test_no_vault_imports.py`).
+
+### Changed (0.2.1.05)
+
+- `[project.scripts] naavik = "cli.main:main"` → `naavik = "main:main"`. `src/main.py:main()` now calls `uvicorn.run("main:app", host=settings.host, port=settings.port, reload=False)` inline. `python -m main` and `uvicorn src.main:app` are functionally identical. `naavik-alembic` is unaffected.
+- `[tool.setuptools] packages` drops `"cli"`.
+- `README.md` § "`naavik` script entry" — replaces the prior CLI sunset section with the new minimal surface description.
+- `docs/DEPLOYMENT.md` § Operations — CLI bullet rewritten to note the uvicorn collapse.
+
+### Added (0.2.1.04 — JWT denylist on password rotation)
+
+- New `RevokedJwt` SQLModel (`jti` unique-indexed, `user_id` FK, `revoked_at`, `expires_at`). Alembic 0010 creates the table + 3 indexes (`jti`, `user_id`, `expires_at`).
+- `issue_jwt` now carries a `jti` claim (`secrets.token_urlsafe(16)` per issue).
+- `verify_jwt` returns `tuple[user_id, jti, expires_at] | None` so callers can drive the denylist check + persist `expires_at` at rotation time.
+- `services/auth.py` gains `revoke_jwt`, `is_jwt_revoked`, `cleanup_expired_revoked_jwts`. `get_current_user` + `require_authed_session` consult the denylist between JWT-decode + user-lookup; revoked tokens raise 401 with `Session revoked`.
+- `POST /api/v1/auth/change-password` revokes the current `jti` BEFORE issuing the new JWT — defense-in-depth fix for PR #50 hacker Finding 3 (DEF-26): a stolen pre-rotation cookie now fails immediately after rotation, restoring the operator-visible "rotate to lock out" intuition.
+- New `admin.cleanup_revoked_jwts` cron at 03:30 UTC daily (`scheduler/jobs.py:cleanup_revoked_jwts`). Added to plan 48's `FUNC_REF_ALLOWLIST` in `src/scheduler/json_jobstore.py`.
+- `tests/test_jwt_revocation.py` — 8 sqlite-backed tests covering jti issuance, denylist round-trip, end-to-end change-password rotation (old JWT 401s on next `/auth/me`), cleanup pruning, and multi-user isolation.
+
+### Security (0.2.1)
+
+- `DEF-26` closed: a successful password rotation now invalidates the pre-rotation JWT. The old token survives only as long as the next `/auth/me` (or any authed) request takes to round-trip; subsequent requests with that cookie receive 401.
+
+### Operations (0.2.1)
+
+- **New daily cron** `admin.cleanup_revoked_jwts` runs at 03:30 UTC (offset from `admin.cleanup_stale_docs` weekly Sun 03:00). Prunes `revoked_jwt` rows whose `expires_at` has passed. No operator action required.
+- **No new env var, no new on-disk path, no new CLI surface.** Sole operational addition is the cron above (behaviorally identical to the existing 5 admin crons).
+- **Operators on 0.1.x with leftover `naavik vault status` scripts**: the binary still exists (now boots the server), so cached operator scripts that call `naavik vault status` will receive `argparse: unrecognized argument` from the implicit uvicorn entry rather than the prior 0.2.0 deprecation hint. Update scripts to `cat .env`-style inspection — values live in `.env` now.
 
 
 ## [0.2.0] - 2026-XX-XX

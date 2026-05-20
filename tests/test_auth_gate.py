@@ -71,42 +71,75 @@ def _unflagged_user():
     )
 
 
+_FAKE_JWT_RESULT = (1, "fake-jti-test-aaaaaaaaaaaaaaaaaaaaa", None)
+
+
+def _async_false(*_a, **_kw):
+    async def _inner(*_aa, **_kk):
+        return False
+
+    return _inner()
+
+
 @pytest.fixture
 def flag_real_jwt(monkeypatch):
     """Monkey-patch `verify_jwt` to accept any cookie + `get_user_by_id` to
     return a flagged user. The wrapper's fake-session check sees a non-
     `fake-1` cookie, falls into the real-JWT branch, decodes to user_id=1,
     looks up the flagged user, raises 307/403.
+
+    Plan 50 (0.2.1.04): `verify_jwt` now returns
+    `tuple[int, str, datetime] | None` so the lambda yields the tuple
+    shape; `is_jwt_revoked` is patched to always-False so the wrapper's
+    new denylist check doesn't fire.
     """
+    from datetime import UTC, datetime, timedelta
+
     from services import auth as auth_svc
 
-    def fake_verify_jwt(token: str) -> int | None:
+    fake_exp = datetime.now(UTC) + timedelta(hours=1)
+    fake_result = (1, "fake-jti-test-aaaaaaaaaaaaaaaaaaaaa", fake_exp)
+
+    def fake_verify_jwt(token: str):
         if token == "fake-1":
             return None
-        return 1
+        return fake_result
 
     async def fake_get_user_by_id(session, user_id: int):
         return _flagged_user()
 
+    async def fake_is_jwt_revoked(session, *, jti: str) -> bool:
+        return False
+
     monkeypatch.setattr(auth_svc, "verify_jwt", fake_verify_jwt)
     monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
+    monkeypatch.setattr(auth_svc, "is_jwt_revoked", fake_is_jwt_revoked)
 
 
 @pytest.fixture
 def real_jwt_unflagged(monkeypatch):
     """Same as `flag_real_jwt` but returns an unflagged user — gate passes."""
+    from datetime import UTC, datetime, timedelta
+
     from services import auth as auth_svc
 
-    def fake_verify_jwt(token: str) -> int | None:
+    fake_exp = datetime.now(UTC) + timedelta(hours=1)
+    fake_result = (1, "fake-jti-test-aaaaaaaaaaaaaaaaaaaaa", fake_exp)
+
+    def fake_verify_jwt(token: str):
         if token == "fake-1":
             return None
-        return 1
+        return fake_result
 
     async def fake_get_user_by_id(session, user_id: int):
         return _unflagged_user()
 
+    async def fake_is_jwt_revoked(session, *, jti: str) -> bool:
+        return False
+
     monkeypatch.setattr(auth_svc, "verify_jwt", fake_verify_jwt)
     monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
+    monkeypatch.setattr(auth_svc, "is_jwt_revoked", fake_is_jwt_revoked)
 
 
 # ── Group 1 — api/profile mutations ─────────────────────────────────────

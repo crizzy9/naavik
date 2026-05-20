@@ -193,7 +193,7 @@ Critical envs to consider in production:
 Self-hoster checklist + runbooks: **`docs/RUNBOOK.md`**. Highlights:
 
 - **Secrets via `.env`** (plan 26 / 0.2.0.01) — `cp .env.example .env && chmod 0600 .env`. Settings UI surfaces env-presence indicators (no values rendered). Edit `.env` + restart to rotate.
-- **CLI** (`naavik`, `naavik-alembic`) — only surviving subcommand is `naavik serve`. `naavik init` / `naavik vault <...>` deleted in plan 26 (exit 2 w/ migration hint). Plan `0.2.0.02` (queued) drops `naavik serve` too.
+- **CLI** (`naavik`, `naavik-alembic`) — plan 50 (0.2.1.05, 2026-05-20) collapsed `naavik` to a uvicorn launcher; `src/cli/` is deleted. `naavik` (bare) boots the server (identical to `python -m main` / `uvicorn src.main:app`). `naavik-alembic` is unaffected.
 - **Backups:** back up `.env` alongside the DB dump. `SECRET_KEY` must be preserved to validate JWTs issued before the backup.
 - **Reset dev DB:** `rm -rf .naavik/db` OR `uv run alembic downgrade base && upgrade head && python -m db.seed`.
 - **Rotate `SECRET_KEY`:** edit `.env`, restart. Active sessions are invalidated; users re-auth from the UI.

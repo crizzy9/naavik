@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import UTC, datetime
 
 # Force fast bcrypt cost for tests before the service module loads.
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
@@ -74,7 +75,12 @@ def test_bcrypt_cost_env_override() -> None:
 def test_issue_then_verify_jwt() -> None:
     token = issue_jwt(42)
     assert isinstance(token, str)
-    assert verify_jwt(token) == 42
+    result = verify_jwt(token)
+    assert result is not None
+    user_id, jti, expires_at = result
+    assert user_id == 42
+    assert jti
+    assert expires_at is not None
 
 
 def test_verify_jwt_invalid_returns_none() -> None:
@@ -429,6 +435,22 @@ def test_change_password_accepts_matching_csrf_token() -> None:
 # ── Plan 23 (PC.6a) — require_authed_session wrapper ────────────────────
 
 
+def _async_return(value):
+    """Build an async callable that returns `value` regardless of arguments.
+
+    Plan 50 (0.2.1.04): used to patch `is_jwt_revoked` (async) in
+    require_authed_session tests so unit tests don't need a live DB.
+    """
+
+    async def _inner(*_a, **_kw):
+        return value
+
+    return _inner
+
+
+_FAKE_JWT_TUPLE = (1, "fake-jti-aaaaaaaaaaaaaaaaaaaaaa", datetime.now(UTC) + JWT_TTL_DEFAULT)
+
+
 def _build_authed_session_test_app(*, override_user=None):
     """Build a minimal FastAPI app exposing one /api/v1/* mutation route and
     one non-/api/v1/* UI route, both gated by `require_authed_session`.
@@ -495,6 +517,7 @@ def test_require_authed_session_invalid_jwt_401(monkeypatch) -> None:
     # if verify_jwt moves to a sibling module, switch this monkeypatch to the
     # wrapper's own import path or this test silently no-ops.
     monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: None)
+    monkeypatch.setattr(auth_svc, "is_jwt_revoked", _async_return(False))
 
     r = client.post(
         "/api/v1/probe",
@@ -525,7 +548,8 @@ def test_require_authed_session_real_jwt_unflagged_passes(monkeypatch) -> None:
             must_change_password=False,
         )
 
-    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: 1)
+    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: _FAKE_JWT_TUPLE)
+    monkeypatch.setattr(auth_svc, "is_jwt_revoked", _async_return(False))
     monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
 
     r = client.post(
@@ -556,7 +580,8 @@ def test_require_authed_session_real_jwt_flagged_403_on_api(monkeypatch) -> None
             must_change_password=True,
         )
 
-    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: 1)
+    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: _FAKE_JWT_TUPLE)
+    monkeypatch.setattr(auth_svc, "is_jwt_revoked", _async_return(False))
     monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
 
     r = client.post(
@@ -590,7 +615,8 @@ def test_require_authed_session_real_jwt_flagged_307_on_ui(monkeypatch) -> None:
             must_change_password=True,
         )
 
-    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: 1)
+    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: _FAKE_JWT_TUPLE)
+    monkeypatch.setattr(auth_svc, "is_jwt_revoked", _async_return(False))
     monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
 
     r = client.post(

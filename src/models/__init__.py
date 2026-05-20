@@ -62,6 +62,7 @@ from .event import AppEvent
 from .job import Job, JobCreate, JobFilter, JobRead, JobUpdate
 from .job_scrape_run import JobScrapeRun, JobScrapeRunRead
 from .profile import Bullet, Certification, Education, Experience, Profile, Project, Skill
+from .revoked_jwt import RevokedJwt
 from .settings import Settings
 from .user import User
 
@@ -87,6 +88,7 @@ __all__ = [
     "EmailThread",
     "AppEvent",
     "ApiUsage",
+    "RevokedJwt",
     "Settings",
     # Pydantic API schemas
     "JobCreate",

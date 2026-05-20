@@ -102,6 +102,16 @@ async def cleanup_stale_docs() -> None:
     log.info("cleanup_stale_docs pruned %d rows", n)
 
 
+async def cleanup_revoked_jwts() -> None:
+    """`admin.cleanup_revoked_jwts` — daily 03:30 UTC (plan 50 / 0.2.1.04)."""
+    from services.auth import cleanup_expired_revoked_jwts
+
+    async with async_session() as session:
+        n = await cleanup_expired_revoked_jwts(session)
+        await session.commit()
+    log.info("cleanup_revoked_jwts pruned %d rows", n)
+
+
 async def daily_db_snapshot() -> None:
     """`admin.daily_db_snapshot` — daily 02:00.
 
@@ -162,6 +172,14 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         coalesce=True,
     )
     scheduler.add_job(
+        cleanup_revoked_jwts,
+        CronTrigger(hour=3, minute=30, timezone="UTC"),
+        id="admin.cleanup_revoked_jwts",
+        name="admin.cleanup_revoked_jwts",
+        replace_existing=True,
+        coalesce=True,
+    )
+    scheduler.add_job(
         daily_db_snapshot,
         CronTrigger(hour=2, minute=0, timezone="UTC"),
         id="admin.daily_db_snapshot",
@@ -191,6 +209,7 @@ def registered_job_ids(scheduler: AsyncIOScheduler) -> list[str]:
 __all__ = [
     "aggregate_costs",
     "auto_apply",
+    "cleanup_revoked_jwts",
     "cleanup_stale_docs",
     "daily_db_snapshot",
     "refresh_oauth_tokens",
