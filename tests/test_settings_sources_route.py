@@ -298,3 +298,46 @@ def test_running_status_renders_running_chip(
     body = r.text
     assert 'data-source-status="running"' in body
     assert "running…" in body
+
+
+# ── Plan 56 · item 1 (0.2.7.02) — IDOR thread-through ────────────────────
+
+
+def test_build_sources_view_threads_user_id(monkeypatch):
+    """`_build_sources_view(session, user_id=N)` passes N to both services.
+
+    Plan 56 / 0.2.7.02: settings_service.get_or_create + job_service.list_recent
+    _scrape_runs_by_source must both receive the route-supplied `user_id`, not
+    the hard-coded 1 the pre-fix code path used.
+    """
+    import asyncio
+
+    from services import job_service, settings_service
+    from ui.routes import settings as settings_routes
+
+    captured: dict[str, int] = {}
+
+    async def _spy_settings(session, *, user_id):
+        captured["settings"] = user_id
+        return _make_settings()
+
+    async def _spy_runs(session, *, user_id):
+        captured["runs"] = user_id
+        return {}
+
+    monkeypatch.setattr(settings_service, "get_or_create", _spy_settings)
+    monkeypatch.setattr(job_service, "list_recent_scrape_runs_by_source", _spy_runs)
+
+    asyncio.run(settings_routes._build_sources_view(_NoopSession(), user_id=42))
+
+    assert captured == {"settings": 42, "runs": 42}
+
+
+def test_effective_user_id_resolves_fake_session_to_one():
+    """Fake-session (`_user=None`) → 1 (seeded owner); real `User` → `user.id`."""
+    from types import SimpleNamespace
+
+    from ui.routes import settings as settings_routes
+
+    assert settings_routes._effective_user_id(None) == 1
+    assert settings_routes._effective_user_id(SimpleNamespace(id=99)) == 99

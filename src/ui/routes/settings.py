@@ -171,6 +171,7 @@ async def _ctx_for_tab(
     tab: str,
     *,
     session: AsyncSession | None = None,
+    user_id: int = 1,
 ) -> dict[str, object]:
     if tab not in _VALID_TABS:
         raise HTTPException(status_code=404, detail="Unknown settings tab")
@@ -203,7 +204,7 @@ async def _ctx_for_tab(
     }
 
     if tab == "sources":
-        ctx["sources_view"] = await _build_sources_view(session)
+        ctx["sources_view"] = await _build_sources_view(session, user_id=user_id)
         ctx["recent_scrape_runs"] = await _recent_scrape_runs_view(session)
 
     if tab == "submissions":
@@ -307,7 +308,18 @@ def _format_started_at(dt) -> str:
     return started.strftime("%Y-%m-%d")
 
 
-async def _build_sources_view(session: AsyncSession | None) -> list[dict]:
+def _effective_user_id(user: User | None) -> int:
+    """Resolve per-request user_id for IDOR scoping (mirrors `ui.routes.jobs`).
+
+    Real JWT sessions return `user.id`. The fake-session transitional stub
+    maps to the seeded owner (id=1) per `db/sample_data.py:USER.id == 1`.
+    Plan 56 / `0.2.7.02` — threading this through `_build_sources_view` to
+    close the latent IDOR before multi-user expansion.
+    """
+    return user.id if user is not None else 1
+
+
+async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> list[dict]:
     """Compose the per-source view list consumed by `_settings_sources.html`.
 
     Per plan 49 § D.1 — pulls (a) Settings (SQL row when session present;
@@ -324,8 +336,8 @@ async def _build_sources_view(session: AsyncSession | None) -> list[dict]:
         # Depends(get_session); None here is unreachable in production.
         return []
 
-    settings_obj = await settings_service.get_or_create(session, user_id=1)
-    last_runs = await job_service.list_recent_scrape_runs_by_source(session, user_id=1)
+    settings_obj = await settings_service.get_or_create(session, user_id=user_id)
+    last_runs = await job_service.list_recent_scrape_runs_by_source(session, user_id=user_id)
 
     rows: list[dict] = []
     for entry in _SOURCES_PANEL:
@@ -432,7 +444,7 @@ async def get_settings_sources(
     other tabs lands as a separate row). `Depends(get_session)` is the
     canonical entry; tests override via `app.dependency_overrides`.
     """
-    ctx = await _ctx_for_tab(request, "sources", session=session)
+    ctx = await _ctx_for_tab(request, "sources", session=session, user_id=_effective_user_id(_user))
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(request, "pages/_settings_sources.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
