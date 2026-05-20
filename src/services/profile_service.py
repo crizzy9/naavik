@@ -17,8 +17,12 @@ from models import (
     AppEvent,
     AppEventKind,
     Bullet,
+    Certification,
+    Education,
     Experience,
     Profile,
+    Project,
+    Skill,
 )
 
 # Whitelist of profile fields that the per-field PUT endpoint may touch.
@@ -86,6 +90,95 @@ async def get_bullet(session: AsyncSession, bullet_id: int) -> Bullet | None:
         Bullet.deleted_at.is_(None),
     )
     return (await session.exec(stmt)).one_or_none()
+
+
+# Plan 60 / 0.2.7.17 — list accessors used to live in `src/db/sample_data.py`.
+# Replacements consume an AsyncSession + user_id; each joins via Profile
+# (`Profile.user_id == user_id`) since the children carry `profile_id` rather
+# than a direct `user_id` column. Soft-delete-aware where the column exists
+# (Experience / Bullet / Project carry `deleted_at`; Skill / Education /
+# Certification don't).
+
+
+async def list_experiences(session: AsyncSession, user_id: int) -> list[Experience]:
+    stmt = (
+        select(Experience)
+        .join(Profile, Profile.id == Experience.profile_id)
+        .where(
+            Profile.user_id == user_id,
+            Profile.deleted_at.is_(None),
+            Experience.deleted_at.is_(None),
+        )
+        .order_by(Experience.order_index)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def list_all_bullets(session: AsyncSession, user_id: int) -> list[Bullet]:
+    """All live bullets for the user across all experiences."""
+    stmt = (
+        select(Bullet)
+        .join(Experience, Experience.id == Bullet.experience_id)
+        .join(Profile, Profile.id == Experience.profile_id)
+        .where(
+            Profile.user_id == user_id,
+            Profile.deleted_at.is_(None),
+            Experience.deleted_at.is_(None),
+            Bullet.deleted_at.is_(None),
+        )
+        .order_by(Bullet.order_index)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def list_skills(session: AsyncSession, user_id: int) -> list[Skill]:
+    stmt = (
+        select(Skill)
+        .join(Profile, Profile.id == Skill.profile_id)
+        .where(Profile.user_id == user_id, Profile.deleted_at.is_(None))
+        .order_by(Skill.order_index)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def list_educations(session: AsyncSession, user_id: int) -> list[Education]:
+    stmt = (
+        select(Education)
+        .join(Profile, Profile.id == Education.profile_id)
+        .where(Profile.user_id == user_id, Profile.deleted_at.is_(None))
+        .order_by(Education.order_index)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def list_projects(session: AsyncSession, user_id: int) -> list[Project]:
+    stmt = (
+        select(Project)
+        .join(Profile, Profile.id == Project.profile_id)
+        .where(
+            Profile.user_id == user_id,
+            Profile.deleted_at.is_(None),
+            Project.deleted_at.is_(None),
+        )
+        .order_by(Project.order_index)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def list_certifications(session: AsyncSession, user_id: int) -> list[Certification]:
+    stmt = (
+        select(Certification)
+        .join(Profile, Profile.id == Certification.profile_id)
+        .where(Profile.user_id == user_id, Profile.deleted_at.is_(None))
+        .order_by(Certification.order_index)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
 
 
 # ── Profile mutations ────────────────────────────────────────────────────
