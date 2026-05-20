@@ -426,6 +426,10 @@ nix run .#dev    # or `docker compose up -d --force-recreate naavik`
 # 4. Re-authenticate from the UI (existing cookies will be rejected with 401)
 ```
 
+### Scheduler endpoints (operator surface)
+
+Four authenticated endpoints under `/api/v1/scheduler/` give read + control over the lifespan-registered APScheduler crons (`src/api/scheduler.py`): `GET /jobs` lists every registered job with its `next_run_time` + trigger summary + paused flag; `POST /jobs/{job_id}/run` triggers a one-off NOW run as a transient job (original cron's `next_run_time` is untouched); `POST /jobs/{job_id}/pause` and `/resume` toggle the paused state. Mutations require the `X-CSRF-Token` double-submit header (see `naavik_csrf` cookie). Returns 503 + `scheduler not started` when the scheduler hasn't booted (cold-start race / boot edge cases — operator usually sees this when DB was unreachable on startup).
+
 ### Upgrading from 0.1.x with a populated vault
 
 If you previously used Settings UI to save an LLM API key or webhook URL, those values lived encrypted in `~/.naavik/secrets.enc`. Plan 26 deleted the vault module + CLI subcommands; there is no automated migration. Capture the scope list before upgrading:
