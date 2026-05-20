@@ -45,12 +45,13 @@ async def start() -> None:
     if _SCHEDULER is not None and _SCHEDULER.running:
         return
 
-    from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+    from scheduler.json_jobstore import NaavikJsonJobStore
 
     jobstore_url = _sync_database_url()
     try:
-        jobstores = {"default": SQLAlchemyJobStore(url=jobstore_url)}
+        jobstores = {"default": NaavikJsonJobStore(url=jobstore_url)}
     except Exception as exc:  # noqa: BLE001 — DB might not be ready in tests
         log.warning("apscheduler db jobstore unavailable; using memory: %s", exc)
         jobstores = {}
