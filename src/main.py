@@ -16,6 +16,7 @@ from api import applications as api_applications
 from api import auth as api_auth
 from api import portfolio as api_portfolio
 from api import profile as api_profile
+from api import scheduler as api_scheduler
 from api import settings as api_settings
 from config import settings as app_settings
 from ui.routes import (
@@ -121,6 +122,7 @@ app.include_router(api_auth.router)
 app.include_router(api_profile.router)
 app.include_router(api_settings.router)
 app.include_router(api_applications.router)
+app.include_router(api_scheduler.router)
 app.include_router(api_portfolio.router)
 app.include_router(overview.router)
 app.include_router(profile.router)
