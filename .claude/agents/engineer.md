@@ -228,10 +228,16 @@ Shipped plan 10c.
 
 Files: <created N, modified M, deleted K — grouped by area>
 Tests: <pytest counts, ruff outcome, manual QA evidence>
-Deviations: <bullets, or "no material deviations">
+Deviations summary:
+  - <one-line title> (surface: env var | on-disk path | cron | naavik-ops subcommand | none)
+  - ...
+  OR
+  none — log reconciled against diff
 PR: <URL>, draft title: "<...>"
 Open questions for user: <or "none">
 ```
+
+**The `Deviations summary:` line is mandatory** (codified plan 39 / `0.7.0.21`). Manager reads it at archive-time before invoking `naavik-ops plan archive <plan-path>`. Missing this line is what triggered the 5-of-8 archive miss in run `2026-05-19T15-42-42_833f4a`.
 
 File refs as `src/path.py:42`. No emojis. No em dashes unless user-initiated.
 

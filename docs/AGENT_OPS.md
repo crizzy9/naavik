@@ -125,8 +125,9 @@ on the Project itself.
 Agent-system operations route through **`.claude/naavik-ops`** — an executable Python
 dispatcher at the `.claude/` package boundary. Subcommand groups: `task` (release-version
 task ops), `release` (release ceremony — pyproject + nix/package.nix + CHANGELOG + tag
-atomically), `deps` (cross-task dependency graph), `gh` (GitHub Project + Issue ops),
-`memory` (`.claude/memory/` ops).
+atomically), `deps` (cross-task dependency graph), `plan` (plan-lifecycle ops — archive
++ validate-deviations; new in `0.7.0.21`), `gh` (GitHub Project + Issue ops), `memory`
+(`.claude/memory/` ops).
 
 ```bash
 .claude/naavik-ops --help                                  # group surface
@@ -136,6 +137,8 @@ atomically), `deps` (cross-task dependency graph), `gh` (GitHub Project + Issue 
 .claude/naavik-ops task bump patch                         # preview release bump
 .claude/naavik-ops release dry-run 0.1.0                   # preview release ceremony
 .claude/naavik-ops deps add 0.2.0.06 0.2.0.05              # record cross-task dep edge
+.claude/naavik-ops plan archive docs/plans/NN-name.md      # canonical archive path (lifts deviations + git mv)
+.claude/naavik-ops plan validate-deviations docs/plans/...  # read-only PASS/BLOCK check
 .claude/naavik-ops gh next-unblocked                       # legacy: .claude/naavik-ops gh next-unblocked
 .claude/naavik-ops memory list discussions                 # legacy: .claude/naavik-ops memory list discussions
 ```

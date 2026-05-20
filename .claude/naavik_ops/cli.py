@@ -8,6 +8,7 @@ Subcommand groups (per design doc § 10):
            / sync / next-unblocked
   release  cut / dry-run / changelog
   deps     add / remove / list / check
+  plan     archive / validate-deviations
   gh       (subprocess wrappers around .claude/naavik-ops gh during A.29)
   memory   (subprocess wrappers around .claude/naavik-ops memory during A.29)
 
@@ -26,6 +27,7 @@ GROUPS: dict[str, str] = {
     "task": "naavik_ops.task",
     "release": "naavik_ops.release",
     "deps": "naavik_ops.deps",
+    "plan": "naavik_ops.plan",
     "gh": "naavik_ops.gh",
     "memory": "naavik_ops.memory",
 }
@@ -41,6 +43,7 @@ Groups:
   task      release-version task ops (list / insert / defer / prioritize / move / etc.)
   release   release ceremony (cut / dry-run / changelog)
   deps      cross-task / cross-version dependency graph (add / remove / list / check)
+  plan      plan-lifecycle ops (archive — canonical archive path; validate-deviations)
   gh        GitHub Project + Issue ops (native Python; sole writer to `.claude/github-issue-map.json`)
   memory    agent memory ops (native Python; sole writer to `.claude/memory/`)
 

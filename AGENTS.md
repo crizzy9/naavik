@@ -260,10 +260,13 @@ ROADMAP.md       →  Plan         →  user review  →  Design doc       →  
 
    This section is the contract for future-you (or future-them) — without it, plan archives become "what we hoped to ship" not "what we actually shipped", and reviewers chasing a regression have to read every commit instead of one section. Keep it terse and honest. **Plans without a Deviations section may not be archived** (use "no material deviations" if the plan really shipped exactly as spec'd, but that's rare).
 
-8. **Archive** *(agent)* — once implementation is verified AND deviations are documented:
-   - Plan → `docs/plans/archive/NN-name.md`, `Status: EXECUTED` (or `Status: GRADUATED → docs/design/NAME.md` if it produced a design doc)
-   - Prompt → `docs/prompts/archive/NN-name.md`, `Status: USED`
-   - Design doc stays at `docs/design/NAME.md` (canonical, permanent)
+   **Plan archive happens via `naavik-ops plan archive`, never manual `git mv`** (codified plan 39 / `0.7.0.21`). The command lifts every matching `DEVIATION` line from `traces/<run-id>/engineer-deviations.log` into the section using the canonical bullet shape, flips `Status: EXECUTED`, performs the `git mv` (plan + matching prompt), and reports surfaces needing propagation. Refuses with exit 2 when the resulting section would be empty unless `--no-material-deviations "<rationale>"` is passed (explicit-bypass surface).
+
+8. **Archive** *(agent)* — once implementation is verified AND deviations are documented, invoke:
+   ```bash
+   .claude/naavik-ops plan archive docs/plans/<NN-name>.md
+   ```
+   The command atomically: lifts log entries, flips `Status: EXECUTED`, `git mv`s plan → `docs/plans/archive/NN-name.md`, `git mv`s matching `docs/prompts/NN-name.md` → `docs/prompts/archive/NN-name.md`. Design doc (if any) stays at `docs/design/NAME.md` (canonical, permanent; not moved).
 
 9. **Roadmap update** *(agent)* — mark the corresponding `ROADMAP.md` task(s) `[x]` with a one-line deliverable note. Bump "Last updated" if the change is meaningful. See § Roadmap Maintenance Rules below.
 

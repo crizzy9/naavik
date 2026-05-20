@@ -84,6 +84,8 @@ If the deviation only matters to maintainers, document it in the plan's `## Devi
 
 **Plans without a Deviations section may not be archived.** Use "no material deviations" if the plan really shipped exactly as spec'd, but that's rare; reviewers should be skeptical when they see it.
 
+**Archive via `naavik-ops plan archive`, never manual `git mv`** (codified plan 39 / `0.7.0.21`). The dispatcher subcommand `.claude/naavik-ops plan archive docs/plans/<NN-name>.md` is the canonical, single-writer entry point for moving any plan to `docs/plans/archive/`. It lifts entries from `traces/<run-id>/engineer-deviations.log`, writes them as canonical bullets in `## Deviations from plan`, flips frontmatter `Status: EXECUTED`, performs `git mv` (plan + matching prompt), and reports operational surfaces needing propagation. Refuses (exit 2) on empty sections unless `--no-material-deviations "<rationale>"` is passed. Read-only check: `.claude/naavik-ops plan validate-deviations docs/plans/<NN-name>.md`.
+
 ## GitHub state — single writer rule (codified 2026-05-16; updated 2026-05-18 for A.29)
 
 **All mutations to GitHub Issues, Milestones, and the Project v2 board** (create, close, label change, status field, priority field, sub-issue link) MUST go through `.claude/naavik-ops gh` subcommands. The dispatcher subprocess-wraps `.claude/naavik_ops/gh.py` during the A.29 transition (A.30 inlines native Python). The script chain is the **sole writer** to `.claude/github-issue-map.json` — the persistent `{phase → epic#, task_id → issue#, phase → milestone#}` cache that gives bootstrap + plan-driven creates deterministic, instant idempotency.
