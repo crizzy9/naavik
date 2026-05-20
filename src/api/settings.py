@@ -24,9 +24,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 # Plan 10b (item 6): the LLM PUT handler intentionally drops `Body()` from
 # its signature so an HTMX form-encoded body does not trigger FastAPI's
 # JSON parser (which would 422 the request). Body parsing is done inline.
+from api.auth import require_csrf
 from db.session import get_session
+from models import JobSource, User
 from models import LLMProvider as LLMProviderEnum
-from models import User
 from services import env_secrets, settings_service
 from services.auth import require_authed_session
 
@@ -202,32 +203,127 @@ async def put_auto_apply(
     }
 
 
+def _split_keywords(raw: str) -> list[str]:
+    """Comma-split, strip whitespace, drop empties. Used by form-encoded
+    `<source>_keywords` form fields (plan 58 / 0.2.7.06)."""
+    return [token.strip() for token in raw.split(",") if token.strip()]
+
+
+def _form_to_sources_payload(form: dict[str, str]) -> dict[str, Any]:
+    """Reassemble flat HTMX form fields into the kwarg shape expected by
+    `settings_service.update_sources` (plan 58 / 0.2.7.06).
+
+    Rate-limit shape — flat `<source>_rpm` / `<source>_lo` / `<source>_hi`
+    fields collapse into a nested `scraper_rate_limits[<source>]` dict per
+    `RateLimitConfig`. Keywords/location shape — `<source>_keywords` is
+    comma-split into list[str]; `<source>_location` passes through.
+    """
+    payload: dict[str, Any] = {}
+    rate_limits: dict[str, dict[str, float]] = {}
+    for source in JobSource:
+        sv = source.value
+        rpm = form.get(f"{sv}_rpm")
+        lo = form.get(f"{sv}_lo")
+        hi = form.get(f"{sv}_hi")
+        if rpm is not None and lo is not None and hi is not None:
+            try:
+                rate_limits[sv] = {
+                    "rpm": float(rpm),
+                    "delay_lo": float(lo),
+                    "delay_hi": float(hi),
+                }
+            except (TypeError, ValueError):
+                # Surface as 422 downstream via RateLimitConfig validator
+                # — preserve the raw shape so the validator sees the bad input.
+                rate_limits[sv] = {"rpm": rpm, "delay_lo": lo, "delay_hi": hi}  # type: ignore[dict-item]
+    if rate_limits:
+        payload["scraper_rate_limits"] = rate_limits
+
+    if (raw := form.get("linkedin_keywords")) is not None:
+        payload["linkedin_keywords"] = _split_keywords(raw)
+    if (loc := form.get("linkedin_location")) is not None:
+        payload["linkedin_location"] = loc
+    if (raw := form.get("indeed_keywords")) is not None:
+        payload["indeed_keywords"] = _split_keywords(raw)
+    if (loc := form.get("indeed_location")) is not None:
+        payload["indeed_location"] = loc
+    return payload
+
+
 @router.put("/api/v1/settings/sources", name="api_settings_sources_put")
 async def put_sources(
-    payload: Annotated[dict[str, Any] | None, Body()] = None,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
-    payload = payload or {}
+    """Update Settings · Sources fields.
+
+    Two content types accepted (plan 58 / 0.2.7.06):
+      * `application/x-www-form-urlencoded` (HTMX paired editors) → returns
+        the re-rendered `pages/_settings_sources.html` partial as HTML.
+      * `application/json` (machine consumers + the per-source enable toggle
+        already wired to this endpoint) → returns JSON with the post-update
+        Settings shape.
+
+    IDOR scoping via `_effective_user_id` (plan 56 / 0.2.7.02 pattern); CSRF
+    via the shared `require_csrf` dep (plan 44 / 0.2.0.11b pattern).
+    Body parsing is inline (mirroring `put_llm`) so a form-encoded request
+    doesn't trip FastAPI's JSON validator before the form branch fires.
+    """
+    is_form = _is_form_request(request)
+    if is_form:
+        form = await request.form()
+        form_dict = {k: str(v) for k, v in form.items()}
+        body = _form_to_sources_payload(form_dict)
+    else:
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+
+    # Lazy-import to avoid cyclic dep with the UI route module.
+    from ui.routes.settings import _effective_user_id
+
+    user_id = _effective_user_id(_user)
+
     try:
         s = await settings_service.update_sources(
             session,
-            user_id=1,
-            sources_enabled=payload.get("sources_enabled"),
-            source_schedules=payload.get("source_schedules"),
-            workday_companies=payload.get("workday_companies"),
-            linkedin_keywords=payload.get("linkedin_keywords"),
-            linkedin_location=payload.get("linkedin_location"),
-            indeed_keywords=payload.get("indeed_keywords"),
-            indeed_location=payload.get("indeed_location"),
-            scraper_rate_limits=payload.get("scraper_rate_limits"),
+            user_id=user_id,
+            sources_enabled=body.get("sources_enabled"),
+            source_schedules=body.get("source_schedules"),
+            workday_companies=body.get("workday_companies"),
+            linkedin_keywords=body.get("linkedin_keywords"),
+            linkedin_location=body.get("linkedin_location"),
+            indeed_keywords=body.get("indeed_keywords"),
+            indeed_location=body.get("indeed_location"),
+            scraper_rate_limits=body.get("scraper_rate_limits"),
         )
     except ValidationError as exc:
         return JSONResponse(
             status_code=422,
-            content={"detail": "invalid scraper_rate_limits", "errors": exc.errors()},
+            content={
+                "detail": "invalid scraper_rate_limits",
+                "errors": exc.errors(include_url=False, include_context=False, include_input=False),
+            },
         )
     await session.commit()
+
+    if is_form:
+        from ui.routes.settings import _ctx_for_tab
+        from ui.templates_setup import templates as ui_templates
+
+        ctx = await _ctx_for_tab(request, "sources", session=session, user_id=user_id)
+        ctx["save_status"] = "saved"
+        return ui_templates.TemplateResponse(
+            request,
+            "pages/_settings_sources.html",
+            ctx,
+        )
+
     return {
         "sources_enabled": s.sources_enabled,
         "source_schedules": s.source_schedules,

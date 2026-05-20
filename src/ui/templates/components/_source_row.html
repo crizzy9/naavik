@@ -109,9 +109,11 @@
         Configure
         <i data-lucide="chevron-down" class="h-3 w-3" stroke-width="1.5"></i>
       </summary>
-      <div class="mt-2 p-3 rounded-md border border-slate-800 bg-slate-950/60 text-slate-300 max-w-xs sm:max-w-sm">
+      <div data-source-editor="{{ v.source }}" class="mt-2 p-3 rounded-md border border-slate-800 bg-slate-950/60 text-slate-300 max-w-xs sm:max-w-sm">
+        {# Plan 58 / 0.2.7.06 — rate-limit editor renders for every source. #}
+        {% include "components/_rate_limit_editor.html" %}
         {% if v.configure.kind == "env" %}
-          <p class="text-[11px] text-slate-400 leading-relaxed">
+          <p class="mt-3 text-[11px] text-slate-400 leading-relaxed border-t border-slate-800 pt-3">
             Set <code class="font-mono text-slate-200">{{ v.configure.env_var }}</code>
             in <code class="font-mono text-slate-200">.env</code> (CSV of company slugs).
             Restart the app after editing — pydantic-settings loads env at boot.
@@ -125,27 +127,12 @@
             </p>
           {% endif %}
         {% elif v.configure.kind == "db" %}
-          <p class="text-[11px] text-slate-400 leading-relaxed">
-            Per-user keywords + location. Until <code class="font-mono">0.2.5.06</code>
-            ships the editor, update via <code class="font-mono text-slate-200">PUT /api/v1/settings/sources</code>.
-          </p>
-          {% if v.configure.keywords %}
-            <p class="mt-1.5 text-[11px] text-slate-300">
-              Keywords:
-              <span class="font-mono text-slate-200">{{ v.configure.keywords | join(", ") }}</span>
-            </p>
-          {% else %}
-            <p class="mt-1.5 text-[11px] text-slate-500 italic">No keywords set.</p>
-          {% endif %}
-          {% if v.configure.location %}
-            <p class="text-[11px] text-slate-300">
-              Location: <span class="font-mono text-slate-200">{{ v.configure.location }}</span>
-            </p>
-          {% endif %}
+          {# Plan 58 / 0.2.7.06 — LinkedIn/Indeed get a writable keywords + location form. #}
+          {% include "components/_keywords_editor.html" %}
         {% elif v.configure.kind == "db-workday" %}
           {# Plan 56 / 0.2.7.04 — Workday is per-tenant DB-stored (Settings.workday_companies);
              the WORKDAY_COMPANIES env-slot in src/config.py is dead-letter until 0.2.7.06. #}
-          <p class="text-[11px] text-slate-400 leading-relaxed">
+          <p class="mt-3 text-[11px] text-slate-400 leading-relaxed border-t border-slate-800 pt-3">
             Workday companies are per-user. Update via
             <code class="font-mono text-slate-200">PUT /api/v1/settings/sources</code>
             (writable editor lands in <code class="font-mono">0.2.7.06</code>).

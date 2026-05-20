@@ -1,6 +1,7 @@
 # Naavik Component Catalog
 
-> **Last updated:** 2026-05-20 (plan 49 / `0.2.0.16` — registers 1 net-new Settings-group partial `_source_row.html` for the Settings · Sources sub-tab rewrite. Net total: 89 partials. Canonical contract: `docs/design/SOURCES_UI.md`.)
+> **Last updated:** 2026-05-20 (plan 58 / `0.2.7.06` — registers 2 net-new Settings-group partials [`_rate_limit_editor.html` + `_keywords_editor.html`] for the Settings · Sources writable-popover editors. Net total: 91 partials. Canonical contract: `docs/design/SOURCES_UI.md` § H.)
+> Earlier line: 2026-05-20 (plan 49 / `0.2.0.16` — registers 1 net-new Settings-group partial `_source_row.html` for the Settings · Sources sub-tab rewrite. Net total: 89 partials. Canonical contract: `docs/design/SOURCES_UI.md`.)
 > Earlier line: 2026-05-20 (plan 36 / `0.2.0.11a` — registers 3 net-new Discover-group partials [`filter_toolbar.html`, `_filter_hidden_inputs.html`, `job_topbar.html`] + 1 new `filter_chip` macro. Net total: 88 partials + macro count grows by 1 in § I. Canonical Job-UI contract: `docs/design/JOB_UI.md`.)
 > Earlier line: 2026-04-30
 > **Status:** Canonical — graduated from `docs/plans/03-component-catalog.md` (archived).
@@ -11,7 +12,7 @@
 
 ## A · Inventory
 
-The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 89 components** across 12 groups.
+The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 91 components** across 12 groups.
 
 | Group | Count | Components |
 |---|---|---|
@@ -25,9 +26,9 @@ The library lives at `src/ui/templates/components/`. Components grouped by respo
 | Discover · review & apply | 6 | `apply_topbar.html`, `warm_intro_card.html`, `tailored_bullet_row.html`, `cover_letter_section.html`, `screener_question_card.html`, `apply_action_bar.html` |
 | Tracking | 8 | `view_toggle.html`, `provider_chip.html`, `integration_card.html`, `followup_banner.html`, `stage_column.html`, `tracking_card.html`, `tracking_list_row.html`, `tracking_board.html` |
 | Outreach | 6 | `outreach_app_row.html`, `recommended_move_card.html`, `outreach_message_card.html`, `contact_card.html`, `linkedin_status_chip.html`, `outreach_timeline.html` |
-| Settings | 8 | `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `deployment_status_card.html`, `log_tail.html`, `on_disk_card.html`, `connection_status_card.html`, `_source_row.html` (plan 49) |
+| Settings | 10 | `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `deployment_status_card.html`, `log_tail.html`, `on_disk_card.html`, `connection_status_card.html`, `_source_row.html` (plan 49), `_rate_limit_editor.html` (plan 58), `_keywords_editor.html` (plan 58) |
 | Skeletons | 5 | `swipe_card_skeleton.html`, `tracking_card_skeleton.html`, `priority_action_row_skeleton.html`, `email_signal_row_skeleton.html`, `bullet_edit_row_skeleton.html` |
-| **Total** | **89** | |
+| **Total** | **91** | |
 
 Cover letter generation lives inside Discover · review & apply (no standalone screen) — its components (`cover_letter_section.html`, `screener_question_card.html`) are listed under that group. The standalone Cover Letter generator's earlier components (`letter_editor.html`, `tone_picker.html`, `output_mode_card.html`, `model_attribution_chip.html`) are NOT in MVP and dropped.
 
@@ -2080,6 +2081,44 @@ Mobile variant: circular `h-14 w-14 rounded-full` with icon only.
 {% endwith %}
 ```
 **Canonical contract:** `docs/design/SOURCES_UI.md` § C.
+
+#### `_rate_limit_editor.html`
+
+**Purpose:** Per-source rate-limit form (rpm + delay_lo + delay_hi) rendered inside each `_source_row.html` popover. HTMX form posts flat `<source>_rpm` / `_lo` / `_hi` fields to `PUT /api/v1/settings/sources`; server-side reassembles into the `scraper_rate_limits[<source>]` nested-dict shape + validates via `RateLimitConfig` (rpm in [0.1, 600]; delay in [0, 600]; lo <= hi). Plan 58 / `0.2.7.06`.
+**Used by:** Screen 11 (Settings · Sources). Included once per `_source_row.html` (every source — 6 times per panel render).
+**API:**
+| Variable | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `view` | dict | yes | — | Same dict the parent `_source_row.html` consumes. Reads `view.source` (used to namespace form-field names) + `view.rate_limit.{rpm, delay_lo, delay_hi}` (the resolved override-or-fallback values rendered as form defaults). |
+
+**Visual spec:** `flex flex-col gap-2 text-xs`. Three-column grid of numeric inputs (`grid grid-cols-3 gap-2`) styled `bg-slate-900 border border-slate-800 text-slate-100 font-mono text-xs`. Hint text under inputs: `rpm in [0.1, 600]; delay in [0, 600]s; lo <= hi.`. Save button: indigo primary `px-2.5 py-1 rounded bg-indigo-500 hover:bg-indigo-400`. CSRF token injected via plan 45 Jinja context-processor (the `<body hx-boost>` parent already carries the global X-CSRF-Token header; this form also declares it explicitly for clarity).
+**Lucide icons:** none.
+**Variants:** none.
+**Example invocation:**
+```jinja
+{# Rendered inside _source_row.html's popover; not a standalone include. #}
+{% include "components/_rate_limit_editor.html" %}
+```
+**Canonical contract:** `docs/design/SOURCES_UI.md` § H (forward pointer — `0.2.7.06` ships this).
+
+#### `_keywords_editor.html`
+
+**Purpose:** LinkedIn / Indeed keywords + location form rendered inside the `kind="db"` branch of `_source_row.html`'s popover. Single text input takes a comma-separated keyword list; comma-split happens server-side (drops empties + strips whitespace). Free-text location with 200-char `maxlength`. HTMX POST to `PUT /api/v1/settings/sources`. Plan 58 / `0.2.7.06`.
+**Used by:** Screen 11 (Settings · Sources) — included once per `kind="db"` source (LinkedIn + Indeed only; not env-kind sources, not Workday).
+**API:**
+| Variable | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `view` | dict | yes | — | Same dict the parent `_source_row.html` consumes. Reads `view.source` (must be `"linkedin"` or `"indeed"`; used to namespace `<source>_keywords` + `<source>_location` form-field names) + `view.configure.keywords` (list[str]; joined with `, ` for the text input default) + `view.configure.location` (str). |
+
+**Visual spec:** `flex flex-col gap-2 text-xs border-t border-slate-800 pt-3` (separator from the rate-limit editor above). Two stacked single-line inputs (`bg-slate-900 border border-slate-800 text-slate-100 font-mono text-xs`), keywords first then location. Save button shares the indigo primary style with `_rate_limit_editor.html`.
+**Lucide icons:** none.
+**Variants:** none — same shape for LinkedIn + Indeed.
+**Example invocation:**
+```jinja
+{# Rendered inside _source_row.html's popover {% elif kind=="db" %} branch. #}
+{% include "components/_keywords_editor.html" %}
+```
+**Canonical contract:** `docs/design/SOURCES_UI.md` § H (forward pointer — `0.2.7.06` ships this).
 
 ---
 
