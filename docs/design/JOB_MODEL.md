@@ -465,6 +465,7 @@ Pydantic shadows in `src/db/sample_data_models.py` mirror the SQLModel shape (`c
 | Scorer visa filter | `src/services/scorer.py` |
 | Pipeline narrative | `docs/design/BACKEND.md` § J.3 |
 | Cross-entity entity inventory | `docs/design/DATA_MODEL.md` § B + § C (Job, JobScrapeRun) |
+| Job-UI surface contract (Discover filter toolbar + `/jobs/{id}`) | `docs/design/JOB_UI.md` (graduated 2026-05-20 from plan 36) |
 | Plan archive (rationale) | `docs/plans/archive/27-0.2.0.05-job-models.md` |
 | ROADMAP row | `ROADMAP.md` `0.2.0.05` |
 | GitHub Issue | #15 |

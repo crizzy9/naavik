@@ -1,15 +1,16 @@
 # Naavik Component Catalog
 
-> **Last updated:** 2026-04-30
+> **Last updated:** 2026-05-20 (plan 36 / `0.2.0.11a` — registers 3 net-new Discover-group partials [`filter_toolbar.html`, `_filter_hidden_inputs.html`, `job_topbar.html`] + 1 new `filter_chip` macro. Net total: 88 partials + macro count grows by 1 in § I. Canonical Job-UI contract: `docs/design/JOB_UI.md`.)
+> Earlier line: 2026-04-30
 > **Status:** Canonical — graduated from `docs/plans/03-component-catalog.md` (archived).
 > **Scope:** Every Jinja partial under `src/ui/templates/components/`. The contract Stage 2 implementation builds against; Stage 3 page templates compose entirely from these partials.
-> **Companion docs:** `DESIGN.md` (visual contract — tokens, typography, motion), `docs/design/SCREENS.md` (per-screen functional spec), `docs/design/INTERACTIONS.md` (HTMX patterns), `docs/design/BACKEND.md` (route table consuming components).
+> **Companion docs:** `DESIGN.md` (visual contract — tokens, typography, motion), `docs/design/SCREENS.md` (per-screen functional spec), `docs/design/INTERACTIONS.md` (HTMX patterns), `docs/design/BACKEND.md` (route table consuming components), `docs/design/JOB_UI.md` (Job-UI surface contract — composes the filter toolbar + Job detail page).
 
 ---
 
 ## A · Inventory
 
-The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 85 components** across 12 groups.
+The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 88 components** across 12 groups.
 
 | Group | Count | Components |
 |---|---|---|
@@ -19,13 +20,13 @@ The library lives at `src/ui/templates/components/`. Components grouped by respo
 | Onboarding | 5 | `step_indicator.html`, `dropzone.html`, `extraction_checklist.html`, `extracted_field_row.html`, `progress_bar.html` |
 | Profile / Bullet | 11 | `profile_hero.html`, `contact_chip.html`, `experience_card.html`, `bullet_row.html`, `section_anchor_nav.html`, `application_readiness_card.html`, `application_qs_form.html`, `bullet_edit_row.html`, `tag_picker.html`, `selection_override.html`, `bullet_textarea.html` |
 | Overview | 4 | `kpi_card.html`, `priority_action_row.html`, `email_signal_row.html`, `pipeline_strip.html` |
-| Discover | 8 | `swipe_card.html`, `match_breakdown.html`, `discover_action_bar.html`, `swipe_action_btn.html`, `discover_stats_strip.html`, `up_next_card.html`, `tip_card.html`, `keyboard_hints.html` |
+| Discover | 11 | `swipe_card.html`, `match_breakdown.html`, `discover_action_bar.html`, `swipe_action_btn.html`, `discover_stats_strip.html`, `up_next_card.html`, `tip_card.html`, `keyboard_hints.html`, `filter_toolbar.html` (plan 36), `_filter_hidden_inputs.html` (plan 36), `job_topbar.html` (plan 36) |
 | Discover · review & apply | 6 | `apply_topbar.html`, `warm_intro_card.html`, `tailored_bullet_row.html`, `cover_letter_section.html`, `screener_question_card.html`, `apply_action_bar.html` |
 | Tracking | 8 | `view_toggle.html`, `provider_chip.html`, `integration_card.html`, `followup_banner.html`, `stage_column.html`, `tracking_card.html`, `tracking_list_row.html`, `tracking_board.html` |
 | Outreach | 6 | `outreach_app_row.html`, `recommended_move_card.html`, `outreach_message_card.html`, `contact_card.html`, `linkedin_status_chip.html`, `outreach_timeline.html` |
 | Settings | 7 | `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `deployment_status_card.html`, `log_tail.html`, `on_disk_card.html`, `connection_status_card.html` |
 | Skeletons | 5 | `swipe_card_skeleton.html`, `tracking_card_skeleton.html`, `priority_action_row_skeleton.html`, `email_signal_row_skeleton.html`, `bullet_edit_row_skeleton.html` |
-| **Total** | **85** | |
+| **Total** | **88** | |
 
 Cover letter generation lives inside Discover · review & apply (no standalone screen) — its components (`cover_letter_section.html`, `screener_question_card.html`) are listed under that group. The standalone Cover Letter generator's earlier components (`letter_editor.html`, `tone_picker.html`, `output_mode_card.html`, `model_attribution_chip.html`) are NOT in MVP and dropped.
 
@@ -1444,6 +1445,71 @@ Mobile variant: circular `h-14 w-14 rounded-full` with icon only.
 ```
 **Mockup reference:** bundle `screens/Discover.jsx:KeyboardHints` line 309.
 
+#### `filter_toolbar.html`
+
+**Purpose:** Sticky 6-axis filter chip-row above the Discover swipe queue. Each chip maps 1:1 to a `JobFilter` field and `hx-get`s `/_fragments/discover/queue?...` with `hx-push-url="true"` so the browser URL mirrors filter state. Plan 36 (`0.2.0.11`).
+**Used by:** Screen 7 (Discover), Screen 12 (Job detail — back link returns here).
+**API:**
+| Variable | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `filters` | `JobFilter` | yes | — | Current filter state (Pydantic v2 model) |
+| `filters_active` | int | yes | — | Count of non-default chips (drives Clear · N affordance) |
+
+**Visual spec:** `sticky top-0 z-10 flex items-center gap-2 flex-wrap py-2 -mx-2 px-2 bg-slate-950/95 backdrop-blur`. Six chip slots: 2 toggle-style + 4 `<details>` popovers. Toggle chips: `bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/40` when on (amber tone for `include_duplicates`); slate when off. Popover chips invoke `filter_chip` macro from `_macros.html`. Each `<details>` contains an embedded `<form hx-get="/_fragments/discover/queue" hx-target="#discover-main" hx-swap="innerHTML" hx-push-url="true" hx-trigger="change">` that includes `_filter_hidden_inputs.html` to preserve sibling-axis state across single-axis changes. Clear · N link is a sibling at the end, only rendered when `filters_active > 0`.
+**Lucide icons:** `globe` (source), `laptop` (remote_only), `user-check` (visa), `bar-chart-3` (seniority), `gauge` (score_min), `copy` (include_duplicates), `chevron-down` (popover affordance), `x` (clear).
+**Variants:** none (state-driven; each chip's `active` flag is computed from `filters` ctx).
+**Example invocation:**
+```jinja
+{% include "components/filter_toolbar.html" with {
+  "filters": filters,
+  "filters_active": filters_active
+} %}
+```
+**Mockup reference:** none (Playwright capture in `traces/2026-05-19T15-42-42_833f4a/qa/0.2.0.11/`).
+
+#### `_filter_hidden_inputs.html`
+
+**Purpose:** Helper partial used by each chip-form in `filter_toolbar.html` to mirror the **other 5 axes** as hidden inputs so a single-axis change doesn't drop sibling state when the form submits. Underscore-prefixed name signals "internal use only — composed inside `filter_toolbar.html`, never on its own." Plan 36 Deviations row 5 records this as net-new vs the plan's surface inventory.
+**Used by:** `filter_toolbar.html` (called 6×, once per chip-form).
+**API:**
+| Variable | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `filters` | `JobFilter` | yes (via context) | — | Current filter state to mirror |
+| `current_axis` | str | no | `None` | Axis being changed in the enclosing form — that axis is NOT mirrored as a hidden input (avoids duplicate `name=...` on the form) |
+
+**Visual spec:** no rendered output beyond `<input type="hidden">` tags. Emits one hidden input per axis that is (a) non-default AND (b) not equal to `current_axis`. `queue_state` is always mirrored (legacy `?filter=saved` continues to work; plan 36 § E row 7).
+**Lucide icons:** none.
+**Variants:** with/without `current_axis` arg.
+**Example invocation:**
+```jinja
+{% include "components/_filter_hidden_inputs.html" ignore missing with context %}
+{# OR, scoped to skip an axis: #}
+{% with current_axis="source" %}
+  {% include "components/_filter_hidden_inputs.html" ignore missing with context %}
+{% endwith %}
+```
+**Mockup reference:** none (helper partial; no visual surface).
+
+#### `job_topbar.html`
+
+**Purpose:** Read-only top context bar for `/jobs/{id}` (Screen 12). Renders back-link + company tile + role + team + company + location + salary chip + source-tone chip + match-score (or `unscored` chip) + Open posting external link. Distinct from `apply_topbar.html` (which couples to the DRAFT Application workspace at `/discover/{id}`); no Save / Skip / Submit buttons here — those live in the right-rail action card on `_job_detail_body.html`. Plan 36 (`0.2.0.11`) § F audit picked NEW over `apply_topbar` variant arg to keep each surface owning one concern.
+**Used by:** Screen 12 (Job detail).
+**API:**
+| Variable | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `job` | dict | yes | — | Job projection from `jobs_ctx.build_job_detail_ctx` — fields used: `id`, `company`, `company_initial`, `role`, `team`, `location`, `salary_range`, `score`, `unscored`, `source`, `source_tone`, `url`, `url_type`, `queue_state` |
+
+**Visual spec:** `flex items-center gap-4 px-6 py-3 border-b border-slate-800 bg-slate-950 flex-wrap`. Left: back-link `<a href="/discover">` with `arrow-left` icon + "Back to Discover" copy. Center: `avatar.html` (kind=`company`, size=`sm`, color_override=`bg-slate-700`) + role meta (`role` bold, `· team` slate-300, `/ company` slate-500, `· location` slate-400, `· salary` mono slate-400). Right shrink-0: `chip` macro for source pill (`source · LINKEDIN` etc., tone driven by `job.source_tone`) + match-score (`font-mono text-xs text-cyan-300 tabular-nums "match 0.86"`) OR `chip("unscored", tone="slate")` when `job.unscored`; trailing Open posting link (external; `hx-boost="false"`).
+**Lucide icons:** `arrow-left`, `external-link` (stroke 1.5).
+**Variants:** unscored (replaces match-score chip with "unscored" slate chip).
+**Example invocation:**
+```jinja
+{% with job=job %}
+  {% include "components/job_topbar.html" %}
+{% endwith %}
+```
+**Mockup reference:** none (Playwright capture in `traces/2026-05-19T15-42-42_833f4a/qa/0.2.0.11/`).
+
 ---
 
 ### H.8 Discover · review & apply
@@ -2100,6 +2166,18 @@ The single macros file imported on every page via `{% from "components/_macros.h
 {% macro deployment_badge(mode) -%}
   {# self-hosted (emerald) | cloud (indigo) #}
 {%- endmacro %}
+
+{% macro filter_chip(name, label, value=None, active=False, icon=None) -%}
+  {#
+    Plan 36 (`0.2.0.11`) filter_toolbar chip primitive. Each chip is a clickable
+    `<summary>` that toggles a sibling `<details>` popover. `name` is the
+    JobFilter field name (e.g. `source`); `value` is the currently-selected
+    value rendered next to the label. `active` flips the indigo ring.
+    Used 4× per render in filter_toolbar.html (source, visa, seniority, score_min).
+    Toggle-style chips (remote_only, include_duplicates) inline their own
+    button/<label> markup since they don't need a popover.
+  #}
+{%- endmacro %}
 ```
 
 Add per-domain macros only when a domain grows past ~10 macros.
@@ -2116,10 +2194,11 @@ Add per-domain macros only when a domain grows past ~10 macros.
 | 4 Profile | `sidebar`, `profile_hero`, `contact_chip`, `experience_card`, `bullet_row`, `tag_chip`, `section_anchor_nav`, `application_readiness_card`, `avatar`, `empty_state` (per-section) |
 | 5 Profile editor | `sidebar`, `editor_field`, `editor_card`, `bullet_edit_row`, `application_qs_form`, `autosave_indicator`, `tag_picker`, `bullet_edit_row_skeleton`, `confirm_modal` (Discard / Remove role) |
 | 6 Bullet editor (modal) | `modal`, `tag_picker`, `selection_override`, `bullet_textarea`, `field_label`, `info_card`, `confirm_modal` (Delete bullet) |
-| 7 Discover | `sidebar`, `swipe_card`, `score_circle`, `match_breakdown`, `discover_action_bar`, `swipe_action_btn`, `discover_stats_strip`, `up_next_card`, `tip_card`, `keyboard_hints`, `kbd`, `swipe_card_skeleton`, `empty_state`, `tag_chip`, `avatar` |
+| 7 Discover | `sidebar`, `swipe_card`, `score_circle`, `match_breakdown`, `discover_action_bar`, `swipe_action_btn`, `discover_stats_strip`, `up_next_card`, `tip_card`, `keyboard_hints`, `kbd`, `swipe_card_skeleton`, `empty_state`, `tag_chip`, `avatar`, `filter_toolbar` (plan 36), `_filter_hidden_inputs` (plan 36), `filter_chip` macro (plan 36) |
 | 8 Discover · review & apply | `sidebar`, `apply_topbar`, `match_breakdown`, `warm_intro_card`, `tailored_bullet_row`, `cover_letter_section`, `screener_question_card`, `apply_action_bar`, `ai_badge`, `tag_chip`, `avatar`, `confirm_modal` (Discard draft) |
 | 9 Tracking | `sidebar`, `tracking_board`, `tracking_card`, `tracking_list_row`, `integration_card`, `provider_chip`, `followup_banner`, `stage_column`, `view_toggle`, `tracking_card_skeleton`, `status_badge`, `score_circle`, `avatar`, `empty_state` |
 | 10 Outreach | `sidebar`, `outreach_app_row`, `outreach_message_card`, `contact_card`, `recommended_move_card`, `linkedin_status_chip`, `provider_chip`, `outreach_timeline`, `ai_badge`, `avatar`, `confirm_modal` (Disconnect LinkedIn) |
 | 11 Settings | `sidebar`, `settings_tabs`, `provider_card`, `cost_card`, `deployment_status_card`, `log_tail`, `on_disk_card`, `connection_status_card`, `integration_card`, `deployment_badge`, `confirm_modal` (Delete account / Disconnect Gmail) |
+| 12 Job detail (plan 36) | `sidebar`, `job_topbar` (plan 36), `avatar`, `tag_chip`, `chip` macro, `empty_state` (when applicable), Lucide icons (`arrow-left`, `external-link`, `sparkles`, `bookmark`, `x`, `copy`). See `docs/design/JOB_UI.md` § D for the composition contract. |
 
 Common across every authenticated screen: `sidebar`, `button`, `card`, `tag_chip`, `status_dot`, `toast` (OOB region). Common across all screens: `spinner` (in-button), `toast`.

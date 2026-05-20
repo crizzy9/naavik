@@ -211,7 +211,7 @@ Under `/api/v1/`, return Pydantic models.
 | URL | Method | Request | Response |
 |---|---|---|---|
 | `/api/v1/jobs` | GET | `?queue_state=&score_min=&cursor=` | `{items: Job[], next_cursor}` |
-| `/api/v1/jobs/{id}` | GET | — | `Job` |
+| `/api/v1/jobs/{id}` | GET | — | `Job` (moved from `discover.py` to `jobs.py` per plan 36; IDOR-bounded — cross-user returns 404) |
 | `/api/v1/jobs/by-url` | POST | `{url}` | scraped + scored `Job` (`+ Add by URL`) |
 | `/api/v1/jobs/{id}/rescore` | POST | — | rescored `Job` (re-run scorer) |
 | `/api/v1/discover/{job_id}/skip` | POST | — | `Job` (queue_state=skipped) |
@@ -219,6 +219,16 @@ Under `/api/v1/`, return Pydantic models.
 | `/api/v1/discover/{job_id}/auto-submit` | POST | — | `{application_id, status: "queued"}` — flips Job.queue_state=queued_for_auto_apply, creates DRAFT Application, queues for next cron run |
 | `/api/v1/discover/saved` | GET | — | saved `Job[]` |
 | `/api/v1/discover/skipped` | GET | — | skipped `Job[]` |
+
+HTML page routes (plan 36 — `0.2.0.11`):
+
+| URL | Method | Returns | Module |
+|---|---|---|---|
+| `/jobs/{id}` | GET | full HTML page (extends `base.html`) | `src/ui/routes/jobs.py:get_job_detail` |
+| `/_fragments/jobs/{id}` | GET | chrome-less body fragment (drawer-ready) | `src/ui/routes/jobs.py:get_job_detail_fragment` |
+| `/_fragments/discover/queue` | GET | HTMX fragment swap target for the filter chip-row toolbar; accepts the 6-axis querystring (`source`, `remote_only`, `visa`, `seniority`, `score_min`, `include_duplicates`) plus legacy `?filter=saved` | `src/ui/routes/discover.py:fragment_queue` |
+
+Canonical Job-UI surface contract (URL contract, HTMX patterns, IDOR boundary, `_effective_user_id` semantics): `docs/design/JOB_UI.md` § C–F.
 
 ### D.4 Applications
 
