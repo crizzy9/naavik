@@ -1,0 +1,154 @@
+{# _application_detail.html — application detail slide-over (plan 53 § C.1).
+
+   Args:
+     application      : dict — id, company, company_initial, company_color, role, team,
+                        location, salary_range, status, status_label, board, external_url,
+                        notes, applied_at, applied_at_label, board_application_id
+     status_timeline  : list — {from, to, trigger, occurred_at, occurred_at_label}
+     documents        : list — {id, kind, compiled_at, compiled_at_label, pdf_path}
+     contacts         : list — {id, name, title, company, initial}
+     last_failure     : optional dict — {kind, message, captured_at}
+#}
+{% set a = application %}
+<aside
+  id="tracking-slide-over-panel"
+  data-testid="tracking-slide-over"
+  class="fixed inset-y-0 right-0 z-40 w-full max-w-md bg-slate-950 border-l border-slate-800 shadow-2xl shadow-black/45 flex flex-col overflow-hidden"
+  role="dialog"
+  aria-modal="false"
+  aria-labelledby="application-detail-title">
+
+  <div class="fixed inset-0 -z-10 bg-black/40"
+       aria-hidden="true"
+       hx-on:click="document.getElementById('tracking-slide-over-panel').remove(); window.history.pushState(null, '', '/tracking')"></div>
+
+  <header class="px-5 pt-5 pb-4 flex items-start gap-3 border-b border-slate-800 shrink-0">
+    {% with kind="company", text=a.company_initial, size="lg", color_override=a.company_color %}
+      {% include "components/avatar.html" %}
+    {% endwith %}
+    <div class="flex-1 min-w-0">
+      <h2 id="application-detail-title" class="text-base font-semibold text-slate-50 truncate">{{ a.role }}</h2>
+      <p class="text-sm text-slate-400 truncate">
+        {% if a.team %}{{ a.team }} · {% endif %}{{ a.company }}
+      </p>
+      <div class="mt-2 flex items-center gap-2 flex-wrap">
+        {% with status=a.status, label_override=a.status_label %}
+          {% include "components/status_badge.html" %}
+        {% endwith %}
+        {% if a.salary_range %}
+          <span class="font-mono text-xs text-slate-400">{{ a.salary_range }}</span>
+        {% endif %}
+        {% if a.location %}
+          <span class="text-xs text-slate-400">· {{ a.location }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <button type="button"
+            class="text-slate-400 hover:text-slate-100 shrink-0 -mt-1 -mr-1 p-1.5 rounded hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+            aria-label="Close"
+            hx-on:click="document.getElementById('tracking-slide-over-panel').remove(); window.history.pushState(null, '', '/tracking')">
+      <i data-lucide="x" class="h-4 w-4" stroke-width="1.5"></i>
+    </button>
+  </header>
+
+  <div class="px-5 py-5 overflow-auto flex-1 flex flex-col gap-5">
+
+    {% if last_failure %}
+      {% set _failure_body %}
+        <div>{{ last_failure.message }}</div>
+        <div class="mt-1 text-xs text-rose-300/70 font-mono">kind: {{ last_failure.kind }}</div>
+      {% endset %}
+      {% with tone="danger", icon="alert-triangle", title="Stuck in queue", body=_failure_body %}
+        {% include "components/info_card.html" %}
+      {% endwith %}
+    {% endif %}
+
+    {% if a.applied_at %}
+      <section data-testid="detail-applied-at">
+        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-1">Applied</div>
+        <div class="text-sm text-slate-200">{{ a.applied_at_label }}</div>
+        {% if a.board_application_id %}
+          <div class="text-xs text-slate-500 mt-0.5 font-mono">ref: {{ a.board_application_id }}</div>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    {% if status_timeline %}
+      <section data-testid="detail-status-timeline">
+        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Status timeline</div>
+        <ol class="flex flex-col gap-2">
+          {% for step in status_timeline %}
+            <li class="flex items-start gap-2.5 text-sm">
+              <span class="inline-block h-2 w-2 mt-1.5 rounded-full {{ STATUS_DOT_COLORS.get(step.to, 'bg-slate-500') }} shrink-0" aria-hidden="true"></span>
+              <div class="flex-1 min-w-0">
+                <div class="text-slate-200">
+                  {% if step.from %}{{ step.from }} → {% endif %}{{ step.to }}
+                </div>
+                <div class="text-xs text-slate-500">
+                  {{ step.occurred_at_label }}{% if step.trigger %} · {{ step.trigger }}{% endif %}
+                </div>
+              </div>
+            </li>
+          {% endfor %}
+        </ol>
+      </section>
+    {% endif %}
+
+    <section data-testid="detail-documents">
+      <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Documents</div>
+      {% if documents %}
+        <ul class="flex flex-col gap-1.5">
+          {% for d in documents %}
+            <li class="flex items-center justify-between gap-2 text-sm">
+              <span class="text-slate-200">{{ d.kind | replace('_', ' ') }}</span>
+              <span class="text-xs text-slate-500">{{ d.compiled_at_label }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-sm text-slate-500">No generated documents yet.</p>
+      {% endif %}
+    </section>
+
+    <section data-testid="detail-contacts">
+      <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Contacts</div>
+      {% if contacts %}
+        <ul class="flex flex-col gap-2">
+          {% for c in contacts %}
+            <li class="flex items-center gap-2.5 text-sm">
+              {% with kind="user", text=c.initial, size="sm" %}
+                {% include "components/avatar.html" %}
+              {% endwith %}
+              <div class="flex-1 min-w-0">
+                <div class="text-slate-200 truncate">{{ c.name }}</div>
+                {% if c.title %}<div class="text-xs text-slate-500 truncate">{{ c.title }}</div>{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-sm text-slate-500">No linked contacts.</p>
+      {% endif %}
+    </section>
+
+    <section data-testid="detail-notes">
+      <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Notes</div>
+      <textarea
+        class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 min-h-[100px] resize-y leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+        placeholder="Track context · who said what · followups."
+        aria-label="application notes"
+        readonly>{{ a.notes }}</textarea>
+    </section>
+
+    {% if a.external_url %}
+      <section>
+        <a href="{{ a.external_url }}" target="_blank" rel="noopener"
+           class="inline-flex items-center gap-1.5 text-sm text-indigo-300 hover:text-indigo-200">
+          <i data-lucide="external-link" class="h-4 w-4" stroke-width="1.5"></i>
+          Open job posting
+        </a>
+      </section>
+    {% endif %}
+
+  </div>
+</aside>

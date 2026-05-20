@@ -19,8 +19,23 @@
       {% with current_view=current_view %}
         {% include "components/view_toggle.html" %}
       {% endwith %}
+      <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 cursor-pointer hover:bg-slate-800"
+             data-testid="tracking-show-drafts">
+        <input type="checkbox" name="show_drafts" value="1"
+               {% if show_drafts %}checked{% endif %}
+               hx-get="/_fragments/tracking/{{ current_view }}"
+               hx-include="[name='show_closed'],[name='show_drafts']"
+               hx-target="#tracking-main"
+               hx-swap="innerHTML"
+               hx-push-url="true"
+               class="rounded border-slate-700 bg-slate-900 text-indigo-500 focus:ring-indigo-500/40">
+        Show drafts
+      </label>
       <button type="button"
-              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              hx-get="/_modal/manual-job"
+              hx-target="body"
+              hx-swap="beforeend">
         <i data-lucide="plus" class="h-4 w-4" stroke-width="1.5"></i>
         Add manually
       </button>
@@ -53,5 +68,14 @@
       {% include "pages/_tracking_board.html" %}
     {% endif %}
   </div>
+</div>
+
+{# Slide-over mount point. `tracking_card` HTMX-swaps its detail partial here.
+   When `slide_over_open` is set (page-load deep-link), the partial renders
+   server-side on first paint. #}
+<div id="tracking-slide-over-mount">
+  {% if slide_over_open and application %}
+    {% include "components/_application_detail.html" %}
+  {% endif %}
 </div>
 {% endblock %}

@@ -102,6 +102,21 @@ async def cleanup_stale_docs() -> None:
     log.info("cleanup_stale_docs pruned %d rows", n)
 
 
+async def cleanup_stale_drafts() -> None:
+    """`admin.cleanup_stale_drafts` — weekly Sun 03:30 (plan 53 / 0.2.4.01).
+
+    Soft-deletes DRAFT Applications idle > 30 days. Mirrors discard_draft
+    semantics (CLOSED + withdrawn_by_me + deleted_at) and emits a
+    STATUS_CHANGE AppEvent with trigger=CLEANUP_STALE.
+    """
+    from services.application_service import cleanup_stale_drafts as svc
+
+    async with async_session() as session:
+        n = await svc(session)
+        await session.commit()
+    log.info("cleanup_stale_drafts archived %d rows", n)
+
+
 async def cleanup_revoked_jwts() -> None:
     """`admin.cleanup_revoked_jwts` — daily 03:30 UTC (plan 50 / 0.2.1.04)."""
     from services.auth import cleanup_expired_revoked_jwts
@@ -172,6 +187,14 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         coalesce=True,
     )
     scheduler.add_job(
+        cleanup_stale_drafts,
+        CronTrigger(day_of_week="sun", hour=3, minute=30, timezone="UTC"),
+        id="admin.cleanup_stale_drafts",
+        name="admin.cleanup_stale_drafts",
+        replace_existing=True,
+        coalesce=True,
+    )
+    scheduler.add_job(
         cleanup_revoked_jwts,
         CronTrigger(hour=3, minute=30, timezone="UTC"),
         id="admin.cleanup_revoked_jwts",
@@ -211,6 +234,7 @@ __all__ = [
     "auto_apply",
     "cleanup_revoked_jwts",
     "cleanup_stale_docs",
+    "cleanup_stale_drafts",
     "daily_db_snapshot",
     "refresh_oauth_tokens",
     "register_all",

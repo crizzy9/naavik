@@ -51,6 +51,7 @@ FUNC_REF_ALLOWLIST: frozenset[str] = frozenset(
         "scheduler.jobs:aggregate_costs",
         "scheduler.jobs:cleanup_revoked_jwts",
         "scheduler.jobs:cleanup_stale_docs",
+        "scheduler.jobs:cleanup_stale_drafts",
         "scheduler.jobs:daily_db_snapshot",
         "scheduler.jobs:refresh_oauth_tokens",
         # src/scheduler/scraping.py

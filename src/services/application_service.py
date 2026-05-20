@@ -473,6 +473,50 @@ async def submit_draft(
     return application
 
 
+async def cleanup_stale_drafts(
+    session: AsyncSession,
+    *,
+    older_than_days: int = 30,
+) -> int:
+    """Archive DRAFTs idle > N days. Returns count archived.
+
+    Plan 53 § A.2 / 0.2.4.01. Mirrors `discard_draft` semantics
+    (CLOSED + withdrawn_by_me + soft-delete) but emits a CLEANUP_STALE
+    AppEvent so audit trail distinguishes system archival from user
+    withdrawal.
+    """
+    threshold = datetime.now(UTC) - timedelta(days=older_than_days)
+    stmt = select(Application).where(
+        Application.status == ApplicationStatus.DRAFT,
+        Application.deleted_at.is_(None),
+        Application.updated_at < threshold,
+    )
+    rows = (await session.exec(stmt)).all()
+    archived = 0
+    for app in rows:
+        now = datetime.now(UTC)
+        app.status = ApplicationStatus.CLOSED
+        app.closed_reason = ClosedReason.WITHDRAWN_BY_ME
+        app.deleted_at = now
+        app.updated_at = now
+        session.add(app)
+        await _emit_event(
+            session,
+            user_id=app.user_id,
+            application_id=app.id,
+            kind=AppEventKind.STATUS_CHANGE,
+            payload={
+                "from": ApplicationStatus.DRAFT.value,
+                "to": ApplicationStatus.CLOSED.value,
+                "trigger": StatusChangeTrigger.CLEANUP_STALE.value,
+            },
+        )
+        archived += 1
+    if archived:
+        await session.flush()
+    return archived
+
+
 async def discard_draft(session: AsyncSession, application_id: int) -> Application:
     """DRAFT → CLOSED `withdrawn_by_me` + soft-delete."""
     application = await get_application(session, application_id)
