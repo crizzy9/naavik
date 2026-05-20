@@ -217,6 +217,12 @@ def test_fake_session_caller_unaffected_across_groups(client: TestClient):
         cookies={"naavik_session": "fake-1"},
     )
     assert r.status_code not in gate_codes, f"ui/settings gate misfired on fake-1: {r.status_code}"
+    # Plan 42 LOW Note 2 fold-in: pin one representative positive-route
+    # response so a future change that turns this route into a 500 doesn't
+    # silently pass the negative-only sweep above.
+    assert r.status_code in {200, 204, 422}, (
+        f"ui/settings test-connection should return 200/204/422; got {r.status_code}"
+    )
 
     # ui/routes/email — read sample_data thread, no DB write
     r = client.post(
@@ -265,3 +271,98 @@ def test_unauthenticated_caller_gets_401_across_groups(client: TestClient):
 
     r = client.put("/api/v1/settings/notifications", json={"notifications_enabled": True})
     assert r.status_code == 401, f"ui/settings expected 401, got {r.status_code}"
+
+
+# ── Plan 42 (0.2.0.04 / PC.6b) — onboarding-bypass precondition ──────────
+
+
+class _FakeUserCountSession:
+    """Stand-in `AsyncSession` whose `.exec(...)` returns a result wrapping
+    the configured count value. Mirrors the shape `_compute_signup_disabled`
+    + `post_signup` unwrap (`.one()` returns a tuple-like with `[0]` = int).
+    """
+
+    def __init__(self, count: int) -> None:
+        self._count = count
+
+    async def exec(self, _stmt):
+        count = self._count
+
+        class _Result:
+            def one(self):
+                return (count,)
+
+        return _Result()
+
+
+def _override_session_with_count(count: int):
+    from db.session import get_session
+    from main import app
+
+    async def _fake_get_session():
+        yield _FakeUserCountSession(count)
+
+    app.dependency_overrides[get_session] = _fake_get_session
+    return get_session
+
+
+def test_from_extraction_blocked_when_user_exists(client: TestClient):
+    """Existing User row → 409 + 'Account already exists' card + cookie NOT set."""
+    dep = _override_session_with_count(1)
+    try:
+        r = client.post("/api/v1/profile/from-extraction")
+    finally:
+        from main import app
+
+        app.dependency_overrides.pop(dep, None)
+    assert r.status_code == 409, f"expected 409, got {r.status_code}: {r.text}"
+    assert "Account already exists" in r.text
+    assert "naavik_session" not in {c.name for c in r.cookies.jar}
+
+
+def test_from_extraction_blocked_when_flagged_user_exists(client: TestClient):
+    """Hacker MEDIUM probe path — flagged user already exists, attacker POSTs
+    to `from-extraction` hoping to replace real-JWT with fake-session. Count
+    probe sees the row and returns 409 without writing the cookie.
+    """
+    dep = _override_session_with_count(1)
+    try:
+        r = client.post("/api/v1/profile/from-extraction")
+    finally:
+        from main import app
+
+        app.dependency_overrides.pop(dep, None)
+    assert r.status_code == 409, f"expected 409, got {r.status_code}: {r.text}"
+    assert "naavik_session" not in {c.name for c in r.cookies.jar}
+
+
+def test_from_extraction_allowed_on_fresh_db(client: TestClient):
+    """Empty `User` table → 204 + `HX-Redirect: /` + `naavik_session=fake-1` cookie."""
+    dep = _override_session_with_count(0)
+    try:
+        r = client.post("/api/v1/profile/from-extraction")
+    finally:
+        from main import app
+
+        app.dependency_overrides.pop(dep, None)
+    assert r.status_code == 204, f"expected 204, got {r.status_code}: {r.text}"
+    assert r.headers.get("hx-redirect") == "/"
+    assert r.cookies.get("naavik_session") == "fake-1"
+
+
+def test_from_extraction_409_response_is_htmx_swappable(client: TestClient):
+    """409 body is a bare HTML fragment (no `<html>`/`<body>` wrapping) so
+    HTMX can swap it directly into `#onboarding-step-content`.
+    """
+    dep = _override_session_with_count(1)
+    try:
+        r = client.post("/api/v1/profile/from-extraction")
+    finally:
+        from main import app
+
+        app.dependency_overrides.pop(dep, None)
+    assert r.status_code == 409
+    body = r.text.lower()
+    assert "<html" not in body, "fragment must not contain <html>"
+    assert "<body" not in body, "fragment must not contain <body>"
+    assert 'id="onboarding-step-content"' in r.text, "fragment must carry the swap-target id"

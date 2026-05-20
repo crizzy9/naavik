@@ -491,6 +491,9 @@ def test_require_authed_session_invalid_jwt_401(monkeypatch) -> None:
     client = TestClient(app)
 
     # verify_jwt returns None on the patched call (mimicking an invalid token).
+    # NOTE: wrapper imports verify_jwt by bare name at services/auth.py:338;
+    # if verify_jwt moves to a sibling module, switch this monkeypatch to the
+    # wrapper's own import path or this test silently no-ops.
     monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: None)
 
     r = client.post(
