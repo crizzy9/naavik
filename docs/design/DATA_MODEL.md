@@ -473,6 +473,13 @@ class Application(SQLModel, table=True):
 
 **Transitions** are enforced at the service layer (see § E). **`submission_artifacts`** is opaque JSONB written by ATS adapters (BACKEND.md § K) — Naavik never queries by its contents, only reads it for retry / debugging. When `submission_artifacts.last_failure` is populated AND `status = DRAFT`, the row surfaces in Discover's "Stuck in queue · {N}" right-rail card (`up_next_card` `state="stuck"`).
 
+**`submission_artifacts.last_failure` sub-shape** (populated by `application_service._record_failure`; consumer: `up_next_card` chip + `GET /api/v1/applications/{id}/postmortem/{ts}`; graduated from plan 52 / `0.2.3.02`):
+
+- `kind: str` — one of `FAILURE_*` taxonomy (`services/ats/base.py`: `captcha` / `rate_limit` / `auth_required` / `field_mismatch` / `unknown`).
+- `message: str` — operator-facing failure message (truncated by adapter).
+- `captured_at: str` — ISO 8601 UTC timestamp of the failure record.
+- `postmortem_path: str | null` — relative path stem under `<data_dir>/data/postmortems/` (e.g. `postmortems/42/2026-05-20T10-12-51Z`). `null` when the postmortem write skipped or failed (LLM unconfigured / disk error / schema invalid). Two files at `<path>/{trace.json, analysis.md}`.
+
 ### `Contact`
 
 ```python

@@ -275,11 +275,13 @@ async def test_submit_draft_success_flips_state_and_job_queue_state():
     # exec sequence:
     # 1. get_application(id) → app
     # 2. validate: count(unreviewed) = 0
-    # 3. _build_bundle: resume → None, cover → None, screeners → []
-    # 4. job lookup (post-success flip)
+    # 3. Settings load (for postmortem LLM provider)
+    # 4. _build_bundle: resume → None, cover → None, screeners → []
+    # 5. job lookup (post-success flip)
     session.exec_queue = [
         _exec_one(app_row),
         _exec_count(0),
+        _exec_one(None),  # Settings load
         _exec_one(None),  # resume lookup
         _exec_one(None),  # cover lookup
         _exec_all([]),  # screeners
@@ -311,6 +313,7 @@ async def test_submit_draft_persistent_failure_keeps_draft_and_writes_last_failu
     session.exec_queue = [
         _exec_one(app_row),  # get_application
         _exec_count(0),  # validate
+        _exec_one(None),  # Settings load
         _exec_one(None),
         _exec_one(None),
         _exec_all([]),
@@ -344,6 +347,7 @@ async def test_submit_draft_rate_limit_failure_classified():
     session.exec_queue = [
         _exec_one(app_row),
         _exec_count(0),
+        _exec_one(None),  # Settings load
         _exec_one(None),
         _exec_one(None),
         _exec_all([]),

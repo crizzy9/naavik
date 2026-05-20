@@ -60,7 +60,7 @@
         </header>
         <div class="flex flex-col gap-2">
           {% for j in stuck_drafts %}
-            {% with job=j, state="stuck", last_failure=j.last_failure %}
+            {% with job=j, state="stuck", last_failure=j.last_failure, application_id=j.application_id %}
               {% include "components/up_next_card.html" %}
             {% endwith %}
           {% endfor %}

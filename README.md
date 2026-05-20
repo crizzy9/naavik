@@ -366,6 +366,7 @@ PORTFOLIO_WEBHOOK_URL=...    # Netlify/Vercel rebuild trigger
 # Holds:
 # data/documents/<app_id>/{resume,cover-letter}.pdf — per-application bundle PDFs (Wave 6)
 # data/documents/portfolio/resume.pdf — cached generic resume served by /api/portfolio/resume.pdf
+# data/postmortems/<app_id>/<utc-ts>/{trace.json,analysis.md} — per-failure ATS postmortem (plan 52 / 0.2.3.02)
 # data/snapshots/snapshot-YYYY-MM-DD.marker — daily DB snapshot markers (Phase 6 will replace)
 # dev-credentials — plaintext dev login (mode 0600, debug + SELF_HOSTED + generated-password only — plan 10c)
 # (~/.naavik/secrets.enc, secrets.enc.lock, secrets.enc.bak.*, logs/vault-audit.log

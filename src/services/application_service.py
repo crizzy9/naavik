@@ -49,6 +49,7 @@ from models import (
     Settings,
     StatusChangeTrigger,
 )
+from services import ats_postmortem
 from services.ats import ATSError
 from services.ats import dispatch as ats_dispatch
 from services.ats.base import ApplicationBundle, SubmissionResult
@@ -357,12 +358,29 @@ async def _record_failure(
     *,
     kind: str,
     message: str,
+    raw: dict | None = None,
+    settings: Settings | None = None,
 ) -> None:
+    postmortem_path: str | None = None
+    if raw is not None and settings is not None:
+        try:
+            postmortem_path = await ats_postmortem.capture_postmortem(
+                session=session,
+                application=application,
+                failure_kind=kind,
+                failure_message=message,
+                raw=raw,
+                settings=settings,
+            )
+        except Exception as exc:  # noqa: BLE001 — postmortem is diagnostic; never block failure
+            log.warning("postmortem capture failed for application %s: %s", application.id, exc)
+
     artifacts = dict(application.submission_artifacts or {})
     artifacts["last_failure"] = {
         "kind": kind,
         "message": message,
         "captured_at": datetime.now(UTC).isoformat(),
+        "postmortem_path": postmortem_path,
     }
     artifacts["retry_count"] = int(artifacts.get("retry_count", 0)) + 1
     application.submission_artifacts = artifacts
@@ -406,13 +424,24 @@ async def submit_draft(
     if application.board is None:
         raise ValidationError("application has no board; cannot dispatch", code="no_board")
 
+    user_settings = (
+        await session.exec(select(Settings).where(Settings.user_id == application.user_id))
+    ).one_or_none()
+
     bundle = await _build_bundle(session, application)
     adapter = ats_dispatch(application.board)
 
     try:
         result: SubmissionResult = await adapter.submit(application, bundle)
     except ATSError as exc:
-        await _record_failure(session, application, kind="unknown", message=str(exc))
+        await _record_failure(
+            session,
+            application,
+            kind="unknown",
+            message=str(exc),
+            raw=getattr(exc, "raw", None),
+            settings=user_settings,
+        )
         await _emit_event(
             session,
             user_id=application.user_id,
@@ -425,7 +454,14 @@ async def submit_draft(
     if not result.ok:
         kind = result.error or "unknown"
         message = result.error_message or kind
-        await _record_failure(session, application, kind=kind, message=message)
+        await _record_failure(
+            session,
+            application,
+            kind=kind,
+            message=message,
+            raw=result.raw,
+            settings=user_settings,
+        )
         await _emit_event(
             session,
             user_id=application.user_id,

@@ -11,16 +11,22 @@ mutation endpoints move here.
 
 from __future__ import annotations
 
+import json
 import logging
+import re
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from config import settings as app_settings
 from db.session import get_session
 from models import ApplicationStatus, ClosedReason, User
 from services import application_service as svc
 from services.auth import require_password_complete
+
+_POSTMORTEM_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/applications")
@@ -147,6 +153,41 @@ async def move(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
     return Response(status_code=204)
+
+
+@router.get("/{application_id}/postmortem/{ts}", name="api_applications_postmortem")
+async def get_postmortem(
+    application_id: int,
+    ts: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(require_password_complete),
+):
+    """Return the ATS-failure postmortem for one application + timestamp.
+
+    IDOR boundary: 404 on cross-user / missing app (no existence leak).
+    Path-traversal guard: strict UTC-timestamp regex + `resolve().relative_to()`.
+    """
+    app = await svc.get_application(session, application_id)
+    if app is None or app.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Application not found")
+    if not _POSTMORTEM_TS_RE.match(ts):
+        raise HTTPException(status_code=400, detail="invalid timestamp")
+
+    data_root = Path(app_settings.data_dir).expanduser().resolve() / "data" / "postmortems"
+    base = (data_root / str(application_id) / ts).resolve()
+    try:
+        base.relative_to(data_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invalid path") from exc
+
+    trace_file = base / "trace.json"
+    analysis_file = base / "analysis.md"
+    if not trace_file.exists() or not analysis_file.exists():
+        raise HTTPException(status_code=404, detail="postmortem not found")
+
+    trace = json.loads(trace_file.read_text(encoding="utf-8"))
+    analysis_md = analysis_file.read_text(encoding="utf-8")
+    return {"trace": trace, "analysis_markdown": analysis_md}
 
 
 @router.get("/stuck", name="api_applications_stuck")

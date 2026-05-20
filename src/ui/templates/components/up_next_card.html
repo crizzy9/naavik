@@ -6,8 +6,10 @@
   Args:
     job          : dict (compact) — id, role, salary_range, company_initial, company_color, score
     state        : "default" / "stuck"
-    last_failure : dict (required when state="stuck"): {kind, message, captured_at}
+    last_failure : dict (required when state="stuck"): {kind, message, captured_at, postmortem_path?}
                    kind ∈ {auth_required, captcha, field_mismatch, unknown}
+                   postmortem_path ∈ str | null — relative path under <data_dir>/data/postmortems/
+    application_id : int | null — required when state="stuck" + last_failure.postmortem_path set
 #}
 {% set state = state | default("default") %}
 {% set j = job %}
@@ -27,12 +29,16 @@
     {% set _border = "border-rose-500/40 bg-rose-500/5" %}
     {% set _chip = "failed" %}
   {% endif %}
+  {% set _postmortem_path = last_failure.postmortem_path if last_failure else None %}
 {% else %}
   {% set _border = "border-slate-800 hover:border-slate-700 bg-slate-900" %}
+  {% set _postmortem_path = None %}
 {% endif %}
 
-<a href="/discover/{{ j.id }}"
-   class="flex items-center gap-3 px-3 py-2.5 rounded-lg border transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/40 {{ _border }}">
+<div class="relative flex items-center gap-3 px-3 py-2.5 rounded-lg border transition {{ _border }}">
+  <a href="/discover/{{ j.id }}"
+     class="absolute inset-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+     aria-label="Open {{ j.role }}"></a>
   {% with kind="company", text=j.company_initial | default(j.company[:1] | upper) if j.company else "?", size="sm", color_override=j.company_color | default("bg-slate-700") %}
     {% include "components/avatar.html" %}
   {% endwith %}
@@ -41,13 +47,21 @@
     <div class="text-xs text-slate-400 truncate font-mono">{{ j.salary_range | default("") }}</div>
   </div>
   {% if state == "stuck" %}
-    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono uppercase tracking-wide text-slate-300 shrink-0"
+    <span class="relative z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono uppercase tracking-wide text-slate-300 shrink-0"
           title="{{ last_failure.message | default('') }}">
       <i data-lucide="alert-triangle" class="h-3 w-3 text-amber-300" stroke-width="1.5"></i>
       {{ _chip }}
     </span>
+    {% if _postmortem_path and application_id %}
+      <a href="/api/v1/applications/{{ application_id }}/postmortem/{{ _postmortem_path.rsplit('/', 1)[-1] }}"
+         class="relative z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono uppercase tracking-wide text-slate-300 shrink-0 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+         title="View postmortem">
+        <i data-lucide="file-search" class="h-3 w-3 text-slate-400" stroke-width="1.5"></i>
+        postmortem
+      </a>
+    {% endif %}
   {% endif %}
   {% if j.score is defined and j.score is not none %}
-    <span class="shrink-0">{{ score_circle(score=j.score, size="compact") }}</span>
+    <span class="relative z-10 shrink-0">{{ score_circle(score=j.score, size="compact") }}</span>
   {% endif %}
-</a>
+</div>
