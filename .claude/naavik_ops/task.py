@@ -86,95 +86,114 @@ def _priority_rank(p: str | None) -> int:
     return PRIORITY_RANK.get((p or "").upper(), 0)
 
 
-def _backlog_task_ids() -> set[str]:
-    """Return the set of task IDs currently in ROADMAP's `## Backlog` section.
+def _roadmap_status_map(version: str) -> dict[str, str]:
+    """Map task_id → ROADMAP status (" " | "~" | "x") for a release version.
 
-    Plan 40 (0.7.0.22) — Backlog is the parking lot for unprioritized work.
-    Task IDs in this set are EXCLUDED from `task list <release>` /
-    `task next-unblocked <release>` output even though their 4-level ID
-    (e.g. `0.2.0.14`) would otherwise match.
+    Closes 0.7.0.27 — `next-unblocked` previously read
+    `.claude/github-issue-map.json:statuses` which was never populated by any
+    write path. ROADMAP is the authoritative single-doc tracking surface
+    (AGENTS.md § Single-doc-tracking), so we read [ ] / [~] / [x] state
+    directly from ROADMAP.md per row.
+
+    Reads the text via this module's `ROADMAP_PATH` (monkeypatch-friendly for
+    tests) and passes it explicitly to the parser so we don't depend on
+    `lib.roadmap.ROADMAP_PATH` which is set at import time.
+
+    Returns empty dict if section missing or parse fails — caller treats
+    absent entries as "open" (status=" ") to avoid silently filtering
+    rows whose state can't be determined.
+    """
+    try:
+        from .lib.roadmap import parse_release_section
+
+        text = ROADMAP_PATH.read_text(encoding="utf-8") if ROADMAP_PATH.exists() else ""
+        return {
+            row.task_id: row.status for row in parse_release_section(version, roadmap_text=text)
+        }
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _backlog_task_ids_via_roadmap_path() -> set[str]:
+    """Variant of _backlog_task_ids using this module's ROADMAP_PATH constant.
+
+    Same monkeypatch reason as _roadmap_status_map. The legacy _backlog_task_ids
+    is retained for callers that don't need test sandboxing.
     """
     try:
         from .lib.roadmap import BACKLOG_VERSION, parse_release_section
 
-        return {row.task_id for row in parse_release_section(BACKLOG_VERSION)}
-    except Exception:  # noqa: BLE001 — parser failure should not break task list
+        text = ROADMAP_PATH.read_text(encoding="utf-8") if ROADMAP_PATH.exists() else ""
+        return {row.task_id for row in parse_release_section(BACKLOG_VERSION, roadmap_text=text)}
+    except Exception:  # noqa: BLE001
         return set()
 
 
+def _is_done(status: str) -> bool:
+    """ROADMAP status is "done-equivalent" — accepts 'x' / 'X' (no whitespace)."""
+    return status.strip().lower() == "x"
+
+
 def _list_release_tasks(version: str) -> list[dict]:
-    """Return tasks for `version` from the issue map, sorted REV-3 priority key.
+    """Return tasks for `version` reading ROADMAP.md as source of truth.
 
-    Reads `.claude/github-issue-map.json:issues` for keys matching
-    `<version>.<NN>`. Priority drawn from the same map's `priorities` sub-dict
-    if present (populated by Wave 2 migration); else unset.
+    Closes 0.7.0.27. ROADMAP is the single-doc-tracking authority (AGENTS.md
+    § Single-doc-tracking). The issue-map cache is consulted only for the
+    display-only Issue # cross-reference (and only when no row exists in
+    ROADMAP — never the other way around).
 
-    Plan 40: `version == "backlog"` lists tasks from ROADMAP's `## Backlog`
-    section instead. For regular release versions, filters out any task IDs
-    that have been moved to Backlog.
+    Each row carries: id, position, priority (from ROADMAP row priority cell),
+    status (from ROADMAP `[ ]` / `[~]` / `[x]` cell), issue (from cache; 0 if
+    absent), blocked_by (from cache's `deps` sub-dict; [] if absent).
+
+    Plan 40: `version == "backlog"` reads ROADMAP's `## Backlog` section. For
+    regular release versions, backlog rows are excluded.
     """
+    from .lib.roadmap import parse_release_section
+
     data = _load_map()
-    issues = data.get("issues") or {}
-    priorities = data.get("priorities") or {}
+    issues_cache = data.get("issues") or {}
     deps = data.get("deps") or {}
 
-    if version == "backlog":
-        # Synthetic version — read ROADMAP's Backlog section, look up issue
-        # numbers from the map.
-        backlog_ids = _backlog_task_ids()
-        rows: list[dict] = []
-        for task_id in backlog_ids:
-            try:
-                _, _, _, position = semver.parse(task_id)
-            except semver.InvalidVersion:
-                continue
-            if position is None:
-                continue
-            rows.append(
-                {
-                    "id": task_id,
-                    "position": position,
-                    "priority": priorities.get(task_id, ""),
-                    "issue": issues.get(task_id, 0),
-                    "blocked_by": (deps.get(task_id) or {}).get("blocked_by") or [],
-                }
-            )
-        rows.sort(key=lambda r: r["id"])
-        return rows
+    text = ROADMAP_PATH.read_text(encoding="utf-8") if ROADMAP_PATH.exists() else ""
+    release_rows = parse_release_section(version, roadmap_text=text)
 
-    backlog_ids = _backlog_task_ids()
-    rows = []
-    for task_id, issue_num in issues.items():
+    # Exclude any rows that ALSO appear in the Backlog section (defensive —
+    # shouldn't happen but the parse for "backlog" is cheap). For
+    # `version == "backlog"` we skip the exclusion (we're listing Backlog).
+    backlog_ids = _backlog_task_ids_via_roadmap_path() if version != "backlog" else set()
+
+    rows: list[dict] = []
+    for r in release_rows:
+        if version != "backlog" and r.task_id in backlog_ids:
+            continue
         try:
-            major, minor, patch, position = semver.parse(task_id)
+            _, _, _, position = semver.parse(r.task_id)
         except semver.InvalidVersion:
             continue
         if position is None:
             continue
-        if semver.format(major, minor, patch) != version:
-            continue
-        if task_id in backlog_ids:
-            # Task lives in ROADMAP Backlog section — exclude from release listing.
-            continue
-        priority = priorities.get(task_id, "")
-        blocked_by = (deps.get(task_id) or {}).get("blocked_by") or []
         rows.append(
             {
-                "id": task_id,
+                "id": r.task_id,
                 "position": position,
-                "priority": priority,
-                "issue": issue_num,
-                "blocked_by": blocked_by,
+                "priority": (r.priority or "").upper(),
+                "issue": issues_cache.get(r.task_id, 0),
+                "status": r.status,
+                "blocked_by": (deps.get(r.task_id) or {}).get("blocked_by") or [],
             }
         )
 
-    rows.sort(
-        key=lambda r: (
-            -_priority_rank(r.get("priority")),
-            r.get("position", 0),
-            r.get("issue", 0),
+    if version == "backlog":
+        rows.sort(key=lambda r: r["id"])
+    else:
+        rows.sort(
+            key=lambda r: (
+                -_priority_rank(r.get("priority")),
+                r.get("position", 0),
+                r.get("issue", 0),
+            )
         )
-    )
     return rows
 
 
@@ -203,14 +222,20 @@ def cmd_list(rest: Sequence[str]) -> int:
     """list <version> [--status <s>] [--include-done] [--json]
 
     Plan 40: `version == "backlog"` lists tasks from the `## Backlog` section.
+    Closes 0.7.0.27: status is read from ROADMAP.md (single-doc-tracking) —
+    by default open ([ ]) + in-progress ([~]) rows are shown; pass
+    `--include-done` to also show shipped ([x]) rows.
     """
     if not rest:
-        sys.stderr.write("usage: naavik-ops task list <version|backlog> [--json]\n")
+        sys.stderr.write(
+            "usage: naavik-ops task list <version|backlog> [--include-done] [--json]\n"
+        )
         return 2
 
     version = rest[0]
     args = list(rest[1:])
     as_json = "--json" in args
+    include_done = "--include-done" in args
 
     # Plan 40 — backlog is a synthetic version; skip semver validation.
     if version != "backlog":
@@ -220,32 +245,47 @@ def cmd_list(rest: Sequence[str]) -> int:
             raise NaavikOpsError(str(e)) from e
 
     rows = _list_release_tasks(version)
+    if not include_done:
+        rows = [r for r in rows if not _is_done(r.get("status", " "))]
 
     if as_json:
         sys.stdout.write(json.dumps(rows, indent=2) + "\n")
         return 0
 
     if not rows:
-        sys.stdout.write(
-            f"(no tasks for release {version} in .claude/github-issue-map.json:issues)\n"
-        )
+        suffix = "" if include_done else " (use --include-done to show shipped rows)"
+        sys.stdout.write(f"(no open tasks for release {version}{suffix})\n")
         return 0
 
-    sys.stdout.write(f"{'TASK-ID':<14} {'PRI':<8} {'POS':<4} {'ISSUE':<8} BLOCKED-BY\n")
+    sys.stdout.write(f"{'TASK-ID':<14} {'STAT':<5} {'PRI':<8} {'POS':<4} {'ISSUE':<8} BLOCKED-BY\n")
     for r in rows:
         pri = r.get("priority") or "-"
+        st = r.get("status", " ").strip() or "-"
+        # Render: " " → " ", "~" → "~", "x" → "x" inside [brackets] for clarity
+        st_display = f"[{st if st != '-' else ' '}]"
         blocked = ", ".join(r.get("blocked_by") or []) or "-"
-        sys.stdout.write(f"{r['id']:<14} {pri:<8} {r['position']:<4} #{r['issue']:<7} {blocked}\n")
+        issue_display = f"#{r['issue']}" if r.get("issue") else "-"
+        sys.stdout.write(
+            f"{r['id']:<14} {st_display:<5} {pri:<8} {r['position']:<4} {issue_display:<8} {blocked}\n"
+        )
     return 0
 
 
 def cmd_next_unblocked(rest: Sequence[str]) -> int:
     """next-unblocked <version>
 
-    Plan 40: backlog tasks (in `## Backlog` section) are excluded — they are
-    deferred + not part of the active cycle. `version == "backlog"` is a no-op
-    that prints the section's contents but never returns "next" — Backlog isn't
-    a cycle.
+    Returns the highest-priority OPEN task in <version> whose blocked_by deps
+    are all DONE per ROADMAP.md. Closes 0.7.0.27: status is read directly
+    from ROADMAP `[ ]` / `[~]` / `[x]` cells (single-doc-tracking per
+    AGENTS.md), not from the never-populated `issue-map.json:statuses` dict.
+
+    Skip rules (in order):
+      1. Task is DONE in ROADMAP (`[x]`) — already shipped, skip
+      2. Any blocked_by dep is not DONE — blocked, skip
+      3. Otherwise — emit + return
+
+    Plan 40: backlog tasks (in `## Backlog` section) are excluded by
+    `_list_release_tasks`. `version == "backlog"` is a no-op.
     """
     if not rest:
         sys.stderr.write("usage: naavik-ops task next-unblocked <version>\n")
@@ -264,20 +304,37 @@ def cmd_next_unblocked(rest: Sequence[str]) -> int:
         raise NaavikOpsError(str(e)) from e
 
     rows = _list_release_tasks(version)
-    data = _load_map()
-    statuses = data.get("statuses") or {}
+
+    # Build a status lookup across ALL known versions so cross-release deps
+    # (e.g. 0.2.7.10 might be blocked_by 0.2.0.05) resolve correctly.
+    # Cheap — only the row's deps trigger lookups, and we only fetch the
+    # version's status map on demand.
+    status_cache: dict[str, dict[str, str]] = {version: _roadmap_status_map(version)}
+
+    def _dep_status(dep_id: str) -> str:
+        try:
+            major, minor, patch, _ = semver.parse(dep_id)
+        except semver.InvalidVersion:
+            return ""
+        dep_version = semver.format(major, minor, patch)
+        if dep_version not in status_cache:
+            status_cache[dep_version] = _roadmap_status_map(dep_version)
+        return status_cache[dep_version].get(dep_id, " ")
 
     for row in rows:
-        # blocked if any blocked_by entry is open (status != 'x' / 'done').
+        # Skip already-shipped tasks.
+        if _is_done(row.get("status", " ")):
+            continue
+        # blocked if any blocked_by entry is not done in ROADMAP.
         blocked = False
         for dep_id in row.get("blocked_by") or []:
-            dep_status = (statuses.get(dep_id) or "").lower()
-            if dep_status not in ("x", "done"):
+            if not _is_done(_dep_status(dep_id)):
                 blocked = True
                 break
         if blocked:
             continue
-        sys.stdout.write(f"{row['id']} {row.get('priority') or 'unset'} #{row['issue']}\n")
+        issue_part = f" #{row['issue']}" if row.get("issue") else ""
+        sys.stdout.write(f"{row['id']} {row.get('priority') or 'unset'}{issue_part}\n")
         return 0
 
     sys.stdout.write(f"(no unblocked tasks for release {version})\n")
