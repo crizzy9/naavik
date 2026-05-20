@@ -59,5 +59,11 @@
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="/static/keys.js"></script>
   <script src="/static/base.js"></script>
+  {# Plan 57 / 0.2.7.13 — onboarding offline retry buffer. Gated server-side to
+     keep IndexedDB cost off non-onboarding pages; JS-side path gate at the top
+     of the script is the second line of defense (covers hx-boost SPA swaps). #}
+  {% if request and request.url.path.startswith('/onboarding') %}
+    <script src="/static/offline_queue.js" defer></script>
+  {% endif %}
 </body>
 </html>

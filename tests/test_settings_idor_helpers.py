@@ -193,18 +193,14 @@ def test_recent_scrape_runs_view_none_session_returns_empty():
     existing `_build_sources_view` raise-or-degrade pattern from plan 56."""
     from ui.routes import settings as settings_routes
 
-    result = asyncio.run(
-        settings_routes._recent_scrape_runs_view(None, user_id=1)
-    )
+    result = asyncio.run(settings_routes._recent_scrape_runs_view(None, user_id=1))
     assert result == []
 
 
 def test_submission_failures_view_none_session_returns_empty():
     from ui.routes import settings as settings_routes
 
-    result = asyncio.run(
-        settings_routes._submission_failures_view(None, user_id=1)
-    )
+    result = asyncio.run(settings_routes._submission_failures_view(None, user_id=1))
     assert result == []
 
 
@@ -215,8 +211,6 @@ def test_llm_cost_cap_view_none_session_returns_cap_only():
     from ui.routes import settings as settings_routes
 
     settings = SimpleNamespace(daily_llm_cost_cap_usd=7.5)
-    today, cap = asyncio.run(
-        settings_routes._llm_cost_cap_view(None, settings, user_id=1)
-    )
+    today, cap = asyncio.run(settings_routes._llm_cost_cap_view(None, settings, user_id=1))
     assert today == 0.0
     assert cap == 7.5

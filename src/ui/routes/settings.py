@@ -235,9 +235,7 @@ async def _recent_scrape_runs_view(
     return [JobScrapeRunRead.model_validate(r, from_attributes=True) for r in runs]
 
 
-async def _submission_failures_view(
-    session: AsyncSession | None, *, user_id: int
-) -> list[dict]:
+async def _submission_failures_view(session: AsyncSession | None, *, user_id: int) -> list[dict]:
     """Per-(board, failure_kind) Application failure aggregates.
 
     Plan 57 / 0.2.7.23 — threads `user_id` through (closes the sibling IDOR
