@@ -184,6 +184,12 @@ async def put_auto_apply(
     _user: User | None = Depends(require_authed_session),
 ):
     payload = payload or {}
+    # Plan 59 / 0.2.7.12 § D.3 — HTMX checkbox tri-state idiom: an absent
+    # key means "skip" (partial PUTs), a present key (truthy or falsy)
+    # means "set bool(value)". Required so unchecking the toggle in the
+    # Settings UI persists False rather than silently skipping assignment.
+    immediate_raw = payload.get("auto_apply_immediate_dispatch")
+    immediate = bool(immediate_raw) if "auto_apply_immediate_dispatch" in payload else None
     s = await settings_service.update_auto_apply(
         session,
         user_id=1,
@@ -192,6 +198,7 @@ async def put_auto_apply(
         auto_apply_daily_cap=payload.get("auto_apply_daily_cap"),
         eager_review_generation=payload.get("eager_review_generation"),
         daily_llm_cost_cap_usd=payload.get("daily_llm_cost_cap_usd"),
+        auto_apply_immediate_dispatch=immediate,
     )
     await session.commit()
     return {
@@ -200,6 +207,7 @@ async def put_auto_apply(
         "auto_apply_daily_cap": s.auto_apply_daily_cap,
         "eager_review_generation": s.eager_review_generation,
         "daily_llm_cost_cap_usd": s.daily_llm_cost_cap_usd,
+        "auto_apply_immediate_dispatch": s.auto_apply_immediate_dispatch,
     }
 
 

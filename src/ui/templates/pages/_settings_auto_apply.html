@@ -28,6 +28,24 @@
       {% include "components/info_card.html" %}
     {% endwith %}
 
+    <div class="mt-5 flex items-center justify-between gap-3">
+      <div>
+        <div class="text-sm text-slate-100">Immediate dispatch on right-swipe</div>
+        <div class="text-xs text-slate-500">When ON, right-swiping a job in Discover fires the auto-apply queue NOW instead of waiting up to 5 minutes for the next cron tick. Default OFF.</div>
+      </div>
+      <label class="relative inline-flex items-center cursor-pointer shrink-0">
+        <input type="checkbox" name="auto_apply_immediate_dispatch"
+               {% if settings.auto_apply_immediate_dispatch %}checked{% endif %}
+               hx-put="/api/v1/settings/auto-apply"
+               hx-trigger="change"
+               hx-swap="none"
+               class="sr-only peer">
+        <span class="w-11 h-6 bg-slate-700 rounded-full peer-checked:bg-indigo-500 transition relative
+                     after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5
+                     after:bg-white after:rounded-full after:transition peer-checked:after:translate-x-5"></span>
+      </label>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
       <div>
         {% with label="SCORE THRESHOLD", for_id="aa-threshold",

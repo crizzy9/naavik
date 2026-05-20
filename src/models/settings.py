@@ -40,6 +40,11 @@ class Settings(SQLModel, table=True):
     auto_apply_enabled: bool = Field(default=False)
     auto_apply_score_threshold: float = Field(default=0.85)
     auto_apply_daily_cap: int | None = None
+    # Plan 59 (0.2.7.12): when True, right-swipe in Discover schedules a
+    # transient `scheduler.jobs:auto_apply` one-off via APScheduler
+    # `DateTrigger(now)` instead of waiting for the 5-min cron tick.
+    # Default False preserves the cron-only behavior.
+    auto_apply_immediate_dispatch: bool = Field(default=False)
 
     # Cost-aware DRAFT generation
     eager_review_generation: bool = Field(default=True)
