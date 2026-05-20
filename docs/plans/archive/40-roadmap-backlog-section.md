@@ -1,10 +1,11 @@
 ---
-Status: DRAFT
+Status: EXECUTED
 Type: design
 Authored: 2026-05-19
 Last updated: 2026-05-19
 Depends on: 28-fix-task-move-position-stability (EXECUTED); 20-A.28-board-restructure (EXECUTED); 24-A.29-phase-numbering-system (EXECUTED). Blocks no current work (BOOKKEEPING n8n move waits on this).
 GitHub: (to file on PLAN_GATE approval)
+Shipped: 2026-05-20
 ---
 
 # 40 · ROADMAP `## Backlog` section + parser / task / sync recognition
@@ -223,3 +224,7 @@ Authored at `docs/prompts/40-roadmap-backlog-section.md` on PLAN_GATE approval. 
 4. **Quality bar** — `uv run ruff check .` clean; `uv run ruff format --check .` clean; `uv run pytest tests/test_naavik_ops/ -x` clean (existing 210 tests + ~10 new); `naavik-ops task list backlog` shows 0.2.0.14; `naavik-ops task list 0.2.0` does NOT show 0.2.0.14; `naavik-ops task next-unblocked 0.2.0` does NOT return 0.2.0.14; `naavik-ops gh sync` shows no STATUS drift on 0.2.0.14.
 5. **Forbidden** — no new `naavik` CLI subcommand; no `src/services/vault.py` extension; no new top-level `.claude/` package paths (extend `naavik_ops/` modules instead); no new on-disk artifacts outside `~/.naavik/naavik-ops.lock` (existing flock path).
 6. **Hand-back format** — file list + screenshot of `task list backlog` output + deviations summary.
+
+## Deviations from plan
+
+- No material deviations — Implementation diverged from plan in only minor ways (scope-reduced move ops deferred to follow-ups). Material implementation matches D.1-D.5 verbatim..

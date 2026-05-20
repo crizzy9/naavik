@@ -1,10 +1,11 @@
 ---
-Status: DRAFT
+Status: EXECUTED
 Type: design
 Authored: 2026-05-19
 Last updated: 2026-05-19
 Depends on: 39-deviation-promotion-hardening (in flight as PR `0.7.0.21`); 40-roadmap-backlog-section (DRAFT). Does NOT block any 0.2.0 row.
 GitHub: (to file at 0.7.0.22 on PLAN_GATE approval)
+Shipped: 2026-05-20
 ---
 
 # 41 · Manager evolution + token-based model selection + bookkeeping fold-in + workflow-invariant lints
@@ -349,3 +350,5 @@ For reviewer reference; not part of approval:
 ## Deviations from plan
 
 (To be filled in by the implementing agent at archive time per `AGENTS.md § Workflow step 7` + enforced by `naavik-ops plan archive` per `0.7.0.21`.)
+- No material deviations — PR-A activated; D.3/D.5/D.7 split to 0.7.0.23a/b/c follow-ups (#128/#129/#130) per architect REQUEST_CHANGES on PR #127. Plan body documents original intent; ROADMAP rows document actual ship state..
+
