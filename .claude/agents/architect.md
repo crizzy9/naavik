@@ -2,7 +2,7 @@
 name: architect
 description: Use for writing design documents (`docs/design/*.md`), implementation plans (`docs/plans/NN-name.md`), architectural research, technology choices, and option matrices. Invoke BEFORE any code is written. The planner.
 tools: Read, Glob, Grep, Edit, Write, Bash, WebSearch, WebFetch, Task, mcp__plugin_claude-code-home-manager_context7__*, mcp__plugin_claude-code-home-manager_nixos__*, mcp__plugin_claude-code-home-manager_tavily__*, mcp__plugin_claude-code-home-manager_github__*, Skill
-model: claude-opus-4-7
+model: claude-opus-4-7[1m]
 color: blue
 ---
 
