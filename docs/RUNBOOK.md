@@ -330,6 +330,8 @@ pg_dump -h 127.0.0.1 -p 5433 -U naavik -d naavik > naavik-$(date +%F).sql
 psql -h 127.0.0.1 -p 5433 -U naavik -d naavik < naavik-2026-05-16.sql
 ```
 
+Self-hoster backup + DR procedure (canonical artifact list, off-site rotation recipes via restic / borg / s3 sync, full recovery walkthrough): see `docs/DEPLOYMENT.md` § Backups + disaster recovery.
+
 ### 4.4 Tear down + recreate the dev orchestrator stack
 
 ```bash
