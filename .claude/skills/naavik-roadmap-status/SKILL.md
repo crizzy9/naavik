@@ -4,7 +4,7 @@ description: Load the current phase status + active work + recently shipped from
 
 # naavik-roadmap-status
 
-`ROADMAP.md` = authoritative 800-line ledger. `ROADMAP.md` = one-page executive digest. Cross-agent lookup — every role needs phase state. Read overview first; drill ROADMAP only when scope work requires.
+`ROADMAP.md § Index` + § Phase status = one-page executive digest at the top of the doc; `ROADMAP § <release>` is the per-task ledger drill-down. Cross-agent lookup — every role needs phase state. Read overview first; drill ROADMAP only when scope work requires.
 
 ## When to invoke
 

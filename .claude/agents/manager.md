@@ -77,9 +77,7 @@ Default: hacker + architect parallel (per § Parallel reviewer invariant). But s
 - **Both reviewers** (default): PRs touching `src/api/`, `src/services/`, `src/scraper/`, auth/secrets, multi-file features, design contracts (`docs/design/**`).
 - **Hacker only**: small security-only fixes (single MEDIUM/LOW follow-up touching <50 LOC). Architect's spec-match lens is overkill when there's no plan to match against.
 - **Architect only**: doc-only contract changes (PLAYBOOK / AGENTS.md / agent prompts) with NO attack surface. Hacker's pattern-scan is redundant for prose.
-- **Neither (manager-only self-review)**: trivial typos, sub-100-LOC bookkeeping-shaped CONTRACT_CHANGE (e.g. ROADMAP TOC reorder + single skill body tweak). Document the self-review in PR body. Hacker auto-blocks ANY auth/secrets touch regardless.
-
-When in doubt, dispatch both. The parallel reviewer invariant still binds: if you dispatch hacker + architect, do it in a single response with two Agent calls.
+When in doubt, dispatch both. The parallel reviewer invariant still binds: if you dispatch hacker + architect, do it in a single response with two Agent calls. **There is NO "skip both reviewers" lane** — the previous draft had one for trivial doc-only changes, but PR #127 architect review (2026-05-19) flagged it as a violation of the parallel-reviewer invariant + plan 41 D.1 ("manager-handled ≤ 100 LOC ≤ 3 files" — manager-handled scope still gets reviewer pair because the BOUNDARY is what reviewer protects).
 
 # Bookkeeping fold-in rule (post-0.7.0.23 / plan 41)
 

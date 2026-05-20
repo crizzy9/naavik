@@ -345,6 +345,6 @@ For deeper dives:
 | Design workflow (mockup → component → page) + agent process (skill routing, checklists, anti-patterns) | `docs/design/WORKFLOW.md` |
 | Devops runbook | `docs/RUNBOOK.md` |
 | Agent system | `docs/AGENT_OPS.md` |
-| Roadmap | `ROADMAP.md` + `ROADMAP.md` |
+| Roadmap | `ROADMAP.md` (folded ROADMAP_OVERVIEW.md content into § Index + § Phase status as of 0.7.0.22) |
 
 When in doubt, **list the directory** and find by filename. The doc set evolves; a maintained table drifts.

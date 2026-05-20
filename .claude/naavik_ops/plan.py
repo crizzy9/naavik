@@ -246,10 +246,16 @@ def _has_nonempty_deviations_section(plan_path: Path) -> bool:
         return True
     # 0.7.0.21c — accept paragraph-style explicit-no-deviations sentinel.
     # Authors may write "No material deviations." prose when nothing diverged.
-    # Validate this is meaningful content (not just whitespace) AND contains
-    # the sentinel phrase. Substantive prose without the sentinel still BLOCKS
-    # because we want explicit signaling, not implicit "this is enough text".
-    if re.search(r"no material deviations", stripped, re.IGNORECASE):
+    # ANCHORED regex (multiline) — only accepts the sentinel as its OWN line
+    # (optionally followed by an em-dash / period / hyphen + trailing prose).
+    # Closes hacker MEDIUM finding from PR #127: substring match accepted
+    # negation-bypass like "we don't have no material deviations because there
+    # are many" — anchored form rejects this.
+    if re.search(
+        r"^\s*No material deviations(?:\s*[—.\-:].*)?\s*$",
+        stripped,
+        re.IGNORECASE | re.MULTILINE,
+    ):
         return True
     return False
 
