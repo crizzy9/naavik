@@ -179,12 +179,25 @@ def test_jobs_list(client):
 def test_jobs_get_by_id(client, monkeypatch):
     """Plan 36 § A moved `GET /api/v1/jobs/{id}` from `ui/routes/discover.py`
     to `ui/routes/jobs.py` and tightened it to require auth + scope to the
-    requesting user. Test now stubs `job_service.get_job` so the endpoint's
-    shape stays covered without needing a live DB connection.
+    requesting user. Plan 46 / 0.2.0.11c then swapped the JSON projection to
+    `JobRead.model_validate(job)` to keep `raw_meta` JSONB off the public API.
+    The stub now mirrors the full JobRead shape so `model_validate` succeeds
+    without a live DB.
     """
+    from datetime import UTC, datetime
     from types import SimpleNamespace
 
+    from models import (
+        ApplicationBoard,
+        JobQueueState,
+        JobSource,
+        RemotePolicy,
+        SeniorityLevel,
+        VisaRestriction,
+    )
     from services import job_service
+
+    now = datetime.now(UTC)
 
     async def _get_job(session, job_id):
         if job_id != 101:
@@ -192,21 +205,49 @@ def test_jobs_get_by_id(client, monkeypatch):
         return SimpleNamespace(
             id=101,
             user_id=1,
+            source=JobSource.LINKEDIN,
+            board=ApplicationBoard.LINKEDIN,
+            external_id="ln-101-zzz",
+            url="https://linkedin.com/jobs/view/101",
+            url_type="ats",
             company="Stripe",
             role="Senior Engineer",
+            team=None,
+            location="Remote · USA",
+            remote_policy=RemotePolicy.REMOTE,
+            seniority_level=SeniorityLevel.SENIOR,
+            posted_at=None,
+            posted_at_text=None,
+            found_at=now,
+            description="Payments infra.",
+            description_extracted_at=None,
+            description_extraction_model=None,
+            criteria=[],
+            skills_required=[],
+            visa_restrictions=VisaRestriction.SPONSORSHIP_AVAILABLE,
+            salary_min=None,
+            salary_max=None,
+            equity_pct=None,
+            score=0.85,
+            score_explanation=None,
+            match_breakdown={},
+            queue_state=JobQueueState.UNSWIPED,
+            tags=[],
+            warm_intro_contact_id=None,
+            last_scrape_run_id=None,
+            duplicate_of_id=None,
+            created_at=now,
+            updated_at=now,
             deleted_at=None,
-            model_dump=lambda mode="json": {
-                "id": 101,
-                "user_id": 1,
-                "company": "Stripe",
-                "role": "Senior Engineer",
-            },
         )
 
     monkeypatch.setattr(job_service, "get_job", _get_job)
     r = client.get("/api/v1/jobs/101")
     assert r.status_code == 200
-    assert r.json()["company"] == "Stripe"
+    body = r.json()
+    assert body["company"] == "Stripe"
+    # raw_meta intentionally absent (plan 46 / 0.2.0.11c).
+    assert "raw_meta" not in body
 
 
 def test_jobs_by_url(client):

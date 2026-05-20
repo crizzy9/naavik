@@ -446,3 +446,38 @@ async def test_api_v1_jobs_get_json_404_for_non_owner(monkeypatch):
     client = TestClient(app, raise_server_exceptions=True)
     r = client.get("/api/v1/jobs/506", cookies={"naavik_session": "fake-1"})
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_api_v1_jobs_get_json_uses_jobread_projection(monkeypatch):
+    """Plan 46 / 0.2.0.11c: response projects through `JobRead` (not the
+    raw SQLModel). `raw_meta` JSONB is scraper-controlled and must not
+    appear in the public API response, even though the owner-only IDOR
+    gate already restricts cross-user reads.
+    """
+    from main import app
+    from services import job_service
+
+    own = _fake_job(
+        jid=507,
+        user_id=1,
+        raw_meta={"linkedin_job_id": "abc", "vendor_secret": "leak-me-if-you-can"},
+    )
+
+    async def _get(session, job_id):
+        return own if job_id == 507 else None
+
+    monkeypatch.setattr(job_service, "get_job", _get)
+
+    client = TestClient(app, raise_server_exceptions=True)
+    r = client.get("/api/v1/jobs/507", cookies={"naavik_session": "fake-1"})
+    assert r.status_code == 200
+    body = r.json()
+    # raw_meta is intentionally absent from the public projection.
+    assert "raw_meta" not in body
+    assert "leak-me-if-you-can" not in r.text
+    # Known JobRead fields still present.
+    assert body["id"] == 507
+    assert body["company"] == "Anthropic"
+    assert body["role"] == "Senior ML Engineer"
+    assert body["source"] == JobSource.LINKEDIN.value

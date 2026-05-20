@@ -15,9 +15,28 @@ when building the enriched `RawJob`.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from models.enums import RemotePolicy, SeniorityLevel, VisaRestriction
+
+# Closed vocabulary mirrored from `models.enums.Tag` + the 9-tag rule in
+# AGENTS.md § Key Conventions § Resume/CV Data Model. LLM outputs that
+# carry off-vocab strings now fail Pydantic validation at the boundary
+# (plan 46 / 0.2.0.08a — fail-fast on LLM hallucination per filed
+# hacker review on PR #106).
+TagLiteral = Literal[
+    "ai-ml",
+    "backend",
+    "frontend",
+    "devops",
+    "data-eng",
+    "genai",
+    "leadership",
+    "platform",
+    "product",
+]
 
 
 class JobExtraction(BaseModel):
@@ -50,7 +69,7 @@ class JobExtraction(BaseModel):
     # Scorer-required arrays (LLM is sole writer)
     criteria: list[str] = Field(default_factory=list)
     skills_required: list[str] = Field(default_factory=list)
-    tags: list[str] = Field(default_factory=list)
+    tags: list[TagLiteral] = Field(default_factory=list)
 
 
 PROMPT = """Extract structured job information from this job description.
@@ -88,4 +107,4 @@ If a field is missing or ambiguous in the JD, use the schema's documented defaul
 """
 
 
-__all__ = ["PROMPT", "JobExtraction"]
+__all__ = ["PROMPT", "JobExtraction", "TagLiteral"]

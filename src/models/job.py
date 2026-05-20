@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
@@ -225,7 +225,15 @@ class JobUpdate(BaseModel):
 
 
 class JobRead(BaseModel):
-    """API output for `/api/v1/jobs/{id}` (Phase 2.0.11 surface)."""
+    """API output for `/api/v1/jobs/{id}` (Phase 2.0.11 surface).
+
+    `raw_meta` is intentionally omitted (plan 46 / 0.2.0.11c):
+    scraper-controlled JSONB may carry vendor noise / unexpected fields
+    and is not part of the public API contract. Defense-in-depth on top
+    of the owner-only IDOR gate.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     user_id: int
@@ -260,6 +268,5 @@ class JobRead(BaseModel):
     warm_intro_contact_id: int | None
     last_scrape_run_id: int | None
     duplicate_of_id: int | None
-    raw_meta: dict
     created_at: datetime
     updated_at: datetime
