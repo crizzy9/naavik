@@ -194,7 +194,54 @@ Self-hoster checklist + runbooks: **`docs/RUNBOOK.md`**. Highlights:
 
 - **Secrets via `.env`** (plan 26 / 0.2.0.01) — `cp .env.example .env && chmod 0600 .env`. Settings UI surfaces env-presence indicators (no values rendered). Edit `.env` + restart to rotate.
 - **CLI** (`naavik`, `naavik-alembic`) — plan 50 (0.2.1.05, 2026-05-20) collapsed `naavik` to a uvicorn launcher; `src/cli/` is deleted. `naavik` (bare) boots the server (identical to `python -m main` / `uvicorn src.main:app`). `naavik-alembic` is unaffected.
-- **Backups:** back up `.env` alongside the DB dump. `SECRET_KEY` must be preserved to validate JWTs issued before the backup.
+
+### Backups + disaster recovery
+
+Self-hoster's responsibility. Naavik ships the snapshot cron and documents the recipe; off-site rotation + alerting are operator decisions. Last verified: 2026-05-20.
+
+**Canonical backup set:**
+
+| Artifact | Location | Frequency | Why |
+|---|---|---|---|
+| `.env` | repo root (Docker) or `/etc/sops-nix/secrets/naavik_env` (NixOS) | On every secret change | API keys + `SECRET_KEY`; without it, JWTs + LLM access are lost |
+| DB dump (`pg_dump -Fc`) | `${DATA_DIR}/data/snapshots/` (Phase 6+); manual `pg_dump` today | Daily | Full Job / Application / Profile / Bullet state |
+| Daily marker | `${DATA_DIR}/data/snapshots/snapshot-YYYY-MM-DD.marker` | Daily 02:00 UTC (cron) | Cron-liveness proof; not a backup itself — see `src/scheduler/jobs.py:115` |
+| Generated PDFs | `${DATA_DIR}/data/pdfs/` | Per-application | Re-generable from profile + Typst templates if lost |
+
+The encrypted vault (`~/.naavik/secrets.enc` + `~/.naavik/key.bin`) **no longer exists** — it was deleted in plan 26 / 0.2.0.01 (vault deprecation). The only secret-of-record is `.env`.
+
+**Daily snapshot today (Phase 1 status).** `admin.daily_db_snapshot` writes touch-marker files at 02:00 UTC (`src/scheduler/jobs.py:115`); real `pg_dump` piping ships in Phase 6 observability. Until then, self-hosters run `pg_dump` themselves. Example cron line for Docker:
+
+```bash
+# /etc/cron.daily/naavik-backup (or systemd timer for NixOS)
+0 2 * * * docker exec naavik-db-1 pg_dump -Fc -U naavik naavik > /var/lib/naavik-backups/naavik-$(date +\%F).dump
+```
+
+NixOS equivalent uses `systemd.services.naavik-backup` with `ExecStart=${pkgs.postgresql}/bin/pg_dump …`.
+
+**Off-site rotation pattern.** Pick one — recipes are illustrative, replace `<your-bucket>` with your own and keep encryption keys somewhere you'll still have them in a recovery scenario:
+
+```bash
+# restic (encrypted, deduplicated; recommended)
+restic -r s3:s3.amazonaws.com/<your-bucket>/naavik backup .env /var/lib/naavik-backups/
+
+# borgbackup (encrypted, deduplicated; alternative)
+borg create user@host:/backups/naavik::naavik-{now} .env /var/lib/naavik-backups/
+
+# aws s3 sync (unencrypted; cheapest for trust-the-provider setups)
+aws s3 sync /var/lib/naavik-backups/ s3://<your-bucket>/naavik/ --delete
+```
+
+**Recovery walkthrough.**
+
+1. Stop the service (`systemctl stop naavik` or `docker compose stop naavik`).
+2. Restore `.env` to repo root / sops path. `chmod 0600 .env`.
+3. `pg_restore -U naavik -d naavik /var/lib/naavik-backups/naavik-YYYY-MM-DD.dump` against a fresh DB.
+4. `uv run alembic upgrade head` to bring the schema forward if the dump is older than the current migration head.
+5. `systemctl start naavik` / `docker compose up -d`. Visit `/login` — sessions issued before the backup are still valid (same `SECRET_KEY`).
+
+**Reminder.** Rotating `SECRET_KEY` invalidates **all** JWTs — active sessions die, users re-auth from the UI. Treat `.env` as crown jewels. The managed cloud tier ($15/month) handles all of this for users who don't want to operate backups.
+
 - **Reset dev DB:** `rm -rf .naavik/db` OR `uv run alembic downgrade base && upgrade head && python -m db.seed`.
 - **Rotate `SECRET_KEY`:** edit `.env`, restart. Active sessions are invalidated; users re-auth from the UI.
 

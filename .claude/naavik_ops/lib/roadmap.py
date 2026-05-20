@@ -387,10 +387,7 @@ def parse_release_section(version: str, *, roadmap_text: str | None = None) -> l
 
         m_rel = RE_RELEASE_HEADER.match(line)
         if m_rel:
-            if is_backlog:
-                in_section = False
-            else:
-                in_section = m_rel.group("version") == version
+            in_section = False if is_backlog else m_rel.group("version") == version
             in_table = False
             cols = None
             continue

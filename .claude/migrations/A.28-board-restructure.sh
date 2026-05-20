@@ -14,13 +14,18 @@
 # Idempotent: re-run is safe; each step checks current state before mutating.
 # Reference: docs/plans/archive/20-A.28-board-restructure.md § E.
 # Single-writer rule: all GitHub state mutations go through scripts/gh-project.sh.
+#
+# Rollback contract:
+#   - Script is idempotent — re-runs are safe.
+#   - To revert: manually flip affected items via `.claude/naavik-ops gh set-status <item-id> <prev>` per the milestone-status snapshot taken before --apply.
+#   - No automated rollback (one-shot historical migration; replicating the pre-state requires the snapshot).
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-DRY_RUN=false
+DRY_RUN=true
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=true ;;
@@ -29,8 +34,8 @@ for arg in "$@"; do
       cat <<EOF
 Usage: $0 [--dry-run | --apply]
 
-  --dry-run   Print what each step would do without executing.
-  --apply     Actually execute the migration (default).
+  --dry-run   Print what each step would do without executing (default).
+  --apply     Actually execute (default: dry-run only).
 
 The migration is idempotent — re-running is safe. Each step checks current state
 before mutating. Single-writer rule: writes go through scripts/gh-project.sh.
@@ -47,11 +52,13 @@ ISSUE_MAP=".claude/github-issue-map.json"
 CACHE=".claude/github-project.json"
 
 run() {
-  # In dry-run, print the command. In apply, run it.
+  # In dry-run, print the command. In apply, execute via "$@" arg array
+  # (no eval — composed strings can't break the quoting boundary even if
+  # future callers interpolate untrusted text).
   if $DRY_RUN; then
-    echo "  DRY-RUN $*"
+    printf '  DRY-RUN'; printf ' %q' "$@"; echo
   else
-    eval "$@"
+    "$@"
   fi
 }
 
@@ -67,7 +74,7 @@ if jq -e '.status_options.backlog // empty' "$CACHE" >/dev/null 2>&1 && \
    [[ -n "$(jq -r '.status_options.backlog // empty' "$CACHE")" ]]; then
   echo "  Backlog status already in cache (id=$(jq -r '.status_options.backlog' "$CACHE"))"
 else
-  run "bash $GH_PROJECT add-status Backlog --color GRAY"
+  run bash "$GH_PROJECT" add-status Backlog --color GRAY
 fi
 echo
 
@@ -123,7 +130,7 @@ for TASK_ID in "${RELOCATED_A[@]}"; do
   # Update milestone (gh issue edit doesn't cascade to Project Status — both calls required).
   CURRENT_MS="$(gh issue view "$ISSUE_NUM" --json milestone -q '.milestone.title' 2>/dev/null || echo "")"
   if [[ "$CURRENT_MS" != "Phase 2.5" ]]; then
-    run "gh issue edit $ISSUE_NUM --milestone \"Phase 2.5\""
+    run gh issue edit "$ISSUE_NUM" --milestone "Phase 2.5"
   fi
   # Update Project Status field to Backlog.
   ITEM_ID="$(bash $GH_PROJECT item-id "$ISSUE_NUM" 2>/dev/null || echo "")"
@@ -136,15 +143,20 @@ for TASK_ID in "${RELOCATED_A[@]}"; do
       | jq -r '.data.node.fieldValues.nodes[]? | select(.field.name == "Status") | .name // ""' \
       | head -n1)"
     if [[ "$CURRENT_STATUS" != "Backlog" ]]; then
-      run "bash $GH_PROJECT set-status $ITEM_ID Backlog"
+      run bash "$GH_PROJECT" set-status "$ITEM_ID" Backlog
       echo "  MIRROR action=set-status item=$ISSUE_NUM from=$CURRENT_STATUS to=Backlog"
     else
       echo "  $TASK_ID (#$ISSUE_NUM) already Backlog — skipping"
     fi
   fi
   # Re-parent under [Epic] Phase 2.5 (idempotent — addSubIssue is a no-op if already linked).
+  # Best-effort: swallow failures so missing parent doesn't abort the loop.
   if [[ -n "$PP_EPIC_NUM" ]]; then
-    run "bash $GH_PROJECT add-subissue $PP_EPIC_NUM $ISSUE_NUM 2>/dev/null || true"
+    if $DRY_RUN; then
+      printf '  DRY-RUN'; printf ' %q' bash "$GH_PROJECT" add-subissue "$PP_EPIC_NUM" "$ISSUE_NUM"; echo
+    else
+      bash "$GH_PROJECT" add-subissue "$PP_EPIC_NUM" "$ISSUE_NUM" 2>/dev/null || true
+    fi
   fi
   echo "  $TASK_ID (#$ISSUE_NUM) → Phase 2.5 / Backlog"
 done
@@ -159,7 +171,7 @@ PC6A_ISSUE_NUM="$(jq -r '.issues["PC.6a"] // empty' "$ISSUE_MAP")"
 if [[ -n "$PC6A_ISSUE_NUM" ]]; then
   CURRENT_MS="$(gh issue view "$PC6A_ISSUE_NUM" --json milestone -q '.milestone.title' 2>/dev/null || echo "")"
   if [[ "$CURRENT_MS" != "Phase 2" ]]; then
-    run "gh issue edit $PC6A_ISSUE_NUM --milestone \"Phase 2\""
+    run gh issue edit "$PC6A_ISSUE_NUM" --milestone "Phase 2"
     echo "  PC.6a (#$PC6A_ISSUE_NUM) milestone: $CURRENT_MS → Phase 2"
   else
     echo "  PC.6a (#$PC6A_ISSUE_NUM) already in Phase 2 — skipping"
@@ -187,7 +199,7 @@ for TASK_ID in "${PHASE2_BACKLOG[@]}"; do
       | jq -r '.data.node.fieldValues.nodes[]? | select(.field.name == "Status") | .name // ""' \
       | head -n1)"
     if [[ "$CURRENT_STATUS" != "Backlog" ]]; then
-      run "bash $GH_PROJECT set-status $ITEM_ID Backlog"
+      run bash "$GH_PROJECT" set-status "$ITEM_ID" Backlog
       echo "  MIRROR action=set-status item=$ISSUE_NUM from=$CURRENT_STATUS to=Backlog"
     else
       echo "  $TASK_ID (#$ISSUE_NUM) already Backlog — skipping"
@@ -218,7 +230,7 @@ for TASK_ID in "${DEFERRED_BACKLOG[@]}"; do
       | jq -r '.data.node.fieldValues.nodes[]? | select(.field.name == "Status") | .name // ""' \
       | head -n1)"
     if [[ "$CURRENT_STATUS" != "Backlog" ]]; then
-      run "bash $GH_PROJECT set-status $ITEM_ID Backlog"
+      run bash "$GH_PROJECT" set-status "$ITEM_ID" Backlog
       echo "  MIRROR action=set-status item=$ISSUE_NUM from=$CURRENT_STATUS to=Backlog"
     fi
   fi
