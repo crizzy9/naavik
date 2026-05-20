@@ -65,6 +65,7 @@ async def update_auto_apply(
     auto_apply_daily_cap: int | None = None,
     eager_review_generation: bool | None = None,
     daily_llm_cost_cap_usd: float | None = None,
+    auto_apply_immediate_dispatch: bool | None = None,
 ) -> Settings:
     s = await get_or_create(session, user_id)
     if auto_apply_enabled is not None:
@@ -77,6 +78,8 @@ async def update_auto_apply(
         s.eager_review_generation = eager_review_generation
     if daily_llm_cost_cap_usd is not None:
         s.daily_llm_cost_cap_usd = float(daily_llm_cost_cap_usd)
+    if auto_apply_immediate_dispatch is not None:
+        s.auto_apply_immediate_dispatch = auto_apply_immediate_dispatch
     s.updated_at = datetime.now(UTC)
     session.add(s)
     await session.flush()

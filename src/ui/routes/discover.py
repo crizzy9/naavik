@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Request
@@ -21,6 +22,8 @@ from services.auth import require_authed_session
 from ui import discover_ctx as dctx
 from ui import discover_review_ctx as drctx
 from ui.templates_setup import templates
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -126,13 +129,70 @@ async def post_save(
 async def post_auto_submit(
     request: Request,
     job_id: int,
-    _user: User | None = Depends(require_authed_session),
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    """Right-swipe — flip Job → QUEUED_FOR_AUTO_APPLY + create DRAFT."""
+    """Right-swipe — flip Job → QUEUED_FOR_AUTO_APPLY + create DRAFT.
+
+    Plan 59 / 0.2.7.12: when `Settings.auto_apply_immediate_dispatch=True`,
+    additionally schedule a one-off `scheduler.jobs:auto_apply` via
+    APScheduler `DateTrigger(now)`. Mirrors `src/api/scheduler.py:135-145`
+    (plan 47 / 0.2.0.10a `/jobs/{id}/run` pattern). Best-effort — any
+    failure logs at WARN and falls through to the 5-min cron tick.
+    """
     await sd._set_job_queue_state(job_id, JobQueueState.QUEUED_FOR_AUTO_APPLY)
     await sd._create_draft(1, job_id)
+    user_id = _effective_user_id(user)
+    if user_id is not None:
+        await _maybe_dispatch_auto_apply_now(session, user_id=user_id)
     return await _next_card_response(request)
+
+
+async def _maybe_dispatch_auto_apply_now(session: AsyncSession, *, user_id: int) -> None:
+    """Schedule a transient `scheduler.jobs:auto_apply` one-off when the
+    user's `Settings.auto_apply_immediate_dispatch` is True.
+
+    Best-effort — caller must not propagate exceptions. The 5-min cron is
+    the fallback path for every failure mode here (scheduler not running,
+    Settings row missing, `add_job` raises).
+    """
+    try:
+        from datetime import UTC, datetime
+        from uuid import uuid4
+
+        from apscheduler.triggers.date import DateTrigger
+
+        from scheduler import get_scheduler
+        from scheduler.jobs import auto_apply as auto_apply_func
+        from services import settings_service
+
+        s = await settings_service.get_or_create(session, user_id)
+        if not s.auto_apply_immediate_dispatch:
+            return
+        scheduler = get_scheduler()
+        if scheduler is None or not scheduler.running:
+            log.info(
+                "auto_apply_immediate_dispatch=True but scheduler not running; "
+                "5-min cron will pick up queue"
+            )
+            return
+        now = datetime.now(UTC)
+        manual_id = f"applications.auto_apply-immediate-{uuid4().hex[:8]}"
+        scheduler.add_job(
+            auto_apply_func,
+            DateTrigger(run_date=now),
+            id=manual_id,
+            name=manual_id,
+            args=[],
+            kwargs={},
+            max_instances=1,
+            coalesce=True,
+            replace_existing=False,
+        )
+        log.info("scheduled immediate auto_apply manual_id=%s", manual_id)
+    except Exception as exc:  # noqa: BLE001 — best-effort
+        log.warning("immediate auto_apply dispatch failed: %s", exc)
 
 
 async def _next_card_response(request: Request) -> HTMLResponse:
