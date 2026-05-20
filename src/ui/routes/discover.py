@@ -13,7 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from api.auth import require_csrf
 from db import sample_data as sd
 from db.session import get_session
-from models import User
+from models import JobRead, User
 from models.enums import (
     JobQueueState,
 )
@@ -253,7 +253,10 @@ async def get_jobs(
         items = [j for j in items if j.queue_state == qs]
     if score_min is not None:
         items = [j for j in items if j.score >= score_min]
-    return {"items": [j.model_dump(mode="json") for j in items], "next_cursor": None}
+    return {
+        "items": [JobRead.model_validate(j).model_dump(mode="json") for j in items],
+        "next_cursor": None,
+    }
 
 
 @router.post("/api/v1/jobs/by-url", name="jobs_by_url")
@@ -275,7 +278,7 @@ async def post_job_by_url(
     company = "Stable Inc"
     role = "Senior Software Engineer"
     job = await sd._append_scraped_job(url=url, company=company, role=role)
-    return job.model_dump(mode="json")
+    return JobRead.model_validate(job).model_dump(mode="json")
 
 
 @router.post("/api/v1/jobs/{job_id}/rescore", name="jobs_rescore")
@@ -286,17 +289,17 @@ async def post_rescore(
     job = await sd.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job.model_dump(mode="json")
+    return JobRead.model_validate(job).model_dump(mode="json")
 
 
 @router.get("/api/v1/discover/saved", name="discover_saved")
 async def get_saved():
-    return [j.model_dump(mode="json") for j in await sd.saved_jobs()]
+    return [JobRead.model_validate(j).model_dump(mode="json") for j in await sd.saved_jobs()]
 
 
 @router.get("/api/v1/discover/skipped", name="discover_skipped")
 async def get_skipped():
-    return [j.model_dump(mode="json") for j in await sd.skipped_jobs()]
+    return [JobRead.model_validate(j).model_dump(mode="json") for j in await sd.skipped_jobs()]
 
 
 # ─────────────────────────────────────────────────────────────────────────
