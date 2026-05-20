@@ -25,7 +25,7 @@
 | **0.2.0** | Job Scraping & Discovery (vault sunset + 6 site scrapers + AI extraction + dedup + scheduler + UI + notifications + rate-limiting + release ceremony) | 🟢 Active | 14/14 core shipped 2026-05-20 (n8n migration 0.2.0.14 closed-as-moot); 3 new release-readiness rows filed (0.2.0.15 release ceremony + 0.2.0.16 self-host walkthrough + 0.2.0.17 observation window) + 6 follow-up letter rows remain |
 | 0.2.1 | Security cleanup (DEF) | ✅ Complete (2026-05-20) | 0.2.1.04 + 0.2.1.05 shipped; 0.2.1.01 + 0.2.1.02 deferred to 0.2.7 |
 | 0.2.2 | UI cleanup (DEF) | ✅ Complete (2026-05-20) | 0.2.2.02/03/04 shipped; 0.2.2.01 light mode deferred to 0.2.7 |
-| 0.2.3 | ATS / scraper cleanup (DEF) | 🟡 Queued | — |
+| 0.2.3 | ATS / scraper cleanup (DEF) | ✅ Complete (2026-05-20) | 0.2.3.02 shipped; 0.2.3.01 + 0.2.3.03 deferred to 0.2.7 |
 | 0.2.4 | Tracking cleanup (DEF) | 🟡 Queued | — |
 | 0.2.5 | Observability cleanup (DEF) | 🟡 Queued | — |
 | 0.2.6 | Tooling cleanup (DEF + A.28a) | 🟡 Queued | — |
@@ -253,7 +253,7 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 | # | Task | Status | Priority | Legacy ID | Notes |
 |---|---|---|---|---|---|
 | 0.2.3.01 | Workday / LinkedIn / Indeed / Generic ATS adapters (Greenhouse / Lever / Ashby shipped in 0.1.0.23) | [ ] | — | DEF-01 | **DEFERRED to 0.2.7.10 (sweep 2026-05-20).** Weeks of work; needs credentials + Playwright + manual review queue. Greenhouse / Lever / Ashby ship in 0.1.0.23. From plan 10 § C.4. |
-| 0.2.3.02 | Postmortem-on-failure: Playwright screenshot + AI summary on ATS failure | [ ] | — | DEF-03 | **Scheduled in plan 52 (0.2.3 single).** Surfaces in stuck-queue card; helps diagnose recurring CAPTCHA / field_mismatch. From this triage 2026-05-01. |
+| 0.2.3.02 | Postmortem-on-failure: HTTP trace + AI summary on ATS failure | [x] | — | DEF-03 | **Plan 52 EXECUTED 2026-05-20 via PR #152.** New `src/services/ats_postmortem.py:capture_postmortem` runs from `application_service._record_failure` on every DRAFT submission failure. Writes `<DATA_DIR>/data/postmortems/<application_id>/<utc-ts>/{trace.json,analysis.md}` atomically (tempfile + rename). LLM analysis via `tracked_call(prompt_name="ats_postmortem")` with `PostmortemAnalysis` Pydantic v2 schema (Literal[failure_kind] + bounded summary/action). LLM-unconfigured → trace-only postmortem with placeholder. Best-effort: any internal exception → log + return None (never raises). New `GET /api/v1/applications/{id}/postmortem/{ts}` returns envelope; IDOR scoped 404; path-traversal blocked via strict regex + `Path.resolve().relative_to(data_root)`. 16 tests. `up_next_card.html` restructured for valid HTML (wrapper div + absolute card link + chip-link sibling). Reviewers: architect APPROVE 0 findings; hacker APPROVE_WITH_NOTES (1 MED `_redact` walks KEYS not VALUES — filed as 0.2.7.18; 1 LOW regex `^$` vs `\Z` cosmetic). Plan reframed Playwright → HTTP trace because 3 shipped adapters are HTTP-API; `screenshot_path` reserved for 0.2.7.10 Workday/LinkedIn/Indeed/Generic adapters. |
 | 0.2.3.03 | LinkedIn proxy support | [ ] | — | DEF-15 | **DEFERRED to 0.2.7.11 (sweep 2026-05-20).** Phase 6+ explicit marker. From BACKEND.md § J.4. |
 
 **Deliverable (0.2.3):** Full ATS coverage + scraper diagnostics + LinkedIn proxy hardening.
@@ -342,6 +342,7 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 | 0.2.7.15 | Portfolio API versioning (formerly 0.2.6.03) | [ ] | — | DEF-12 | **DEFERRED from 0.2.6 to 0.2.7 2026-05-20 per sweep directive.** Phase 2+. From this triage 2026-05-01. |
 | 0.2.7.16 | `JobEmbedding` semantic match (formerly 0.2.6.04) | [ ] | — | DEF-14 | **DEFERRED from 0.2.6 to 0.2.7 2026-05-20 per sweep directive.** Phase 6 explicit. From DATA_MODEL.md § H. |
 | 0.2.7.17 | NAAVIK_PERSISTENCE env-var full removal (formerly 0.2.6.05) | [ ] | — | DEF-23 | **DEFERRED from 0.2.6 to 0.2.7 2026-05-20 per sweep directive — separate plan needed.** Wave 4 partial-swap + Wave 5 partial-swap left ~20 accessors falling back to memory. Plan 10b set `NAAVIK_PERSISTENCE=db` as orchestrator default, but env var still gates the swap. Cleanup deserves own plan once Phase 1 fully verified. Medium-large refactor. From this triage 2026-05-03 (post-Wave-5). |
+| 0.2.7.18 | Postmortem `_redact()` walks VALUES not just KEYS — Bearer/JWT/Set-Cookie patterns in scraper-controlled HTTP error bodies leak into `trace.json` + LLM prompt | [ ] | MEDIUM | (hacker PR #152 MED-1) | **Filed 2026-05-20 via PR #152 hacker review.** Current `_redact()` walks dict keys but `response_body_excerpt` is a raw string — ATS error bodies can contain echoed auth headers (rare but observed). Fix: value-shape regex pass for Bearer/JWT/`Set-Cookie:`/`Authorization:` BEFORE the 32KB truncate. ~30 LOC + 4 tests. Defer until first board reports leakage OR alongside 0.2.7.10 (multi-adapter expansion). |
 
 **Deliverable (0.2.7):** Pickup queue for product-side cleanup deferred from 0.2.x sweep. Items graduate to a future release-version when scheduled.
 
