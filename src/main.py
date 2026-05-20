@@ -16,6 +16,7 @@ from api import applications as api_applications
 from api import auth as api_auth
 from api import portfolio as api_portfolio
 from api import profile as api_profile
+from api import profile_answer as api_profile_answer
 from api import scheduler as api_scheduler
 from api import settings as api_settings
 from config import settings as app_settings
@@ -120,6 +121,7 @@ app.mount("/static", StaticFiles(directory="src/ui/static"), name="static")
 app.include_router(auth.router)
 app.include_router(api_auth.router)
 app.include_router(api_profile.router)
+app.include_router(api_profile_answer.router)
 app.include_router(api_settings.router)
 app.include_router(api_applications.router)
 app.include_router(api_scheduler.router)

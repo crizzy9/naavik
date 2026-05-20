@@ -60,8 +60,10 @@ from .enums import (
 )
 from .event import AppEvent
 from .job import Job, JobCreate, JobFilter, JobRead, JobUpdate
+from .job_embedding import EMBEDDING_DIM, JobEmbedding
 from .job_scrape_run import JobScrapeRun, JobScrapeRunRead
 from .profile import Bullet, Certification, Education, Experience, Profile, Project, Skill
+from .profile_answer import ProfileAnswer
 from .revoked_jwt import RevokedJwt
 from .settings import Settings
 from .user import User
@@ -77,7 +79,9 @@ __all__ = [
     "Project",
     "Certification",
     "Job",
+    "JobEmbedding",
     "JobScrapeRun",
+    "ProfileAnswer",
     "Application",
     "ApplicationScreenerAnswer",
     "GeneratedDocument",
@@ -90,6 +94,8 @@ __all__ = [
     "ApiUsage",
     "RevokedJwt",
     "Settings",
+    # Constants
+    "EMBEDDING_DIM",
     # Pydantic API schemas
     "JobCreate",
     "JobFilter",

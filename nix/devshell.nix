@@ -18,6 +18,10 @@ pkgs.mkShell {
     postgresql_17
     pre-commit
     stdenv.cc.cc.lib
+    # `zlib` for numpy native libs (transitive via `pgvector`; plan 61 / 0.2.7.16).
+    # Numpy's `_multiarray_umath.so` dlopens `libz.so.1`; without it, `import numpy`
+    # blows up before any pytest collection.
+    zlib
     # Playwright visual-QA dependencies (Chromium needs these to launch headless).
     playwright-driver.browsers
     # Nix-built node for the playwright JS driver (replaces the bundled
@@ -28,7 +32,7 @@ pkgs.mkShell {
   shellHook = ''
     echo "Naavik dev shell ready"
     export PYTHONPATH="$PWD/src:$PYTHONPATH"
-    export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:${pkgs.zlib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     # Point Playwright at the Nix-provided Chromium so `playwright install`
     # is a no-op when the dev shell ships the browsers.
     export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"

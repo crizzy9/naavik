@@ -783,27 +783,52 @@ async def answer_screeners(
             reviewed_at = now
             drafted_by_model = None
         else:
+            # Plan 61 (0.2.7.14) — check the per-user reuse cache before
+            # spending LLM tokens. A hit prefills the suggestion but never
+            # auto-submits (decision D7); the row's `drafted_by_model` carries
+            # a `reuse:<id>` marker so the UI swaps in the diff component.
+            from services import profile_answer_service as _pas
+
+            reuse_hit = None
             try:
-                p = _ensure_provider()
-                result = await llm_tracker.tracked_call(
-                    session=session,
+                reuse_hit = await _pas.get_suggestion(
+                    session,
                     user_id=user_id,
-                    provider=p,
-                    method="structured",
-                    prompt_name="answer_screener",
-                    application_id=application.id,
-                    prompt=_render_screener_prompt(profile_row, job, text, qtype.value, choices),
-                    schema=__import__(
-                        "llm.prompts.answer_screener", fromlist=["ScreenerAnswer"]
-                    ).ScreenerAnswer,
+                    question_text=text,
+                    company_name=application.company,
                 )
-                answer_value = str(result.value.get("answer") or "")
-            except LLMProviderError as exc:
-                log.warning("answer_screener LLM failed for %r: %s", text, exc)
-                answer_value = ""
-            source = ScreenerAnswerSource.DRAFTED
-            reviewed_at = None
-            drafted_by_model = provider.model_name if provider else None
+            except Exception as exc:  # noqa: BLE001 — reuse lookup is best-effort
+                log.debug("profile_answer reuse lookup failed: %s", exc)
+
+            if reuse_hit is not None:
+                answer_value = reuse_hit.answer
+                source = ScreenerAnswerSource.DRAFTED
+                reviewed_at = None
+                drafted_by_model = f"reuse:{reuse_hit.id}"
+            else:
+                try:
+                    p = _ensure_provider()
+                    result = await llm_tracker.tracked_call(
+                        session=session,
+                        user_id=user_id,
+                        provider=p,
+                        method="structured",
+                        prompt_name="answer_screener",
+                        application_id=application.id,
+                        prompt=_render_screener_prompt(
+                            profile_row, job, text, qtype.value, choices
+                        ),
+                        schema=__import__(
+                            "llm.prompts.answer_screener", fromlist=["ScreenerAnswer"]
+                        ).ScreenerAnswer,
+                    )
+                    answer_value = str(result.value.get("answer") or "")
+                except LLMProviderError as exc:
+                    log.warning("answer_screener LLM failed for %r: %s", text, exc)
+                    answer_value = ""
+                source = ScreenerAnswerSource.DRAFTED
+                reviewed_at = None
+                drafted_by_model = provider.model_name if provider else None
 
         if row is None:
             row = ApplicationScreenerAnswer(

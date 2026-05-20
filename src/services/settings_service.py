@@ -42,6 +42,10 @@ async def update_llm(
     provider: LLMProviderEnum | None = None,
     model: str | None = None,
     fallback_provider: LLMProviderEnum | None = None,
+    semantic_match_enabled: bool | None = None,
+    embedding_provider: str | None = None,
+    semantic_match_threshold: float | None = None,
+    semantic_match_sync_on_upsert: bool | None = None,
 ) -> Settings:
     s = await get_or_create(session, user_id)
     if provider is not None:
@@ -50,6 +54,20 @@ async def update_llm(
         s.llm_model = model
     if fallback_provider is not None:
         s.llm_fallback_provider = fallback_provider
+    # Plan 61 (0.2.7.16) — semantic-match toggles. `None` means "skip" so
+    # partial PUTs don't clobber unrelated fields.
+    if semantic_match_enabled is not None:
+        s.semantic_match_enabled = bool(semantic_match_enabled)
+    if embedding_provider is not None:
+        # Empty string = clear (user selected "Auto").
+        s.embedding_provider = embedding_provider or None
+    if semantic_match_threshold is not None:
+        threshold = float(semantic_match_threshold)
+        if threshold < 0.0 or threshold > 1.0:
+            raise ValueError("semantic_match_threshold must be between 0.0 and 1.0")
+        s.semantic_match_threshold = threshold
+    if semantic_match_sync_on_upsert is not None:
+        s.semantic_match_sync_on_upsert = bool(semantic_match_sync_on_upsert)
     s.updated_at = datetime.now(UTC)
     session.add(s)
     await session.flush()

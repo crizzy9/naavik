@@ -1,0 +1,121 @@
+{#
+  Semantic match section — plan 61 (0.2.7.16).
+
+  Surfaces:
+    - Toggle: `Settings.semantic_match_enabled`
+    - Provider select: openai / ollama (Anthropic NOT eligible — D1)
+    - Env-presence indicator per choice
+    - Threshold slider: `Settings.semantic_match_threshold` ∈ [0.0, 1.0]
+    - Sync-on-upsert toggle: `Settings.semantic_match_sync_on_upsert`
+
+  Args (template context):
+    - settings : Settings — current row
+    - env_indicators : dict[str, bool] — {anthropic, openai, ollama}
+
+  Per AGENTS.md § Frontend: HTMX form submits via the parent
+  `PUT /api/v1/settings/llm` form (no separate route).
+#}
+<section
+  class="bg-slate-900 border border-slate-800 rounded-lg p-6"
+  data-settings-section="semantic-match"
+>
+  <header class="flex items-baseline justify-between mb-4 gap-3">
+    <div>
+      <h2 class="text-base font-medium text-slate-50">Semantic match</h2>
+      <p class="text-xs text-slate-400 mt-0.5">
+        Cosine-similarity scoring across past jobs + screener questions.
+        Optional; default off. Requires an embedding-capable provider
+        (OpenAI or Ollama). Anthropic does not offer embeddings.
+      </p>
+    </div>
+  </header>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+    <label class="flex items-start gap-3 cursor-pointer">
+      <input
+        type="checkbox"
+        name="semantic_match_enabled"
+        value="true"
+        {% if settings.semantic_match_enabled %}checked{% endif %}
+        class="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950 text-indigo-500 focus:ring-indigo-500/40"
+      />
+      <span class="flex-1">
+        <span class="block text-sm text-slate-100">Enable semantic match</span>
+        <span class="block text-xs text-slate-500 mt-0.5">
+          Turns on nightly job embedding + reuse-cache suggestions.
+        </span>
+      </span>
+    </label>
+
+    <label class="flex items-start gap-3 cursor-pointer">
+      <input
+        type="checkbox"
+        name="semantic_match_sync_on_upsert"
+        value="true"
+        {% if settings.semantic_match_sync_on_upsert %}checked{% endif %}
+        class="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950 text-indigo-500 focus:ring-indigo-500/40"
+      />
+      <span class="flex-1">
+        <span class="block text-sm text-slate-100">Sync embed on upsert</span>
+        <span class="block text-xs text-slate-500 mt-0.5">
+          Embed new jobs immediately instead of waiting for the nightly batch.
+          Adds ~200ms to scraper p50.
+        </span>
+      </span>
+    </label>
+  </div>
+
+  <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+    <div>
+      <label for="embedding_provider" class="block text-xs text-slate-400 uppercase tracking-wide font-medium mb-2">
+        Embedding provider
+      </label>
+      <select
+        id="embedding_provider"
+        name="embedding_provider"
+        class="w-full rounded-md bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+      >
+        <option value="" {% if not settings.embedding_provider %}selected{% endif %}>
+          Auto (prefer Ollama if available)
+        </option>
+        <option value="openai"
+          {% if settings.embedding_provider == "openai" %}selected{% endif %}
+          {% if not env_indicators.openai %}disabled{% endif %}>
+          OpenAI · text-embedding-3-small @ 768d
+          {% if not env_indicators.openai %}(OPENAI_API_KEY not set){% endif %}
+        </option>
+        <option value="ollama"
+          {% if settings.embedding_provider == "ollama" %}selected{% endif %}
+          {% if not env_indicators.ollama %}disabled{% endif %}>
+          Ollama · nomic-embed-text
+          {% if not env_indicators.ollama %}(OLLAMA_BASE_URL not set){% endif %}
+        </option>
+      </select>
+      <p class="mt-2 text-xs text-slate-500">
+        Anthropic users must additionally configure one of these for semantic match.
+      </p>
+    </div>
+
+    <div>
+      <label for="semantic_match_threshold" class="block text-xs text-slate-400 uppercase tracking-wide font-medium mb-2">
+        Similarity threshold:
+        <span data-semantic-threshold-value class="font-mono text-slate-300">{{ "%.2f" | format(settings.semantic_match_threshold) }}</span>
+      </label>
+      <input
+        type="range"
+        id="semantic_match_threshold"
+        name="semantic_match_threshold"
+        min="0.0"
+        max="1.0"
+        step="0.01"
+        value="{{ settings.semantic_match_threshold }}"
+        class="w-full accent-indigo-500"
+        oninput="this.parentElement.querySelector('[data-semantic-threshold-value]').textContent = parseFloat(this.value).toFixed(2)"
+      />
+      <p class="mt-2 text-xs text-slate-500">
+        Cosine similarity floor for matches. 0.65 is a sensible default;
+        loosen for sparse data.
+      </p>
+    </div>
+  </div>
+</section>

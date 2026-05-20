@@ -33,6 +33,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from llm.base import (
     CompletionResult,
+    EmbeddingResult,
     LLMProvider,
     LLMProviderError,
     StructuredResult,
@@ -175,7 +176,7 @@ async def tracked_call(
         latency_ms = int((time.perf_counter() - start) * 1000)
 
         # Pull token counts from result for ApiUsage row.
-        if isinstance(result, (CompletionResult, StructuredResult)):
+        if isinstance(result, (CompletionResult, StructuredResult, EmbeddingResult)):
             in_tok = result.input_tokens
             out_tok = result.output_tokens
         else:

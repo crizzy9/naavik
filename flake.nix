@@ -102,7 +102,8 @@
               # and the greenlet bridge raises ValueError. nix/devshell.nix sets
               # this for the interactive shell; the orchestrator must do the
               # same so `nix run .#dev` sees a writable Postgres path.
-              export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+              # `zlib` for numpy (transitive via `pgvector`; plan 61 / 0.2.7.16).
+              export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:${pkgs.zlib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
               # Plan 10c (10c.3, 2026-05-11): flip `app_settings.debug` on so
               # the `[seed]` step writes `<data_dir>/dev-credentials` (mode
               # 0600) and the `[app]` lifespan re-emits the credential ~750ms

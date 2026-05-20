@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from .base import (
     CompletionResult,
+    EmbeddingResult,
     LLMProvider,
     LLMProviderError,
     StructuredResult,
@@ -27,6 +28,12 @@ _PRICING = {
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
     "_default": {"input": 2.50, "output": 10.0},
 }
+
+# Plan 61 / 0.2.7.16 — Matryoshka-truncated to 768d via `dimensions` SDK kwarg.
+# Same `text-embedding-3-small` model used for the per-job + per-question
+# embedding pipeline.
+_EMBEDDING_MODEL = "text-embedding-3-small"
+_EMBEDDING_DIM = 768
 
 
 class OpenAIProvider(LLMProvider):
@@ -124,6 +131,26 @@ class OpenAIProvider(LLMProvider):
                     yield delta.content
         except Exception as exc:  # noqa: BLE001
             raise LLMProviderError(f"openai stream failed: {exc}") from exc
+
+    async def embed(self, text: str) -> EmbeddingResult:
+        try:
+            response = await self._client.embeddings.create(
+                model=_EMBEDDING_MODEL,
+                input=text,
+                dimensions=_EMBEDDING_DIM,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise LLMProviderError(f"openai embed failed: {exc}") from exc
+
+        vector = list(response.data[0].embedding)
+        usage = getattr(response, "usage", None)
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage is not None else 0
+        return EmbeddingResult(
+            vector=vector,
+            input_tokens=int(prompt_tokens),
+            output_tokens=0,
+            model=f"{_EMBEDDING_MODEL}@{_EMBEDDING_DIM}",
+        )
 
     def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
         rates = _PRICING.get(self._model, _PRICING["_default"])

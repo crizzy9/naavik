@@ -58,6 +58,19 @@ class LLMProvider(ABC):
     def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
         """USD cost estimate per provider's pricing sheet."""
 
+    async def embed(self, text: str) -> EmbeddingResult:
+        """Dense vector embedding (plan 61 / 0.2.7.16).
+
+        Anthropic doesn't offer embeddings — subclasses that route to a
+        completion-only API raise here. OpenAI + Ollama override.
+        """
+        raise LLMProviderError(
+            f"{self.provider_id} does not offer embeddings. Configure "
+            "Settings.embedding_provider = 'openai' or 'ollama' for "
+            "semantic match.",
+            kind="embed_unsupported",
+        )
+
     @property
     @abstractmethod
     def model_name(self) -> str:
@@ -71,6 +84,15 @@ class LLMProvider(ABC):
 
 class CompletionResult(BaseModel):
     text: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    model: str
+
+
+class EmbeddingResult(BaseModel):
+    """Return shape for `LLMProvider.embed` (plan 61 / 0.2.7.16)."""
+
+    vector: list[float]
     input_tokens: int = 0
     output_tokens: int = 0
     model: str

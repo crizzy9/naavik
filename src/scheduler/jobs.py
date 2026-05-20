@@ -156,6 +156,59 @@ async def refresh_oauth_tokens() -> None:
     log.debug("refresh_oauth_tokens — Phase 4 will light this up")
 
 
+async def embed_pending_jobs() -> None:
+    """`embeddings.embed_pending_jobs` — nightly 02:00 UTC (plan 61 / 0.2.7.16).
+
+    For each user with `Settings.semantic_match_enabled = True`, embed every
+    Job whose JobEmbedding is missing or stale. Respects the daily cost cap
+    via `llm_tracker.tracked_call` (which logs ApiUsage rows the cap reads).
+    """
+    from models import Job, Settings
+    from services import embedding_service
+
+    async with async_session() as session:
+        users_stmt = select(Settings).where(Settings.semantic_match_enabled.is_(True))
+        users = (await session.exec(users_stmt)).all()
+
+        total_processed = 0
+        total_embedded = 0
+        for settings_row in users:
+            jobs_stmt = select(Job).where(
+                Job.user_id == settings_row.user_id,
+                Job.deleted_at.is_(None),
+            )
+            jobs = (await session.exec(jobs_stmt)).all()
+            for job in jobs:
+                total_processed += 1
+                if not await embedding_service.needs_embedding(
+                    session, job=job, settings=settings_row
+                ):
+                    continue
+                row = await embedding_service.embed_job(session, job=job, settings=settings_row)
+                if row is not None:
+                    total_embedded += 1
+            await session.commit()
+    log.info(
+        "embed_pending_jobs processed=%d embedded=%d users=%d",
+        total_processed,
+        total_embedded,
+        len(users),
+    )
+
+
+async def embed_orphan_sweep() -> None:
+    """`embeddings.embed_orphan_sweep` — nightly 03:00 UTC (plan 61 / 0.2.7.16).
+
+    DELETE JobEmbedding rows whose Job is gone or soft-deleted. Idempotent.
+    """
+    from services import embedding_service
+
+    async with async_session() as session:
+        deleted = await embedding_service.delete_orphan_embeddings(session)
+        await session.commit()
+    log.info("embed_orphan_sweep deleted=%d", deleted)
+
+
 # ── Registration ──────────────────────────────────────────────────────
 
 
@@ -218,6 +271,27 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         coalesce=True,
     )
+    # Plan 61 (0.2.7.16): semantic-match nightly batch + orphan sweep.
+    # Gated per-user by Settings.semantic_match_enabled; cron runs always so
+    # the moment a user enables the toggle it picks up at the next tick.
+    scheduler.add_job(
+        embed_pending_jobs,
+        CronTrigger(hour=2, minute=0, timezone="UTC"),
+        id="embeddings.embed_pending_jobs",
+        name="embeddings.embed_pending_jobs",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        embed_orphan_sweep,
+        CronTrigger(hour=3, minute=0, timezone="UTC"),
+        id="embeddings.embed_orphan_sweep",
+        name="embeddings.embed_orphan_sweep",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
 
     # Phase 2 plan 35 (0.2.0.10): six per-source scraping crons.
     from . import scraping
@@ -236,6 +310,8 @@ __all__ = [
     "cleanup_stale_docs",
     "cleanup_stale_drafts",
     "daily_db_snapshot",
+    "embed_orphan_sweep",
+    "embed_pending_jobs",
     "refresh_oauth_tokens",
     "register_all",
     "registered_job_ids",

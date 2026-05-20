@@ -16,6 +16,7 @@ from models import Settings
 
 from .base import (
     CompletionResult,
+    EmbeddingResult,
     LLMProvider,
     LLMProviderError,
     StructuredResult,
@@ -63,10 +64,71 @@ def get_provider(
     raise LLMProviderError(f"unsupported llm_provider: {target}", kind="provider_error")
 
 
+def get_embedding_provider(
+    user_settings: Settings,
+) -> LLMProvider | None:
+    """Resolve a per-user embedding provider from `Settings.embedding_provider`.
+
+    Plan 61 / 0.2.7.16. Returns None when not configured (toggle OFF, no
+    selection, or selected provider has no env-presence). Caller treats
+    None as "feature disabled" — no-op.
+
+    Resolution order:
+      1. Honor explicit `settings.embedding_provider` ("openai" | "ollama").
+      2. Default fallback: ollama if `OLLAMA_BASE_URL` set; openai if
+         `OPENAI_API_KEY` set; otherwise None.
+
+    Anthropic is rejected — it does not offer embeddings.
+    """
+    if not user_settings.semantic_match_enabled:
+        return None
+
+    selected = (user_settings.embedding_provider or "").lower() or None
+    if selected == "anthropic":
+        return None
+
+    if selected == "openai":
+        if not app_settings.openai_api_key:
+            return None
+        from .openai import OpenAIProvider
+
+        return OpenAIProvider(
+            api_key=app_settings.openai_api_key,
+            model=user_settings.llm_model,
+        )
+
+    if selected == "ollama":
+        from .ollama import OllamaProvider
+
+        return OllamaProvider(
+            base_url=app_settings.ollama_base_url,
+            model=user_settings.llm_model,
+        )
+
+    # No selection — fall back to env presence.
+    if app_settings.ollama_base_url:
+        from .ollama import OllamaProvider
+
+        return OllamaProvider(
+            base_url=app_settings.ollama_base_url,
+            model=user_settings.llm_model,
+        )
+    if app_settings.openai_api_key:
+        from .openai import OpenAIProvider
+
+        return OpenAIProvider(
+            api_key=app_settings.openai_api_key,
+            model=user_settings.llm_model,
+        )
+    return None
+
+
 __all__ = [
     "CompletionResult",
+    "EmbeddingResult",
     "LLMProvider",
     "LLMProviderError",
     "StructuredResult",
+    "get_embedding_provider",
     "get_provider",
 ]
