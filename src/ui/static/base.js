@@ -225,6 +225,14 @@
       syncSidebarAria();
     }
   });
+  // Keep aria-expanded in sync when no click fires (history pop, back-button
+  // restore, hx-boost swap).
+  if (document.readyState !== 'loading') {
+    syncSidebarAria();
+  } else {
+    document.addEventListener('DOMContentLoaded', syncSidebarAria);
+  }
+  document.body.addEventListener('htmx:afterSwap', syncSidebarAria);
 
   // ---------------------------------------------------------------- //
   // showToast helper — used by rollback handler. Kept tiny.          //

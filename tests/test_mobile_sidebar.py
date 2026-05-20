@@ -50,3 +50,20 @@ def test_base_js_syncs_aria_expanded(client: TestClient) -> None:
     body = client.get("/static/base.js").text
     assert "syncSidebarAria" in body, "Issue 2 · aria sync helper must be wired"
     assert "aria-expanded" in body
+
+
+def test_base_js_syncs_aria_on_swap(client: TestClient) -> None:
+    """0.2.2.03 · aria sync must also fire on htmx:afterSwap so navigation
+    (back-button, hx-boost) re-syncs the hamburger button's aria-expanded
+    even when no click event fires."""
+    body = client.get("/static/base.js").text
+    # Both substrings must coexist in the same module so the wiring is
+    # demonstrably in place. Proximity asserted via the substring count of
+    # syncSidebarAria appearing after the swap-listener registration.
+    assert "htmx:afterSwap" in body
+    assert "syncSidebarAria" in body
+    # The new wiring registers syncSidebarAria as a listener (not just calls
+    # it inline) — guard against accidental removal.
+    assert "addEventListener('htmx:afterSwap', syncSidebarAria)" in body, (
+        "0.2.2.03 · syncSidebarAria must be registered as htmx:afterSwap listener"
+    )
