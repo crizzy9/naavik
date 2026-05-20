@@ -221,11 +221,47 @@ async def get_extraction_stream(extraction_id: str):
 
 
 @router.post("/api/v1/profile/from-extraction", name="profile_from_extraction")
-async def post_profile_from_extraction(request: Request):
+async def post_profile_from_extraction(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
     """Stub — flag the profile committed and redirect / via HX-Redirect.
+
+    Plan 42 (0.2.0.04 / PC.6b, 2026-05-20): no-existing-user precondition.
+    The endpoint sets `naavik_session=FAKE_SESSION_VALUE`, which would
+    REPLACE a flagged operator's real-JWT cookie and let every
+    `require_authed_session`-gated route take the fake-session pass-through
+    branch — silently demoting auth posture from real-JWT-flagged to
+    fake-session-unflagged. Count probe: any existing User → 409 + HTML
+    error card pointing back to /login. Bootstrap path (count==0) still
+    works for fresh installs.
+
+    On DB error, let the exception propagate — silently demoting to fake-
+    session on a transient hiccup is worse than a clear 500 (plan § Risk 2).
 
     Wave 6 wires this to `services/profile_service.commit_extraction`.
     """
+    count_row = (await session.exec(select(func.count()).select_from(User))).one()
+    if hasattr(count_row, "_mapping") or isinstance(count_row, tuple):
+        existing_count = int(count_row[0])
+    else:
+        existing_count = int(count_row)
+    if existing_count > 0:
+        return HTMLResponse(
+            content=(
+                '<div id="onboarding-step-content" '
+                'class="p-4 rounded-lg bg-rose-500/10 border border-rose-500/30 '
+                'text-rose-200 text-sm space-y-2">'
+                '<div class="font-medium">Account already exists.</div>'
+                '<div class="text-rose-200/80">'
+                "Onboarding is for fresh installs only. "
+                '<a href="/login" class="underline hover:text-rose-100">Sign in instead</a>.'
+                "</div>"
+                "</div>"
+            ),
+            status_code=409,
+        )
+
     response = Response(status_code=204)
     response.headers["HX-Redirect"] = "/"
     response.set_cookie(

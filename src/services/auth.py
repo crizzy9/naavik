@@ -306,6 +306,8 @@ async def require_authed_session(
     rather than a real JWT. Retires when the fake-session stub is deleted
     (post-Phase-2 task 2.12 / a real-auth migration). At that time:
     `Depends(require_authed_session)` → `Depends(require_password_complete)`.
+    Also tighten `_user: User | None` -> `User` on dependent handlers because
+    `require_password_complete` returns `User`, not `User | None`.
 
     Resolution order:
       1. Missing cookie → 401.
