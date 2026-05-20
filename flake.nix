@@ -103,15 +103,6 @@
               # this for the interactive shell; the orchestrator must do the
               # same so `nix run .#dev` sees a writable Postgres path.
               export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-              # Plan 10b (item 2, 2026-05-03): default DB-mode persistence so
-              # the orchestrator's UI reads from Postgres, not the in-memory
-              # fixtures in db/sample_data.py. Wave 4 of plan 10 swapped the
-              # high-traffic accessors (Profile, User, Settings, Experience,
-              # Bullet, Skill, Education, Project, Cert, Job, Application,
-              # discover_queue, applications_visible_in_tracking) to honor this
-              # env. Lower-traffic accessors fall back to in-memory until a
-              # follow-up plan finishes the swap (deferred backlog item B6).
-              export NAAVIK_PERSISTENCE=db
               # Plan 10c (10c.3, 2026-05-11): flip `app_settings.debug` on so
               # the `[seed]` step writes `<data_dir>/dev-credentials` (mode
               # 0600) and the `[app]` lifespan re-emits the credential ~750ms

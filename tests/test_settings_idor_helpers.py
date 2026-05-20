@@ -31,7 +31,6 @@ import os
 
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 os.environ.setdefault("NAAVIK_DEBUG", "1")
-os.environ["NAAVIK_PERSISTENCE"] = "memory"
 
 
 class _NoopSession:

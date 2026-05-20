@@ -35,7 +35,6 @@ from typing import Any
 # Bypass SECRET_KEY validator so `from scheduler import jobs` (which transitively
 # imports config) doesn't ValidationError at module import time.
 os.environ.setdefault("NAAVIK_DEBUG", "1")
-os.environ.setdefault("NAAVIK_PERSISTENCE", "memory")
 
 import pytest
 from apscheduler.job import Job

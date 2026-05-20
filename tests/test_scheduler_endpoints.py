@@ -29,7 +29,6 @@ from apscheduler.jobstores.base import JobLookupError
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 # Memory persistence keeps the matching-CSRF path away from Postgres — this
 # router doesn't touch DB but `TestClient(app)` fires the lifespan otherwise.
-os.environ["NAAVIK_PERSISTENCE"] = "memory"
 
 
 # ── _FakeJob + _FakeScheduler ───────────────────────────────────────────

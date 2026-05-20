@@ -21,7 +21,6 @@ from pathlib import Path
 # Bypass SECRET_KEY validator so `from scheduler.json_jobstore import ...`
 # (transitively imports config) doesn't raise at collection.
 os.environ.setdefault("NAAVIK_DEBUG", "1")
-os.environ.setdefault("NAAVIK_PERSISTENCE", "memory")
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext

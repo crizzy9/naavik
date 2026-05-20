@@ -14,7 +14,6 @@ import os
 # Bypass SECRET_KEY validator so `from main import main` (transitively imports
 # config) doesn't ValidationError at collection time.
 os.environ.setdefault("NAAVIK_DEBUG", "1")
-os.environ.setdefault("NAAVIK_PERSISTENCE", "memory")
 
 
 def test_main_invokes_uvicorn(monkeypatch) -> None:

@@ -16,7 +16,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
-os.environ["NAAVIK_PERSISTENCE"] = "memory"
 
 
 _CSRF = "p" * 48

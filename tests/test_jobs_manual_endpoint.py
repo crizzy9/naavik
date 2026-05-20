@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 os.environ.setdefault("NAAVIK_DEBUG", "1")
-os.environ["NAAVIK_PERSISTENCE"] = "memory"
 
 
 _CSRF_TOKEN = "csrf-cookie-token-manual-job-aaaaaaaaaaaaaaaaaaaaaaa"

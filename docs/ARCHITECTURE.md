@@ -78,7 +78,7 @@ Strict layering — each layer only depends on those below it.
 
 - Single `app_settings` instance (singleton). Read everywhere via `from src.config import app_settings`.
 - All env vars optional; defaults in code.
-- Critical fields: `DATABASE_URL`, `SECRET_KEY`, `DATA_DIR`, `NAAVIK_PERSISTENCE`, `NAAVIK_DEBUG`, `NAAVIK_DEV_PASSWORD`, `NAAVIK_BCRYPT_COST`.
+- Critical fields: `DATABASE_URL`, `SECRET_KEY`, `DATA_DIR`, `NAAVIK_DEBUG`, `NAAVIK_DEV_PASSWORD`, `NAAVIK_BCRYPT_COST`.
 - `Settings.debug` reads `NAAVIK_DEBUG` / `DEBUG` (plan 10c).
 
 ### 3.3 `src/api/` — REST endpoints
@@ -97,7 +97,7 @@ Strict layering — each layer only depends on those below it.
 - `templates/`: base layout + components/ (reusable partials) + pages/ (composed screens).
 - `static/`: htmx.min.js, lucide.min.js, base.js, styles.
 - **Components are NEVER duplicated.** If a screen needs a variant, extend the existing partial via macro args; don't fork.
-- Per-screen accessor pattern (plan 09): each page handler reads from a `discover_ctx()` / `tracking_ctx()` accessor in `src/db/sample_data.py` (memory mode) or via service-layer DB reads (db mode), gated by `NAAVIK_PERSISTENCE`.
+- Per-screen accessor pattern (plan 09 / refined plan 60): each page handler builds a context dict via a `discover_ctx()` / `tracking_ctx()` / `_build_profile_ctx()` helper. Post-plan-60 routes either read through the `services/*` layer (Postgres) or — for routes not yet migrated — fall through to fixture data in `src/db/sample_data.py`. The dual env-gated mode is gone; future plans incrementally rewire the remaining routes onto `services/*`.
 
 ### 3.5 `src/services/` — business logic
 
@@ -167,7 +167,7 @@ Canonical reference: `docs/design/SCRAPER_BASE.md` (plan 29 / `0.2.0.06`).
 
 - `session.py` — `AsyncSession` factory + `get_session()` dependency.
 - `seed.py` — populates from `sample_data.py`; bumps each table's autoincrement sequence past seeded max so subsequent inserts don't collide. Writes `~/.naavik/dev-credentials` when debug + SELF_HOSTED + generated-password (plan 10c).
-- `sample_data.py` + `sample_data_models.py` — frozen Pydantic per `SAMPLE_DATA.md` (372 rows across 20 entities). Used by both `seed.py` (production seeding) and the in-memory accessor mode gated by `NAAVIK_PERSISTENCE`.
+- `sample_data.py` + `sample_data_models.py` — frozen Pydantic per `SAMPLE_DATA.md` (372 rows across 20 entities). Post-plan-60 (0.2.7.17): the legitimate consumers are `seed.py` (production seeding) and the pytest fixture suite + transitional route call sites that haven't yet migrated to `services/*`. The `NAAVIK_PERSISTENCE` env var is removed; new route code MUST read through `services/*` (enforced via `tests/test_no_sample_data_imports_in_routes.py`).
 
 ---
 
@@ -306,7 +306,7 @@ When implementing a pattern that already exists in the codebase, **read the exis
 | DRAFT lifecycle | `src/services/application_service.py` (plan 10 § C.5) | submit / discard / auto-apply queue + reuse heuristic |
 | ATS adapter | `src/services/ats/greenhouse.py` + `lever.py` + `ashby.py` | Factory in `services/ats/__init__.py` |
 | Per-field PUT autosave | `src/api/v1/profile.py:update_field` | Triggers `profile_updated` AppEvent |
-| Stub fragment + JSON dual endpoint | `src/db/sample_data.py` + `src/ui/routes/*` (memory mode) | Gated by `NAAVIK_PERSISTENCE` |
+| Stub fragment + JSON dual endpoint | `src/db/sample_data.py` + `src/ui/routes/*` (transitional) | Plan 60 / 0.2.7.17 removed the `NAAVIK_PERSISTENCE` env gate; routes incrementally migrate to `services/*` |
 | Optimistic rollback | `src/ui/static/base.js` (htmx:responseError listener) | Pairs with `hx-swap-oob` |
 | Lifespan-managed scheduler | `src/main.py` lifespan + `src/scheduler/__init__.py` | APScheduler PostgresJobStore |
 | Env-presence indicator | `src/services/env_secrets.py:llm_provider_configured` + `_settings_llm.html` / `_settings_notifications.html` | Replaces deleted vault scope booleans (plan 26 / `0.2.0.01`); never returns values |
