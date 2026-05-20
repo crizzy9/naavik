@@ -48,6 +48,16 @@ Plans never land exactly as written. Engineer captures every meaningful divergen
    - Lint fixes that don't change behavior
    - Self-correction within same turn (tried A, switched to B before commit)
 
+6. **Hand-back contract** (codified plan 39 / `0.7.0.21`). Every engineer hand-back to manager MUST include an explicit `Deviations summary:` line listing each entry written to `engineer-deviations.log` for this dispatch (or `none — reconciled against diff`). This is what the manager's archive step reads when invoking `naavik-ops plan archive <plan-path>`. Missing this line is what triggered the 5-of-8 archive miss in run `2026-05-19T15-42-42_833f4a`. Format:
+
+   ```
+   Deviations summary:
+     - <one-line title> (surface: env var | on-disk path | cron | naavik-ops subcommand | none)
+     - ...
+     OR
+     none — log reconciled against diff
+   ```
+
 ## Worked examples (past runs)
 
 ```

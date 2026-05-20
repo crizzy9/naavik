@@ -236,9 +236,9 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 **Allowed files for BOOKKEEPING (direct push):**
 
 - `ROADMAP.md` — row state flips (`[~]` → `[x]`, `[ ]` → `[~]`), "Last updated" bumps, new row additions for follow-ups (PC.6a, DEF-23, etc.), Notes column updates with deliverable narratives.
-- `docs/plans/<NN>-<slug>.md` → `docs/plans/archive/<NN>-<slug>.md` — plan archive moves via `git mv` (or `mv` + `git add` of both paths).
-- `docs/plans/archive/<NN>-<slug>.md` — frontmatter `Status: DRAFT|APPROVED → EXECUTED`, `Shipped:` line additions, `## Deviations from plan` section appends (if the engineer didn't fold them in the PR squash).
-- `docs/prompts/<NN>-<slug>.md` → `docs/prompts/archive/<NN>-<slug>.md` — kickoff prompt archive moves.
+- `docs/plans/<NN>-<slug>.md` → `docs/plans/archive/<NN>-<slug>.md` — **plan archive moves via `.claude/naavik-ops plan archive docs/plans/<NN>-<slug>.md`** (codified plan 39 / `0.7.0.21`). The subcommand lifts engineer-deviations.log entries into `## Deviations from plan`, flips `Status: EXECUTED`, performs `git mv` (plan + matching prompt). Manual `git mv docs/plans/<NN>...md docs/plans/archive/` is FORBIDDEN — the manual path is what let 5/8 plans archive empty in run `2026-05-19T15-42-42_833f4a`.
+- `docs/plans/archive/<NN>-<slug>.md` — frontmatter `Status:` flips + `Shipped:` line additions + `## Deviations from plan` section content are written by `naavik-ops plan archive`. Manual hand-edits only when the command flagged `RECONCILIATION_NEEDED` or surface propagation requires re-touching the file in the same bookkeeping commit.
+- `docs/prompts/<NN>-<slug>.md` → `docs/prompts/archive/<NN>-<slug>.md` — moved automatically by `naavik-ops plan archive` when a matching prompt exists alongside the plan.
 - `traces/**` — gitignored, but for completeness: MANIFEST.json schema refreshes, runs.log appends, per-agent log appends.
 - `README.md` "Last updated" line bumps (one-liners only).
 

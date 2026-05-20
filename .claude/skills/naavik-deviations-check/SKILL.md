@@ -25,10 +25,12 @@ Read docs/plans/<NN-name>.md
 ### 2 — Confirm `## Deviations from plan` section exists
 
 ```bash
-Grep "^## Deviations from plan" docs/plans/<NN-name>.md
+.claude/naavik-ops plan validate-deviations docs/plans/<NN-name>.md
 ```
 
-No match → **BLOCK archive**. Contract is binary: no section, no archive. Tell user/manager to invoke `manager-deviation-promote` to lift entries from `traces/<run-id>/engineer-deviations.log`.
+Exit `0` = PASS (non-empty section present); exit `2` = BLOCK (missing OR empty). Wraps the binary contract; this is the canonical read-only check (codified plan 39 / `0.7.0.21`). Don't grep by hand — the subcommand handles both "no heading at all" and "heading with no bullets" uniformly.
+
+On BLOCK, manager invokes `.claude/naavik-ops plan archive docs/plans/<NN-name>.md` (the canonical archive path) which lifts entries from `traces/<run-id>/engineer-deviations.log`. If the log is empty AND there is no material deviation, manager re-runs with `--no-material-deviations "<rationale>"` — skepticism applies.
 
 ### 3 — Inspect section content
 

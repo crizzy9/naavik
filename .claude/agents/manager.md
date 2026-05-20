@@ -123,7 +123,7 @@ Request ambiguous in scope (e.g. "improve auth") → ask one precise question vi
 8. Merge                  →  github MCP create_pull_request + merge; commit msg has `Closes #N`
 9. Update ledger          →  mark ROADMAP row [x] + deliverable note + bump "Last updated"
 10. Deviations gate       →  ensure plan has `## Deviations from plan` section; promote operational surface to README/CLAUDE/POST_PHASE_1
-11. Archive               →  plan → docs/plans/archive/; prompt → docs/prompts/archive/
+11. Archive               →  `.claude/naavik-ops plan archive docs/plans/<NN>-<slug>.md` (canonical; lifts log entries, flips Status: EXECUTED, mv plan + matching prompt to archive/. NEVER manual `git mv`.)
 12. Mirror                →  .claude/naavik-ops gh set-status <item-id> Done; close GitHub issue if not auto-closed
 13. Budget                →  update .claude/budget-ledger.json; halt if over cap
 14. Loop                  →  back to step 2 until milestone empty

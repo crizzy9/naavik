@@ -15,7 +15,20 @@ allowed-tools: Read, Edit, Write, Bash(jq:*), Glob
 
 ## Steps
 
-1. **Read deviations log.**
+1. **Invoke `naavik-ops plan archive`** (codified plan 39 / `0.7.0.21`). This is the canonical, single-writer entry point for any move from `docs/plans/` to `docs/plans/archive/`. The command lifts every matching `DEVIATION` line from `traces/<run-id>/engineer-deviations.log` into the plan's `## Deviations from plan` section using the canonical bullet shape (`- **<title>** — what: ... why: ... impact: ... surface: ...`), flips the frontmatter `Status:` to `EXECUTED`, performs the `git mv` (plus matching prompt sidecar under `docs/prompts/`), and STDOUTs a "Surface propagation required" block listing every operational surface the manager must land in user-facing docs in the same bookkeeping commit.
+
+   ```bash
+   .claude/naavik-ops plan archive docs/plans/<NN-name>.md
+   #   optional flags:
+   #   --run-id <id>                   pick a specific traces/<run-id>/ (default: latest)
+   #   --no-material-deviations "X"    explicit-bypass; writes "No material deviations — X."
+   #   --force                          archive even if section already non-empty
+   #   --dry-run                        preview, no writes
+   ```
+
+   Exit codes: `0` = archived, `2` = refused (empty log + no override, or section conflict needing reconciliation), `1` = environmental error.
+
+2. **Read what the command produced** (read-only):
    ```bash
    cat traces/<run-id>/engineer-deviations.log
    ```
@@ -24,31 +37,24 @@ allowed-tools: Read, Edit, Write, Bash(jq:*), Glob
    [<ISO-timestamp>] DEVIATION plan=<docs/plans/NN-name.md> what=<one-line> why=<one-line> impact=<one-line>
    ```
 
-2. **Group by plan.** Run may touch multiple plans (rare — e.g. plan execution uncovering paper cut).
+3. **Group by plan.** Run may touch multiple plans (rare — e.g. plan execution uncovering paper cut). Invoke `naavik-ops plan archive` once per plan.
 
-3. **Verify 4 fields per line** (AGENTS.md § Workflow step 7 contract):
+4. **Verify 4 fields per line** (AGENTS.md § Workflow step 7 contract):
    - **What changed** (one-line)
    - **Why** (root cause / forcing constraint)
    - **Impact** on dependent plans / phases
    - **Surface** — new env var / CLI / on-disk path / port / schedule (`none` if internal-only)
 
-   Missing dimension → infer from engineer.log + diff. Ambiguous → AskUserQuestion.
+   Missing dimension → manager hand-edits the section + re-runs with `--force`, OR AskUserQuestion to engineer.
 
-4. **Open `docs/plans/NN-name.md`.** No `## Deviations from plan` section → append. Has one → append new bullets (don't overwrite; earlier waves may have written).
-
-5. **Format each bullet:**
+5. **Bullet shape produced by the command** (matches `naavik-deviations-check § 3c`):
    ```markdown
-   - **<one-line title>** — what: <what>. why: <why>. impact: <impact>. surface: <surface or "none">.
+   - **<one-line title>** — what: <what> why: <why> impact: <impact> surface: <surface or "none">.
    ```
 
-   Multi-faceted → sub-list:
-   ```markdown
-   - **<title>** — what: <what>. why: <why>.
-     - impact: <impact on follow-up plans>
-     - surface: <new env var / path / etc.>
-   ```
+   For multi-faceted entries the engineer should log two separate `DEVIATION` lines — one per concern — so each lifts to its own bullet.
 
-6. **Propagate operational surface.** For each non-"none" surface, land in right user-facing doc(s) same change:
+6. **Propagate operational surface.** For each non-"none" surface the command flagged in STDOUT, land in the right user-facing doc(s) in the same bookkeeping commit:
 
    | Surface type | Propagate to |
    |---|---|
@@ -59,7 +65,7 @@ allowed-tools: Read, Edit, Write, Bash(jq:*), Glob
 
    Maintainer-only surface (e.g. NullPool engine choice plan 10b) → plan Deviations only, no propagation.
 
-7. **Verify before archive.** Re-read `## Deviations from plan`. "no material deviations" → be skeptical (rare). Empty/missing → **do not archive**.
+7. **Verify after archive.** Re-read the archived plan's `## Deviations from plan` section. `naavik-ops plan archive` refuses (exit 2) on empty sections, so a successful exit guarantees non-empty. If `--no-material-deviations` was used, be skeptical and confirm against the diff. `naavik-deviations-check` skill is the read-only verification wrapper.
 
 ## Canonical references
 
