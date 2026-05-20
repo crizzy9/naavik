@@ -12,8 +12,9 @@ coupled to the API view.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AfterValidator, BaseModel, ConfigDict
 from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
@@ -189,10 +190,30 @@ class JobFilter(BaseModel):
     include_duplicates: bool = False
 
 
+def _validate_job_url(value: str) -> str:
+    """Reject any scheme that's renderable as an href but not navigable as a
+    real link — the `javascript:` / `data:` / `file:` family. http / https
+    cover real ATS + company pages; `manual://` is the synthetic-id scheme
+    for URL-less manual entries (see `ui.routes.jobs.post_job_manual`).
+    Closes hacker PR #153 HIGH-2 (stored-XSS via slide-over `<a href>`).
+    """
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("url required")
+    lower = cleaned.lower()
+    if lower.startswith(("http://", "https://", "manual://")):
+        return cleaned
+    scheme = cleaned.split(":", 1)[0] if ":" in cleaned else cleaned
+    raise ValueError(f"unsupported URL scheme: {scheme}")
+
+
+JobUrl = Annotated[str, AfterValidator(_validate_job_url)]
+
+
 class JobCreate(BaseModel):
     """API input for manual job creation (`+ Add by URL`)."""
 
-    url: str
+    url: JobUrl
     board: ApplicationBoard
     company: str
     role: str

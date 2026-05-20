@@ -191,6 +191,119 @@ def test_post_manual_job_unauthenticated_returns_401() -> None:
     assert r.status_code == 401
 
 
+def test_post_manual_job_missing_csrf_returns_403() -> None:
+    """Session cookie present but no X-CSRF-Token header → 403 (hacker PR #153 HIGH-1)."""
+    from main import app
+
+    c = TestClient(app, raise_server_exceptions=True)
+    c.cookies.set("naavik_session", "fake-1")
+    c.cookies.set("naavik_csrf", _CSRF_TOKEN)
+    r = c.post(
+        "/api/v1/jobs/manual",
+        data={
+            "company": "Acme",
+            "role": "Eng",
+            "description": "JD",
+        },
+    )
+    assert r.status_code == 403
+    assert "csrf" in r.text.lower()
+
+
+def test_post_manual_job_csrf_header_mismatch_returns_403() -> None:
+    """X-CSRF-Token header value different from cookie → 403 (double-submit)."""
+    from main import app
+
+    c = TestClient(app, raise_server_exceptions=True)
+    c.cookies.set("naavik_session", "fake-1")
+    c.cookies.set("naavik_csrf", _CSRF_TOKEN)
+    r = c.post(
+        "/api/v1/jobs/manual",
+        data={
+            "company": "Acme",
+            "role": "Eng",
+            "description": "JD",
+        },
+        headers={"X-CSRF-Token": "wrong-token-value-zzzzzzzzzzzzzzzzzzzzzz"},
+    )
+    assert r.status_code == 403
+
+
+def test_post_manual_job_rejects_javascript_url(client: TestClient) -> None:
+    """`javascript:` URL scheme is rejected at JobCreate boundary (hacker PR #153 HIGH-2)."""
+    r = client.post(
+        "/api/v1/jobs/manual",
+        data={
+            "company": "Acme",
+            "role": "Eng",
+            "description": "JD",
+            "url": "javascript:alert(document.cookie)",
+        },
+        headers={"X-CSRF-Token": _CSRF_TOKEN},
+    )
+    assert r.status_code == 422
+    assert "scheme" in r.text.lower()
+
+
+def test_post_manual_job_rejects_data_url(client: TestClient) -> None:
+    """`data:` URL scheme is rejected (XSS vector via inline HTML)."""
+    r = client.post(
+        "/api/v1/jobs/manual",
+        data={
+            "company": "Acme",
+            "role": "Eng",
+            "description": "JD",
+            "url": "data:text/html,<script>alert(1)</script>",
+        },
+        headers={"X-CSRF-Token": _CSRF_TOKEN},
+    )
+    assert r.status_code == 422
+    assert "scheme" in r.text.lower()
+
+
+def test_post_manual_job_rejects_file_url(client: TestClient) -> None:
+    """`file:` URL scheme is rejected (local-file disclosure vector)."""
+    r = client.post(
+        "/api/v1/jobs/manual",
+        data={
+            "company": "Acme",
+            "role": "Eng",
+            "description": "JD",
+            "url": "file:///etc/passwd",
+        },
+        headers={"X-CSRF-Token": _CSRF_TOKEN},
+    )
+    assert r.status_code == 422
+    assert "scheme" in r.text.lower()
+
+
+def test_post_manual_job_accepts_manual_synthetic_url(client: TestClient, monkeypatch) -> None:
+    """`manual://entry/<id>` synthetic URLs pass validation (used when user omits URL)."""
+    captured: dict = {}
+
+    async def _fake_create(session, payload, *, user_id):
+        captured["payload"] = payload
+        from types import SimpleNamespace
+
+        return SimpleNamespace(id=1001)
+
+    from services import job_service
+
+    monkeypatch.setattr(job_service, "create_manual_job", _fake_create)
+
+    r = client.post(
+        "/api/v1/jobs/manual",
+        data={
+            "company": "Acme",
+            "role": "Eng",
+            "description": "JD",
+        },
+        headers={"X-CSRF-Token": _CSRF_TOKEN},
+    )
+    assert r.status_code == 204
+    assert captured["payload"].url.startswith("manual://entry/")
+
+
 def test_tracking_page_add_manually_button_wires_modal(client: TestClient) -> None:
     """Tracking page's `Add manually` button HTMX-fetches the modal partial."""
     r = client.get("/tracking")

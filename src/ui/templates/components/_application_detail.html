@@ -140,7 +140,7 @@
         readonly>{{ a.notes }}</textarea>
     </section>
 
-    {% if a.external_url %}
+    {% if a.external_url and (a.external_url.startswith('http://') or a.external_url.startswith('https://')) %}
       <section>
         <a href="{{ a.external_url }}" target="_blank" rel="noopener"
            class="inline-flex items-center gap-1.5 text-sm text-indigo-300 hover:text-indigo-200">

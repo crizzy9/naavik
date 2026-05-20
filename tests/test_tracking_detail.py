@@ -168,3 +168,57 @@ def test_tracking_detail_renders_status_timeline(
     assert "Documents" in body
     assert "Contacts" in body
     assert "Notes" in body
+
+
+def test_application_detail_template_blocks_javascript_external_url(
+    client: TestClient, known_application_id: int
+) -> None:
+    """Template scheme allowlist filters non-http(s) hrefs even if a hostile
+    URL leaks past JobCreate (defense-in-depth for hacker PR #153 HIGH-2).
+    """
+    import asyncio
+
+    from db import sample_data as sd
+
+    async def _set_url(url: str) -> str:
+        app = await sd.get_application(known_application_id)
+        original = app.external_url
+        app.external_url = url
+        return original
+
+    async def _restore(original: str) -> None:
+        app = await sd.get_application(known_application_id)
+        app.external_url = original
+
+    # javascript: URL — must NOT render as a clickable link.
+    original = asyncio.run(_set_url("javascript:alert(1)"))
+    try:
+        r = client.get(f"/_fragments/tracking/application/{known_application_id}")
+        assert r.status_code == 200
+        body = r.text
+        assert 'href="javascript:' not in body
+        assert "Open job posting" not in body
+    finally:
+        asyncio.run(_restore(original))
+
+    # manual:// synthetic URL — also non-navigable, must not render.
+    original = asyncio.run(_set_url("manual://entry/abc123"))
+    try:
+        r = client.get(f"/_fragments/tracking/application/{known_application_id}")
+        assert r.status_code == 200
+        body = r.text
+        assert 'href="manual://' not in body
+        assert "Open job posting" not in body
+    finally:
+        asyncio.run(_restore(original))
+
+    # https URL — should render the link.
+    original = asyncio.run(_set_url("https://example.com/jobs/123"))
+    try:
+        r = client.get(f"/_fragments/tracking/application/{known_application_id}")
+        assert r.status_code == 200
+        body = r.text
+        assert 'href="https://example.com/jobs/123"' in body
+        assert "Open job posting" in body
+    finally:
+        asyncio.run(_restore(original))

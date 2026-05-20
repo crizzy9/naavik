@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
 from db.session import get_session
 from models import (
     ApplicationBoard,
@@ -150,6 +151,7 @@ async def post_job_manual(
     remote_policy: Annotated[str, Form()] = "unknown",
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     """Create a manually-entered Job (plan 53 § B.2)."""
     if not (company.strip() and role.strip() and description.strip()):
