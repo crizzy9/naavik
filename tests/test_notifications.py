@@ -23,11 +23,15 @@ from services.notifications import (
     EVENT_AUTO_APPLY_FAILED,
     EVENT_NEW_HIGH_SCORE,
     EVENT_REJECTION,
+    EVENT_SCRAPE_RUN_NEW_JOBS,
     _embed_for_event,
+    _embed_for_scrape_run,
     _is_event_enabled,
     _telegram_text_for_event,
+    _telegram_text_for_scrape_run,
     notify_application_submitted,
     notify_new_high_score,
+    notify_scrape_run_summary,
     push_toast,
     send_discord,
     send_telegram,
@@ -280,3 +284,253 @@ async def test_notify_application_submitted_pushes_toast():
     toast = notifications._TOAST_QUEUE.get_nowait()
     assert toast.kind == "success"
     assert "Stripe" in toast.body
+
+
+# ── Per-scrape-run summary (plan 37 / 0.2.0.12) ─────────────────────────
+
+
+def _scrape_run(**kw):
+    """Plain-data JobScrapeRun stand-in. Real model is SQLModel-backed, but
+    the notification builders only touch attributes — no ORM behavior needed.
+    """
+    from datetime import UTC, datetime
+
+    from models import JobScrapeStatus, JobSource
+
+    base = {
+        "id": 901,
+        "user_id": 1,
+        "source": JobSource.LINKEDIN,
+        "status": JobScrapeStatus.SUCCESS,
+        "started_at": datetime(2026, 5, 19, 15, 0, tzinfo=UTC),
+        "finished_at": datetime(2026, 5, 19, 15, 0, 1, tzinfo=UTC),
+        "listings_returned": 12,
+        "new_jobs": 5,
+        "updated_jobs": 7,
+        "errors": [],
+        "duration_ms": 1400,
+    }
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def _top_jobs(n: int) -> list:
+    return [
+        SimpleNamespace(
+            id=100 + i,
+            role=f"Senior Engineer {i}",
+            company=f"Acme {i}",
+            url=f"https://example.com/jobs/{100 + i}",
+        )
+        for i in range(n)
+    ]
+
+
+def test_event_scrape_run_default_on():
+    """Empty notifications_enabled returns the on-by-default for the new event."""
+    s = _settings()
+    assert _is_event_enabled(s, EVENT_SCRAPE_RUN_NEW_JOBS) is True
+
+
+def test_event_scrape_run_explicit_off():
+    s = _settings(notifications_enabled={EVENT_SCRAPE_RUN_NEW_JOBS: False})
+    assert _is_event_enabled(s, EVENT_SCRAPE_RUN_NEW_JOBS) is False
+
+
+def test_embed_for_scrape_run_shape_and_color():
+    run = _scrape_run(new_jobs=5, listings_returned=12, updated_jobs=7)
+    embed = _embed_for_scrape_run(run, _top_jobs(5))
+    assert "5 new jobs from linkedin" in embed["title"]
+    # Cyan matches EVENT_NEW_HIGH_SCORE convention.
+    assert embed["color"] == 5793266
+    # Description carries each top job's link.
+    for i in range(5):
+        assert f"https://example.com/jobs/{100 + i}" in embed["description"]
+    # No "+N more" line when the count fits exactly.
+    assert "more" not in embed["description"]
+    # Field block carries run summary + score-gate disclaimer.
+    assert len(embed["fields"]) == 2
+    assert "linkedin" in embed["fields"][0]["value"]
+    assert "12 listings" in embed["fields"][0]["value"]
+    assert "5 new" in embed["fields"][0]["value"]
+    assert "0.3.0" in embed["fields"][1]["value"]
+
+
+def test_embed_for_scrape_run_truncates_to_top_5_with_overflow_line():
+    """50 new jobs → top-5 inline + a '+45 more' overflow line."""
+    run = _scrape_run(new_jobs=50, listings_returned=60)
+    embed = _embed_for_scrape_run(run, _top_jobs(50))
+    # Only 5 links rendered + 1 overflow line.
+    assert embed["description"].count("• ") == 6
+    assert "+45 more" in embed["description"]
+
+
+def test_telegram_text_for_scrape_run_under_4096_bytes():
+    """5 long titles still fit comfortably under Telegram's 4096-byte limit."""
+    run = _scrape_run(new_jobs=5, listings_returned=12, updated_jobs=7)
+    fat_jobs = [
+        SimpleNamespace(
+            id=100 + i,
+            role="S" * 200,  # 200-char role string
+            company="C" * 200,
+            url=f"https://example.com/jobs/{100 + i}",
+        )
+        for i in range(5)
+    ]
+    text = _telegram_text_for_scrape_run(run, fat_jobs)
+    assert len(text.encode("utf-8")) < 4096
+    assert "5 new jobs from linkedin" in text
+    assert "_Run: 12 listings · 5 new · 7 updated · 1.4s_" in text
+
+
+@pytest.mark.asyncio
+async def test_notify_scrape_run_summary_no_op_when_no_new_jobs():
+    """run.new_jobs == 0 → no Discord, no Telegram, no toast."""
+    s = _settings()
+    run = _scrape_run(new_jobs=0)
+    discord = AsyncMock(return_value=False)
+    tg = AsyncMock(return_value=False)
+    while not notifications._TOAST_QUEUE.empty():
+        notifications._TOAST_QUEUE.get_nowait()
+    with (
+        patch("services.notifications._send_discord_scrape_run", new=discord),
+        patch("services.notifications._send_telegram_scrape_run", new=tg),
+    ):
+        await notify_scrape_run_summary(settings=s, run=run, top_jobs=[])
+    discord.assert_not_awaited()
+    tg.assert_not_awaited()
+    assert notifications._TOAST_QUEUE.empty()
+
+
+@pytest.mark.asyncio
+async def test_notify_scrape_run_summary_fans_out_to_all_three_channels():
+    """new_jobs > 0 → Discord + Telegram + toast all fire."""
+    s = _settings()
+    run = _scrape_run(new_jobs=5)
+    while not notifications._TOAST_QUEUE.empty():
+        notifications._TOAST_QUEUE.get_nowait()
+    discord = AsyncMock(return_value=True)
+    tg = AsyncMock(return_value=True)
+    with (
+        patch("services.notifications._send_discord_scrape_run", new=discord),
+        patch("services.notifications._send_telegram_scrape_run", new=tg),
+    ):
+        await notify_scrape_run_summary(settings=s, run=run, top_jobs=_top_jobs(3))
+    discord.assert_awaited_once()
+    tg.assert_awaited_once()
+    toast = notifications._TOAST_QUEUE.get_nowait()
+    assert toast.kind == "info"
+    assert "linkedin" in toast.title
+
+
+@pytest.mark.asyncio
+async def test_notify_scrape_run_summary_survives_one_channel_failure():
+    """return_exceptions=True → a Discord raise doesn't cancel Telegram + toast."""
+    s = _settings()
+    run = _scrape_run(new_jobs=5)
+    while not notifications._TOAST_QUEUE.empty():
+        notifications._TOAST_QUEUE.get_nowait()
+
+    async def _boom(**_kw):
+        raise RuntimeError("discord exploded")
+
+    tg = AsyncMock(return_value=True)
+    with (
+        patch("services.notifications._send_discord_scrape_run", new=_boom),
+        patch("services.notifications._send_telegram_scrape_run", new=tg),
+    ):
+        # The whole gather must not raise.
+        await notify_scrape_run_summary(settings=s, run=run, top_jobs=_top_jobs(3))
+    tg.assert_awaited_once()
+    # Toast still fires regardless.
+    toast = notifications._TOAST_QUEUE.get_nowait()
+    assert toast.kind == "info"
+
+
+@pytest.mark.asyncio
+async def test_send_discord_scrape_run_posts_embed():
+    """Happy path: builds an embed and posts to the configured webhook."""
+    from services.notifications import _send_discord_scrape_run
+
+    s = _settings()
+    run = _scrape_run(new_jobs=5)
+    captured = {}
+    client = _mock_client(captured)
+    with patch(
+        "services.notifications._discord_url",
+        return_value="https://discord.example/webhook/scrape-run",
+    ):
+        ok = await _send_discord_scrape_run(
+            settings=s, run=run, top_jobs=_top_jobs(5), http_client=client
+        )
+    await client.aclose()
+    assert ok is True
+    body = json.loads(captured["body"])
+    assert body["embeds"][0]["title"].startswith("🆕 5 new jobs from linkedin")
+
+
+@pytest.mark.asyncio
+async def test_send_telegram_scrape_run_posts_plaintext():
+    """Telegram outbound payload carries chat_id + NO parse_mode (markdown
+    injection defense — scraper-controlled role/company/url could otherwise
+    forge `[phish](url)` clickable links).
+    """
+    from services.notifications import _send_telegram_scrape_run
+
+    s = _settings()
+    run = _scrape_run(new_jobs=5)
+    captured = {}
+    client = _mock_client(captured)
+    with (
+        patch("services.notifications._telegram_token", return_value="bot-token"),
+        patch("services.notifications._telegram_chat_id", return_value="42"),
+    ):
+        ok = await _send_telegram_scrape_run(
+            settings=s, run=run, top_jobs=_top_jobs(3), http_client=client
+        )
+    await client.aclose()
+    assert ok is True
+    body = json.loads(captured["body"])
+    assert body["chat_id"] == "42"
+    assert "parse_mode" not in body
+    assert "5 new jobs from linkedin" in body["text"]
+
+
+@pytest.mark.asyncio
+async def test_send_telegram_scrape_run_hostile_role_renders_as_plain_text():
+    """A scraper-controlled `role` carrying Markdown link syntax
+    `[phish](https://evil.example)` is sent verbatim, NOT as a clickable
+    link — because no parse_mode is set, Telegram falls back to text
+    rendering and the brackets/parens stay literal.
+    """
+    from services.notifications import _send_telegram_scrape_run
+
+    hostile = [
+        SimpleNamespace(
+            id=999,
+            role="[phish](https://evil.example)",
+            company="*pretend-bold*",
+            url="https://legit.example/jobs/999",
+        )
+    ]
+    s = _settings()
+    run = _scrape_run(new_jobs=1)
+    captured = {}
+    client = _mock_client(captured)
+    with (
+        patch("services.notifications._telegram_token", return_value="bot-token"),
+        patch("services.notifications._telegram_chat_id", return_value="42"),
+    ):
+        ok = await _send_telegram_scrape_run(
+            settings=s, run=run, top_jobs=hostile, http_client=client
+        )
+    await client.aclose()
+    assert ok is True
+    body = json.loads(captured["body"])
+    # No parse_mode → Telegram won't interpret the bracket syntax as a link.
+    assert "parse_mode" not in body
+    # Hostile text is in the payload verbatim — defense is the absent
+    # parse_mode, not sanitization.
+    assert "[phish](https://evil.example)" in body["text"]
+    assert "*pretend-bold*" in body["text"]
+    assert "api.telegram.org/botbot-token/sendMessage" in captured["url"]

@@ -85,9 +85,24 @@
   <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
     <h2 class="text-base font-medium text-slate-50">Per-event toggles</h2>
     <p class="text-xs text-slate-400 mt-0.5">Which job-search signals fire push notifications.</p>
+    {#
+      Plan 37 (0.2.0.12): render known events even when notifications_enabled is empty.
+      Catalog mirrors the defaults in `services.notifications._is_event_enabled` so
+      the new scrape-run-summary toggle is reliably visible.
+    #}
+    {% set _notif_event_catalog = [
+      ('new_high_score_job', True),
+      ('application_sent', True),
+      ('interview_scheduled', True),
+      ('offer_received', True),
+      ('rejection', False),
+      ('auto_apply_failed', True),
+      ('scrape_run_new_jobs', True),
+    ] %}
     <ul class="mt-5 flex flex-col divide-y divide-slate-800/50">
-      {% for key, enabled in settings.notifications_enabled.items() %}
+      {% for key, default_on in _notif_event_catalog %}
         {% set _label = key | replace('_', ' ') | title %}
+        {% set enabled = settings.notifications_enabled.get(key, default_on) %}
         <li class="flex items-center justify-between py-3 gap-3">
           <div>
             <div class="text-sm text-slate-100">{{ _label }}</div>

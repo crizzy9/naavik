@@ -25,13 +25,15 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from models import JobScrapeRun, JobScrapeStatus
+from models import JobScrapeRun, JobScrapeStatus, Settings
 from scraper.base import ScraperBase
 from scraper.redaction import safe_exc, safe_url
 from scraper.types import ScrapeQuery
 from services import job_service
+from services.notifications import notify_scrape_run_summary
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +45,7 @@ async def run_scraper(
     user_id: int,
     query: ScrapeQuery | None = None,
     triggered_by: str = "manual",
+    notify: bool = True,
 ) -> JobScrapeRun:
     """Run one scraper invocation; persist Jobs + JobScrapeRun row.
 
@@ -121,5 +124,24 @@ async def run_scraper(
         run.duration_ms = int((finished_at - started_at).total_seconds() * 1000)
         session.add(run)
         await session.flush()
+
+    # Per-scrape-run summary notification (plan 37 / 0.2.0.12 § D.1).
+    # Score-blind for the 0.2.x window — fires on every SUCCESS / PARTIAL run
+    # with new_jobs > 0. Best-effort: any notify-side failure is logged and
+    # swallowed so a misbehaving webhook never blocks the cron lifecycle.
+    if (
+        notify
+        and run.new_jobs > 0
+        and run.status in (JobScrapeStatus.SUCCESS, JobScrapeStatus.PARTIAL)
+    ):
+        try:
+            user_settings = (
+                await session.exec(select(Settings).where(Settings.user_id == user_id))
+            ).one_or_none()
+            if user_settings is not None:
+                top_jobs = await job_service.list_new_jobs_from_run(session, run_id=run.id, limit=5)
+                await notify_scrape_run_summary(settings=user_settings, run=run, top_jobs=top_jobs)
+        except Exception as exc:  # noqa: BLE001 — notify is best-effort
+            log.warning("scrape-run notify failed for run=%s: %s", run.id, exc)
 
     return run

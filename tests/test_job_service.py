@@ -462,3 +462,28 @@ async def test_record_scrape_run_leaves_duration_none_when_unfinished():
     assert run.duration_ms is None
     assert run.finished_at is None
     assert run.status == JobScrapeStatus.RUNNING
+
+
+# ── list_new_jobs_from_run (plan 37 / 0.2.0.12) ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_new_jobs_from_run_returns_session_rows():
+    """Helper just composes the SELECT + LIMIT; in-memory fake hands rows back."""
+    session = _FakeSession()
+    canned = [
+        SimpleNamespace(id=101, last_scrape_run_id=901, role="Senior", company="Acme"),
+        SimpleNamespace(id=102, last_scrape_run_id=901, role="Staff", company="Beta"),
+    ]
+    session.exec_queue = [_exec_all(canned)]
+
+    rows = await job_service.list_new_jobs_from_run(session, run_id=901, limit=5)
+    assert rows == canned
+
+
+@pytest.mark.asyncio
+async def test_list_new_jobs_from_run_empty_when_no_matches():
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([])]
+    rows = await job_service.list_new_jobs_from_run(session, run_id=901, limit=5)
+    assert rows == []
