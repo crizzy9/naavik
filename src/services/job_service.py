@@ -329,6 +329,33 @@ def _create_payload(raw: dict) -> dict:
 # ── Aggregates + scrape-run lifecycle ────────────────────────────────────
 
 
+async def list_new_jobs_from_run(
+    session: AsyncSession,
+    *,
+    run_id: int,
+    limit: int = 5,
+) -> list[Job]:
+    """Return up to `limit` non-duplicate, live Jobs scoped to one scrape run.
+
+    Plan 37 / 0.2.0.12 § A: per-run summary fetch helper. Orders by
+    `found_at DESC` (most-recent first). Filters: `last_scrape_run_id ==
+    run_id`, soft-delete-aware (`deleted_at IS NULL`), excludes tier-3
+    cross-source duplicates (`duplicate_of_id IS NULL`).
+    """
+    stmt = (
+        select(Job)
+        .where(
+            Job.last_scrape_run_id == run_id,
+            Job.deleted_at.is_(None),
+            Job.duplicate_of_id.is_(None),
+        )
+        .order_by(Job.found_at.desc())
+        .limit(limit)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
 async def count_jobs_by_source(session: AsyncSession, user_id: int) -> dict[JobSource, int]:
     """Count of live Jobs per source for the user.
 

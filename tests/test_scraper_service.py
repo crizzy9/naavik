@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -346,3 +347,136 @@ async def test_run_scraper_inherits_scraper_internal_errors():
     assert run.listings_returned == 3
     assert run.new_jobs == 3
     assert any("parse_failure" in e for e in run.errors)
+
+
+# ── Post-finalize notification dispatch (plan 37 / 0.2.0.12) ────────────
+
+
+@pytest.mark.asyncio
+async def test_run_scraper_dispatches_notify_on_success_with_new_jobs():
+    """SUCCESS run with new_jobs > 0 → notify_scrape_run_summary fires once."""
+    scraper = SampleScraper(client=_client_no_sleep())
+    session = _setup_session_for_sample(scraper, all_new=True)
+    # Settings lookup (post-finalize) returns a stub for user_id=1.
+    fake_settings = SimpleNamespace(user_id=1)
+    session.exec_queue.append(_exec_one(fake_settings))
+    # list_new_jobs_from_run query returns 2 stand-in jobs.
+    session.exec_queue.append(
+        SimpleNamespace(
+            one_or_none=lambda: None,
+            all=lambda: [
+                SimpleNamespace(role="A", company="X", url="https://x.example/1"),
+                SimpleNamespace(role="B", company="Y", url="https://y.example/2"),
+            ],
+        )
+    )
+
+    notify_mock = AsyncMock()
+    with patch("services.scraper_service.notify_scrape_run_summary", new=notify_mock):
+        run = await scraper_service.run_scraper(
+            session,  # type: ignore[arg-type]
+            scraper=scraper,
+            user_id=1,
+        )
+
+    assert run.status is JobScrapeStatus.SUCCESS
+    assert run.new_jobs == 3
+    notify_mock.assert_awaited_once()
+    kwargs = notify_mock.await_args.kwargs
+    assert kwargs["settings"] is fake_settings
+    assert kwargs["run"] is run
+    assert len(kwargs["top_jobs"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_run_scraper_skips_notify_when_no_new_jobs():
+    """All upserts hit existing rows → new_jobs == 0 → no notify."""
+    scraper = SampleScraper(client=_client_no_sleep())
+    session = _FakeSession()
+    # 3 yields, each existence check returns an existing Job row → updated.
+    for i in range(3):
+        existing = SimpleNamespace(
+            id=10 + i,
+            user_id=1,
+            source=JobSource.MANUAL,
+            external_id=f"manual-sample-{i:03d}",
+            description_extracted_at=None,
+            updated_at=None,
+            raw_meta={},
+            last_scrape_run_id=None,
+        )
+        session.exec_queue.append(_exec_one(existing))
+
+    notify_mock = AsyncMock()
+    with patch("services.scraper_service.notify_scrape_run_summary", new=notify_mock):
+        run = await scraper_service.run_scraper(
+            session,  # type: ignore[arg-type]
+            scraper=scraper,
+            user_id=1,
+        )
+
+    assert run.status is JobScrapeStatus.SUCCESS
+    assert run.new_jobs == 0
+    notify_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_scraper_skips_notify_on_failed_status():
+    """FAILED status → no notify even if new_jobs > 0 (status guard)."""
+    scraper = _RaisingScraper(yield_before=0, exc=RuntimeError("auth invalid"))
+    session = _FakeSession()
+
+    notify_mock = AsyncMock()
+    with patch("services.scraper_service.notify_scrape_run_summary", new=notify_mock):
+        run = await scraper_service.run_scraper(
+            session,  # type: ignore[arg-type]
+            scraper=scraper,
+            user_id=1,
+        )
+
+    assert run.status is JobScrapeStatus.FAILED
+    notify_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_scraper_notify_false_skips_dispatch():
+    """notify=False opt-out → no notify even on SUCCESS with new_jobs > 0."""
+    scraper = SampleScraper(client=_client_no_sleep())
+    session = _setup_session_for_sample(scraper, all_new=True)
+
+    notify_mock = AsyncMock()
+    with patch("services.scraper_service.notify_scrape_run_summary", new=notify_mock):
+        run = await scraper_service.run_scraper(
+            session,  # type: ignore[arg-type]
+            scraper=scraper,
+            user_id=1,
+            notify=False,
+        )
+
+    assert run.status is JobScrapeStatus.SUCCESS
+    assert run.new_jobs == 3
+    notify_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_scraper_notify_failure_does_not_block_lifecycle():
+    """A raise from notify_scrape_run_summary is swallowed; run still returns."""
+    scraper = SampleScraper(client=_client_no_sleep())
+    session = _setup_session_for_sample(scraper, all_new=True)
+    fake_settings = SimpleNamespace(user_id=1)
+    session.exec_queue.append(_exec_one(fake_settings))
+    session.exec_queue.append(SimpleNamespace(one_or_none=lambda: None, all=lambda: []))
+
+    async def _boom(**_kw):
+        raise RuntimeError("notify died")
+
+    with patch("services.scraper_service.notify_scrape_run_summary", new=_boom):
+        run = await scraper_service.run_scraper(
+            session,  # type: ignore[arg-type]
+            scraper=scraper,
+            user_id=1,
+        )
+
+    # Run lifecycle stayed SUCCESS; notify failure is best-effort.
+    assert run.status is JobScrapeStatus.SUCCESS
+    assert run.new_jobs == 3

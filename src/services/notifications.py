@@ -22,7 +22,7 @@ from typing import Any
 import httpx
 
 from config import settings as app_settings
-from models import Application, Job, Settings
+from models import Application, Job, JobScrapeRun, Settings
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +33,11 @@ EVENT_INTERVIEW_SCHEDULED = "interview_scheduled"
 EVENT_OFFER_RECEIVED = "offer_received"
 EVENT_REJECTION = "rejection"
 EVENT_AUTO_APPLY_FAILED = "auto_apply_failed"
+# Plan 37 / 0.2.0.12: per-scrape-run summary fired after run_scraper finalizes.
+EVENT_SCRAPE_RUN_NEW_JOBS = "scrape_run_new_jobs"
+
+# Plan 37 / 0.2.0.12: max top-jobs links inlined into the summary embed/text.
+_SCRAPE_RUN_TOP_N = 5
 
 
 # ── Toast / SSE in-app routing ─────────────────────────────────────────
@@ -151,6 +156,7 @@ def _is_event_enabled(settings: Settings, event: str) -> bool:
             EVENT_OFFER_RECEIVED: True,
             EVENT_REJECTION: False,
             EVENT_AUTO_APPLY_FAILED: True,
+            EVENT_SCRAPE_RUN_NEW_JOBS: True,
         }
         return defaults.get(event, True)
     return bool(payload.get(event, True))
@@ -361,3 +367,192 @@ async def notify_admin_error(
     finally:
         if owns:
             await client.aclose()
+
+
+# ── Per-scrape-run summary (plan 37 / 0.2.0.12) ────────────────────────
+
+
+def _embed_for_scrape_run(run: JobScrapeRun, top_jobs: list[Job]) -> dict[str, Any]:
+    """Discord rich embed for one completed JobScrapeRun summary.
+
+    Description: bulleted top-N job links (`+M more` line when truncated).
+    Fields: run counters + score-gate disclaimer. Color matches the
+    `EVENT_NEW_HIGH_SCORE` cyan convention.
+    """
+    source = run.source.value
+    total_new = run.new_jobs
+
+    lines: list[str] = []
+    for job in top_jobs[:_SCRAPE_RUN_TOP_N]:
+        # role @ company — link
+        role = job.role or "—"
+        company = job.company or "—"
+        url = job.url or ""
+        lines.append(f"• {role} @ {company} — {url}")
+    leftover = max(0, total_new - len(lines))
+    if leftover > 0:
+        lines.append(f"• … +{leftover} more")
+    description = "\n".join(lines) if lines else "(no link-able new jobs)"
+
+    duration_label = "—"
+    if run.duration_ms is not None:
+        duration_label = f"{run.duration_ms / 1000:.1f}s"
+
+    run_summary = (
+        f"{source} · {run.listings_returned} listings · "
+        f"{run.new_jobs} new · {run.updated_jobs} updated · "
+        f"{duration_label}"
+    )
+
+    finished = (run.finished_at or run.started_at).isoformat()
+
+    return {
+        "title": f"🆕 {total_new} new jobs from {source}",
+        "description": description[:4000],
+        "color": 5793266,  # cyan — matches EVENT_NEW_HIGH_SCORE
+        "fields": [
+            {"name": "Run", "value": run_summary, "inline": False},
+            {
+                "name": "Threshold",
+                "value": "score gate disabled until 0.3.0",
+                "inline": False,
+            },
+        ],
+        "footer": {"text": f"naavik · {finished}"},
+    }
+
+
+def _telegram_text_for_scrape_run(run: JobScrapeRun, top_jobs: list[Job]) -> str:
+    """Markdown-formatted summary for Telegram sendMessage.
+
+    Stays well under the 4096-byte payload limit via the top-N cap.
+    """
+    source = run.source.value
+    total_new = run.new_jobs
+
+    lines = [f"📌 *{total_new} new jobs from {source}*"]
+    for job in top_jobs[:_SCRAPE_RUN_TOP_N]:
+        role = job.role or "—"
+        company = job.company or "—"
+        url = job.url or ""
+        lines.append(f"• {role} @ {company} — {url}")
+    leftover = max(0, total_new - min(len(top_jobs), _SCRAPE_RUN_TOP_N))
+    if leftover > 0:
+        lines.append(f"• … +{leftover} more")
+
+    duration_label = "—"
+    if run.duration_ms is not None:
+        duration_label = f"{run.duration_ms / 1000:.1f}s"
+    lines.append(
+        f"_Run: {run.listings_returned} listings · "
+        f"{run.new_jobs} new · {run.updated_jobs} updated · "
+        f"{duration_label}_"
+    )
+    return "\n".join(lines)[:4000]
+
+
+async def _send_discord_scrape_run(
+    *,
+    settings: Settings,
+    run: JobScrapeRun,
+    top_jobs: list[Job],
+    http_client: httpx.AsyncClient | None = None,
+) -> bool:
+    """Post the per-scrape-run Discord embed. Silently no-ops when muted or
+    webhook unset. Logs + returns False on transport error.
+    """
+    if not _is_event_enabled(settings, EVENT_SCRAPE_RUN_NEW_JOBS):
+        return False
+    url = _discord_url()
+    if not url:
+        return False
+    body = {"embeds": [_embed_for_scrape_run(run, top_jobs)]}
+    client = http_client or httpx.AsyncClient(timeout=10.0)
+    owns = http_client is None
+    try:
+        resp = await client.post(url, json=body)
+        if resp.status_code >= 300:
+            log.warning(
+                "discord scrape-run webhook failed: %d %s",
+                resp.status_code,
+                resp.text[:200],
+            )
+            return False
+        return True
+    except httpx.RequestError as exc:
+        log.warning("discord scrape-run webhook errored: %s", exc)
+        return False
+    finally:
+        if owns:
+            await client.aclose()
+
+
+async def _send_telegram_scrape_run(
+    *,
+    settings: Settings,
+    run: JobScrapeRun,
+    top_jobs: list[Job],
+    http_client: httpx.AsyncClient | None = None,
+) -> bool:
+    """Post the per-scrape-run Telegram summary. Silently no-ops when muted
+    or bot token / chat id unset.
+    """
+    if not _is_event_enabled(settings, EVENT_SCRAPE_RUN_NEW_JOBS):
+        return False
+    token = _telegram_token()
+    chat = _telegram_chat_id()
+    if not token or not chat:
+        return False
+    text = _telegram_text_for_scrape_run(run, top_jobs)
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    body = {"chat_id": chat, "text": text, "parse_mode": "Markdown"}
+    client = http_client or httpx.AsyncClient(timeout=10.0)
+    owns = http_client is None
+    try:
+        resp = await client.post(url, json=body)
+        if resp.status_code >= 300:
+            log.warning(
+                "telegram scrape-run send failed: %d %s",
+                resp.status_code,
+                resp.text[:200],
+            )
+            return False
+        return True
+    except httpx.RequestError as exc:
+        log.warning("telegram scrape-run send errored: %s", exc)
+        return False
+    finally:
+        if owns:
+            await client.aclose()
+
+
+async def notify_scrape_run_summary(
+    *,
+    settings: Settings,
+    run: JobScrapeRun,
+    top_jobs: list[Job],
+    http_client: httpx.AsyncClient | None = None,
+) -> None:
+    """Fan-out one JobScrapeRun summary to Discord + Telegram + in-app toast.
+
+    No-ops when `run.new_jobs <= 0` so the caller can invoke unconditionally
+    after lifecycle finalize. Per-channel mutes + missing-env cases handled
+    inside each send helper. `asyncio.gather(return_exceptions=True)` so a
+    bad-actor channel never cancels the others.
+    """
+    if run.new_jobs <= 0:
+        return
+    await asyncio.gather(
+        _send_discord_scrape_run(
+            settings=settings, run=run, top_jobs=top_jobs, http_client=http_client
+        ),
+        _send_telegram_scrape_run(
+            settings=settings, run=run, top_jobs=top_jobs, http_client=http_client
+        ),
+        push_toast(
+            "info",
+            f"{run.new_jobs} new jobs from {run.source.value}",
+            f"{run.listings_returned} listings · {run.updated_jobs} updated",
+        ),
+        return_exceptions=True,
+    )

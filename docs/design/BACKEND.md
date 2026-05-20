@@ -402,9 +402,12 @@ scheduler/scrape_jobs_<source>                          # 0.2.0.10
     → scraper.scrape(query) yields RawJob...             # 0.2.0.07 site subclasses
     → job_service.upsert_job(session, raw=...) per yield
     → prompts.extract_job(provider, description_html)   # 0.2.0.08 (separate pass)
-    → scorer.score(job, profile)                        # post-extract pass
+    → scorer.score(job, profile)                        # post-extract pass (Phase 3)
     → AppEvent emitted
-    → notifications.notify_new_high_score_job() if score ≥ threshold
+    → notifications.notify_new_high_score_job() if score ≥ threshold (Phase 3+)
+  → [lifecycle finalize] update JobScrapeRun row
+  → notifications.notify_scrape_run_summary(settings, run, top_jobs) # 0.2.0.12
+    → _send_discord_scrape_run + _send_telegram_scrape_run + push_toast (asyncio.gather)
 ```
 
 **Manual review-and-apply (foreground):**
@@ -821,19 +824,21 @@ Session cookie persisted via `vault.set(scope="integrations", key="linkedin.sess
 
 ### L.3 Discord webhook (outbound only)
 
-URL stored via `vault.set(scope="notifications", key="discord_webhook_url", ...)`. `services/notifications.py` posts on:
+URL configured via `DISCORD_WEBHOOK_URL` env var (plan 26 / `0.2.0.01` — vault sunset replaced the `vault.set(scope="notifications", ...)` slot). `services/notifications.py` posts on:
 
-- New high-score job (≥ `Settings.notify_threshold`)
-- Application submitted
-- Interview invitation received (auto-classified)
-- Offer received
-- Rejection received (configurable; default OFF — too noisy)
+- New high-score job (≥ `Settings.notify_threshold`) — `EVENT_NEW_HIGH_SCORE`, per-job (score-gated, fires at scoring time; Phase 3+)
+- Application submitted — `EVENT_APPLICATION_SENT`
+- Interview invitation received (auto-classified) — `EVENT_INTERVIEW_SCHEDULED`
+- Offer received — `EVENT_OFFER_RECEIVED`
+- Rejection received (configurable; default OFF — too noisy) — `EVENT_REJECTION`
+- Auto-apply failed — `EVENT_AUTO_APPLY_FAILED`
+- **Per-scrape-run summary** — `EVENT_SCRAPE_RUN_NEW_JOBS` (plan 37 / `0.2.0.12`). One Discord embed per completed `JobScrapeRun` with `new_jobs > 0` and `status in (SUCCESS, PARTIAL)`. Description lists top-5 non-duplicate new Jobs by `found_at DESC`; footer summarizes counters + duration. Score-blind for the 0.2.x window — coexists with the score-gated `EVENT_NEW_HIGH_SCORE` per-job ping that lights up at `0.3.0.02`.
 
 Body: rich embed with company logo, role, score, link.
 
 ### L.4 Telegram bot (outbound + inbound)
 
-Bot token via `vault.set(scope="notifications", key="telegram_bot_token", ...)`. Outbound: same events as Discord. Inbound (Phase 5): `/status`, `/today`, `/silent` commands query the pipeline.
+Bot token configured via `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` env vars (plan 26 / `0.2.0.01`). Outbound: same events as Discord, including `EVENT_SCRAPE_RUN_NEW_JOBS` (plan 37 / `0.2.0.12`) — Markdown-formatted summary, top-5 cap keeps the payload well under Telegram's 4096-byte limit. Inbound (Phase 5): `/status`, `/today`, `/silent` commands query the pipeline.
 
 **Implementation note:** the inbound long-poll runs as a **separate worker task** under the FastAPI lifespan, not as an APScheduler job (see § I.3). Outbound notifications use APScheduler as needed.
 
