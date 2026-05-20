@@ -490,13 +490,15 @@ async def get_settings_submissions(
 async def get_settings_llm_provider(
     request: Request,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     """Settings · LLM Provider tab with daily cost-cap widget — plan 54 / 0.2.5.03.
 
     Dedicated route (vs. catch-all `/settings/{tab}`) so we can `Depends(get_session)`
     without changing the catch-all's signature (existing tests rely on it being
-    DB-free). Auth on the LLM tab tightens as a separate row; for now this
-    route is unauthed in line with the catch-all.
+    DB-free). Plan 56 / 0.2.7.20 — gated by `require_authed_session` matching the
+    Sources + Submissions sub-tabs; the daily-cost widget aggregates per-user
+    ApiUsage rows and shouldn't leak unauth.
     """
     ctx = await _ctx_for_tab(request, "llm-provider", session=session)
     if request.headers.get("HX-Request") == "true":

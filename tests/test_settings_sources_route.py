@@ -382,3 +382,30 @@ def test_build_sources_view_workday_kind_is_db_workday(monkeypatch, _patch_route
     workday = next(r for r in rows if r["source"] == JobSource.WORKDAY.value)
     assert workday["configure"]["kind"] == "db-workday"
     assert workday["configure"]["companies"] == ["acme/External", "globex/Careers"]
+
+
+# ── Plan 56 · item 7 (0.2.7.20) — /settings/llm-provider auth dep ────────
+
+
+def test_get_settings_llm_provider_requires_auth(client: TestClient):
+    """`/settings/llm-provider` without naavik_session cookie → 401."""
+    bare = TestClient(client.app, raise_server_exceptions=True)
+    r = bare.get("/settings/llm-provider")
+    assert r.status_code == 401
+
+
+def test_get_settings_llm_provider_authed_renders_panel(
+    client: TestClient, auth_cookies, monkeypatch
+):
+    """`/settings/llm-provider` with fake-session cookie → 200 + panel chrome."""
+    from services import llm_tracker
+
+    async def _zero(session, *, user_id):
+        return 0.0
+
+    monkeypatch.setattr(llm_tracker, "today_cost_usd", _zero)
+
+    r = client.get("/settings/llm-provider", cookies=auth_cookies)
+    assert r.status_code == 200, r.text
+    # LLM Provider tab body renders — the provider radio cards must appear.
+    assert "Anthropic Claude" in r.text or "anthropic" in r.text.lower()
