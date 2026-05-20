@@ -13,10 +13,12 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db import sample_data as sd
-from models import User
-from services import env_secrets
+from db.session import get_session
+from models import JobSource, User
+from services import env_secrets, job_service, settings_service
 from services.auth import require_authed_session, require_password_complete
 from ui.templates_setup import templates
 
@@ -163,7 +165,12 @@ _ON_DISK = [
 # ─────────────────────────────────────────────────────────────────────────
 
 
-async def _ctx_for_tab(request: Request, tab: str) -> dict[str, object]:
+async def _ctx_for_tab(
+    request: Request,
+    tab: str,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, object]:
     if tab not in _VALID_TABS:
         raise HTTPException(status_code=404, detail="Unknown settings tab")
     settings = await sd.get_settings()
@@ -171,7 +178,7 @@ async def _ctx_for_tab(request: Request, tab: str) -> dict[str, object]:
     provider_id = settings.llm_provider.value if settings else "anthropic"
     deployment_info = await _deployment_render_info(settings)
 
-    return {
+    ctx: dict[str, object] = {
         "current_tab": tab,
         "tab_template": _TAB_TEMPLATES[tab],
         "settings": settings,
@@ -194,6 +201,164 @@ async def _ctx_for_tab(request: Request, tab: str) -> dict[str, object]:
         "active_template_path": "/settings/:tab" if tab != "llm-provider" else "/settings",
     }
 
+    if tab == "sources":
+        ctx["sources_view"] = await _build_sources_view(session)
+
+    return ctx
+
+
+# ── Sources panel context (plan 49 / 0.2.0.16) ──────────────────────────
+
+
+_SOURCES_PANEL = [
+    {"value": JobSource.LINKEDIN, "label": "LinkedIn", "icon": "linkedin"},
+    {"value": JobSource.WORKDAY, "label": "Workday", "icon": "briefcase"},
+    {"value": JobSource.GREENHOUSE, "label": "Greenhouse", "icon": "leaf"},
+    {"value": JobSource.LEVER, "label": "Lever", "icon": "git-branch"},
+    {"value": JobSource.ASHBY, "label": "Ashby", "icon": "globe"},
+    {"value": JobSource.INDEED, "label": "Indeed", "icon": "search"},
+]
+
+# Fallback cron strings when Settings.source_schedules is empty.
+_DEFAULT_SCHEDULES: dict[str, str] = {
+    "linkedin": "*/30 * * * *",
+    "workday": "0 * * * *",
+    "greenhouse": "0 * * * *",
+    "lever": "0 * * * *",
+    "ashby": "0 * * * *",
+    "indeed": "every 90 min",
+}
+
+_ENV_VAR_FOR_SOURCE = {
+    "workday": "WORKDAY_COMPANIES",
+    "greenhouse": "GREENHOUSE_COMPANIES",
+    "lever": "LEVER_COMPANIES",
+    "ashby": "ASHBY_COMPANIES",
+}
+
+_ENV_EXAMPLE_FOR_SOURCE = {
+    "workday": "WORKDAY_COMPANIES=salesforce/External,adobe/Adobe_Careers",
+    "greenhouse": "GREENHOUSE_COMPANIES=anthropic,scale,databricks",
+    "lever": "LEVER_COMPANIES=netflix,figma",
+    "ashby": "ASHBY_COMPANIES=ramp,vercel",
+}
+
+
+def _format_started_at(dt) -> str:
+    """Render a human-readable "Nh ago" / "Nm ago" / ISO date for last-run timestamp."""
+    from datetime import UTC, datetime
+
+    if dt is None:
+        return ""
+    now = datetime.now(UTC)
+    started = dt
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=UTC)
+    delta = now - started
+    seconds = max(int(delta.total_seconds()), 0)
+    if seconds < 60:
+        return f"{seconds}s ago"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    if days < 7:
+        return f"{days}d ago"
+    return started.strftime("%Y-%m-%d")
+
+
+async def _build_sources_view(session: AsyncSession | None) -> list[dict]:
+    """Compose the per-source view list consumed by `_settings_sources.html`.
+
+    Per plan 49 § D.1 — pulls (a) Settings (SQL row when session present;
+    shadow fallback otherwise), (b) latest JobScrapeRun per source via
+    `job_service.list_recent_scrape_runs_by_source`, (c) env-vs-DB
+    configured indicator via `env_secrets.scraper_source_configured`,
+    (d) resolved rate-limit via `scraper.rate_limit.resolve_rate_limit`.
+    """
+    from config import settings as app_settings
+    from scraper.rate_limit import resolve_rate_limit
+
+    if session is None:
+        # The /settings/sources route always provides a session via
+        # Depends(get_session); None here is unreachable in production.
+        return []
+
+    settings_obj = await settings_service.get_or_create(session, user_id=1)
+    last_runs = await job_service.list_recent_scrape_runs_by_source(session, user_id=1)
+
+    rows: list[dict] = []
+    for entry in _SOURCES_PANEL:
+        source: JobSource = entry["value"]
+        source_value = source.value
+        sources_enabled = getattr(settings_obj, "sources_enabled", {}) or {}
+        source_schedules = getattr(settings_obj, "source_schedules", {}) or {}
+        configured = env_secrets.scraper_source_configured(source, settings_obj)
+        rate_limit = resolve_rate_limit(settings_obj, source)
+        run = last_runs.get(source)
+        last_run_view: dict | None = None
+        if run is not None:
+            if run.status.value == "running" or run.finished_at is None:
+                status_value = "running"
+            else:
+                status_value = run.status.value
+            last_run_view = {
+                "status_value": status_value,
+                "started_at_label": _format_started_at(run.started_at),
+            }
+        configure_block: dict
+        if source_value in _ENV_VAR_FOR_SOURCE:
+            configure_block = {
+                "kind": "env",
+                "env_var": _ENV_VAR_FOR_SOURCE[source_value],
+                "example": _ENV_EXAMPLE_FOR_SOURCE.get(source_value),
+            }
+            if source is JobSource.WORKDAY:
+                current = getattr(settings_obj, "workday_companies", None) or []
+            elif source is JobSource.GREENHOUSE:
+                current = app_settings.greenhouse_companies or []
+            elif source is JobSource.LEVER:
+                current = app_settings.lever_companies or []
+            elif source is JobSource.ASHBY:
+                current = app_settings.ashby_companies or []
+            else:
+                current = []
+            if current:
+                configure_block["current"] = ", ".join(current)
+        else:
+            keywords_attr = (
+                "linkedin_keywords" if source is JobSource.LINKEDIN else "indeed_keywords"
+            )
+            location_attr = (
+                "linkedin_location" if source is JobSource.LINKEDIN else "indeed_location"
+            )
+            configure_block = {
+                "kind": "db",
+                "keywords": list(getattr(settings_obj, keywords_attr, None) or []),
+                "location": getattr(settings_obj, location_attr, None) or "",
+            }
+        rows.append(
+            {
+                "source": source_value,
+                "label": entry["label"],
+                "icon": entry["icon"],
+                "enabled": bool(sources_enabled.get(source_value, True)),
+                "configured": configured,
+                "last_run": last_run_view,
+                "schedule": source_schedules.get(source_value, _DEFAULT_SCHEDULES[source_value]),
+                "rate_limit": {
+                    "rpm": rate_limit.rpm,
+                    "delay_lo": rate_limit.delay_lo,
+                    "delay_hi": rate_limit.delay_hi,
+                },
+                "configure": configure_block,
+            }
+        )
+    return rows
+
 
 async def _deployment_render_info(settings) -> dict[str, object]:
     """Build the `deployment` ctx dict consumed by `_settings_deployment.html`.
@@ -214,6 +379,25 @@ async def _deployment_render_info(settings) -> dict[str, object]:
 @router.get("/settings", response_class=HTMLResponse, name="settings")
 async def get_settings(request: Request):
     ctx = await _ctx_for_tab(request, "llm-provider")
+    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+
+
+@router.get("/settings/sources", response_class=HTMLResponse, name="settings_sources")
+async def get_settings_sources(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+):
+    """Settings · Sources sub-tab — plan 49 / 0.2.0.16.
+
+    Gated by `require_authed_session` so unauthed callers receive 401 (rest
+    of Settings sub-tabs remain unauthed today; the auth tightening for
+    other tabs lands as a separate row). `Depends(get_session)` is the
+    canonical entry; tests override via `app.dependency_overrides`.
+    """
+    ctx = await _ctx_for_tab(request, "sources", session=session)
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(request, "pages/_settings_sources.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 

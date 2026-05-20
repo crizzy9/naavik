@@ -125,6 +125,84 @@ def test_is_configured_unknown_scope_returns_false(env_settings):
     assert env_secrets.is_configured("") is False
 
 
+def test_scraper_source_configured_workday_reads_settings(env_settings):
+    """Workday source is configured iff Settings.workday_companies is non-empty."""
+    from types import SimpleNamespace
+
+    from models import JobSource
+    from services import env_secrets
+
+    empty = SimpleNamespace(workday_companies=[], linkedin_keywords=None, indeed_keywords=None)
+    assert env_secrets.scraper_source_configured(JobSource.WORKDAY, empty) is False
+
+    populated = SimpleNamespace(
+        workday_companies=["adobe", "salesforce"],
+        linkedin_keywords=None,
+        indeed_keywords=None,
+    )
+    assert env_secrets.scraper_source_configured(JobSource.WORKDAY, populated) is True
+
+
+def test_scraper_source_configured_greenhouse_lever_ashby_read_env(env_settings, monkeypatch):
+    """Company-list env vars drive Greenhouse / Lever / Ashby configured indicator."""
+    from types import SimpleNamespace
+
+    from models import JobSource
+    from services import env_secrets
+
+    settings = SimpleNamespace(workday_companies=[], linkedin_keywords=None, indeed_keywords=None)
+
+    monkeypatch.setattr(env_settings, "greenhouse_companies", None)
+    monkeypatch.setattr(env_settings, "lever_companies", None)
+    monkeypatch.setattr(env_settings, "ashby_companies", None)
+    assert env_secrets.scraper_source_configured(JobSource.GREENHOUSE, settings) is False
+    assert env_secrets.scraper_source_configured(JobSource.LEVER, settings) is False
+    assert env_secrets.scraper_source_configured(JobSource.ASHBY, settings) is False
+
+    monkeypatch.setattr(env_settings, "greenhouse_companies", ["anthropic"])
+    monkeypatch.setattr(env_settings, "lever_companies", ["netflix"])
+    monkeypatch.setattr(env_settings, "ashby_companies", ["ramp"])
+    assert env_secrets.scraper_source_configured(JobSource.GREENHOUSE, settings) is True
+    assert env_secrets.scraper_source_configured(JobSource.LEVER, settings) is True
+    assert env_secrets.scraper_source_configured(JobSource.ASHBY, settings) is True
+
+
+def test_scraper_source_configured_linkedin_indeed_read_keywords(env_settings):
+    """LinkedIn / Indeed configured indicator follows per-user keywords."""
+    from types import SimpleNamespace
+
+    from models import JobSource
+    from services import env_secrets
+
+    empty = SimpleNamespace(workday_companies=[], linkedin_keywords=None, indeed_keywords=None)
+    assert env_secrets.scraper_source_configured(JobSource.LINKEDIN, empty) is False
+    assert env_secrets.scraper_source_configured(JobSource.INDEED, empty) is False
+
+    populated = SimpleNamespace(
+        workday_companies=[],
+        linkedin_keywords=["staff engineer"],
+        indeed_keywords=["sre"],
+    )
+    assert env_secrets.scraper_source_configured(JobSource.LINKEDIN, populated) is True
+    assert env_secrets.scraper_source_configured(JobSource.INDEED, populated) is True
+
+
+def test_scraper_source_configured_unsupported_sources_return_false(env_settings):
+    """COMPANY_DIRECT / RSSHUB / N8N_LEGACY / MANUAL are not surfaced on the panel."""
+    from types import SimpleNamespace
+
+    from models import JobSource
+    from services import env_secrets
+
+    settings = SimpleNamespace(
+        workday_companies=["x"], linkedin_keywords=["x"], indeed_keywords=["x"]
+    )
+    assert env_secrets.scraper_source_configured(JobSource.COMPANY_DIRECT, settings) is False
+    assert env_secrets.scraper_source_configured(JobSource.RSSHUB, settings) is False
+    assert env_secrets.scraper_source_configured(JobSource.N8N_LEGACY, settings) is False
+    assert env_secrets.scraper_source_configured(JobSource.MANUAL, settings) is False
+
+
 def test_helpers_never_return_secret_values(env_settings, monkeypatch):
     """Defensive: every indicator helper returns bool, never the actual value."""
     from services import env_secrets

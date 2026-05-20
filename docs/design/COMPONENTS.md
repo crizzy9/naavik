@@ -1,6 +1,7 @@
 # Naavik Component Catalog
 
-> **Last updated:** 2026-05-20 (plan 36 / `0.2.0.11a` — registers 3 net-new Discover-group partials [`filter_toolbar.html`, `_filter_hidden_inputs.html`, `job_topbar.html`] + 1 new `filter_chip` macro. Net total: 88 partials + macro count grows by 1 in § I. Canonical Job-UI contract: `docs/design/JOB_UI.md`.)
+> **Last updated:** 2026-05-20 (plan 49 / `0.2.0.16` — registers 1 net-new Settings-group partial `_source_row.html` for the Settings · Sources sub-tab rewrite. Net total: 89 partials. Canonical contract: `docs/design/SOURCES_UI.md`.)
+> Earlier line: 2026-05-20 (plan 36 / `0.2.0.11a` — registers 3 net-new Discover-group partials [`filter_toolbar.html`, `_filter_hidden_inputs.html`, `job_topbar.html`] + 1 new `filter_chip` macro. Net total: 88 partials + macro count grows by 1 in § I. Canonical Job-UI contract: `docs/design/JOB_UI.md`.)
 > Earlier line: 2026-04-30
 > **Status:** Canonical — graduated from `docs/plans/03-component-catalog.md` (archived).
 > **Scope:** Every Jinja partial under `src/ui/templates/components/`. The contract Stage 2 implementation builds against; Stage 3 page templates compose entirely from these partials.
@@ -10,7 +11,7 @@
 
 ## A · Inventory
 
-The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 88 components** across 12 groups.
+The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 89 components** across 12 groups.
 
 | Group | Count | Components |
 |---|---|---|
@@ -24,9 +25,9 @@ The library lives at `src/ui/templates/components/`. Components grouped by respo
 | Discover · review & apply | 6 | `apply_topbar.html`, `warm_intro_card.html`, `tailored_bullet_row.html`, `cover_letter_section.html`, `screener_question_card.html`, `apply_action_bar.html` |
 | Tracking | 8 | `view_toggle.html`, `provider_chip.html`, `integration_card.html`, `followup_banner.html`, `stage_column.html`, `tracking_card.html`, `tracking_list_row.html`, `tracking_board.html` |
 | Outreach | 6 | `outreach_app_row.html`, `recommended_move_card.html`, `outreach_message_card.html`, `contact_card.html`, `linkedin_status_chip.html`, `outreach_timeline.html` |
-| Settings | 7 | `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `deployment_status_card.html`, `log_tail.html`, `on_disk_card.html`, `connection_status_card.html` |
+| Settings | 8 | `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `deployment_status_card.html`, `log_tail.html`, `on_disk_card.html`, `connection_status_card.html`, `_source_row.html` (plan 49) |
 | Skeletons | 5 | `swipe_card_skeleton.html`, `tracking_card_skeleton.html`, `priority_action_row_skeleton.html`, `email_signal_row_skeleton.html`, `bullet_edit_row_skeleton.html` |
-| **Total** | **88** | |
+| **Total** | **89** | |
 
 Cover letter generation lives inside Discover · review & apply (no standalone screen) — its components (`cover_letter_section.html`, `screener_question_card.html`) are listed under that group. The standalone Cover Letter generator's earlier components (`letter_editor.html`, `tone_picker.html`, `output_mode_card.html`, `model_attribution_chip.html`) are NOT in MVP and dropped.
 
@@ -2060,6 +2061,26 @@ Mobile variant: circular `h-14 w-14 rounded-full` with icon only.
 ```
 **Mockup reference:** SCREENS.md § 11 LLM Provider tab.
 
+#### `_source_row.html`
+
+**Purpose:** Per-source row on the Settings · Sources sub-tab — composes the enable toggle, configured/unconfigured indicator, last-run status chip + timestamp, schedule, resolved rate-limit, and a `<details>` popover for per-source configuration. Plan 49 / `0.2.0.16`.
+**Used by:** Screen 11 (Settings · Sources). Included six times by `pages/_settings_sources.html`, once per JobSource (LinkedIn / Workday / Greenhouse / Lever / Ashby / Indeed).
+**API:**
+| Variable | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `view` | dict | yes | — | Composed by `_build_sources_view` in `src/ui/routes/settings.py`. Keys: `source` (str), `label` (str), `icon` (Lucide name), `enabled` (bool), `configured` (bool), `last_run` (dict or None), `schedule` (str), `rate_limit` (dict `{rpm, delay_lo, delay_hi}`), `configure` (dict `{kind: "env"|"db", ...}`) |
+
+**Visual spec:** `flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:gap-4`. Left cell: 32px icon tile (`bg-slate-800/80`) + label + configured chip (emerald/slate) + last-run meta (status chip tone-mapped per status; mono schedule next to it). Rate-limit caption (mono, `text-[11px] text-slate-500`) below row meta. Right cell: toggle (`peer-checked:bg-indigo-500`) stacked above `<details>` Configure popover.
+**Lucide icons:** `check-circle-2`, `circle`, `chevron-down`, plus per-source icons (`linkedin`, `briefcase`, `leaf`, `git-branch`, `globe`, `search`).
+**Variants:** by `view.enabled` × `view.configured` × `view.last_run.status_value` × `view.configure.kind`.
+**Example invocation:**
+```jinja
+{% with view=v %}
+  {% include "components/_source_row.html" %}
+{% endwith %}
+```
+**Canonical contract:** `docs/design/SOURCES_UI.md` § C.
+
 ---
 
 ### H.12 Skeletons
@@ -2198,7 +2219,7 @@ Add per-domain macros only when a domain grows past ~10 macros.
 | 8 Discover · review & apply | `sidebar`, `apply_topbar`, `match_breakdown`, `warm_intro_card`, `tailored_bullet_row`, `cover_letter_section`, `screener_question_card`, `apply_action_bar`, `ai_badge`, `tag_chip`, `avatar`, `confirm_modal` (Discard draft) |
 | 9 Tracking | `sidebar`, `tracking_board`, `tracking_card`, `tracking_list_row`, `integration_card`, `provider_chip`, `followup_banner`, `stage_column`, `view_toggle`, `tracking_card_skeleton`, `status_badge`, `score_circle`, `avatar`, `empty_state` |
 | 10 Outreach | `sidebar`, `outreach_app_row`, `outreach_message_card`, `contact_card`, `recommended_move_card`, `linkedin_status_chip`, `provider_chip`, `outreach_timeline`, `ai_badge`, `avatar`, `confirm_modal` (Disconnect LinkedIn) |
-| 11 Settings | `sidebar`, `settings_tabs`, `provider_card`, `cost_card`, `deployment_status_card`, `log_tail`, `on_disk_card`, `connection_status_card`, `integration_card`, `deployment_badge`, `confirm_modal` (Delete account / Disconnect Gmail) |
+| 11 Settings | `sidebar`, `settings_tabs`, `provider_card`, `cost_card`, `deployment_status_card`, `log_tail`, `on_disk_card`, `connection_status_card`, `_source_row` (plan 49), `integration_card`, `deployment_badge`, `confirm_modal` (Delete account / Disconnect Gmail) |
 | 12 Job detail (plan 36) | `sidebar`, `job_topbar` (plan 36), `avatar`, `tag_chip`, `chip` macro, `empty_state` (when applicable), Lucide icons (`arrow-left`, `external-link`, `sparkles`, `bookmark`, `x`, `copy`). See `docs/design/JOB_UI.md` § D for the composition contract. |
 
 Common across every authenticated screen: `sidebar`, `button`, `card`, `tag_chip`, `status_dot`, `toast` (OOB region). Common across all screens: `spinner` (in-button), `toast`.
