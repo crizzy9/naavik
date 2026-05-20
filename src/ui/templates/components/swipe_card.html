@@ -32,8 +32,18 @@
       <div class="text-[10px] uppercase tracking-wide text-white/80 font-mono">COMPANY</div>
       <div class="text-base font-semibold text-white truncate">{{ j.role }}{% if j.team %} · {{ j.team }}{% endif %}</div>
     </div>
-    <div class="shrink-0">
-      {{ score_circle(score=j.score, size="default", text_color_override="text-white") }}
+    <div class="shrink-0 flex flex-col items-end gap-1">
+      {% if j.unscored %}
+        {#
+          Plan 36 § E row 2 — pre-0.3.0 jobs land with `score=0.0`. Render a
+          placeholder pill instead of a meaningless 0/100 circle so the swipe
+          stack doesn't look broken on freshly-scraped DB rows.
+        #}
+        <span class="inline-flex h-16 w-16 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/30 text-white text-2xl font-mono">—</span>
+        <span class="text-[10px] uppercase tracking-wide text-white/80 font-mono">unscored</span>
+      {% else %}
+        {{ score_circle(score=j.score, size="default", text_color_override="text-white") }}
+      {% endif %}
     </div>
   </header>
 
@@ -46,6 +56,17 @@
       {% if j.team_size %}{{ meta_item("users-round", j.team_size) }}{% endif %}
       {% if j.visa_friendly %}{{ meta_item("user-check", "sponsorship ok") }}{% endif %}
       {% if j.posted_relative %}{{ meta_item("clock", j.posted_relative) }}{% endif %}
+      {# Plan 36 § A · D.1 — "More info" affordance to /jobs/{id}.
+         Stops propagation so the parent tap-to-expand binding to /discover/{id}
+         doesn't fire when the user clicks the link itself. #}
+      <a href="/jobs/{{ j.id }}"
+         class="ml-auto inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-indigo-300 font-mono transition"
+         hx-boost="false"
+         onclick="event.stopPropagation()"
+         data-job-detail-link>
+        <i data-lucide="info" class="h-3 w-3" stroke-width="1.5"></i>
+        More info
+      </a>
     </div>
 
     {# Tag row — warm intro chip first if applicable. #}

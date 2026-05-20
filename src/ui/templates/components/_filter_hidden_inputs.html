@@ -1,0 +1,32 @@
+{#
+  _filter_hidden_inputs.html — preserve sibling filter axes during a
+  single-axis change. Each per-chip <form> includes this; the chip's own
+  field overrides the hidden one because HTMX serializes nearest-form-first
+  but in this layout each form is independent, so we only emit hidden inputs
+  for axes OTHER than the one being changed. Templates pass `current_axis`
+  via `{% with current_axis="source" %}…{% endwith %}` if needed — when
+  unset, every axis is mirrored so the form is self-sufficient.
+#}
+{% set f = filters %}
+{% set axis = current_axis | default(none) %}
+{% if axis != "source" and f.source %}
+  <input type="hidden" name="source" value="{{ f.source.value }}">
+{% endif %}
+{% if axis != "visa" and f.visa %}
+  <input type="hidden" name="visa" value="{{ f.visa.value }}">
+{% endif %}
+{% if axis != "seniority" and f.seniority %}
+  <input type="hidden" name="seniority" value="{{ f.seniority.value }}">
+{% endif %}
+{% if axis != "remote_only" and f.remote_only %}
+  <input type="hidden" name="remote_only" value="1">
+{% endif %}
+{% if axis != "include_duplicates" and f.include_duplicates %}
+  <input type="hidden" name="include_duplicates" value="1">
+{% endif %}
+{% if axis != "score_min" and f.score_min > 0.0 %}
+  <input type="hidden" name="score_min" value="{{ f.score_min }}">
+{% endif %}
+{% if f.queue_state %}
+  <input type="hidden" name="queue_state" value="{{ f.queue_state.value }}">
+{% endif %}

@@ -20,9 +20,12 @@
         Saved · <span class="font-mono">{{ saved_count }}</span>
       </a>
       <button type="button"
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs">
+              data-filter-toolbar-toggle
+              data-filter-active="{{ filters_active | default(0) }}"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs"
+              onclick="document.getElementById('filter-toolbar').classList.toggle('hidden')">
         <i data-lucide="sliders-horizontal" class="h-3.5 w-3.5" stroke-width="1.5"></i>
-        Filters
+        Filters{% if filters_active and filters_active > 0 %} · <span class="font-mono text-indigo-300">{{ filters_active }}</span>{% endif %}
       </button>
       <button type="button"
               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-medium"
@@ -34,6 +37,10 @@
       </button>
     </div>
   </header>
+
+  {% with filters=filters, filters_active=filters_active %}
+    {% include "components/filter_toolbar.html" %}
+  {% endwith %}
 
   {% with stats=stats %}
     {% include "components/discover_stats_strip.html" %}

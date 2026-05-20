@@ -91,11 +91,19 @@ async def list_jobs(
     return list(rows)
 
 
-async def archive_job(session: AsyncSession, job_id: int) -> None:
-    """Soft-delete: sets `deleted_at = now()`. No-op if already archived."""
+async def archive_job(session: AsyncSession, job_id: int, *, user_id: int) -> None:
+    """Soft-delete: sets `deleted_at = now()`. No-op if already archived.
+
+    Raises ``PermissionError`` when ``job.user_id != user_id`` (closes the
+    0.7.0.15 IDOR row — UI handlers that wire skip/save / archive actions
+    must thread the authenticated user through this gate so a Job belonging
+    to user A cannot be archived by user B via a crafted URL).
+    """
     job = await get_job(session, job_id)
     if job is None or job.deleted_at is not None:
         return
+    if job.user_id != user_id:
+        raise PermissionError(f"job {job_id} does not belong to user {user_id}")
     now = datetime.now(UTC)
     job.deleted_at = now
     job.updated_at = now
@@ -103,18 +111,24 @@ async def archive_job(session: AsyncSession, job_id: int) -> None:
     await session.flush()
 
 
-async def restore_job(session: AsyncSession, job_id: int) -> Job:
+async def restore_job(session: AsyncSession, job_id: int, *, user_id: int) -> Job:
     """Inverse of archive_job; clears `deleted_at`.
 
-    Raises if a live row with the same `(user_id, source, external_id)`
-    already occupies the dedup slot — the partial-unique index permits a
-    soft-deleted row to coexist with one live row, but un-archiving would
-    push the count to two and trip the constraint at flush time. Caller
-    must either archive the colliding live row first or accept the raise.
+    Raises ``PermissionError`` when ``job.user_id != user_id`` (closes
+    0.7.0.15 IDOR — symmetric guard with ``archive_job``).
+
+    Raises ``ValueError`` if a live row with the same
+    ``(user_id, source, external_id)`` already occupies the dedup slot —
+    the partial-unique index permits a soft-deleted row to coexist with
+    one live row, but un-archiving would push the count to two and trip
+    the constraint at flush time. Caller must either archive the colliding
+    live row first or accept the raise.
     """
     job = await get_job(session, job_id)
     if job is None:
         raise ValueError(f"job {job_id} not found")
+    if job.user_id != user_id:
+        raise PermissionError(f"job {job_id} does not belong to user {user_id}")
     if job.deleted_at is None:
         return job
 

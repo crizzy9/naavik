@@ -1,16 +1,17 @@
-"""Regression lint — `JobSource.AUTOMATED` must not reappear in `src/`.
+"""Regression lints around the Job pipeline + Discover UI.
 
-Plan 27 (`0.2.0.05`) collapsed the 2-value `JobSource = {AUTOMATED, MANUAL}`
-into the 10-value per-source enum (LINKEDIN / WORKDAY / GREENHOUSE / LEVER /
-ASHBY / INDEED / COMPANY_DIRECT / RSSHUB / N8N_LEGACY / MANUAL). Existing
-rows with `source='automated'` get remapped to per-board values by alembic
-0005 (`board::text::jobsource`); the `automated` member persists in the
-Postgres ENUM type only because PG <16 cannot DROP enum values cleanly.
+Two checks live here, both load-bearing for plan 27 (`0.2.0.05`) +
+plan 36 (`0.2.0.11`):
 
-If a future refactor inadvertently reintroduces `JobSource.AUTOMATED` in
-Python code, dedup + scoring + UI filtering will silently start clustering
-rows under the legacy bucket. This test fails loud so the regression
-surfaces in code review.
+1. `JobSource.AUTOMATED` must not reappear in `src/` (plan 27 collapsed
+   the 2-value enum into 10 per-source values; the legacy bucket would
+   silently cluster rows if a future refactor re-typed it).
+2. `src/ui/discover_ctx.py:build_discover_ctx` must remain wired to
+   `services.job_service.list_jobs` (plan 36 cut the umbilical from
+   `db.sample_data.discover_queue()` for the live-DB path). Sample data
+   stays as a fallback for fake-session callers — but the
+   `job_service.list_jobs` call MUST be present for the live path so the
+   scraper crons' output surfaces in the swipe queue.
 """
 
 from __future__ import annotations
@@ -30,4 +31,25 @@ def test_no_legacy_jobsource_automated_in_src():
     assert not offenders, (
         f"JobSource.AUTOMATED was removed in plan 27 (`0.2.0.05`); offenders: {offenders}. "
         "Use a per-source value (LINKEDIN/WORKDAY/GREENHOUSE/...) or MANUAL instead."
+    )
+
+
+def test_discover_ctx_wires_job_service_list_jobs():
+    """Plan 36 § A — discover_ctx MUST call `job_service.list_jobs`.
+
+    Guards against a future regression that re-routes the Discover queue
+    back through `db.sample_data.discover_queue()` for the live-DB path
+    (the legacy umbilical). Sample data is allowed as a fallback for
+    fake-session callers; the live path is non-negotiable.
+    """
+    path = Path(__file__).resolve().parent.parent / "src" / "ui" / "discover_ctx.py"
+    body = path.read_text(encoding="utf-8")
+    assert "job_service.list_jobs" in body, (
+        "src/ui/discover_ctx.py must call services.job_service.list_jobs for the "
+        "live-DB path (plan 36 § A). If you're intentionally rolling back to the "
+        "sample_data shim, update this lint + document the regression in the "
+        "plan's ## Deviations section."
+    )
+    assert "from services import job_service" in body or "from services.job_service" in body, (
+        "src/ui/discover_ctx.py must import job_service (plan 36 § A wiring)."
     )

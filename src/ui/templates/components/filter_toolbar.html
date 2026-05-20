@@ -1,0 +1,196 @@
+{% from "components/_macros.html" import filter_chip %}
+{#
+  filter_toolbar.html — six-axis Discover filter chip row (plan 36 § A / § D.2).
+
+  Args:
+    filters         : JobFilter — current filter state
+    filters_active  : int — count of non-default chips (drives "· N" affordance)
+
+  HTMX contract:
+    Each <details> popover's form GETs /_fragments/discover/queue?... and
+    swaps the result into #discover-main. hx-push-url=true keeps the browser
+    URL aligned so a hard refresh restores the filter state.
+#}
+{% set f = filters %}
+<div id="filter-toolbar"
+     class="sticky top-0 z-10 flex items-center gap-2 flex-wrap py-2 -mx-2 px-2 bg-slate-950/95 backdrop-blur"
+     hx-preserve="false"
+     aria-label="Discover filters">
+
+  {# ─ SOURCE ─ #}
+  <details class="relative">
+    {{ filter_chip(
+      name="source",
+      label="Source",
+      value=(f.source.value | upper if f.source else None),
+      active=(f.source is not none),
+      icon="globe"
+    ) }}
+    <div class="absolute left-0 mt-1 w-52 bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-2 z-20"
+         role="listbox">
+      <form hx-get="/_fragments/discover/queue"
+            hx-target="#discover-main"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            hx-trigger="change"
+            class="flex flex-col gap-1">
+        {% include "components/_filter_hidden_inputs.html" ignore missing with context %}
+        <label class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 rounded cursor-pointer">
+          <input type="radio" name="source" value="" {% if not f.source %}checked{% endif %} class="accent-indigo-500">
+          <span>Any source</span>
+        </label>
+        {% for s in ["linkedin", "workday", "greenhouse", "lever", "ashby", "indeed", "company_direct", "rsshub", "n8n_legacy", "manual"] %}
+          <label class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 rounded cursor-pointer">
+            <input type="radio" name="source" value="{{ s }}" {% if f.source and f.source.value == s %}checked{% endif %} class="accent-indigo-500">
+            <span class="font-mono uppercase">{{ s.replace("_", " ") }}</span>
+          </label>
+        {% endfor %}
+      </form>
+    </div>
+  </details>
+
+  {# ─ REMOTE-ONLY (toggle) ─ #}
+  <form hx-get="/_fragments/discover/queue"
+        hx-target="#discover-main"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+        hx-trigger="change"
+        class="contents">
+    {% include "components/_filter_hidden_inputs.html" ignore missing with context %}
+    <label class="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono transition focus-within:ring-2 focus-within:ring-indigo-500/40
+                 {% if f.remote_only %}bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/40
+                 {% else %}bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800{% endif %}">
+      <input type="checkbox" name="remote_only" value="1" {% if f.remote_only %}checked{% endif %}
+             class="accent-indigo-500 h-3 w-3"
+             data-filter-toggle="remote_only">
+      <i data-lucide="laptop" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      <span>Remote only</span>
+    </label>
+  </form>
+
+  {# ─ VISA ─ #}
+  <details class="relative">
+    {{ filter_chip(
+      name="visa",
+      label="Visa",
+      value=(f.visa.value.replace("_", " ") | title if f.visa else None),
+      active=(f.visa is not none),
+      icon="user-check"
+    ) }}
+    <div class="absolute left-0 mt-1 w-60 bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-2 z-20"
+         role="listbox">
+      <form hx-get="/_fragments/discover/queue"
+            hx-target="#discover-main"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            hx-trigger="change"
+            class="flex flex-col gap-1">
+        {% include "components/_filter_hidden_inputs.html" ignore missing with context %}
+        <label class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 rounded cursor-pointer">
+          <input type="radio" name="visa" value="" {% if not f.visa %}checked{% endif %} class="accent-indigo-500">
+          <span>Any visa policy</span>
+        </label>
+        {% for v, lbl in [
+          ("sponsorship_available", "Sponsorship available"),
+          ("not_mentioned", "Not mentioned"),
+          ("us_citizen_only", "US citizen only"),
+          ("green_card_required", "Green card required")
+        ] %}
+          <label class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 rounded cursor-pointer">
+            <input type="radio" name="visa" value="{{ v }}" {% if f.visa and f.visa.value == v %}checked{% endif %} class="accent-indigo-500">
+            <span>{{ lbl }}</span>
+          </label>
+        {% endfor %}
+      </form>
+    </div>
+  </details>
+
+  {# ─ SENIORITY ─ #}
+  <details class="relative">
+    {{ filter_chip(
+      name="seniority",
+      label="Seniority",
+      value=(f.seniority.value | title if f.seniority else None),
+      active=(f.seniority is not none),
+      icon="bar-chart-3"
+    ) }}
+    <div class="absolute left-0 mt-1 w-48 bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-2 z-20"
+         role="listbox">
+      <form hx-get="/_fragments/discover/queue"
+            hx-target="#discover-main"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            hx-trigger="change"
+            class="flex flex-col gap-1">
+        {% include "components/_filter_hidden_inputs.html" ignore missing with context %}
+        <label class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 rounded cursor-pointer">
+          <input type="radio" name="seniority" value="" {% if not f.seniority %}checked{% endif %} class="accent-indigo-500">
+          <span>Any seniority</span>
+        </label>
+        {% for s in ["entry", "mid", "senior", "staff", "principal", "exec"] %}
+          <label class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 rounded cursor-pointer">
+            <input type="radio" name="seniority" value="{{ s }}" {% if f.seniority and f.seniority.value == s %}checked{% endif %} class="accent-indigo-500">
+            <span class="font-mono uppercase">{{ s }}</span>
+          </label>
+        {% endfor %}
+      </form>
+    </div>
+  </details>
+
+  {# ─ SCORE MIN ─ #}
+  <details class="relative">
+    {{ filter_chip(
+      name="score_min",
+      label="Score ≥",
+      value=("%.2f" | format(f.score_min) if f.score_min > 0.0 else None),
+      active=(f.score_min > 0.0),
+      icon="gauge"
+    ) }}
+    <div class="absolute left-0 mt-1 w-60 bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-3 z-20">
+      <form hx-get="/_fragments/discover/queue"
+            hx-target="#discover-main"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            hx-trigger="change"
+            class="flex flex-col gap-2">
+        {% include "components/_filter_hidden_inputs.html" ignore missing with context %}
+        <label class="text-xs text-slate-400 font-mono">Minimum score: <span data-score-min-value class="text-indigo-300">{{ "%.2f" | format(f.score_min) }}</span></label>
+        <input type="range" min="0" max="1" step="0.05" name="score_min" value="{{ f.score_min }}"
+               class="w-full accent-indigo-500"
+               oninput="this.closest('details').querySelector('[data-score-min-value]').textContent = parseFloat(this.value).toFixed(2)">
+        <p class="text-[11px] text-slate-500 leading-tight">Pre-scoring jobs surface at 0.00 until 0.3.0 scoring lands.</p>
+      </form>
+    </div>
+  </details>
+
+  {# ─ INCLUDE DUPLICATES (toggle) ─ #}
+  <form hx-get="/_fragments/discover/queue"
+        hx-target="#discover-main"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+        hx-trigger="change"
+        class="contents">
+    {% include "components/_filter_hidden_inputs.html" ignore missing with context %}
+    <label class="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono transition focus-within:ring-2 focus-within:ring-indigo-500/40
+                 {% if f.include_duplicates %}bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/40
+                 {% else %}bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800{% endif %}">
+      <input type="checkbox" name="include_duplicates" value="1" {% if f.include_duplicates %}checked{% endif %}
+             class="accent-amber-500 h-3 w-3"
+             data-filter-toggle="include_duplicates">
+      <i data-lucide="copy" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      <span>Show duplicates</span>
+    </label>
+  </form>
+
+  {% if filters_active and filters_active > 0 %}
+    <a href="/discover"
+       class="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] text-slate-500 hover:text-slate-200 transition"
+       hx-get="/_fragments/discover/queue"
+       hx-target="#discover-main"
+       hx-swap="innerHTML"
+       hx-push-url="/discover">
+      <i data-lucide="x" class="h-3 w-3" stroke-width="1.5"></i>
+      Clear · <span class="font-mono">{{ filters_active }}</span>
+    </a>
+  {% endif %}
+</div>

@@ -100,3 +100,27 @@
               {% if mode == 'cloud' %}bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30
               {% else %}bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30{% endif %}">{{ mode }}</span>
 {%- endmacro %}
+
+{% macro filter_chip(name, label, value=None, active=False, icon=None) -%}
+  {#
+    Plan 36 § A · filter_toolbar chip primitive. Each chip is a clickable
+    `<summary>` that toggles a sibling `<details>` popover. `name` is the
+    JobFilter field name (e.g. `source`); `value` is the currently-selected
+    value rendered next to the label. `active` flips the indigo ring.
+  #}
+  <summary class="cursor-pointer list-none inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40
+                 {% if active %}bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/40 hover:bg-indigo-500/20
+                 {% else %}bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800{% endif %}"
+           data-filter-chip="{{ name }}"
+           role="button"
+           aria-haspopup="true">
+    {% if icon %}<i data-lucide="{{ icon }}" class="h-3.5 w-3.5" stroke-width="1.5"></i>{% endif %}
+    <span class="text-slate-400 uppercase tracking-wide text-[10px]">{{ label }}</span>
+    {% if value %}
+      <span class="text-slate-100 font-medium normal-case">{{ value }}</span>
+    {% else %}
+      <span class="text-slate-500 normal-case">·</span>
+    {% endif %}
+    <i data-lucide="chevron-down" class="h-3 w-3 text-slate-500" stroke-width="1.5"></i>
+  </summary>
+{%- endmacro %}
