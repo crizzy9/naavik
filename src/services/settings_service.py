@@ -90,6 +90,10 @@ async def update_sources(
     sources_enabled: dict[str, bool] | None = None,
     source_schedules: dict[str, str] | None = None,
     workday_companies: list[str] | None = None,
+    linkedin_keywords: list[str] | None = None,
+    linkedin_location: str | None = None,
+    indeed_keywords: list[str] | None = None,
+    indeed_location: str | None = None,
 ) -> Settings:
     s = await get_or_create(session, user_id)
     if sources_enabled is not None:
@@ -98,6 +102,14 @@ async def update_sources(
         s.source_schedules = source_schedules
     if workday_companies is not None:
         s.workday_companies = workday_companies
+    if linkedin_keywords is not None:
+        s.linkedin_keywords = linkedin_keywords
+    if linkedin_location is not None:
+        s.linkedin_location = linkedin_location
+    if indeed_keywords is not None:
+        s.indeed_keywords = indeed_keywords
+    if indeed_location is not None:
+        s.indeed_location = indeed_location
     s.updated_at = datetime.now(UTC)
     session.add(s)
     await session.flush()

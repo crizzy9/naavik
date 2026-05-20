@@ -79,6 +79,31 @@ class Settings(SQLModel, table=True):
         sa_column=Column(ARRAY(String), nullable=False, server_default="{}"),
     )
 
+    # Plan 35 (0.2.0.10): per-user search inputs for LinkedIn + Indeed crons.
+    # `linkedin_keywords` / `indeed_keywords` are list[str]; cron composes
+    # them into ScrapeQuery.keywords. `linkedin_location` / `indeed_location`
+    # are free-text strings (LinkedIn accepts "United States", "Remote", etc).
+    linkedin_keywords: list[str] | None = Field(
+        default=None,
+        sa_column=Column(ARRAY(String), nullable=True),
+    )
+    linkedin_location: str | None = None
+    indeed_keywords: list[str] | None = Field(
+        default=None,
+        sa_column=Column(ARRAY(String), nullable=True),
+    )
+    indeed_location: str | None = None
+
+    # Plan 35 (0.2.0.10): per-source consecutive-FAILED counter. Cron resets
+    # to 0 on first SUCCESS / PARTIAL; one Discord admin alert fires when
+    # the counter crosses threshold=3 (2 → 3). Cron never skips on counter —
+    # always runs so the counter can recover. Key = JobSource.value (e.g.
+    # "linkedin"); value = int failure count.
+    consecutive_scrape_failures: dict[str, int] = Field(
+        default_factory=dict,
+        sa_column=Column(JSONB, nullable=False, server_default="{}"),
+    )
+
     # Deployment
     deployment_mode: DeploymentMode = Field(default=DeploymentMode.SELF_HOSTED)
 

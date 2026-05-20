@@ -178,6 +178,11 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         coalesce=True,
     )
 
+    # Phase 2 plan 35 (0.2.0.10): six per-source scraping crons.
+    from . import scraping
+
+    scraping.register_scraping_jobs(scheduler)
+
 
 def registered_job_ids(scheduler: AsyncIOScheduler) -> list[str]:
     return [j.id for j in scheduler.get_jobs()]
