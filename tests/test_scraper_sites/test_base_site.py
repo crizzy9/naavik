@@ -163,3 +163,38 @@ async def test_maybe_enrich_catches_service_exception(_wipe_job_extractor, monke
     assert len(scraper._errors) == 1
     assert "kind=extract_failure" in scraper._errors[0]
     assert "RuntimeError" in scraper._errors[0]
+
+
+# ── Plan 43 § D.5.2 — `_compose_url` slug-validate wrapper ────────────────
+
+
+def test_compose_url_returns_none_and_logs_on_hostile_slug():
+    """Hostile slug → None + tier-1 error append + redaction (no smuggled controls)."""
+    scraper = _StubSiteScraper(client=object())  # type: ignore[arg-type]
+    result = scraper._compose_url("https://{x}.test/", stage="list", x="evil.com#")
+    assert result is None
+    assert len(scraper._errors) == 1
+    assert "kind=invalid_slug" in scraper._errors[0]
+    assert "msg=x=" in scraper._errors[0]
+    # No smuggled control chars / newlines from a hostile slug value.
+    assert "\x00" not in scraper._errors[0]
+    assert "\n" not in scraper._errors[0]
+
+
+def test_compose_url_returns_url_on_valid_slug():
+    """Valid slug → composed URL + no error."""
+    scraper = _StubSiteScraper(client=object())  # type: ignore[arg-type]
+    result = scraper._compose_url("https://{x}.test/", stage="list", x="acme-corp")
+    assert result == "https://acme-corp.test/"
+    assert scraper._errors == []
+
+
+def test_compose_url_redacts_control_chars_in_error_msg():
+    """Slug with null + newline gets `_strip_control_chars`'d before logging."""
+    scraper = _StubSiteScraper(client=object())  # type: ignore[arg-type]
+    result = scraper._compose_url("https://{x}.test/", stage="detail", x="x\x00\nrebind")
+    assert result is None
+    assert len(scraper._errors) == 1
+    assert "stage=detail" in scraper._errors[0]
+    assert "\x00" not in scraper._errors[0]
+    assert "\n" not in scraper._errors[0]

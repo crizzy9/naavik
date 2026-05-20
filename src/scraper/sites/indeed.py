@@ -103,6 +103,9 @@ class IndeedScraper(_BaseSiteScraper):
             yield enriched
 
     def _compose_listing_url(self, query: ScrapeQuery) -> str:
+        # Plan 43 (`0.2.0.07a`): `q` + `l` are `quote_plus`'d query params;
+        # `jk` is vendor-extracted from card HTML. No operator-controlled slug
+        # substitution in URL templates — slug validation does not apply here.
         kw = " ".join(query.keywords) if query.keywords else ""
         loc = query.location or ""
         return f"{self._LIST_BASE}?q={quote_plus(kw)}&l={quote_plus(loc)}"

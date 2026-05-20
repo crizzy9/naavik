@@ -207,6 +207,11 @@ class LinkedInScraper(_BaseSiteScraper):
         )
 
     async def _scrape_rsshub(self, query: ScrapeQuery) -> AsyncIterator[RawJob]:
+        # Plan 43 (`0.2.0.07a`): no slug substitution applies here. `base` comes
+        # from `settings.scraper_rsshub_url` (env-only, operator-trust boundary);
+        # `keywords` + `location` originate from env-loaded `Settings.linkedin_*`
+        # and use `+` separators (URL-path shape, NOT slug shape). Trust boundary
+        # = env; the `is_safe_destination(rsshub_url)` call below is the chokepoint.
         base = (settings.scraper_rsshub_url or "").rstrip("/")
         keywords = "+".join(query.keywords) if query.keywords else ""
         location = (query.location or "").replace(" ", "+")

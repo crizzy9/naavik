@@ -28,8 +28,9 @@ from __future__ import annotations
 import logging
 
 from scraper.base import ScraperBase
-from scraper.redaction import safe_exc, safe_url
+from scraper.redaction import _strip_control_chars, safe_exc, safe_url
 from scraper.types import RawJob
+from scraper.url_guard import InvalidSlugError, _make_url
 
 log = logging.getLogger(__name__)
 
@@ -82,3 +83,30 @@ class _BaseSiteScraper(ScraperBase):
                 f"kind=extract_failure msg={safe_exc(exc)}"
             )
             return raw_job
+
+    def _compose_url(
+        self,
+        template: str,
+        *,
+        stage: str = "list",
+        **slugs: str,
+    ) -> str | None:
+        """Slug-validate + format `template` with `**slugs`.
+
+        Returns the composed URL on success; on `InvalidSlugError`, appends a
+        tier-1 error to `self._errors` (mirrors the existing
+        `is_safe_destination` rejection shape) and returns `None`. Caller MUST
+        check `if url is None: continue`.
+
+        Plan 43 (`0.2.0.07a`). Mirrors `_maybe_enrich` precedent — one wrapper
+        owns the error-append + redaction; sites pass-through.
+        """
+        try:
+            return _make_url(template, **slugs)
+        except InvalidSlugError as exc:
+            redacted_value = _strip_control_chars(exc.value)[:64]
+            self._errors.append(
+                f"stage={stage} url=<unmade:{template[:80]}> "
+                f"kind=invalid_slug msg={exc.slug_name}={redacted_value!r}"
+            )
+            return None

@@ -2,7 +2,8 @@
 
 > **Canonical reference** — graduated from `docs/plans/archive/33-0.2.0.07-site-scrapers.md` per `AGENTS.md` § Workflow step 4.
 > **Status:** Active. This is the single source for per-source URL patterns, rate-limit overrides, `external_id` derivation, and the parse contract every site scraper inherits from `_BaseSiteScraper`.
-> **Last updated:** 2026-05-19 (plan 38 / `0.2.0.13` — § E LinkedIn rpm `1` → `0.4` (int→float fold); § E.4 Indeed adapter column added + cross-ref to `SCRAPER_BASE.md § G`; § H notes the new `scraper_rate_limits` Settings column).
+> **Last updated:** 2026-05-20 (plan 43 / `0.2.0.07a` — § D.6 `_make_url` slug-validate helper documented; § E.1–§ E.4 per-scraper notes added; closes PR #102 hacker MEDIUM × 2 / Issue #103).
+> Earlier line: 2026-05-19 (plan 38 / `0.2.0.13` — § E LinkedIn rpm `1` → `0.4` (int→float fold); § E.4 Indeed adapter column added + cross-ref to `SCRAPER_BASE.md § G`; § H notes the new `scraper_rate_limits` Settings column).
 > **Companion docs:** `docs/design/SCRAPER_BASE.md` (substrate; `_BaseSiteScraper` extends `ScraperBase`), `docs/design/JOB_MODEL.md` (`RawJob → Job` upsert contract), `docs/design/research/LINKEDIN_SCRAPING.md` (LinkedIn-specific blueprint that this doc locks).
 > **Downstream plans depending on this contract:** `0.2.0.08` (AI extraction wires into `_maybe_enrich`), `0.2.0.10` (APScheduler cron registers per-source from `scrapers` registry), `0.2.0.11` (Discover UI surfaces persisted Jobs), `0.2.0.13` (per-source rate-limit tuning via Settings).
 
@@ -87,6 +88,46 @@ The guard is called twice on every URL:
 - At URL-composition time inside each subclass (rejection logs + skips the listing).
 - At `Crawl4AIClient.fetch_html` / `stream_many` boundary (defense-in-depth; a future scraper that forgets to call the guard still gets blocked).
 
+### D.6 `_make_url(template, **slugs)` helper
+
+Plan 43 (`0.2.0.07a`) — closes PR #102 hacker MEDIUM × 2. Slug-validates every operator-supplied URL component (`tenant`, `site`, `company`) BEFORE template substitution. Single chokepoint in `src/scraper/url_guard.py`; per-site wrapper `_BaseSiteScraper._compose_url(template, *, stage="list", **slugs) -> str | None` owns error-append + redaction.
+
+```python
+_SLUG_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+
+
+class InvalidSlugError(ValueError):
+    """Raised by `_make_url` when a slug fails `_SLUG_RE`.
+
+    Subclass of `ValueError` for broad-except composition. Carries
+    `slug_name` + `value` for log redaction.
+    """
+
+
+def _make_url(template: str, **slugs: str) -> str:
+    """Format `template` with slug-validated kwargs.
+
+    Each kwarg matched against `_SLUG_RE` BEFORE substitution; first
+    failure raises `InvalidSlugError(slug_name, value)`. Composes with
+    `is_safe_destination` — both chokepoints run.
+    """
+```
+
+**Why one layer up:** `is_safe_destination` runs AFTER URL composition. `tenant="evil.com#"` confuses `urlsplit.hostname` (returns `evil.com`) so the post-composition guard accepts it; the URL never should have composed in the first place. The slug regex closes the composition-bug attack vector; `is_safe_destination` closes the DNS-resolution one. Both layers compose.
+
+**Per-scraper applicability matrix:**
+
+| Scraper | Slug substitution in templates? | `_compose_url` call site | Notes |
+|---|---|---|---|
+| **Workday** | Yes — `tenant` + `site` | `scrape()` for `_LIST_TEMPLATE` | `_parse_tenant_spec` strips whitespace; `_make_url` rejects fragment / `@` / `/` |
+| **Greenhouse** | Yes — `company` | `scrape()` for `_LIST_TEMPLATE` | `_row_detail_url` keeps bare `.format(job_id=...)` — `company` validated one frame up; `job_id` is vendor-trusted |
+| **Lever** | Yes — `company` (path position; most dangerous) | `scrape()` for `_LIST_TEMPLATE` | `hostedUrl` (vendor-supplied) stays under `is_safe_destination` only |
+| **Ashby** | Yes — `company` | `scrape()` for `_LIST_TEMPLATE` | `jobUrl` (vendor-supplied) stays under `is_safe_destination` only |
+| **LinkedIn** | No — `keywords` / `location` use `quote_plus` (query-param shape) | Not called | RSShub fallback uses env-only `Settings.linkedin_*` + `scraper_rsshub_url` — operator-trust boundary |
+| **Indeed** | No — `q` / `l` use `quote_plus`; `jk` is vendor-extracted | Not called | Same operator-trust boundary as LinkedIn for query params |
+
+**Slug regex rationale.** Accepts `[a-zA-Z0-9_-]+` with alphanumeric leading char. Rejects all confusable shapes catalogued in plan 43 § D.1: `""` (empty), `"-leading"` / `"_leading"`, `"evil.com#"` (fragment), `"evil.com?"` (query), `"evil.com&for=victim"` (separator injection), `"evil.com@spoof"` (userinfo smuggle), `"acme/../v0/users/{id}"` (path traversal), `"a b"` (whitespace), `"\x00"` (null), `"\n"` (newline), `"x.y"` (dot — vendor slugs don't use), `"https://x"` (URL as slug). No per-vendor relaxation in this row; if a real-world Workday tenant or ATS company fails (e.g. a `.` in the slug), file a follow-up row with carve-out scope.
+
 ---
 
 ## E · Per-source reference table
@@ -106,17 +147,25 @@ All `rate_limit_per_minute` values below are the class-attr fallbacks; operators
 
 Per `docs/design/research/LINKEDIN_SCRAPING.md § 5` (Option B — direct guest API + Crawl4AI stealth). Conservative defaults: effective ~24 listings / hour ceiling. RSShub fallback activates ONLY when `Settings.scraper_rsshub_url` is set AND the guest-API call returns zero cards. Cookie-based auth (`Settings.linkedin_session_cookie`) is deferred to Phase 5 task 5.12 — research § 5 Trade-off accepted.
 
+No operator-controlled slug substitution in URL templates (`_LIST_BASE` / `_DETAIL_BASE` / `_FALLBACK_VIEW_BASE` are constants); `keywords` + `location` are `quote_plus`'d query params — structural protection. RSShub fallback inherits the env-only operator-trust boundary for `scraper_rsshub_url` + `Settings.linkedin_*`.
+
 ### E.2 Workday
 
 Per-tenant. `Settings.workday_companies: list[str] | None` parsed as CSV from `WORKDAY_COMPANIES` env var; each entry is `"tenant/site"` (e.g. `"salesforce/External"`) or `"tenant"` (site defaults to `"External"`). Cron skips silently when the list is unset.
+
+Plan 43 (`0.2.0.07a`): both `tenant` and `site` are slug-validated (`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`) BEFORE template substitution; entries with `.`, `#`, `?`, `&`, `@`, `/`, whitespace, or control chars are skipped with a `kind=invalid_slug` error append.
 
 ### E.3 Greenhouse / Lever / Ashby
 
 Three near-identical JSON-API scrapers. Each reads `Settings.{ats}_companies: list[str] | None` (CSV-parsed) when `ScrapeQuery.company_filter` is empty. Per-company JSON-API endpoint returns a flat array; iterate, build seed `RawJob`, optionally re-fetch the detail HTML for richer description (Lever / Ashby inline description in JSON; Greenhouse needs a second fetch).
 
+Plan 43 (`0.2.0.07a`): `{company}` is slug-validated BEFORE template substitution. Lever's path-position substitution (`https://api.lever.co/v0/postings/{company}`) was the most dangerous variant per PR #102 (slash injection → vendor-API path traversal); slug regex rejects `/` and `.`. Greenhouse `_row_detail_url` keeps bare `.format(job_id=...)` since `company` is validated one stack frame up and `job_id` is vendor-trusted.
+
 ### E.4 Indeed
 
 Aggressively anti-bot (Cloudflare WAF + fingerprinting). Crawl4AI `enable_stealth=True` is the front-line defense. Conservative 2/min cap + 20-40s jitter. Plan 38 shipped the `UndetectedAdapter` wiring + telemetry — `IndeedScraper.use_undetected_adapter` stays `False` here; engagement deferred to `0.2.0.13c` after the cron observes real-world 403-rate exceeding ~5% (operator-visible via `JobScrapeRun.raw_meta["rate_limit"]["hits"]` per `SCRAPER_BASE.md § G.7`).
+
+No operator-controlled slug substitution in URL templates; `q` / `l` are `quote_plus`'d query params and `jk` is vendor-extracted from card HTML. Same operator-trust posture as LinkedIn.
 
 ---
 
@@ -150,8 +199,9 @@ HTML / JSON fixtures live at `tests/fixtures/html/sites/` — hand-crafted (NOT 
 Lint guards:
 - `tests/test_no_direct_http_imports.py` — rejects `requests` / `httpx` / `urllib.request` / `aiohttp` inside `src/scraper/`.
 - `tests/test_scraper_sites/test_registry.py` — confirms the six registered sources + SampleScraper exclusion.
-- `tests/test_scraper_sites/test_url_guard.py` — exercises all five rejection classes plus the `Settings.debug` escape hatch.
-- `tests/test_scraper_sites/test_base_site.py` — exercises the four-way `_maybe_enrich` decision tree.
+- `tests/test_scraper_sites/test_url_guard.py` — exercises all five rejection classes plus the `Settings.debug` escape hatch + plan 43 § D.6 `_make_url` slug-validate acceptance + rejection matrix.
+- `tests/test_scraper_sites/test_base_site.py` — exercises the four-way `_maybe_enrich` decision tree + plan 43 `_compose_url` wrapper (None on hostile / URL on valid / control-char redaction).
+- `tests/test_scraper_sites/test_{workday,greenhouse,lever,ashby}.py` — integration tests verify PR #102 attack payloads compose no URL + perform no outbound fetch (`client.fetch_calls == []`).
 
 ---
 

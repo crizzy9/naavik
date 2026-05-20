@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from scraper import url_guard
-from scraper.url_guard import is_safe_destination
+from scraper.url_guard import InvalidSlugError, _make_url, is_safe_destination
 
 
 @pytest.fixture(autouse=True)
@@ -154,3 +154,88 @@ def test_dns_cache_clear_forces_re_resolution(monkeypatch):
     url_guard._DNS_CACHE.clear()  # Simulate TTL expiry / explicit reset.
     url_guard._resolve_host("example.com")
     assert call_count["n"] == 2
+
+
+# ── Plan 43 § D.5.1 — `_make_url` slug-validate helper ────────────────────
+
+
+def test_make_url_accepts_alphanumeric():
+    """Canonical happy path — pure alphanumeric slug."""
+    assert _make_url("https://{x}.test/", x="acme") == "https://acme.test/"
+
+
+def test_make_url_accepts_hyphen():
+    """Internal hyphen is permitted (`acme-corp`)."""
+    assert _make_url("https://{x}.test/", x="acme-corp") == "https://acme-corp.test/"
+
+
+def test_make_url_accepts_underscore():
+    """Internal underscore is permitted (Workday `Adobe_Careers` site)."""
+    assert _make_url("https://{x}.test/", x="Adobe_Careers") == "https://Adobe_Careers.test/"
+
+
+def test_make_url_accepts_mixed_case():
+    """ASCII mixed-case is permitted."""
+    assert _make_url("https://{x}.test/", x="MixedCASE123") == "https://MixedCASE123.test/"
+
+
+def test_make_url_accepts_digits_only():
+    """Pure digit slug is permitted (some vendor IDs use numeric prefixes)."""
+    assert _make_url("https://{x}.test/", x="12345") == "https://12345.test/"
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "",  # empty
+        "-leading-hyphen",
+        "_leading-underscore",
+        "evil.com#",  # canonical PR #102 fragment trick
+        "evil.com?",
+        "evil.com&for=victim",
+        "evil.com@spoof",
+        "acme/../v0/users/{id}",  # Lever path-traversal
+        "a b",  # whitespace
+        "x\x00",  # null byte
+        "x\nrebind",  # newline
+        "x\trebind",  # tab
+        "https://x",  # full URL stuffed as slug
+        "x.y",  # dot
+        "x.com",  # apex domain
+    ],
+)
+def test_make_url_rejects_hostile_slug(hostile):
+    """All confusable shapes from PR #102 review get rejected."""
+    with pytest.raises(InvalidSlugError) as exc_info:
+        _make_url("https://{x}.test/", x=hostile)
+    assert exc_info.value.slug_name == "x"
+    assert exc_info.value.value == hostile
+
+
+def test_make_url_rejects_non_string():
+    """Non-string slug values are rejected — `None` / int / dict all fail."""
+    with pytest.raises(InvalidSlugError) as exc_info:
+        _make_url("https://{x}.test/", x=None)  # type: ignore[arg-type]
+    assert exc_info.value.slug_name == "x"
+
+
+def test_make_url_rejects_first_failing_slug_when_multiple():
+    """Multi-slug template — first failing kwarg is named in the error."""
+    with pytest.raises(InvalidSlugError) as exc_info:
+        _make_url(
+            "https://{tenant}.wd1.myworkdayjobs.com/{site}",
+            tenant="evil.com#",
+            site="External",
+        )
+    assert exc_info.value.slug_name == "tenant"
+
+
+def test_invalid_slug_error_is_value_error():
+    """Subclass relationship preserves broad-except composition (`except ValueError:`)."""
+    try:
+        _make_url("https://{x}/", x="evil.com#")
+    except ValueError as exc:
+        assert isinstance(exc, InvalidSlugError)
+        assert exc.slug_name == "x"
+    else:  # pragma: no cover
+        raise AssertionError("expected InvalidSlugError")
