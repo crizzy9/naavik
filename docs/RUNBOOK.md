@@ -88,19 +88,9 @@ psql -h 127.0.0.1 -p 5433 -U naavik -d naavik -c 'select version()'
 
 ### 2.5 "UI shows mock-looking data after `nix run .#dev`"
 
-**Symptom:** Profile edits don't persist. KPIs look static. Jobs list is the hardcoded sample data, not seeded.
+**Removed in plan 60 / 0.2.7.17 (2026-05-20).** The dual memory/DB persistence mode (gated by `NAAVIK_PERSISTENCE`) is gone. Plan 60 collapsed `src/db/sample_data.py` to fixture-only consumption — `db/seed.py` populates Postgres from those fixtures at first boot; routes read through the `services/*` layer for tables that have been migrated, and still read fixture-data for tables that haven't (incremental migration tracked in follow-up plan 0.2.7.17a). The `NAAVIK_PERSISTENCE` env var no longer exists in `flake.nix`, `nix/devshell.nix`, or `.env.example`.
 
-**Root cause:** `NAAVIK_PERSISTENCE` is `memory` instead of `db`. The orchestrator sets `db` automatically (plan 10b); raw `uv run fastapi dev` doesn't.
-
-**Fix:**
-```bash
-export NAAVIK_PERSISTENCE=db
-uv run fastapi dev
-```
-
-Plan 10c also wired `NAAVIK_PERSISTENCE=db` into `nix develop`'s shellHook, so interactive dev shells should be in parity. If you still see memory mode under `nix develop`, your `nix/devshell.nix` predates plan 10c.
-
-**Verify:** `psql -h 127.0.0.1 -p 5433 -U naavik -d naavik -c "SELECT headline FROM profile WHERE user_id=1"` — edit the profile in the UI, re-run, value should change.
+**Verify Postgres is the underlying store:** `psql -h 127.0.0.1 -p 5433 -U naavik -d naavik -c "SELECT headline FROM profile WHERE user_id=1"`.
 
 ### 2.6 Process-compose Ctrl-C leaves orphan processes
 

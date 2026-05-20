@@ -192,6 +192,56 @@ async def soft_delete(session: AsyncSession, contact_id: int) -> Contact | None:
     return contact
 
 
+# ── List accessors (plan 60 / 0.2.7.17) ─────────────────────────────────
+
+
+async def list_contacts(session: AsyncSession, user_id: int) -> list[Contact]:
+    """All live contacts for the user."""
+    stmt = (
+        select(Contact)
+        .where(Contact.user_id == user_id, Contact.deleted_at.is_(None))
+        .order_by(Contact.created_at.desc())
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def list_contacts_for_company(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    company: str,
+) -> list[Contact]:
+    """Live contacts for a specific company."""
+    stmt = (
+        select(Contact)
+        .where(
+            Contact.user_id == user_id,
+            Contact.company == company,
+            Contact.deleted_at.is_(None),
+        )
+        .order_by(Contact.created_at.desc())
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def list_contacts_for_application(
+    session: AsyncSession, application_id: int
+) -> list[Contact]:
+    """Live contacts linked to a specific Application via ContactApplicationLink."""
+    stmt = (
+        select(Contact)
+        .join(ContactApplicationLink, ContactApplicationLink.contact_id == Contact.id)
+        .where(
+            ContactApplicationLink.application_id == application_id,
+            Contact.deleted_at.is_(None),
+        )
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
 # ── State inference (roll up to ContactApplicationLink + Application) ──
 
 

@@ -18,7 +18,6 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
-os.environ["NAAVIK_PERSISTENCE"] = "memory"
 
 
 def test_discover_page_renders_csrf_token_from_cookie() -> None:

@@ -23,7 +23,8 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func
@@ -221,3 +222,49 @@ async def today_cost_usd(session: AsyncSession, *, user_id: int) -> float:
     row = result.one()
     value = row[0] if isinstance(row, tuple) else row
     return float(value or 0.0)
+
+
+# ── Recent-usage + summary (plan 60 / 0.2.7.17) ────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class UsageSummary:
+    """Bundle returned by `usage_summary` — drives Settings · LLM cost cards."""
+
+    month_cost_usd: float
+    avg_per_generation_usd: float
+    total_tokens: int
+    gen_count: int
+
+
+async def recent_usage(session: AsyncSession, *, user_id: int, days: int = 30) -> list[ApiUsage]:
+    """Most-recent ApiUsage rows over a window. Mirrors `sample_data.api_usage_recent`."""
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    stmt = (
+        select(ApiUsage)
+        .where(ApiUsage.user_id == user_id, ApiUsage.occurred_at >= cutoff)
+        .order_by(ApiUsage.occurred_at.desc())
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def usage_summary(session: AsyncSession, *, user_id: int, days: int = 30) -> UsageSummary:
+    """Aggregate cost + tokens + gen-count over a window.
+
+    Mirrors `sample_data.llm_usage_summary`. `gen_count` = distinct
+    `application_id`s (one bundle = resume + cover_letter attributed to an
+    application).
+    """
+    rows = await recent_usage(session, user_id=user_id, days=days)
+    cost = sum(r.cost_usd for r in rows)
+    tokens = sum(r.input_tokens + r.output_tokens for r in rows)
+    gen_apps = {r.application_id for r in rows if r.application_id is not None}
+    gen_count = len(gen_apps)
+    avg = (cost / gen_count) if gen_count else 0.0
+    return UsageSummary(
+        month_cost_usd=round(cost, 2),
+        avg_per_generation_usd=round(avg, 2),
+        total_tokens=int(tokens),
+        gen_count=int(gen_count),
+    )

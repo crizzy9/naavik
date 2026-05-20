@@ -913,6 +913,226 @@ async def stuck_drafts(session: AsyncSession, *, user_id: int) -> list[Applicati
     ]
 
 
+# ── List accessors (plan 60 / 0.2.7.17) ────────────────────────────────
+
+
+_TRACKING_VISIBLE_STATUSES: set[ApplicationStatus] = {
+    ApplicationStatus.APPLIED,
+    ApplicationStatus.RECRUITER_SCREEN,
+    ApplicationStatus.ONSITE_LOOP,
+    ApplicationStatus.OFFER,
+}
+
+
+async def list_applications(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    statuses: set[ApplicationStatus] | None = None,
+    include_deleted: bool = False,
+) -> list[Application]:
+    """Soft-delete-aware list of Applications for `user_id`."""
+    stmt = select(Application).where(Application.user_id == user_id)
+    if not include_deleted:
+        stmt = stmt.where(Application.deleted_at.is_(None))
+    if statuses is not None:
+        stmt = stmt.where(Application.status.in_(statuses))
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def list_visible_in_tracking(session: AsyncSession, user_id: int) -> list[Application]:
+    """Default Tracking view — APPLIED through OFFER. Hides DRAFT + CLOSED."""
+    return await list_applications(session, user_id=user_id, statuses=_TRACKING_VISIBLE_STATUSES)
+
+
+async def list_by_status(
+    session: AsyncSession, user_id: int, status: ApplicationStatus
+) -> list[Application]:
+    return await list_applications(session, user_id=user_id, statuses={status})
+
+
+async def list_in_followup(session: AsyncSession, user_id: int) -> list[Application]:
+    """Recruiter SILENT / STALLED on live (non-DRAFT, non-CLOSED) apps."""
+    stmt = select(Application).where(
+        Application.user_id == user_id,
+        Application.deleted_at.is_(None),
+        Application.recruiter_state.in_([RecruiterState.SILENT, RecruiterState.STALLED]),
+        Application.status.not_in([ApplicationStatus.DRAFT, ApplicationStatus.CLOSED]),
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def list_closed(session: AsyncSession, user_id: int) -> list[Application]:
+    return await list_by_status(session, user_id, ApplicationStatus.CLOSED)
+
+
+async def list_drafts(session: AsyncSession, user_id: int) -> list[Application]:
+    return await list_by_status(session, user_id, ApplicationStatus.DRAFT)
+
+
+async def list_documents_for(session: AsyncSession, application_id: int) -> list[GeneratedDocument]:
+    """All compiled (error IS NULL) GeneratedDocuments for an Application."""
+    stmt = (
+        select(GeneratedDocument)
+        .where(
+            GeneratedDocument.application_id == application_id,
+            GeneratedDocument.error.is_(None),
+        )
+        .order_by(GeneratedDocument.compiled_at.desc())
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def list_screener_answers_for(
+    session: AsyncSession, application_id: int
+) -> list[ApplicationScreenerAnswer]:
+    """All screener answers for an Application, ordered by `order_index`."""
+    stmt = (
+        select(ApplicationScreenerAnswer)
+        .where(ApplicationScreenerAnswer.application_id == application_id)
+        .order_by(ApplicationScreenerAnswer.order_index)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def count_unreviewed_required_screeners(session: AsyncSession, application_id: int) -> int:
+    """Count of required screener answers that are still unreviewed."""
+    stmt = select(func.count(ApplicationScreenerAnswer.id)).where(
+        ApplicationScreenerAnswer.application_id == application_id,
+        ApplicationScreenerAnswer.required.is_(True),
+        ApplicationScreenerAnswer.reviewed_at.is_(None),
+    )
+    result = (await session.exec(stmt)).one()
+    if isinstance(result, tuple):
+        result = result[0]
+    return int(result or 0)
+
+
+async def list_events_for(
+    session: AsyncSession,
+    application_id: int,
+    *,
+    limit: int = 50,
+) -> list[AppEvent]:
+    """Most-recent AppEvents for an Application."""
+    stmt = (
+        select(AppEvent)
+        .where(AppEvent.application_id == application_id)
+        .order_by(AppEvent.occurred_at.desc())
+        .limit(limit)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+# ── Mutation helpers (plan 60 / 0.2.7.17) ──────────────────────────────
+
+
+async def record_draft_failure(
+    session: AsyncSession,
+    application_id: int,
+    kind: str,
+    message: str,
+) -> Application | None:
+    """Write `submission_artifacts.last_failure` to a DRAFT Application."""
+    a = await get_application(session, application_id)
+    if a is None:
+        return None
+    artifacts = dict(a.submission_artifacts or {})
+    artifacts["last_failure"] = {
+        "kind": kind,
+        "message": message,
+        "captured_at": datetime.now(UTC).isoformat(),
+    }
+    artifacts["retry_count"] = int(artifacts.get("retry_count") or 0) + 1
+    a.submission_artifacts = artifacts
+    a.updated_at = datetime.now(UTC)
+    session.add(a)
+    await session.flush()
+    return a
+
+
+async def create_manual(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    company: str,
+    role: str,
+    team: str | None = None,
+    location: str | None = None,
+    salary_min: int | None = None,
+    salary_max: int | None = None,
+    notes: str | None = None,
+) -> Application:
+    """Create an APPLIED Application from the manual-entry form.
+
+    Uses `board = ApplicationBoard.MANUAL` and stamps `applied_at = now`.
+    Emits a STATUS_CHANGE AppEvent so the Tracking timeline carries the
+    transition.
+    """
+    from models import ApplicationBoard  # local import to avoid circular
+
+    now = datetime.now(UTC)
+    a = Application(
+        user_id=user_id,
+        job_id=None,
+        company=company,
+        role=role,
+        team=team,
+        location=location,
+        salary_min=salary_min,
+        salary_max=salary_max,
+        applied_at=now,
+        board=ApplicationBoard.MANUAL,
+        external_url=None,
+        status=ApplicationStatus.APPLIED,
+        docs_state=DocsState.NONE,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.NONE,
+        submission_artifacts={"board_application_id": None, "manual": True},
+        notes=notes,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(a)
+    await session.flush()
+    await _emit_event(
+        session,
+        user_id=user_id,
+        application_id=a.id,
+        kind=AppEventKind.STATUS_CHANGE,
+        payload={
+            "from": None,
+            "to": ApplicationStatus.APPLIED.value,
+            "trigger": "manual",
+        },
+    )
+    return a
+
+
+async def record_screener_answer(
+    session: AsyncSession,
+    answer_id: int,
+    body: str,
+) -> ApplicationScreenerAnswer | None:
+    """Update an ApplicationScreenerAnswer body + stamp reviewed_at."""
+    stmt = select(ApplicationScreenerAnswer).where(ApplicationScreenerAnswer.id == answer_id)
+    a = (await session.exec(stmt)).one_or_none()
+    if a is None:
+        return None
+    now = datetime.now(UTC)
+    a.answer = body
+    a.reviewed_at = now
+    a.updated_at = now
+    session.add(a)
+    await session.flush()
+    return a
+
+
 # ── Submission-result observability (plan 54 / 0.2.5.02) ───────────────
 
 

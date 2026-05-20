@@ -25,6 +25,7 @@ from models import (
     Job,
     JobCreate,
     JobFilter,
+    JobQueueState,
     JobScrapeRun,
     JobScrapeStatus,
     JobSource,
@@ -468,6 +469,111 @@ async def list_recent_scrape_runs_by_source(
         if result is not None:
             out[source] = result
     return out
+
+
+# ── Queue-state ops (plan 60 / 0.2.7.17) ─────────────────────────────────
+
+
+async def set_queue_state(
+    session: AsyncSession,
+    job_id: int,
+    *,
+    user_id: int,
+    state: JobQueueState,
+) -> Job | None:
+    """Flip a Job's `queue_state` (skip / save / queue-for-auto-apply).
+
+    Replaces the in-memory `_set_job_queue_state` shim. Soft-delete-aware,
+    user_id-scoped (IDOR boundary).
+    """
+    job = await get_job(session, job_id)
+    if job is None or job.deleted_at is not None:
+        return None
+    if job.user_id != user_id:
+        raise PermissionError(f"job {job_id} does not belong to user {user_id}")
+    job.queue_state = state
+    job.updated_at = datetime.now(UTC)
+    session.add(job)
+    await session.flush()
+    return job
+
+
+async def list_jobs_by_queue_state(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    state: JobQueueState,
+) -> list[Job]:
+    """Thin wrapper around list_jobs filtered by queue_state.
+
+    Used by `/api/v1/discover/saved` and `/api/v1/discover/skipped`.
+    """
+    return await list_jobs(
+        session,
+        user_id=user_id,
+        filters=JobFilter(queue_state=state),
+        page=0,
+        page_size=200,
+    )
+
+
+async def auto_apply_queue(session: AsyncSession, *, user_id: int) -> list[Job]:
+    """Jobs flipped to QUEUED_FOR_AUTO_APPLY for the user."""
+    stmt = (
+        select(Job)
+        .where(
+            Job.user_id == user_id,
+            Job.queue_state == JobQueueState.QUEUED_FOR_AUTO_APPLY,
+            Job.deleted_at.is_(None),
+        )
+        .order_by(Job.found_at.desc())
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
+async def create_scraped_job_stub(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    url: str,
+    company: str,
+    role: str,
+) -> Job:
+    """Land a placeholder Job from Discover · `+ Add by URL` modal.
+
+    Stub for the 0.2.7.10 ATS-adapter follow-up. Until then, this synthesizes
+    a high-score Job from the URL + (company, role) the operator supplied so
+    Discover can render it immediately.
+    """
+    import hashlib
+
+    now = datetime.now(UTC)
+    ext = hashlib.sha1(url.encode()).hexdigest()[:12]
+    job = Job(
+        user_id=user_id,
+        source=JobSource.MANUAL,
+        board=ApplicationBoard.MANUAL,
+        external_id=f"manual-{ext}",
+        url=url,
+        url_type="manual",
+        company=company,
+        role=role,
+        team=None,
+        location="San Francisco, CA",
+        remote_policy=RemotePolicy.UNKNOWN,
+        description="Scraped via + Add by URL.",
+        visa_restrictions=VisaRestriction.NOT_MENTIONED,
+        score=0.84,
+        score_explanation="Auto-scored from manual URL submit.",
+        queue_state=JobQueueState.UNSWIPED,
+        found_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(job)
+    await session.flush()
+    return job
 
 
 async def record_scrape_run(

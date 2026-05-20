@@ -20,7 +20,6 @@ import os
 from types import SimpleNamespace
 
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
-os.environ["NAAVIK_PERSISTENCE"] = "memory"
 
 
 # ── 0.2.5.02 — aggregate_submission_failures ───────────────────────────

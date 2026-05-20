@@ -22,7 +22,6 @@ from datetime import UTC, datetime, timedelta
 # Bcrypt cost low for any password handling that side-effects through these tests.
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 os.environ.setdefault("NAAVIK_DEBUG", "1")
-os.environ.setdefault("NAAVIK_PERSISTENCE", "memory")
 
 import jwt as pyjwt
 import pytest

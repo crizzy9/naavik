@@ -21,10 +21,7 @@ import pytest
 # Tests bcrypt-init: keep cost low (same as test_auth.py).
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 # CSRF gate is in-app; the swipe body falls through to `db.sample_data`
-# in-memory accessors when `NAAVIK_PERSISTENCE=memory`. The nix devshell
-# exports `db` for the live orchestrator, but this isolation test needs
-# memory mode so the matching-CSRF path doesn't hit Postgres.
-os.environ["NAAVIK_PERSISTENCE"] = "memory"
+# in-memory accessors (plan 60 / 0.2.7.17 removed the dual-mode env var).
 
 
 @pytest.fixture(autouse=True)
