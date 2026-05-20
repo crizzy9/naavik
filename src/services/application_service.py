@@ -500,6 +500,15 @@ async def submit_draft(
     )
     await session.flush()
 
+    # Plan 61 (0.2.7.14) — persist reusable screener answers AFTER successful
+    # submission. Iterates only DRAFTED + reviewed rows with a non-empty answer;
+    # last-write-wins on fingerprint collision. Best-effort — failures here
+    # never block submission ack.
+    try:
+        await _persist_reusable_screener_answers(session, application)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("profile_answer upsert post-submit failed: %s", exc)
+
     if notify_fn is not None:
         try:
             await notify_fn(application)
@@ -507,6 +516,35 @@ async def submit_draft(
             log.warning("notify_application_submitted failed: %s", exc)
 
     return application
+
+
+async def _persist_reusable_screener_answers(
+    session: AsyncSession, application: Application
+) -> None:
+    """Upsert ProfileAnswer rows from this application's reviewed DRAFTED screeners.
+
+    Plan 61 (0.2.7.14). Only rows whose `source == DRAFTED`, `reviewed_at IS
+    NOT NULL`, and `answer` non-empty are eligible — user-edited (`USER`)
+    answers are already personal; AUTO-filled rows are profile-field reuse
+    and don't need a separate cache.
+    """
+    from services import profile_answer_service
+
+    stmt = select(ApplicationScreenerAnswer).where(
+        ApplicationScreenerAnswer.application_id == application.id,
+        ApplicationScreenerAnswer.source == ScreenerAnswerSource.DRAFTED,
+        ApplicationScreenerAnswer.reviewed_at.is_not(None),
+    )
+    rows = (await session.exec(stmt)).all()
+    for row in rows:
+        if not row.answer or not row.answer.strip():
+            continue
+        await profile_answer_service.upsert_from_screener_answer(
+            session,
+            user_id=application.user_id,
+            screener_answer=row,
+            company_name=application.company,
+        )
 
 
 async def cleanup_stale_drafts(

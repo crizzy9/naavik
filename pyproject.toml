@@ -55,6 +55,11 @@ dependencies = [
     # folds in 0.2.0.13a). Pure-Python; MIT; nixpkgs ships
     # `python312Packages.cachetools`. Bounds DNS-rebind TOCTOU window to 60s.
     "cachetools>=5.0,<6",
+    # pgvector SQLAlchemy bindings for `JobEmbedding` + `embedding_service`
+    # (plan 61, 0.2.7.16). 0.4.x is the stable API band; pulls `numpy`
+    # transitively which needs `libz.so.1` at dlopen — devshell + flake
+    # export the right LD_LIBRARY_PATH so `nix run .#dev` boots.
+    "pgvector>=0.4.0,<0.5",
 ]
 
 [project.optional-dependencies]

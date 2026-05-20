@@ -492,6 +492,13 @@ class Settings(_Base):
     source_schedules: dict[str, str] = Field(default_factory=dict)
     workday_companies: list[str] = Field(default_factory=list)
 
+    # Plan 61 (0.2.7.14 + 0.2.7.16): semantic match toggles. Default OFF;
+    # threshold 0.65 matches the SQLModel default.
+    semantic_match_enabled: bool = False
+    embedding_provider: str | None = None
+    semantic_match_threshold: float = 0.65
+    semantic_match_sync_on_upsert: bool = False
+
     deployment_mode: DeploymentMode = DeploymentMode.SELF_HOSTED
 
     # Plan 10b (item 4, 2026-05-03): single-user signup gate. Mirrors the

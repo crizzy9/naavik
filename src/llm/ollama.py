@@ -15,12 +15,16 @@ from pydantic import BaseModel
 
 from .base import (
     CompletionResult,
+    EmbeddingResult,
     LLMProvider,
     LLMProviderError,
     StructuredResult,
 )
 
 T = TypeVar("T", bound=BaseModel)
+
+# Plan 61 / 0.2.7.16 — nomic-embed-text returns 768d native; no truncation.
+_EMBEDDING_MODEL = "nomic-embed-text"
 
 
 class OllamaProvider(LLMProvider):
@@ -142,6 +146,30 @@ class OllamaProvider(LLMProvider):
                         yield text
         except httpx.HTTPError as exc:
             raise LLMProviderError(f"ollama stream failed: {exc}") from exc
+
+    async def embed(self, text: str) -> EmbeddingResult:
+        try:
+            r = await self._client.post(
+                f"{self._base}/api/embeddings",
+                json={"model": _EMBEDDING_MODEL, "prompt": text},
+            )
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise LLMProviderError(f"ollama embed failed: {exc}") from exc
+
+        data = r.json()
+        if "embedding" not in data or not isinstance(data["embedding"], list):
+            raise LLMProviderError(
+                f"ollama embed response missing embedding: {data!r}",
+                kind="schema_validation",
+            )
+        vector = data["embedding"]
+        return EmbeddingResult(
+            vector=[float(v) for v in vector],
+            input_tokens=int(data.get("prompt_eval_count", 0)),
+            output_tokens=0,
+            model=_EMBEDDING_MODEL,
+        )
 
     def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
         return 0.0  # local = free

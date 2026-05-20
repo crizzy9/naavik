@@ -119,6 +119,17 @@ class Settings(SQLModel, table=True):
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
 
+    # Plan 61 (0.2.7.14 + 0.2.7.16): semantic-match toggle + per-user embedding
+    # provider + cosine-sim floor. Default OFF; provider routing reads
+    # `OPENAI_API_KEY` / `OLLAMA_BASE_URL` env presence via env_secrets.
+    # `semantic_match_sync_on_upsert` — opt-in sync trigger inside
+    # `job_service.upsert_job`; default OFF (nightly-only) so scraper p50
+    # isn't bombed by embedding-call latency. See `decision D3`.
+    semantic_match_enabled: bool = Field(default=False)
+    embedding_provider: str | None = Field(default=None, max_length=32)
+    semantic_match_threshold: float = Field(default=0.65)
+    semantic_match_sync_on_upsert: bool = Field(default=False)
+
     # Deployment
     deployment_mode: DeploymentMode = Field(default=DeploymentMode.SELF_HOSTED)
 

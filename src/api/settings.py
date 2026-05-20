@@ -117,13 +117,38 @@ async def put_llm(
 
     provider = payload.get("llm_provider")
     fallback_provider = payload.get("llm_fallback_provider")
-    s = await settings_service.update_llm(
-        session,
-        user_id=1,
-        provider=LLMProviderEnum(provider) if provider else None,
-        model=payload.get("llm_model"),
-        fallback_provider=(LLMProviderEnum(fallback_provider) if fallback_provider else None),
-    )
+    # Plan 61 (0.2.7.16) — checkbox tri-state idiom mirrors plan 59 / 0.2.7.12.
+    # Absent key = skip; present truthy/falsy = set bool(value).
+    semantic_enabled_raw = payload.get("semantic_match_enabled")
+    semantic_enabled = bool(semantic_enabled_raw) if "semantic_match_enabled" in payload else None
+    semantic_sync_raw = payload.get("semantic_match_sync_on_upsert")
+    semantic_sync = bool(semantic_sync_raw) if "semantic_match_sync_on_upsert" in payload else None
+    embedding_provider_raw = payload.get("embedding_provider")
+    embedding_provider = str(embedding_provider_raw) if "embedding_provider" in payload else None
+    threshold_raw = payload.get("semantic_match_threshold")
+    threshold: float | None = None
+    if "semantic_match_threshold" in payload and threshold_raw not in (None, ""):
+        try:
+            threshold = float(threshold_raw)
+        except (TypeError, ValueError):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "semantic_match_threshold must be a float"},
+            )
+    try:
+        s = await settings_service.update_llm(
+            session,
+            user_id=1,
+            provider=LLMProviderEnum(provider) if provider else None,
+            model=payload.get("llm_model"),
+            fallback_provider=(LLMProviderEnum(fallback_provider) if fallback_provider else None),
+            semantic_match_enabled=semantic_enabled,
+            embedding_provider=embedding_provider,
+            semantic_match_threshold=threshold,
+            semantic_match_sync_on_upsert=semantic_sync,
+        )
+    except ValueError as exc:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
     await session.commit()
 
     if is_form:
