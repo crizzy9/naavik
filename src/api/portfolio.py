@@ -11,8 +11,9 @@ out of the Profile JSON. The PDF is served from the cached portfolio path
 from __future__ import annotations
 
 import logging
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -52,9 +53,17 @@ def _cors_response(origin: str | None, settings: Settings) -> dict[str, str]:
 async def get_cv(
     request: Request,
     origin: str | None = Header(default=None, alias="origin"),
+    version: Annotated[Literal["v1"], Query()] = "v1",
     session: AsyncSession = Depends(get_session),
 ):
-    """Public CV — Profile JSON, filtered for PII/EEO/visa/salary."""
+    """Public CV — Profile JSON, filtered for PII/EEO/visa/salary.
+
+    Plan 57 / 0.2.7.15 — reserves a version surface for cv.astro pinning.
+    `version=v1` is the only shape today; future schema-breaking changes
+    will branch the payload-build step at line 92. Pydantic Literal rejects
+    unknown values with 422 (FastAPI default; close enough to 400 for the
+    "fail loudly on client drift" intent).
+    """
     settings = await _get_settings(session)
     profile = (
         await session.exec(
