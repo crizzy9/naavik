@@ -17,7 +17,8 @@ from .auto_tag_bullets import BulletTags, auto_tag_bullets
 from .classify_email import EmailClassificationResult, classify_email
 from .draft_cover_letter import CoverLetterDraft, draft_cover_letter
 from .draft_outreach import OutreachDraft, draft_outreach
-from .extract_job import ExtractedJob, extract_job
+from .extract_job import PROMPT as EXTRACT_JOB_PROMPT
+from .extract_job import JobExtraction
 from .extract_resume import ExtractedResume, extract_resume
 from .score_job import JobScore, score_job
 from .select_bullets import BulletSelection, select_bullets
@@ -28,8 +29,9 @@ __all__ = [
     "BulletTags",
     "CoverLetterDraft",
     "EmailClassificationResult",
-    "ExtractedJob",
+    "EXTRACT_JOB_PROMPT",
     "ExtractedResume",
+    "JobExtraction",
     "JobScore",
     "OutreachDraft",
     "ScreenerAnswer",
@@ -39,7 +41,6 @@ __all__ = [
     "classify_email",
     "draft_cover_letter",
     "draft_outreach",
-    "extract_job",
     "extract_resume",
     "score_job",
     "select_bullets",
