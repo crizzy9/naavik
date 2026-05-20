@@ -27,8 +27,13 @@ async def get_tracking(
     request: Request,
     view: Annotated[Literal["board", "list"], Query()] = "board",
     show_closed: Annotated[int, Query()] = 0,
+    show_drafts: Annotated[int, Query()] = 0,
 ):
-    ctx = await tctx.build_tracking_ctx(view=view, show_closed=bool(show_closed))
+    ctx = await tctx.build_tracking_ctx(
+        view=view,
+        show_closed=bool(show_closed),
+        show_drafts=bool(show_drafts),
+    )
     ctx["active_sidebar"] = "tracking"
     ctx["active_template_path"] = "/tracking"
     return templates.TemplateResponse(request, "pages/tracking.html", ctx)
@@ -45,14 +50,26 @@ async def get_tracking(
 async def fragment_board(
     request: Request,
     show_closed: Annotated[int, Query()] = 0,
+    show_drafts: Annotated[int, Query()] = 0,
 ):
-    ctx = await tctx.build_tracking_ctx(view="board", show_closed=bool(show_closed))
+    ctx = await tctx.build_tracking_ctx(
+        view="board",
+        show_closed=bool(show_closed),
+        show_drafts=bool(show_drafts),
+    )
     return templates.TemplateResponse(request, "pages/_tracking_board.html", ctx)
 
 
 @router.get("/_fragments/tracking/list", response_class=HTMLResponse, name="tracking_list_fragment")
-async def fragment_list(request: Request):
-    ctx = await tctx.build_tracking_ctx(view="list", show_closed=True)
+async def fragment_list(
+    request: Request,
+    show_drafts: Annotated[int, Query()] = 0,
+):
+    ctx = await tctx.build_tracking_ctx(
+        view="list",
+        show_closed=True,
+        show_drafts=bool(show_drafts),
+    )
     return templates.TemplateResponse(request, "pages/_tracking_list.html", ctx)
 
 
@@ -70,6 +87,54 @@ async def fragment_followup(request: Request):
         "components/followup_banner.html",
         {"count": ctx["followup_count"], "items": ctx["followup_items"]},
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Application detail slide-over (plan 53 § C / 0.2.4.03)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _effective_user_id(user: User | None) -> int:
+    return user.id if user is not None else 1
+
+
+async def _application_or_404(application_id: int, user: User | None):
+    """Fetch an Application and enforce user_id boundary (IDOR → 404, never 403)."""
+    a = await sd.get_application(application_id)
+    if a is None or a.user_id != _effective_user_id(user):
+        raise HTTPException(status_code=404, detail="Application not found")
+    return a
+
+
+@router.get("/tracking/{application_id}", response_class=HTMLResponse, name="tracking_detail")
+async def get_tracking_detail(
+    request: Request,
+    application_id: int,
+    user: User | None = Depends(require_authed_session),
+):
+    application = await _application_or_404(application_id, user)
+    base_ctx = await tctx.build_tracking_ctx(view="board")
+    detail_ctx = await tctx.build_application_detail_ctx(application)
+    ctx = {**base_ctx, **detail_ctx}
+    ctx["active_sidebar"] = "tracking"
+    ctx["active_template_path"] = "/tracking"
+    ctx["slide_over_open"] = True
+    return templates.TemplateResponse(request, "pages/tracking.html", ctx)
+
+
+@router.get(
+    "/_fragments/tracking/application/{application_id}",
+    response_class=HTMLResponse,
+    name="tracking_application_fragment",
+)
+async def fragment_application(
+    request: Request,
+    application_id: int,
+    user: User | None = Depends(require_authed_session),
+):
+    application = await _application_or_404(application_id, user)
+    ctx = await tctx.build_application_detail_ctx(application)
+    return templates.TemplateResponse(request, "components/_application_detail.html", ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────

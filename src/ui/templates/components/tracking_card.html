@@ -8,8 +8,13 @@
                   context_chip (str)
 #}
 {% set a = application %}
-<article class="flex flex-col gap-2 p-3 bg-slate-950 border border-slate-800 rounded-lg cursor-grab hover:border-slate-700 transition group"
-         data-app-id="{{ a.id }}">
+<article class="flex flex-col gap-2 p-3 bg-slate-950 border border-slate-800 rounded-lg cursor-pointer hover:border-slate-700 transition group"
+         data-app-id="{{ a.id }}"
+         data-testid="tracking-card"
+         hx-get="/_fragments/tracking/application/{{ a.id }}"
+         hx-target="#tracking-slide-over-mount"
+         hx-swap="innerHTML"
+         hx-push-url="/tracking/{{ a.id }}">
   <header class="flex items-start gap-2.5">
     {% with kind="company", text=a.company_initial | default(a.company[:1] | upper), size="sm", color_override=a.company_color | default("bg-slate-700") %}
       {% include "components/avatar.html" %}

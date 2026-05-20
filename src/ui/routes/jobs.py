@@ -12,13 +12,25 @@ on mutating ops (plan 36 fold-in of 0.7.0.15).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
 from db.session import get_session
-from models import JobRead, JobScrapeRun, User
+from models import (
+    ApplicationBoard,
+    JobCreate,
+    JobRead,
+    JobScrapeRun,
+    JobSource,
+    RemotePolicy,
+    User,
+)
 from services import job_service
 from services.auth import require_authed_session
 from ui import jobs_ctx
@@ -114,3 +126,61 @@ async def get_job_json(
     """
     job = await _job_or_404(session, job_id, _effective_user_id(user))
     return JSONResponse(content=JobRead.model_validate(job).model_dump(mode="json"))
+
+
+# ── Manual job entry modal + endpoint (plan 53 § B / 0.2.4.02) ───────────
+
+
+@router.get("/_modal/manual-job", response_class=HTMLResponse, name="modal_manual_job")
+async def manual_job_modal(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "components/_manual_job_entry_modal.html",
+        {},
+    )
+
+
+@router.post("/api/v1/jobs/manual", name="jobs_manual")
+async def post_job_manual(
+    company: Annotated[str, Form()],
+    role: Annotated[str, Form()],
+    description: Annotated[str, Form()],
+    url: Annotated[str | None, Form()] = None,
+    location: Annotated[str | None, Form()] = None,
+    source: Annotated[str, Form()] = "manual",
+    remote_policy: Annotated[str, Form()] = "unknown",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Create a manually-entered Job (plan 53 § B.2)."""
+    if not (company.strip() and role.strip() and description.strip()):
+        raise HTTPException(status_code=422, detail="company, role, description required")
+
+    try:
+        JobSource(source)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid source: {source}") from exc
+
+    try:
+        payload = JobCreate(
+            company=company.strip(),
+            role=role.strip(),
+            description=description.strip(),
+            url=(url or "").strip() or f"manual://entry/{uuid.uuid4().hex[:12]}",
+            location=(location or "").strip() or None,
+            remote_policy=RemotePolicy(remote_policy),
+            board=ApplicationBoard.MANUAL,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await job_service.create_manual_job(
+        session,
+        payload,
+        user_id=_effective_user_id(user),
+    )
+    await session.commit()
+    response = Response(status_code=204)
+    response.headers["HX-Redirect"] = "/tracking"
+    return response

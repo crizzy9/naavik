@@ -6,7 +6,7 @@ from datetime import datetime
 
 from db import sample_data as sd
 from db.sample_data_models import Application
-from models.enums import ApplicationStatus, RecruiterState, ReferralState
+from models.enums import AppEventKind, ApplicationStatus, RecruiterState, ReferralState
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",
@@ -118,9 +118,11 @@ def _columns_for_board(apps: list[Application], *, show_closed: bool) -> list[di
 
 
 async def build_tracking_ctx(
-    *, view: str = "board", show_closed: bool = False
+    *, view: str = "board", show_closed: bool = False, show_drafts: bool = False
 ) -> dict[str, object]:
     visible_apps = await sd.applications_visible_in_tracking()
+    if show_drafts:
+        visible_apps = visible_apps + await sd.draft_applications()
     all_apps = visible_apps + await sd.closed_applications() if show_closed else visible_apps
     closed = await sd.closed_applications()
     columns = _columns_for_board(all_apps, show_closed=show_closed)
@@ -181,6 +183,7 @@ async def build_tracking_ctx(
     return {
         "current_view": view,
         "show_closed": show_closed,
+        "show_drafts": show_drafts,
         "columns": columns,
         "rows": [application_to_list_row(a) for a in visible_apps],
         "active_count": len(visible_apps),
@@ -188,4 +191,77 @@ async def build_tracking_ctx(
         "followup_count": len(followup),
         "followup_items": items,
         "integrations": integrations,
+    }
+
+
+async def build_application_detail_ctx(application: Application) -> dict[str, object]:
+    """Project Application + related rows into the detail slide-over (plan 53 § C.3)."""
+    initial, color = _initial_color(application.company)
+    events = await sd.app_events_for_application(application.id)
+    status_timeline = [
+        {
+            "from": e.payload.get("from"),
+            "to": e.payload.get("to"),
+            "trigger": e.payload.get("trigger"),
+            "occurred_at": e.occurred_at,
+            "occurred_at_label": _relative_label(e.occurred_at),
+        }
+        for e in events
+        if e.kind == AppEventKind.STATUS_CHANGE
+    ]
+    status_timeline.reverse()
+
+    documents = await sd.documents_for_application(application.id)
+    docs = [
+        {
+            "id": d.id,
+            "kind": d.kind.value,
+            "compiled_at": d.compiled_at,
+            "compiled_at_label": _relative_label(d.compiled_at),
+            "path": d.path,
+        }
+        for d in documents
+    ]
+
+    contacts = await sd.contacts_for_application(application.id)
+    contact_rows = [
+        {
+            "id": c.id,
+            "name": c.name,
+            "title": c.title,
+            "company": c.company,
+            "initial": (c.name[:1] or "?").upper(),
+        }
+        for c in contacts
+    ]
+
+    last_failure = None
+    board_application_id = None
+    if application.submission_artifacts:
+        last_failure = application.submission_artifacts.get("last_failure")
+        board_application_id = application.submission_artifacts.get("board_application_id")
+
+    return {
+        "application": {
+            "id": application.id,
+            "company": application.company,
+            "company_initial": initial,
+            "company_color": color,
+            "role": application.role,
+            "team": application.team,
+            "location": application.location,
+            "salary_range": _salary_range(application),
+            "status": application.status.value,
+            "status_label": application.status.value.replace("_", " "),
+            "board": application.board.value if application.board else None,
+            "external_url": application.external_url,
+            "notes": application.notes or "",
+            "applied_at": application.applied_at,
+            "applied_at_label": _relative_label(application.applied_at),
+            "board_application_id": board_application_id,
+        },
+        "status_timeline": status_timeline,
+        "documents": docs,
+        "contacts": contact_rows,
+        "last_failure": last_failure,
     }

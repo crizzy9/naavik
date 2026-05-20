@@ -205,6 +205,7 @@ class StatusChangeTrigger(StrEnum):
     AUTO_APPLY_SUBMITTED = "auto_apply_submitted"
     DISCARD = "discard"
     ATS_CALLBACK = "ats_callback"
+    CLEANUP_STALE = "cleanup_stale"
 
 
 class OutreachStatus(StrEnum):
