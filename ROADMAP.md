@@ -2,7 +2,7 @@
 
 > **Single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. Tracking-only (per `AGENTS.md` § Single-doc-tracking).
 >
-> **Last updated:** 2026-05-20. (0.2.7 PATH-A SWEEP continues — PR #158 (0.2.7.01/13/15/23) + PR #159 (0.2.7.06 paired editors) merged. Plans 57+58 archived. Engineer 59 (auto-apply immediate) in flight; plan 60 (NAAVIK_PERSISTENCE) queued. Filed 0.2.7.13a + 13b + 24 follow-ups.)
+> **Last updated:** 2026-05-20. (0.2.7 PATH-A SWEEP continues — PRs #158 (0.2.7.01/13/15/23) + #159 (0.2.7.06) + #160 (0.2.7.12) merged. Plans 57-59 archived. Engineer 60 (NAAVIK_PERSISTENCE removal) in flight. Filed 0.2.7.13a + 13b + 24 + 25 + 26 follow-ups.)
 
 ---
 
@@ -322,7 +322,7 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 | 0.2.7.07 | Multi-tenant JWT signing-key rotation | [ ] | — | DEF-13 | Phase 2+ multi-tenant cloud feature. Self-hosted single-key fine. From plan 10 Q7. |
 | 0.2.7.10 | Workday / LinkedIn / Indeed / Generic ATS adapters | [ ] | — | DEF-01 | Weeks of work; requires real ATS credentials + manual review queues + Playwright. Composes with 0.2.3.02 postmortem-on-failure (which adds optional `screenshot_path` field reserved for these adapters). From plan 10 § C.4. |
 | 0.2.7.11 | LinkedIn proxy support | [ ] | — | DEF-15 | Phase 6+ explicit marker. From BACKEND.md § J.4. |
-| 0.2.7.12 | Auto-apply immediate dispatch on right-swipe | [ ] | — | DEF-10 | Phase 4 auto-apply work; changes auto-apply latency contract. From this triage 2026-05-01. |
+| 0.2.7.12 | Auto-apply immediate dispatch on right-swipe | [x] | — | DEF-10 | **Plan 59 EXECUTED 2026-05-20 via PR #160.** Option D shipped: `Settings.auto_apply_immediate_dispatch BOOLEAN NOT NULL DEFAULT FALSE` (alembic 0011) + right-swipe handler schedules one-off `add_job(DateTrigger=now, id='auto-apply-immediate-{app_id}-{uuid8}', func='scheduler.jobs:auto_apply')` when toggle enabled. HTMX tri-state idiom for the new toggle. 5 tests. `FUNC_REF_ALLOWLIST` not modified (`auto_apply` already there). Default OFF preserves 5-min cron behavior. Reviewers: hacker APPROVE_WITH_NOTES (2 LOW non-blocking notes on PRE-EXISTING gaps — filed as `0.2.7.25` CSRF on put_auto_apply/put_llm/put_notifications + `0.2.7.26` IDOR via `user_id=1` hardcode on same 3 routes); architect APPROVE 0 findings. |
 | 0.2.7.13 | Onboarding offline retry buffer for autosave | [x] | — | DEF-07 | **Plan 57 EXECUTED 2026-05-20 via PR #158.** New `src/ui/static/offline_queue.js` (~210 LOC) — IndexedDB-backed retry queue for `/onboarding*` autosave. Path-gated server-side; prefix-allowlist for replay; 5-retry exponential backoff; `naavik:offline-queue-drop` CustomEvent. 14 tests. Browser-side IndexedDB tests deferred to `0.2.7.13a`. |
 | 0.2.7.14 | `ProfileAnswer` reuse cache | [ ] | — | DEF-09 | Phase 2+ entity. From DATA_MODEL.md § J. |
 | 0.2.7.15 | Portfolio API versioning | [x] | — | DEF-12 | **Plan 57 EXECUTED 2026-05-20 via PR #158.** `GET /api/portfolio/cv` accepts `?version=v1` via Pydantic `Literal["v1"]`; default v1; unknown→422. 5 tests. |
@@ -337,6 +337,8 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 | 0.2.7.13a | Playwright IndexedDB round-trip test for offline_queue.js | [ ] | LOW | (engineer PR #158 deviation) | **Filed 2026-05-20.** PR #158 ships TestClient assertions for `src/ui/static/offline_queue.js`; behavioral DOM testing (offline → enqueue → online → drain → drop event) deferred until Playwright DOM-driver exists. ~50 LOC test. |
 | 0.2.7.13b | Re-read `meta[name=csrf-token]` at offline-queue replay time | [ ] | LOW | (hacker PR #158 NOTE-2) | **Filed 2026-05-20 via PR #158 hacker review.** Queued autosaves surviving logout+login replay with stale CSRF → silent drop after 5 retries. Fix: at replay time, re-read `meta[name=csrf-token]` from DOM. ~5 LOC JS + 1 test. |
 | 0.2.7.24 | Catch-all `/settings/{tab}` still uses hardcoded `user_id=1` — extend `_effective_user_id` to the catchall handler | [ ] | MEDIUM | (hacker PR #158 NOTE-1 + engineer follow-up) | **Filed 2026-05-20 via PR #158 review.** `src/ui/routes/settings.py:531` catchall defaults `user_id=1`. Latent IDOR — explicit routes match FIRST so not actively exploitable. Same pattern as 0.2.7.23. ~5 LOC + 2 tests. |
+| 0.2.7.25 | Pre-existing CSRF gap on `put_auto_apply` + `put_llm` + `put_notifications` (Settings PUT routes) | [ ] | MEDIUM | (hacker PR #160 NOTE-1) | **Filed 2026-05-20 via PR #160 hacker review.** Pre-existing on main (not introduced by PR #160). 3 settings PUT routes lack `require_csrf` dep — cross-origin form-submit could toggle auto-apply/LLM/notifications config on logged-in user. Same pattern as `put_sources:258` fix. ~3 LOC × 3 routes + 3 tests. |
+| 0.2.7.26 | Pre-existing IDOR via `user_id=1` hardcode on `put_auto_apply` + `put_llm` + `put_notifications` | [ ] | MEDIUM | (hacker PR #160 NOTE-2) | **Filed 2026-05-20 via PR #160 hacker review.** Pre-existing on main (not introduced by PR #160). Same hardcode pattern as 0.2.7.02 + 0.2.7.24. Thread `_effective_user_id(_user)` through 3 routes per `put_sources:290` precedent. ~3 LOC × 3 routes + 6 tests. |
 
 **Deliverable (0.2.7):** Pickup queue for product-side cleanup deferred from 0.2.x sweep. Items graduate to a future release-version when scheduled.
 
