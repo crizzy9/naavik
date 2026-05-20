@@ -58,17 +58,27 @@ Before reaching for a sub-agent, ask: is this scope big enough to justify the di
 
 **Override:** when user says "do it yourself" or "you handle the small ones" — that's standing authority. Don't relitigate.
 
-# Token-based model selection (post-0.7.0.23 / plan 41)
+# Dynamic model selection at dispatch — no twin files
 
-Sub-agent base files (`.claude/agents/{architect,engineer}.md`) ship with `claude-opus-4-7` (no 1M-context extension). When dispatching, override to `claude-opus-4-7[1m]` ONLY when the work warrants the bigger context window — heuristic: estimated total dispatch tokens >= 60K. This means:
+All 6 sub-agent files ship with `claude-opus-4-7[1m]` as the frontmatter default — the big-context flavor is the SAFE default. Manager **dynamically picks smaller flavor at dispatch** via the Task tool's `model` parameter, which takes precedence over frontmatter.
 
-- **Small architect dispatch** (delta re-review, tight plan refinement, single-file analysis): use base `opus-4-7`.
-- **Big architect dispatch** (new design plan with multiple option matrices, full-repo research, BACKEND.md graduation): use `[1m]` via `model` override in Task call.
-- **Small engineer dispatch** (~2-3 file fix, follow-up patch): base `opus-4-7`.
-- **Big engineer dispatch** (full feature implementation, multi-wave plan): `[1m]`.
-- **Hacker / architect at PR review**: typically base `opus-4-7` (review work fits 200K context window comfortably). Promote to `[1m]` only for >15-file PRs.
+**The 3 dispatch tiers:**
 
-You estimate at dispatch time. Wrong estimate → re-dispatch with bigger model is cheap (Task tool restart).
+| Tier | When | Mechanism | Effective model |
+|---|---|---|---|
+| **Tier 0 — sonnet** | Tiny dispatch: <20K input, simple lookup / mechanical fix / fixture write / shape-validation. Cheap + fast. | `Agent(model="sonnet", ...)` | Sonnet 4.6 (whatever Claude Code's project-default sonnet is) |
+| **Tier 1 — opus (base)** | Small-medium dispatch: 20-60K input. Single-PR review, focused 2-3 file edit, tight delta re-review, single-file analysis. | `Agent(model="opus", ...)` | Base `claude-opus-4-7` — override drops the `[1m]` suffix from frontmatter |
+| **Tier 2 — opus[1m] (default)** | Big dispatch: ≥60K input. Multi-file feature, new design plan with option matrices, full-repo research, big PR review (>15 files), cold-start with full canonical-read load. | OMIT `model` arg from Task call (frontmatter wins) | `claude-opus-4-7[1m]` — 1M-context window |
+
+**Operational rule of thumb at dispatch time:**
+1. Estimate input tokens: cold-start (~25K) + per-file reads + plan/diff size + your instruction prose.
+2. If <20K AND task is mechanical (no design/review judgement) → `sonnet`.
+3. If 20-60K AND task fits 200K context easily → `opus`.
+4. If ≥60K OR task needs to load >15 files OR cross-cutting reasoning → omit `model` (`[1m]` default kicks in).
+
+**Wrong estimate → cheap to recover.** If you under-estimate and a `sonnet`/`opus` dispatch fails to fit context, re-dispatch with no `model` arg (`[1m]` default). Token cost of the failed dispatch is the floor; not catastrophic.
+
+**Why no twin files** (per user directive 2026-05-19): manager owns the decision per-dispatch via the Task tool `model` enum override. Twin files (`architect-1m.md` + `engineer-1m.md`) would create bloat for a decision that's already manager's responsibility to make instinctively.
 
 # Dynamic reviewer selection — not all PRs need both reviewers
 
