@@ -432,12 +432,12 @@ Four authenticated endpoints under `/api/v1/scheduler/` give read + control over
 
 ### Upgrading from 0.1.x with a populated vault
 
-If you previously used Settings UI to save an LLM API key or webhook URL, those values lived encrypted in `~/.naavik/secrets.enc`. Plan 26 deleted the vault module + CLI subcommands; there is no automated migration. Capture the scope list before upgrading:
+If you previously used Settings UI to save an LLM API key or webhook URL, those values lived encrypted in `~/.naavik/secrets.enc`. Plan 26 deleted the vault module + CLI subcommands; there is no automated migration. Capture the scope list before upgrading on the **last 0.1.x release** (the `naavik vault status` CLI is the LAST point at which scope inspection works):
 
 ```bash
-# BEFORE upgrading (on 0.1.x):
-naavik vault status      # capture your scope list / key names
-# AFTER upgrading (on 0.2.0):
+# BEFORE upgrading (still on the last 0.1.x release):
+uv run naavik vault status   # capture your scope list / key names
+# AFTER upgrading (0.2.0+):
 cp .env.example .env && chmod 0600 .env
 # Edit .env with the values from the captured scope list. Then:
 rm -f ~/.naavik/secrets.enc ~/.naavik/key.bin
@@ -456,19 +456,17 @@ rm -rf .naavik/db                 # nuke postgres data dir; nix run .#dev re-ini
 uv run alembic downgrade base && uv run alembic upgrade head && uv run python -m db.seed
 ```
 
-### `naavik` CLI
+### `naavik` script entry
 
-> **Sunset track — do not extend.** Plan 26 (0.2.0.01, 2026-05-19) deleted `naavik init` + `naavik vault <...>` along with the encrypted vault. The remaining surface is `naavik` (bare) and `naavik serve`; plan `0.2.0.02` (queued) removes those too. New operator capabilities ship as Settings UI surfaces or `.env`-based config per AGENTS.md § Key Conventions § CLI.
+> **Sunset complete (plan 50 / 0.2.1.05, 2026-05-20).** `src/cli/` deleted; the script collapses to a uvicorn launcher. Plan 26 (0.2.0.01) previously deleted `naavik init` + `naavik vault <...>` along with the encrypted vault. New operator capabilities ship as Settings UI surfaces or `.env`-based config per AGENTS.md § Key Conventions § CLI.
 
 ```bash
-naavik                              # default: serve (back-compat)
-naavik serve                        # explicit alias for default
-naavik init                         # DEPRECATED in 0.2.0 — prints migration hint + exits 2
-naavik vault status                 # DEPRECATED in 0.2.0 — prints migration hint + exits 2
-naavik vault rotate-key --old=...   # DEPRECATED in 0.2.0 — prints migration hint + exits 2
+naavik                              # boot uvicorn against main:app
+python -m main                      # functionally identical
+uvicorn src.main:app                # also identical
 ```
 
-The deprecated subcommands surface a hint pointing at `.env` config + `CHANGELOG.md ## [0.2.0]`. `naavik-alembic` (alembic's own CLI) is unaffected.
+`naavik-alembic` (alembic's own CLI surface) is unaffected.
 
 ### Agent memory + learning (Phase A row A.15)
 

@@ -143,16 +143,21 @@ async def health_check():
 
 
 def main():
-    """Back-compat alias for `python -m main`.
+    """`naavik` script entry — boots uvicorn against `main:app`.
 
-    Plan 10b (item 5, 2026-05-03) moved the canonical CLI dispatch to
-    `cli.main:main`. The actual `naavik` script entry point now resolves
-    there. This shim exists so anyone running `python -m main` (or
-    importing `main.main`) keeps booting the server.
+    Plan 50 (0.2.1.05, 2026-05-20): `src/cli/` deleted. `python -m main`
+    and `uvicorn src.main:app` are functionally identical to this entry.
     """
-    from cli.main import cmd_serve
+    import uvicorn
 
-    return cmd_serve()
+    from config import settings as app_settings
+
+    uvicorn.run(
+        "main:app",
+        host=app_settings.host,
+        port=app_settings.port,
+        reload=False,
+    )
 
 
 if __name__ == "__main__":

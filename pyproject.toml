@@ -65,12 +65,14 @@ dev = [
 ]
 
 [project.scripts]
-# Plan 26 (0.2.0.01, 2026-05-19): `naavik init` + `naavik vault <...>`
-# subcommands deleted with the encrypted vault. `naavik` (bare) and
-# `naavik serve` are the only surfaces left; both run uvicorn. Plan
-# 0.2.0.02 (queued) collapses to the bare invocation per AGENTS.md
-# § Key Conventions § CLI sunset directive.
-naavik = "cli.main:main"
+# Plan 50 (0.2.1.05, 2026-05-20): `src/cli/` deleted. The `naavik`
+# script entry now boots uvicorn directly via `main:main`; the prior
+# `cli.main:main` dispatcher is gone along with the `init` / `vault`
+# / `serve` subparsers. `python -m main` and `uvicorn src.main:app`
+# remain functionally identical. Future operator capabilities ship as
+# Settings UI surfaces or `.env.example` slots per AGENTS.md § Key
+# Conventions § CLI.
+naavik = "main:main"
 naavik-alembic = "alembic.config:main"
 
 [build-system]
@@ -79,7 +81,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["api", "cli", "db", "llm", "models", "scheduler", "scraper", "scraper.sites", "services", "typst", "ui"]
+packages = ["api", "db", "llm", "models", "scheduler", "scraper", "scraper.sites", "services", "typst", "ui"]
 py-modules = ["config", "main", "app"]
 
 [tool.ruff]
