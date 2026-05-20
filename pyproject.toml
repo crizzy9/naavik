@@ -47,6 +47,10 @@ dependencies = [
     # Exact pin keeps the lockfile deterministic; future bumps come after release
     # notes are read.
     "crawl4ai==0.8.6",
+    # Fuzzy string scoring for tier-3 cross-source dedup (plan 34, 0.2.0.09).
+    # Compiled C++ wheel; manylinux + macOS arm64 prebuilt; nixpkgs ships
+    # `python312Packages.rapidfuzz`. token_set_ratio used in services/dedup.py.
+    "rapidfuzz>=3.10.0,<4",
 ]
 
 [project.optional-dependencies]

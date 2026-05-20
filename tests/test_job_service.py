@@ -39,12 +39,17 @@ from services import job_service
 
 
 class _FakeSession:
-    """Tracks add()/flush()/exec() calls; serves canned exec results."""
+    """Tracks add()/flush()/exec() calls; serves canned exec results.
+
+    Exposes a sqlite-flavored `bind.dialect` so `services.dedup` picks the
+    LIKE fallback branch rather than pg_trgm (plan 34 / 0.2.0.09).
+    """
 
     def __init__(self) -> None:
         self.added: list = []
         self.exec_queue: list = []
         self.flush_count = 0
+        self.bind = SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
 
     def add(self, obj):
         self.added.append(obj)

@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel
-from sqlalchemy import CheckConstraint, Column, DateTime, Index, String
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
 
@@ -58,6 +58,9 @@ class Job(SQLModel, table=True):
             unique=True,
             postgresql_where="deleted_at IS NULL",
         ),
+        # Tier-3 fuzzy dedup candidate-narrowing index (plan 34 § D.6).
+        # GIN trigram on lower(company); declared in alembic 0006 because
+        # SQLModel can't natively express the expression-index + opclass.
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -134,6 +137,17 @@ class Job(SQLModel, table=True):
         default=None,
         foreign_key="job_scrape_run.id",
     )
+    # Tier-3 fuzzy dedup link (plan 34 § D.3). Self-FK; ON DELETE SET NULL
+    # so archiving the canonical Job re-surfaces shadowed rows in Discover.
+    duplicate_of_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("job.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
     raw_meta: dict = Field(
         default_factory=dict,
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
@@ -170,6 +184,9 @@ class JobFilter(BaseModel):
     score_max: float = 1.0
     tag: Tag | None = None
     posted_within_days: int | None = None
+    # Diagnostic mode (operator Scrapes panel). Default hides duplicates so
+    # Discover never surfaces a tier-3 shadow row (plan 34 § D.3).
+    include_duplicates: bool = False
 
 
 class JobCreate(BaseModel):
@@ -242,6 +259,7 @@ class JobRead(BaseModel):
     tags: list[str]
     warm_intro_contact_id: int | None
     last_scrape_run_id: int | None
+    duplicate_of_id: int | None
     raw_meta: dict
     created_at: datetime
     updated_at: datetime
