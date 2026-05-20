@@ -231,7 +231,31 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 
 ### I — BOOKKEEPING
 
-**These are mechanical post-merge / post-decision edits. Direct push to `main` is the canonical path.**
+**These are mechanical post-merge / post-decision edits. Default path is direct push to `main`, BUT see § Fold-in rule below — when a related PR is open, bookkeeping folds into THAT PR's branch as a new commit instead.**
+
+#### Fold-in rule (post-0.7.0.23 / plan 41)
+
+When a PR is OPEN AND the bookkeeping change is RELATED to that PR's scope (same task ID, same file area, deriving from the PR's reviewer findings), the manager folds the bookkeeping commit INTO that PR's branch as a NEW commit (no `--amend` per § Hard rules). The PR squash carries both. Avoids stranded direct-push commits on `main` racing the PR squash.
+
+**Fold-in candidates** (commit on PR branch, not main):
+- ROADMAP row state flips for the PR's task ID (e.g. `[ ]` → `[~]` on PR open; `[~]` → `[x]` lands in same PR via reviewer fold-in OR follows in next bookkeeping commit on main if PR already squashed).
+- Plan archive moves for the PR's plan (run `naavik-ops plan archive` on the PR branch BEFORE merge → engineer commit picks it up).
+- Follow-up issue rows that derive from the PR's reviewer findings (file via `naavik-ops gh create-issue`, add ROADMAP rows on the same branch).
+- User's manual edits to working tree that match the PR's intent (e.g. user tweaks the plan text mid-implementation; engineer's next commit picks them up).
+
+**Direct-push-to-main candidates** (no PR open OR unrelated to active PR):
+- ROADMAP "Last updated" bump for general session activity.
+- New follow-up rows for work that won't ship soon (no active branch).
+- MANIFEST refreshes, runs.log appends (gitignored anyway).
+
+**Hard exceptions — NEVER fold (security / privacy)**:
+- Gitignored files (`.env`, `.naavik/`, `traces/<run-id>/`).
+- Security-sensitive content (vault, secrets, key material).
+- Personal data (user identity, API keys, credentials).
+
+**Self-test before any commit**: "is there an open PR whose scope touches this file area?" If yes → branch + add commit there. If no → main is canonical.
+
+**Allowed files for BOOKKEEPING (direct push when no related PR; fold otherwise):**
 
 **Allowed files for BOOKKEEPING (direct push):**
 
@@ -299,7 +323,7 @@ A CONTRACT_CHANGE is ANY edit to a file in this list:
 
 Non-exhaustive examples that fall under "everything else" (CONTRACT_CHANGE — PR required): `src/**`, `tests/**`, `migrations/**`, `scripts/**`, `.claude/**` (agents, skills, commands, hooks, settings), `AGENTS.md`, `CLAUDE.md`, `docs/AGENT_OPS.md`, `docs/PLAYBOOK.md` (this file), `docs/RUNBOOK.md`, `docs/DEPLOYMENT.md`, `docs/ARCHITECTURE.md`, `DESIGN.md`, `docs/design/**` (except mockups, which are gitignored), `docs/plans/<NN>-<slug>.md` (active — bundles with the implementation PR), `docs/prompts/<NN>-<slug>.md` (active), `pyproject.toml`, `uv.lock`, `flake.nix`, `flake.lock`, `nix/**`, `Dockerfile`, `docker-compose.yml`, `alembic.ini`, `.env.example`, `.envrc`, `.gitignore`, `.github/**`, `LICENSE`, `app.py`, `README.md` § Configuration / Operations / any non-"Last updated" edit.
 
-**If a single commit would touch BOTH categories** (e.g. archiving plan 18 to `docs/plans/archive/` AND ALSO updating an agent prompt), split into two commits / two PRs / one PR + one bookkeeping commit. Don't mix categories in one push.
+**If a single commit would touch BOTH categories** (e.g. archiving plan 18 to `docs/plans/archive/` AND ALSO updating an agent prompt), apply the **fold-in rule** (§ I): when the PR for the agent-prompt change is open, the plan-archive bookkeeping commits into that PR's branch as a new commit. The PR squash carries both. Don't direct-push the bookkeeping to `main` while a related PR is in flight — that creates a race between the bookkeeping commit and the PR squash. When NO related PR is open, keep them in separate commits per the historical guidance (still fine; just no fold opportunity).
 
 ---
 

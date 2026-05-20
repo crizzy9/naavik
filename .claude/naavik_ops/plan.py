@@ -162,10 +162,12 @@ def cmd_archive(rest: Sequence[str]) -> int:
         _print_dry_run(plan_path, bullets, surfaces)
         return 0
 
+    # 0.7.0.21d — snapshot pre-mutation text for partial-write rollback.
+    original_text = plan_path.read_text(encoding="utf-8")
     if bullets:
         _append_deviations_section(plan_path, bullets)
     _update_frontmatter_status(plan_path)
-    target_path = _git_mv_plan_and_prompt(plan_path)
+    target_path = _git_mv_plan_and_prompt(plan_path, original_text=original_text)
 
     _print_archive_summary(plan_path, target_path, len(bullets), surfaces)
     return 0
@@ -199,6 +201,17 @@ def _resolve_plan_path(raw: str) -> Path:
         raise SystemExit(f"plan archive: plan not found: {raw}")
     if not p.name.endswith(".md"):
         raise SystemExit(f"plan archive: plan must be a .md file: {raw}")
+    # 0.7.0.21a — path-traversal hardening. Constrain to docs/plans/ subtree
+    # (active or archived). Refuses arbitrary repo .md files; refuses paths
+    # already under archive/ unless invoked via validate-deviations (caller
+    # passes ARCHIVE_DIR-rooted paths intentionally for re-validation).
+    try:
+        p.relative_to(PLANS_DIR)
+    except ValueError as e:
+        raise SystemExit(
+            f"plan archive: path must live under docs/plans/ subtree: {raw} "
+            f"(resolved to {p}). Refusing for path-traversal hygiene."
+        ) from e
     return p
 
 
@@ -227,8 +240,24 @@ def _has_nonempty_deviations_section(plan_path: Path) -> bool:
     stripped = section_body.strip()
     if not stripped:
         return False
+    # 0.7.0.21b — accept bullets (preferred shape).
     has_bullet = re.search(r"^\s*[-*]\s+\S", stripped, re.MULTILINE)
-    return has_bullet is not None
+    if has_bullet is not None:
+        return True
+    # 0.7.0.21c — accept paragraph-style explicit-no-deviations sentinel.
+    # Authors may write "No material deviations." prose when nothing diverged.
+    # ANCHORED regex (multiline) — only accepts the sentinel as its OWN line
+    # (optionally followed by an em-dash / period / hyphen + trailing prose).
+    # Closes hacker MEDIUM finding from PR #127: substring match accepted
+    # negation-bypass like "we don't have no material deviations because there
+    # are many" — anchored form rejects this.
+    if re.search(
+        r"^\s*No material deviations(?:\s*[—.\-:].*)?\s*$",
+        stripped,
+        re.IGNORECASE | re.MULTILINE,
+    ):
+        return True
+    return False
 
 
 def _append_deviations_section(plan_path: Path, bullets: Sequence[str]) -> None:
@@ -280,16 +309,40 @@ def _update_frontmatter_status(plan_path: Path) -> None:
 # -----------------------------------------------------------------------------
 
 
-def _git_mv_plan_and_prompt(plan_path: Path) -> Path:
+def _git_mv_plan_and_prompt(plan_path: Path, *, original_text: str | None = None) -> Path:
+    """Atomic-ish archive: git mv plan + prompt (if exists).
+
+    0.7.0.21d — Partial-write rollback. If the plan file was mutated in-place
+    (Deviations section appended + Status flipped) and then `git mv` fails
+    (dirty tree, file outside repo, permission denied, etc.), restore the
+    original text so the working tree isn't left with a mutated-not-archived
+    plan. Caller passes `original_text` (pre-mutation snapshot).
+    """
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     target = ARCHIVE_DIR / plan_path.name
-    _run_git("mv", str(plan_path), str(target))
+    try:
+        _run_git("mv", str(plan_path), str(target))
+    except SystemExit:
+        if original_text is not None and plan_path.exists():
+            plan_path.write_text(original_text, encoding="utf-8")
+        raise
 
     prompt_src = PROMPTS_DIR / plan_path.name
     if prompt_src.exists():
         PROMPTS_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
         prompt_target = PROMPTS_ARCHIVE_DIR / plan_path.name
-        _run_git("mv", str(prompt_src), str(prompt_target))
+        try:
+            _run_git("mv", str(prompt_src), str(prompt_target))
+        except SystemExit:
+            # Plan already moved successfully; prompt-mv failure is partial.
+            # Roll back plan-mv to keep the working tree internally consistent.
+            try:
+                _run_git("mv", str(target), str(plan_path))
+            except SystemExit:
+                pass  # Best-effort; surface original error.
+            if original_text is not None and plan_path.exists():
+                plan_path.write_text(original_text, encoding="utf-8")
+            raise
     return target
 
 
@@ -411,7 +464,11 @@ def _unwrap_quotes(value: str) -> str:
 def _entry_to_bullet(e: DeviationEntry) -> str:
     title = _derive_title(e.what)
     surface = _detect_surface(e.impact)
-    return f"- **{title}** — what: {e.what} why: {e.why} impact: {e.impact} surface: {surface}."
+    # 0.7.0.21b — periods between fields for readability (plan 39 § C.7).
+    return (
+        f"- **{title}** — what: {e.what}. why: {e.why}. "
+        f"impact: {e.impact}. surface: {surface}."
+    )
 
 
 def _derive_title(what: str) -> str:

@@ -1,13 +1,16 @@
 {
-  "daily_token_ceiling": 5000000,
+  "daily_token_ceiling": 30000000,
   "per_agent_caps": {
-    "manager": 800000,
-    "architect": 1200000,
-    "engineer": 1500000,
-    "devops": 700000,
-    "hacker": 500000,
-    "designer": 300000
+    "manager": 5000000,
+    "architect": 8000000,
+    "engineer": 10000000,
+    "devops": 3000000,
+    "hacker": 5000000,
+    "designer": 3000000
   },
   "halt_action": "ask_user",
-  "reset_at": "00:00 local"
+  "reset_at": "00:00 local",
+  "plan": "max",
+  "weekly_usage_pct_at_last_check": 34,
+  "last_user_check": "2026-05-19"
 }

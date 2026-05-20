@@ -234,3 +234,96 @@ class TestLegacyCLI:
         emitted = [json.loads(line) for line in out.strip().splitlines()]
         assert len(emitted) == 2
         assert emitted[0]["id"] == "A.1"
+
+
+# ---------------------------------------------------------------------------
+# Plan 40 — Backlog section (synthetic version, parser + filter)
+# ---------------------------------------------------------------------------
+
+
+SAMPLE_ROADMAP_WITH_BACKLOG = textwrap.dedent(
+    """\
+    # Roadmap
+
+    ## Phases
+
+    ### 0.2.0 — Job Scraping
+    > Goal: Active.
+
+    | # | Task | Status | Priority | Notes |
+    |---|---|---|---|---|
+    | 0.2.0.01 | Active task | [x] | HIGH | shipped |
+    | 0.2.0.02 | In flight | [~] | MEDIUM | working |
+    | 0.2.0.03 | Pending | [ ] | - | queued |
+
+    ### 0.3.0 — Future
+    > Goal: Future.
+
+    | # | Task | Status | Priority | Notes |
+    |---|---|---|---|---|
+    | 0.3.0.01 | Future stuff | [ ] | - | future |
+
+    ## Backlog (unprioritized)
+
+    Tasks deferred from current cycles but not deleted. No priority; pick by inspection.
+
+    | # | Task | Status | Priority | Notes |
+    |---|---|---|---|---|
+    | 0.2.0.14 | n8n migration | [ ] | - | deferred per user 2026-05-19 |
+    | 0.3.0.04 | Some old idea | [ ] | - | parked |
+
+    ## Agent System
+
+    Other stuff.
+    """
+)
+
+
+class TestBacklogParser:
+    def test_parse_backlog_section_returns_rows(self):
+        rows = roadmap.parse_release_section(
+            roadmap.BACKLOG_VERSION, roadmap_text=SAMPLE_ROADMAP_WITH_BACKLOG
+        )
+        ids = [r.task_id for r in rows]
+        assert "0.2.0.14" in ids
+        assert "0.3.0.04" in ids
+        assert len(rows) == 2
+
+    def test_parse_020_excludes_backlog_via_h2_boundary(self):
+        # Tasks living in Backlog section are NOT picked up by 0.2.0 release parse.
+        rows = roadmap.parse_release_section("0.2.0", roadmap_text=SAMPLE_ROADMAP_WITH_BACKLOG)
+        ids = [r.task_id for r in rows]
+        assert "0.2.0.01" in ids
+        assert "0.2.0.02" in ids
+        assert "0.2.0.03" in ids
+        # 0.2.0.14 is in Backlog section, NOT in 0.2.0 section.
+        assert "0.2.0.14" not in ids
+
+    def test_parse_030_excludes_backlog_030_rows(self):
+        rows = roadmap.parse_release_section("0.3.0", roadmap_text=SAMPLE_ROADMAP_WITH_BACKLOG)
+        ids = [r.task_id for r in rows]
+        assert "0.3.0.01" in ids
+        # 0.3.0.04 in Backlog — excluded.
+        assert "0.3.0.04" not in ids
+
+    def test_is_in_backlog_positive(self):
+        assert roadmap.is_in_backlog("0.2.0.14", roadmap_text=SAMPLE_ROADMAP_WITH_BACKLOG)
+        assert roadmap.is_in_backlog("0.3.0.04", roadmap_text=SAMPLE_ROADMAP_WITH_BACKLOG)
+
+    def test_is_in_backlog_negative(self):
+        assert not roadmap.is_in_backlog("0.2.0.01", roadmap_text=SAMPLE_ROADMAP_WITH_BACKLOG)
+        assert not roadmap.is_in_backlog("0.3.0.01", roadmap_text=SAMPLE_ROADMAP_WITH_BACKLOG)
+
+    def test_no_backlog_section_yields_empty(self):
+        rows = roadmap.parse_release_section(
+            roadmap.BACKLOG_VERSION, roadmap_text=SAMPLE_ROADMAP
+        )
+        assert rows == []
+
+    def test_backlog_stops_at_next_h2(self):
+        # Verify parser stops at `## Agent System` and doesn't bleed.
+        rows = roadmap.parse_release_section(
+            roadmap.BACKLOG_VERSION, roadmap_text=SAMPLE_ROADMAP_WITH_BACKLOG
+        )
+        # Only the 2 rows in the Backlog table; nothing from Agent System section.
+        assert len(rows) == 2

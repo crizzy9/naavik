@@ -495,7 +495,7 @@ Naavik uses 6 specialized Claude Code subagents and 13 slash commands at project
 
 > **Operational guide:** `docs/AGENT_OPS.md` — single source for first-time setup, daily workflow, GitHub Mirror conventions, troubleshooting, extending the system. Read once; reference as needed.
 > **Reference guides loaded by agents on cold start:**
-> - `docs/ROADMAP_OVERVIEW.md` — phase state at a glance
+> - `ROADMAP.md` — phase state at a glance
 > - `docs/ARCHITECTURE.md` — layer responsibilities + cross-cutting concerns + pattern catalog
 > - `DESIGN.md` (root) — visual contract (tokens, type, icons, voice; frozen)
 > - `docs/design/WORKFLOW.md` — UI sub-process (skill routing, per-screen checklist, accessibility, common patterns, anti-patterns)

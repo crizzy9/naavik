@@ -435,3 +435,57 @@ class TestTitleDerivation:
     def test_derive_title_truncates_to_first_six_words(self, sandbox_plan, what, expected_prefix):
         plan_mod, _ = sandbox_plan
         assert plan_mod._derive_title(what).startswith(expected_prefix.split("...")[0])
+
+
+# ---------------------------------------------------------------------------
+# 0.7.0.21c — anchored sentinel after hacker MEDIUM (PR #127)
+# ---------------------------------------------------------------------------
+
+
+class TestNoMaterialDeviationsSentinelAnchored:
+    """Closes hacker MEDIUM from PR #127 review: substring regex bypassable.
+
+    Original 21c shipped `r"no material deviations"` substring match —
+    accepted negation-bypass prose like "we don't have NO MATERIAL DEVIATIONS".
+    Anchored multiline regex rejects this.
+    """
+
+    def _has_section(self, content: str, tmp_path):
+        from naavik_ops.plan import _has_nonempty_deviations_section
+        p = tmp_path / "test_plan.md"
+        p.write_text(f"# Plan\n\n## Deviations from plan\n\n{content}\n", encoding="utf-8")
+        return _has_nonempty_deviations_section(p)
+
+    def test_anchored_accepts_canonical_sentinel(self, tmp_path):
+        assert self._has_section("No material deviations.", tmp_path)
+
+    def test_anchored_accepts_with_em_dash_trailing(self, tmp_path):
+        assert self._has_section("No material deviations — all 3 fixes shipped per spec.", tmp_path)
+
+    def test_anchored_accepts_with_colon_trailing(self, tmp_path):
+        assert self._has_section("No material deviations: spec matched verbatim.", tmp_path)
+
+    def test_anchored_rejects_negation_bypass(self, tmp_path):
+        # Pre-fix substring match would PASS this; anchored MUST reject.
+        assert not self._has_section(
+            "we don't have NO MATERIAL DEVIATIONS because there are many", tmp_path
+        )
+
+    def test_anchored_rejects_embedded_substring(self, tmp_path):
+        # Embedded substring inside otherwise-empty-shaped prose.
+        assert not self._has_section(
+            "This plan claims no material deviations but actually has 5 unsaid ones.",
+            tmp_path,
+        )
+
+    def test_anchored_rejects_misleading_prefix(self, tmp_path):
+        assert not self._has_section(
+            "Despite the title 'no material deviations', the work diverged on every axis.",
+            tmp_path,
+        )
+
+    def test_bullets_still_PASS(self, tmp_path):
+        # Regression — bullet-form still works after anchor change.
+        assert self._has_section(
+            "- **What** Real deviation. **Why** Because. **Impact** Some.", tmp_path
+        )

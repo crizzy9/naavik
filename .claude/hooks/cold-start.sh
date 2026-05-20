@@ -35,7 +35,7 @@ fi
 cat <<EOF
 Naavik cold-start reminder. Your first action MUST be: Skill: naavik-cold-start
 
-That skill will load the canonical context (AGENTS.md, ROADMAP_OVERVIEW.md, AGENT_OPS.md, etc.) in the right order for your role. Until it has run, do not read individual files directly.
+That skill will load the canonical context (AGENTS.md, ROADMAP.md, AGENT_OPS.md, etc.) in the right order for your role. Until it has run, do not read individual files directly.
 
 Current state snapshot (use this to decide whether the skill needs to re-fetch state):
 - ROADMAP $LAST_UPDATED

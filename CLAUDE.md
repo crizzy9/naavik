@@ -41,7 +41,7 @@ before the skill has run — that path is what plan 16 fixed.
 
 **Agent system entry points:**
 - `docs/AGENT_OPS.md` — first-time bootstrap, daily workflow, troubleshooting. **This links to the four canonical guides:**
-  - `docs/ROADMAP_OVERVIEW.md` — phase state at a glance
+  - `ROADMAP.md` — phase state at a glance
   - `docs/ARCHITECTURE.md` — layer responsibilities + cross-cutting concerns + pattern catalog
   - `DESIGN.md` (root, visual contract) + `docs/design/WORKFLOW.md` (UI sub-process — skill routing, checklists, common patterns) — UI work
   - `docs/DEPLOYMENT.md` — 4 deployment paths + config + ops checklist (deployment / install work)
