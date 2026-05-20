@@ -2,7 +2,7 @@
 
 > **Single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. Tracking-only (per `AGENTS.md` § Single-doc-tracking).
 >
-> **Last updated:** 2026-05-20. (Historical "Earlier line:" entries removed — they're recoverable via `git log ROADMAP.md` if needed. We evolve as we go.)
+> **Last updated:** 2026-05-20. (0.2.x multi-release sweep BEGIN — added 0.2.7 catch-all section for product-side deferrals from 0.2.0–0.2.6 sequential delivery; auto-approve sweep in flight under user directive.)
 
 ---
 
@@ -29,6 +29,7 @@
 | 0.2.4 | Tracking cleanup (DEF) | 🟡 Queued | — |
 | 0.2.5 | Observability cleanup (DEF) | 🟡 Queued | — |
 | 0.2.6 | Tooling cleanup (DEF + A.28a) | 🟡 Queued | — |
+| 0.2.7 | Deferred-from-0.2.x catch-all (multi-tenant cloud features + Phase 6 work + multi-week ATS adapters + Phase 4 auto-apply refinements) | 🟡 Queued (deferred from 0.2.1–0.2.6 sweeps; ships post-0.3.0+) | — |
 | 0.3.0 | Intelligent Scoring & Matching | ⚪ Future | — |
 | 0.4.0 | Application Tracking & Auto-Apply | ⚪ Future | — |
 | 0.5.0 | Email Monitoring & Outreach | ⚪ Future | — |
@@ -310,6 +311,21 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 | 0.2.6.09 | Backup / disaster-recovery docs for self-hosters — `.env` + `~/.naavik/data/snapshots/` off-site backup story | [ ] | LOW | (release-readiness audit 2026-05-20) | **Filed 2026-05-20 via 0.2.x release-readiness audit (#145).** POST_PHASE_1.md cross-cutting concern #7 — current docs don't tell self-hosters how to back up. Add section to `docs/DEPLOYMENT.md` (or new `docs/BACKUP.md`): canonical backup set is `.env` + `~/.naavik/data/snapshots/` (daily SQL gzip already shipped via `admin.daily_db_snapshot` cron in 0.1.0.23). Document off-site rotation pattern (S3 / Backblaze / restic / borgbackup) — self-hoster's responsibility but recipe + example cron line lowers friction. Encrypted vault was deleted in 0.2.0.01; no key.bin to back up anymore. |
 
 **Deliverable (0.2.6):** Repository-wide tooling cleanup; pre-existing CI/test gaps closed; script hardening complete; backup story documented.
+
+---
+
+### 0.2.7 — Deferred-from-0.2.x catch-all
+> **Goal:** Catch-all for items deferred during the 0.2.0–0.2.6 sequential sweep (2026-05-20). Themes: multi-tenant cloud features (real Phase 2+ scope), Phase 6 polish (light mode, semantic match, ML calibration), multi-week ATS adapter work (Workday/LinkedIn/Indeed/Generic), Phase 4 auto-apply refinements, and small optional polish that didn't pull weight in 0.2.x release-version contexts.
+> **Status:** 🟡 Queued (each row gets its own plan when scheduled).
+> **Plan:** Per-row plans authored when picked up.
+>
+> **Why 0.2.7 vs 0.7.0?** 0.7.0 is the agent-system follow-up pickup queue (post-Phase-2 quality-of-life on the dev process itself). 0.2.7 is the PRODUCT-side catch-all for items deferred from the 0.2.x cleanup sweeps that aren't agent-system work. Keeps the two surfaces distinct: 0.7.0 = how we ship; 0.2.7 = what we ship later.
+
+| # | Task | Status | Priority | Legacy ID | Notes |
+|---|---|---|---|---|---|
+| (rows added per deferral during 0.2.x sweep — see § 0.2.x multi-release sweep below for canonical defer-vs-ship decisions) | | | | | |
+
+**Deliverable (0.2.7):** Pickup queue for product-side cleanup deferred from 0.2.x sweep. Items graduate to a future release-version when scheduled.
 
 ---
 
