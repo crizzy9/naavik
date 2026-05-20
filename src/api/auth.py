@@ -42,8 +42,10 @@ from services.auth import (
     issue_csrf_token,
     issue_jwt,
     record_login_attempt,
+    revoke_jwt,
     validate_csrf,
     validate_password_complexity,
+    verify_jwt,
     verify_password,
 )
 
@@ -287,6 +289,7 @@ async def post_change_password(
     new_password: Annotated[str, Form()],
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    naavik_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
     _csrf: None = Depends(require_csrf),
 ):
     """Change-password endpoint. Re-verifies current password (defense in
@@ -324,6 +327,21 @@ async def post_change_password(
         new_hash = hash_password_with_complexity_check(new_password)
     except ValueError as exc:
         return _login_error_card(str(exc), 422)
+
+    # Plan 50 (0.2.1.04): revoke the CURRENT jti before issuing the new
+    # JWT so an attacker holding the pre-rotation cookie cannot use it
+    # after rotation completes. `get_current_user` already validated the
+    # cookie, so verify_jwt round-trips deterministically here.
+    if naavik_session:
+        result = verify_jwt(naavik_session)
+        if result is not None:
+            old_user_id, old_jti, old_exp = result
+            await revoke_jwt(
+                session,
+                jti=old_jti,
+                user_id=old_user_id,
+                expires_at=old_exp,
+            )
 
     user.password_hash = new_hash
     user.must_change_password = False

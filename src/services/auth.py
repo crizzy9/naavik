@@ -25,12 +25,12 @@ from datetime import UTC, datetime, timedelta
 import bcrypt
 import jwt
 from fastapi import Cookie, Depends, HTTPException, Request, status
-from sqlmodel import select
+from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from config import settings as app_settings
 from db.session import get_session
-from models import Settings, User
+from models import RevokedJwt, Settings, User
 
 # ── Constants ───────────────────────────────────────────────────────────
 
@@ -121,19 +121,25 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def issue_jwt(user_id: int, *, keep_signed_in: bool = False) -> str:
-    """Issue a fresh signed JWT carrying `user_id`."""
+    """Issue a fresh signed JWT carrying `user_id` + a per-issue `jti`."""
     ttl = JWT_TTL_KEEP_SIGNED_IN if keep_signed_in else JWT_TTL_DEFAULT
     now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
+        "jti": secrets.token_urlsafe(16),
         "iat": int(now.timestamp()),
         "exp": int((now + ttl).timestamp()),
     }
     return jwt.encode(payload, app_settings.secret_key, algorithm=JWT_ALGORITHM)
 
 
-def verify_jwt(token: str) -> int | None:
-    """Return `user_id` on valid JWT; None on expired/invalid."""
+def verify_jwt(token: str) -> tuple[int, str, datetime] | None:
+    """Return `(user_id, jti, expires_at)` on valid JWT; None on expired/invalid.
+
+    Plan 50 (0.2.1.04): expanded from `int | None` to a tuple so callers
+    can drive the `RevokedJwt` denylist check + persist `expires_at`
+    when revoking the current token at password-change time.
+    """
     try:
         decoded = jwt.decode(
             token,
@@ -141,9 +147,11 @@ def verify_jwt(token: str) -> int | None:
             algorithms=[JWT_ALGORITHM],
         )
         sub = decoded.get("sub")
-        if sub is None:
+        jti = decoded.get("jti")
+        exp = decoded.get("exp")
+        if sub is None or not jti or exp is None:
             return None
-        return int(sub)
+        return int(sub), str(jti), datetime.fromtimestamp(int(exp), tz=UTC)
     except (jwt.InvalidTokenError, ValueError):
         return None
 
@@ -196,6 +204,46 @@ def reset_rate_limit(ip: str | None = None) -> None:
         _login_attempts.clear()
     else:
         _login_attempts.pop(ip, None)
+
+
+# ── JWT denylist (plan 50 / 0.2.1.04) ────────────────────────────────────
+
+
+async def revoke_jwt(
+    session: AsyncSession,
+    *,
+    jti: str,
+    user_id: int,
+    expires_at: datetime,
+) -> None:
+    """Insert a row into `revoked_jwt`. Idempotent on duplicate `jti`."""
+    existing = await session.exec(select(RevokedJwt.id).where(RevokedJwt.jti == jti))
+    if existing.one_or_none() is not None:
+        return
+    session.add(
+        RevokedJwt(
+            jti=jti,
+            user_id=user_id,
+            revoked_at=datetime.now(UTC),
+            expires_at=expires_at,
+        )
+    )
+    await session.flush()
+
+
+async def is_jwt_revoked(session: AsyncSession, *, jti: str) -> bool:
+    """O(1) lookup on the `jti` unique index. True iff a revocation row exists."""
+    stmt = select(RevokedJwt.id).where(RevokedJwt.jti == jti)
+    result = await session.exec(stmt)
+    return result.one_or_none() is not None
+
+
+async def cleanup_expired_revoked_jwts(session: AsyncSession) -> int:
+    """Delete `revoked_jwt` rows whose `expires_at` has passed. Returns count."""
+    now = datetime.now(UTC)
+    stmt = delete(RevokedJwt).where(RevokedJwt.expires_at < now)
+    result = await session.execute(stmt)
+    return int(result.rowcount or 0)
 
 
 # ── DB helpers ───────────────────────────────────────────────────────────
@@ -261,9 +309,12 @@ async def get_current_user(
     """Resolve the user via JWT cookie. Raise 401 on missing/invalid."""
     if not naavik_session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user_id = verify_jwt(naavik_session)
-    if user_id is None:
+    result = verify_jwt(naavik_session)
+    if result is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+    user_id, jti, _ = result
+    if await is_jwt_revoked(session, jti=jti):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked")
     user = await get_user_by_id(session, user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
@@ -337,11 +388,17 @@ async def require_authed_session(
     if naavik_session == FAKE_SESSION_VALUE:
         return None
 
-    user_id = verify_jwt(naavik_session)
-    if user_id is None:
+    result = verify_jwt(naavik_session)
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session expired",
+        )
+    user_id, jti, _ = result
+    if await is_jwt_revoked(session, jti=jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session revoked",
         )
     user = await get_user_by_id(session, user_id)
     if user is None or not user.is_active:
