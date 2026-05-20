@@ -90,3 +90,27 @@ async def test_lever_provider_none_short_circuits_extraction():
     scraper = LeverScraper(client=client)  # type: ignore[arg-type]
     [_ async for _ in scraper.scrape(ScrapeQuery(company_filter=["fakecorp"]))]
     assert "services.job_extractor" not in sys.modules
+
+
+# ── Plan 43 § D.5.4 — PR #102 path-traversal attack ───────────────────────
+
+
+@pytest.mark.asyncio
+async def test_lever_hostile_company_slash_injection_skipped():
+    """PR #102 Finding #2 — `company="acme/../v0/users/{id}"` MUST NOT compose.
+
+    Lever inlines `{company}` at the URL PATH position
+    (`https://api.lever.co/v0/postings/{company}?mode=json`); a slash
+    injection smuggles a path traversal. Slug regex rejects `/`, `.`, and
+    `{}` — URL never composed, no fetch.
+    """
+    client = _make_client()
+    scraper = LeverScraper(client=client)  # type: ignore[arg-type]
+    rawjobs = [
+        j async for j in scraper.scrape(ScrapeQuery(company_filter=["acme/../v0/users/{id}"]))
+    ]
+
+    assert rawjobs == []
+    assert client.fetch_calls == []
+    assert any("kind=invalid_slug" in e for e in scraper._errors)
+    assert any("msg=company=" in e for e in scraper._errors)

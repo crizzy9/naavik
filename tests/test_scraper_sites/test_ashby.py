@@ -87,3 +87,19 @@ async def test_ashby_max_listings_cap_honored():
         j async for j in scraper.scrape(ScrapeQuery(company_filter=["fakelabs"], max_listings=1))
     ]
     assert len(rawjobs) == 1
+
+
+# ── Plan 43 § D.5.5 — hostile company slug → no fetch ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_ashby_hostile_company_skipped_with_invalid_slug_error():
+    """Hostile `company` slug rejected BEFORE URL composition."""
+    client = _make_client()
+    scraper = AshbyScraper(client=client)  # type: ignore[arg-type]
+    rawjobs = [j async for j in scraper.scrape(ScrapeQuery(company_filter=["evil.com#"]))]
+
+    assert rawjobs == []
+    assert client.fetch_calls == []
+    assert any("kind=invalid_slug" in e for e in scraper._errors)
+    assert any("msg=company=" in e for e in scraper._errors)

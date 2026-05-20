@@ -105,3 +105,38 @@ async def test_workday_provider_none_short_circuits_extraction():
     scraper = WorkdayScraper(client=client)  # type: ignore[arg-type]
     [_ async for _ in scraper.scrape(ScrapeQuery(company_filter=["fakeco/External"]))]
     assert "services.job_extractor" not in sys.modules
+
+
+# ── Plan 43 § D.5.3 — PR #102 canonical attack ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_workday_hostile_tenant_skipped_with_invalid_slug_error():
+    """PR #102 Finding #1 — `tenant="evil.com#"` MUST NOT compose a URL.
+
+    The `#` fragment confuses `urlsplit.hostname` (returns `evil.com`),
+    so the post-composition `is_safe_destination` guard accepts it as
+    a public host. Plan 43 slug-validates BEFORE composition → no URL,
+    no outbound HTTP, error recorded for operator visibility.
+    """
+    client = _make_client()  # No responses needed — fetch must not occur.
+    scraper = WorkdayScraper(client=client)  # type: ignore[arg-type]
+    rawjobs = [j async for j in scraper.scrape(ScrapeQuery(company_filter=["evil.com#"]))]
+
+    assert rawjobs == []
+    assert client.fetch_calls == []  # No outbound fetch.
+    assert any("kind=invalid_slug" in e for e in scraper._errors)
+    assert any("msg=tenant=" in e for e in scraper._errors)
+
+
+@pytest.mark.asyncio
+async def test_workday_hostile_site_skipped_with_invalid_slug_error():
+    """`tenant/site` form — hostile `site` slug also rejected."""
+    client = _make_client()
+    scraper = WorkdayScraper(client=client)  # type: ignore[arg-type]
+    rawjobs = [j async for j in scraper.scrape(ScrapeQuery(company_filter=["fakeco/evil.com#"]))]
+
+    assert rawjobs == []
+    assert client.fetch_calls == []
+    assert any("kind=invalid_slug" in e for e in scraper._errors)
+    assert any("msg=site=" in e for e in scraper._errors)

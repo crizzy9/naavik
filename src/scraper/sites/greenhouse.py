@@ -61,7 +61,9 @@ class GreenhouseScraper(_BaseSiteScraper):
 
         yielded = 0
         for company in companies:
-            list_url = self._LIST_TEMPLATE.format(company=company)
+            list_url = self._compose_url(self._LIST_TEMPLATE, stage="list", company=company)
+            if list_url is None:
+                continue
             safe, reason = is_safe_destination(list_url)
             if not safe:
                 self._errors.append(
@@ -104,6 +106,9 @@ class GreenhouseScraper(_BaseSiteScraper):
     def _row_detail_url(company: str, row: dict[str, Any]) -> str:
         if isinstance(row.get("absolute_url"), str) and row["absolute_url"]:
             return str(row["absolute_url"])
+        # `company` is slug-validated one frame up in `scrape()` via `_compose_url`;
+        # `job_id` originates from the vendor JSON `row["id"]` (trusted — vendor
+        # compromise is out of scope for plan 43). Bare `.format` is correct.
         return GreenhouseScraper._DETAIL_TEMPLATE.format(
             company=company, job_id=row.get("id", "unknown")
         )

@@ -54,7 +54,9 @@ class LeverScraper(_BaseSiteScraper):
 
         yielded = 0
         for company in companies:
-            list_url = self._LIST_TEMPLATE.format(company=company)
+            list_url = self._compose_url(self._LIST_TEMPLATE, stage="list", company=company)
+            if list_url is None:
+                continue
             safe, reason = is_safe_destination(list_url)
             if not safe:
                 self._errors.append(

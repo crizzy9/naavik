@@ -131,3 +131,19 @@ async def test_greenhouse_provider_none_short_circuits_extraction(monkeypatch):
     assert len(rawjobs) == 3
     # Lazy import never fired because provider is None.
     assert "services.job_extractor" not in sys.modules
+
+
+# ── Plan 43 § D.5.5 — hostile company slug → no fetch ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_greenhouse_hostile_company_skipped_with_invalid_slug_error():
+    """Hostile `company` slug rejected BEFORE URL composition."""
+    client = _make_client()
+    scraper = GreenhouseScraper(client=client)  # type: ignore[arg-type]
+    rawjobs = [j async for j in scraper.scrape(ScrapeQuery(company_filter=["acme&for=victim"]))]
+
+    assert rawjobs == []
+    assert client.fetch_calls == []
+    assert any("kind=invalid_slug" in e for e in scraper._errors)
+    assert any("msg=company=" in e for e in scraper._errors)

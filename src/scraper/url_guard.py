@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import re
 import socket
 from urllib.parse import urlsplit
 
@@ -137,3 +138,43 @@ def is_safe_destination(url: str) -> tuple[bool, str | None]:
                 if addr in net:
                     return False, f"private_destination:{addr_str}"
     return True, None
+
+
+# Plan 43 (`0.2.0.07a`) — slug regex for operator-supplied URL components.
+# Closes PR #102 hacker MEDIUMs (#103): Workday tenant-fragment trick
+# (`tenant="evil.com#"` bypasses `is_safe_destination` via `urlsplit.hostname`
+# returning `evil.com`) + Lever path-position substitution (`company="acme/..
+# /v0/users/{id}"` smuggles vendor API path traversal). Slug-validate BEFORE
+# template substitution; rejects all confusable shapes catalogued in plan 43
+# § D.1 (empty / leading hyphen / fragment / query / `@` / `/` / whitespace /
+# null / newline / dot / URL-as-slug).
+_SLUG_RE: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+
+
+class InvalidSlugError(ValueError):
+    """Raised by `_make_url` when a slug kwarg fails `_SLUG_RE`.
+
+    Subclass of `ValueError` so callers using broad `except ValueError:` or
+    `except Exception:` keep composing. Carries `slug_name` + `value` for
+    log redaction.
+    """
+
+    def __init__(self, slug_name: str, value: str) -> None:
+        super().__init__(f"invalid_slug:{slug_name}={value!r}")
+        self.slug_name = slug_name
+        self.value = value
+
+
+def _make_url(template: str, **slugs: str) -> str:
+    """Format `template` with slug-validated kwargs.
+
+    Each kwarg value is matched against `_SLUG_RE` BEFORE substitution; first
+    failure raises `InvalidSlugError(slug_name, value)`. Composes with
+    `is_safe_destination` — callers run both: this helper closes the
+    composition-bug vector, `is_safe_destination` closes the DNS-resolution
+    one.
+    """
+    for name, value in slugs.items():
+        if not isinstance(value, str) or not _SLUG_RE.match(value):
+            raise InvalidSlugError(name, value if isinstance(value, str) else str(value))
+    return template.format(**slugs)
