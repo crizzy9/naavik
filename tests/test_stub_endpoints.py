@@ -251,7 +251,12 @@ def test_jobs_get_by_id(client, monkeypatch):
 
 
 def test_jobs_by_url(client):
-    r = client.post("/api/v1/jobs/by-url", json={"url": "https://example.com/job/123"})
+    # Plan 56 / 0.2.7.19 — `Depends(require_csrf)` added; thread the matching header.
+    r = client.post(
+        "/api/v1/jobs/by-url",
+        json={"url": "https://example.com/job/123"},
+        headers=_CSRF_HEADERS,
+    )
     assert r.status_code == 200
     assert r.json()["url"] == "https://example.com/job/123"
 
@@ -316,7 +321,12 @@ def test_applications_move_fail(client):
 
 
 def test_applications_manual_creates_row(client):
-    r = client.post("/api/v1/applications/manual", data={"company": "Test Co", "role": "Sr Eng"})
+    # Plan 56 / 0.2.7.19 — `Depends(require_csrf)` added; thread the matching header.
+    r = client.post(
+        "/api/v1/applications/manual",
+        data={"company": "Test Co", "role": "Sr Eng"},
+        headers=_CSRF_HEADERS,
+    )
     assert r.status_code == 204
     assert r.headers.get("hx-redirect") == "/tracking"
 

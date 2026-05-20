@@ -572,8 +572,8 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 - **Mockup:** PDF § 12 (was numbered 12 in the historical 12-section PDF) · bundle `screens/Settings.jsx`
 - **Route:** `/settings` (with sub-routes `/settings/{tab}` for deep-linking)
 - **Sidebar label:** Settings
-- **Purpose:** All configuration in one place. 6 tabs.
-- **Layout:** sidebar + main. Main has 6 tabs across the top: **Account · LLM Provider · Notifications · Auto-Apply · Sources · Deployment**.
+- **Purpose:** All configuration in one place. 7 tabs.
+- **Layout:** sidebar + main. Main has 7 tabs across the top: **Account · LLM Provider · Notifications · Auto-Apply · Sources · Submissions · Deployment** (Submissions added by plan 54 / `0.2.5.03`).
 
 #### Tab: LLM Provider
 - Title "Settings" + subtitle "Configure how Naavik runs."
@@ -626,7 +626,8 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 - **Account** — name, email, password change, sign out, "Delete my account" (destructive)
 - **Notifications** — Discord webhook URL, Telegram bot token, "Send test", per-event toggles (new high-score job, application sent, interview scheduled, offer received, rejection)
 - **Auto-Apply** — master toggle (default OFF), score threshold slider (default 0.85), per-source toggle, daily total cap optional (default unlimited)
-- **Sources** — scraping source list with enable/disable/schedule (LinkedIn / Workday / Greenhouse / Lever / Ashby / Indeed / RSS)
+- **Sources** — operator-facing surface for per-scraper configured-state + last-run state. Six rows (LinkedIn / Workday / Greenhouse / Lever / Ashby / Indeed); each row renders enable toggle + env-vs-DB configured indicator + last-`JobScrapeRun` status chip + relative timestamp + schedule cron + resolved rate-limit + `<details>` configure popover. **Full contract:** `docs/design/SOURCES_UI.md`. Writable editors for rate-limit JSONB + LinkedIn/Indeed keywords + Workday companies deferred to `0.2.7.06`.
+- **Submissions** — recent application submissions feed (auto-apply + manual). Shipped via plan 54 / `0.2.5.03`.
 
 - **Components:** `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `log_tail.html`, `on_disk_card.html`, `deployment_status_card.html`
 

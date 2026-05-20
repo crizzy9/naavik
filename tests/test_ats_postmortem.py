@@ -442,3 +442,93 @@ def test_build_trace_handles_none_raw():
     assert trace.application_id == app.id
     assert trace.response_body_excerpt is None
     assert trace.request_url is None
+
+
+# ── Plan 56 · item 5 (0.2.7.18) — _redact_value_patterns ────────────────
+
+
+class TestRedactValuePatterns:
+    """Value-shape redaction on `response_body_excerpt`.
+
+    Plan 56 / 0.2.7.18 — `_redact()` only walks dict KEYS via `_SECRET_KEY_RE`;
+    raw-string `response_body_excerpt` paths used to bypass redaction entirely
+    when an ATS error page echoed back the request's auth header. The new
+    `_redact_value_patterns` covers Bearer/JWT/Set-Cookie/OAuth shapes.
+    """
+
+    def test_redacts_bearer_header(self):
+        out = ats_postmortem._redact_value_patterns(
+            "Authorization failed: Bearer eyJabcdefghijklmnopqrstuvwxyz0123456789.payload.sig"
+        )
+        assert "[REDACTED]" in out
+        assert "eyJabcdefghijklmnopqrstuvwxyz" not in out
+
+    def test_redacts_bare_jwt(self):
+        # 3-segment base64url JWT shape; matches even without "bearer" prefix.
+        out = ats_postmortem._redact_value_patterns(
+            'response: {"token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NSJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}'
+        )
+        assert "[REDACTED]" in out
+        assert "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" not in out
+
+    def test_redacts_set_cookie_header(self):
+        out = ats_postmortem._redact_value_patterns(
+            "failed: Set-Cookie: session=abc123xyz; Path=/; HttpOnly\nOther line."
+        )
+        assert "session=abc123xyz" not in out
+        # Subsequent non-cookie lines preserved.
+        assert "Other line." in out
+
+    def test_redacts_authorization_header_line(self):
+        out = ats_postmortem._redact_value_patterns(
+            "request headers:\nAuthorization: Basic dXNlcjpwYXNz\nUser-Agent: test"
+        )
+        assert "dXNlcjpwYXNz" not in out
+        assert "User-Agent: test" in out
+
+    def test_redacts_oauth_access_token_url_param(self):
+        out = ats_postmortem._redact_value_patterns(
+            "redirect: ?access_token=ya29.abcdefghij1234567890klmnop&state=xyz"
+        )
+        assert "ya29.abcdefghij1234567890klmnop" not in out
+        # Non-secret param preserved.
+        assert "state=xyz" in out
+
+    def test_redacts_refresh_token_url_param(self):
+        out = ats_postmortem._redact_value_patterns(
+            "callback: ?refresh_token=1//abcdefghijklmnopqrstuvwxyz12345"
+        )
+        assert "1//abcdefghijklmnopqrstuvwxyz12345" not in out
+
+    def test_does_not_redact_short_non_secret_strings(self):
+        # `signature=abc` is shorter than 20 chars; must NOT match the token
+        # URL-param patterns. False-positive guard per plan § Risk + mitigation.
+        out = ats_postmortem._redact_value_patterns("user signed up: signature=abc, role=engineer")
+        assert "[REDACTED]" not in out
+        assert "signature=abc" in out
+        assert "role=engineer" in out
+
+    def test_does_not_redact_when_no_auth_material(self):
+        # Plain text without auth-shape value patterns passes through verbatim.
+        body = "company: acme, role: engineer, message: error 503 service unavailable"
+        out = ats_postmortem._redact_value_patterns(body)
+        assert out == body
+
+
+def test_build_trace_redacts_value_patterns_in_string_body(tmp_path, monkeypatch):
+    """End-to-end: `response_body_excerpt` has its auth material redacted."""
+    monkeypatch.setattr(ats_postmortem.app_settings, "data_dir", str(tmp_path))
+    body = (
+        "ATS rejected: Bearer eyJabc1234567890longenough.payload.sig "
+        "and ?access_token=ya29.abcdefghij1234567890klmnop"
+    )
+    trace = ats_postmortem._build_trace(
+        application=_make_app(),
+        failure_kind="auth_required",
+        failure_message="x",
+        raw={"text": body},
+        captured_at=datetime(2026, 5, 20, 10, 0, 0, tzinfo=UTC),
+    )
+    assert "eyJabc1234567890longenough" not in trace.response_body_excerpt
+    assert "ya29.abcdefghij1234567890klmnop" not in trace.response_body_excerpt
+    assert "[REDACTED]" in trace.response_body_excerpt

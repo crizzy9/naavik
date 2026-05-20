@@ -43,9 +43,7 @@ def test_run_helper_uses_arg_array_not_eval() -> None:
     start = text.index("run() {")
     end = text.index("\n}\n", start)
     body = text[start:end]
-    code_lines = [
-        ln for ln in body.splitlines() if not ln.lstrip().startswith("#")
-    ]
+    code_lines = [ln for ln in body.splitlines() if not ln.lstrip().startswith("#")]
     code = "\n".join(code_lines)
     assert '"$@"' in code, "run() must pass-through via arg array"
     assert "eval " not in code, "run() must not invoke eval"
@@ -89,9 +87,7 @@ def test_dry_run_smoke_exit_zero_and_banner() -> None:
             text=True,
             timeout=30,
         )
-        assert proc.returncode == 0, (
-            f"argv={argv!r} exit={proc.returncode} stderr={proc.stderr!r}"
-        )
+        assert proc.returncode == 0, f"argv={argv!r} exit={proc.returncode} stderr={proc.stderr!r}"
         assert "Mode: DRY-RUN" in proc.stdout, (
             f"argv={argv!r} stdout missing DRY-RUN banner: {proc.stdout!r}"
         )

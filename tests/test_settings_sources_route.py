@@ -298,3 +298,114 @@ def test_running_status_renders_running_chip(
     body = r.text
     assert 'data-source-status="running"' in body
     assert "running…" in body
+
+
+# ── Plan 56 · item 1 (0.2.7.02) — IDOR thread-through ────────────────────
+
+
+def test_build_sources_view_threads_user_id(monkeypatch):
+    """`_build_sources_view(session, user_id=N)` passes N to both services.
+
+    Plan 56 / 0.2.7.02: settings_service.get_or_create + job_service.list_recent
+    _scrape_runs_by_source must both receive the route-supplied `user_id`, not
+    the hard-coded 1 the pre-fix code path used.
+    """
+    import asyncio
+
+    from services import job_service, settings_service
+    from ui.routes import settings as settings_routes
+
+    captured: dict[str, int] = {}
+
+    async def _spy_settings(session, *, user_id):
+        captured["settings"] = user_id
+        return _make_settings()
+
+    async def _spy_runs(session, *, user_id):
+        captured["runs"] = user_id
+        return {}
+
+    monkeypatch.setattr(settings_service, "get_or_create", _spy_settings)
+    monkeypatch.setattr(job_service, "list_recent_scrape_runs_by_source", _spy_runs)
+
+    asyncio.run(settings_routes._build_sources_view(_NoopSession(), user_id=42))
+
+    assert captured == {"settings": 42, "runs": 42}
+
+
+def test_effective_user_id_resolves_fake_session_to_one():
+    """Fake-session (`_user=None`) → 1 (seeded owner); real `User` → `user.id`."""
+    from types import SimpleNamespace
+
+    from ui.routes import settings as settings_routes
+
+    assert settings_routes._effective_user_id(None) == 1
+    assert settings_routes._effective_user_id(SimpleNamespace(id=99)) == 99
+
+
+# ── Plan 56 · item 2 (0.2.7.03) — loud raise on None session ─────────────
+
+
+def test_build_sources_view_raises_on_none_session():
+    """Programming-bug branch: `session is None` must raise loudly, not return []."""
+    import asyncio
+
+    import pytest as _pytest
+
+    from ui.routes import settings as settings_routes
+
+    with _pytest.raises(RuntimeError, match="AsyncSession"):
+        asyncio.run(settings_routes._build_sources_view(None, user_id=1))
+
+
+# ── Plan 56 · item 3 (0.2.7.04) — Workday popover kind = db-workday ──────
+
+
+def test_build_sources_view_workday_kind_is_db_workday(monkeypatch, _patch_route_helpers):
+    """Workday row carries `configure.kind == "db-workday"` + companies list.
+
+    Plan 56 / 0.2.7.04 — README/popover env-var asymmetry fix: Workday is
+    actually per-tenant DB-stored via `Settings.workday_companies`, not env.
+    The popover renders honest prose under `kind="db-workday"` instead of
+    misleading `kind="env"` w/ a dead-letter `WORKDAY_COMPANIES` example.
+    """
+    import asyncio
+
+    from models import JobSource
+    from ui.routes import settings as settings_routes
+
+    _patch_route_helpers["settings"] = _make_settings(
+        workday_companies=["acme/External", "globex/Careers"],
+    )
+
+    rows = asyncio.run(settings_routes._build_sources_view(_NoopSession(), user_id=1))
+    workday = next(r for r in rows if r["source"] == JobSource.WORKDAY.value)
+    assert workday["configure"]["kind"] == "db-workday"
+    assert workday["configure"]["companies"] == ["acme/External", "globex/Careers"]
+
+
+# ── Plan 56 · item 7 (0.2.7.20) — /settings/llm-provider auth dep ────────
+
+
+def test_get_settings_llm_provider_requires_auth(client: TestClient):
+    """`/settings/llm-provider` without naavik_session cookie → 401."""
+    bare = TestClient(client.app, raise_server_exceptions=True)
+    r = bare.get("/settings/llm-provider")
+    assert r.status_code == 401
+
+
+def test_get_settings_llm_provider_authed_renders_panel(
+    client: TestClient, auth_cookies, monkeypatch
+):
+    """`/settings/llm-provider` with fake-session cookie → 200 + panel chrome."""
+    from services import llm_tracker
+
+    async def _zero(session, *, user_id):
+        return 0.0
+
+    monkeypatch.setattr(llm_tracker, "today_cost_usd", _zero)
+
+    r = client.get("/settings/llm-provider", cookies=auth_cookies)
+    assert r.status_code == 200, r.text
+    # LLM Provider tab body renders — the provider radio cards must appear.
+    assert "Anthropic Claude" in r.text or "anthropic" in r.text.lower()

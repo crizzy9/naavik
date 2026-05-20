@@ -171,6 +171,7 @@ async def _ctx_for_tab(
     tab: str,
     *,
     session: AsyncSession | None = None,
+    user_id: int = 1,
 ) -> dict[str, object]:
     if tab not in _VALID_TABS:
         raise HTTPException(status_code=404, detail="Unknown settings tab")
@@ -203,7 +204,7 @@ async def _ctx_for_tab(
     }
 
     if tab == "sources":
-        ctx["sources_view"] = await _build_sources_view(session)
+        ctx["sources_view"] = await _build_sources_view(session, user_id=user_id)
         ctx["recent_scrape_runs"] = await _recent_scrape_runs_view(session)
 
     if tab == "submissions":
@@ -267,14 +268,15 @@ _DEFAULT_SCHEDULES: dict[str, str] = {
 }
 
 _ENV_VAR_FOR_SOURCE = {
-    "workday": "WORKDAY_COMPANIES",
+    # Plan 56 / 0.2.7.04: WORKDAY excluded — Workday uses `Settings.workday_companies`
+    # (per-user DB); the `WORKDAY_COMPANIES` env-slot in `src/config.py` is dead-letter
+    # until 0.2.7.06 wires env→DB seed at boot.
     "greenhouse": "GREENHOUSE_COMPANIES",
     "lever": "LEVER_COMPANIES",
     "ashby": "ASHBY_COMPANIES",
 }
 
 _ENV_EXAMPLE_FOR_SOURCE = {
-    "workday": "WORKDAY_COMPANIES=salesforce/External,adobe/Adobe_Careers",
     "greenhouse": "GREENHOUSE_COMPANIES=anthropic,scale,databricks",
     "lever": "LEVER_COMPANIES=netflix,figma",
     "ashby": "ASHBY_COMPANIES=ramp,vercel",
@@ -307,7 +309,18 @@ def _format_started_at(dt) -> str:
     return started.strftime("%Y-%m-%d")
 
 
-async def _build_sources_view(session: AsyncSession | None) -> list[dict]:
+def _effective_user_id(user: User | None) -> int:
+    """Resolve per-request user_id for IDOR scoping (mirrors `ui.routes.jobs`).
+
+    Real JWT sessions return `user.id`. The fake-session transitional stub
+    maps to the seeded owner (id=1) per `db/sample_data.py:USER.id == 1`.
+    Plan 56 / `0.2.7.02` — threading this through `_build_sources_view` to
+    close the latent IDOR before multi-user expansion.
+    """
+    return user.id if user is not None else 1
+
+
+async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> list[dict]:
     """Compose the per-source view list consumed by `_settings_sources.html`.
 
     Per plan 49 § D.1 — pulls (a) Settings (SQL row when session present;
@@ -320,12 +333,17 @@ async def _build_sources_view(session: AsyncSession | None) -> list[dict]:
     from scraper.rate_limit import resolve_rate_limit
 
     if session is None:
-        # The /settings/sources route always provides a session via
-        # Depends(get_session); None here is unreachable in production.
-        return []
+        # Plan 56 / 0.2.7.03 — defense in depth. The /settings/sources route
+        # always provides a session via Depends(get_session); reaching this
+        # branch means a caller forgot the dep wiring. Raise loudly so the
+        # bug surfaces instead of degrading to a silently-empty panel.
+        raise RuntimeError(
+            "_build_sources_view requires an AsyncSession — "
+            "callers must pass Depends(get_session) (plan 49 / 0.2.0.16 contract)"
+        )
 
-    settings_obj = await settings_service.get_or_create(session, user_id=1)
-    last_runs = await job_service.list_recent_scrape_runs_by_source(session, user_id=1)
+    settings_obj = await settings_service.get_or_create(session, user_id=user_id)
+    last_runs = await job_service.list_recent_scrape_runs_by_source(session, user_id=user_id)
 
     rows: list[dict] = []
     for entry in _SOURCES_PANEL:
@@ -347,15 +365,23 @@ async def _build_sources_view(session: AsyncSession | None) -> list[dict]:
                 "started_at_label": _format_started_at(run.started_at),
             }
         configure_block: dict
-        if source_value in _ENV_VAR_FOR_SOURCE:
+        if source is JobSource.WORKDAY:
+            # Plan 56 / 0.2.7.04 — Workday's cron reads `Settings.workday_companies`
+            # (per-user DB), not `WORKDAY_COMPANIES` env. The env-slot exists in
+            # config.py but is dead-letter until 0.2.7.06 wires it. Render honest
+            # popover prose under `kind="db-workday"` instead of the misleading
+            # env-kind w/ a CSV example operators copy to .env and see no result.
+            configure_block = {
+                "kind": "db-workday",
+                "companies": list(getattr(settings_obj, "workday_companies", None) or []),
+            }
+        elif source_value in _ENV_VAR_FOR_SOURCE:
             configure_block = {
                 "kind": "env",
                 "env_var": _ENV_VAR_FOR_SOURCE[source_value],
                 "example": _ENV_EXAMPLE_FOR_SOURCE.get(source_value),
             }
-            if source is JobSource.WORKDAY:
-                current = getattr(settings_obj, "workday_companies", None) or []
-            elif source is JobSource.GREENHOUSE:
+            if source is JobSource.GREENHOUSE:
                 current = app_settings.greenhouse_companies or []
             elif source is JobSource.LEVER:
                 current = app_settings.lever_companies or []
@@ -432,7 +458,7 @@ async def get_settings_sources(
     other tabs lands as a separate row). `Depends(get_session)` is the
     canonical entry; tests override via `app.dependency_overrides`.
     """
-    ctx = await _ctx_for_tab(request, "sources", session=session)
+    ctx = await _ctx_for_tab(request, "sources", session=session, user_id=_effective_user_id(_user))
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(request, "pages/_settings_sources.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
@@ -464,13 +490,15 @@ async def get_settings_submissions(
 async def get_settings_llm_provider(
     request: Request,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
     """Settings · LLM Provider tab with daily cost-cap widget — plan 54 / 0.2.5.03.
 
     Dedicated route (vs. catch-all `/settings/{tab}`) so we can `Depends(get_session)`
     without changing the catch-all's signature (existing tests rely on it being
-    DB-free). Auth on the LLM tab tightens as a separate row; for now this
-    route is unauthed in line with the catch-all.
+    DB-free). Plan 56 / 0.2.7.20 — gated by `require_authed_session` matching the
+    Sources + Submissions sub-tabs; the daily-cost widget aggregates per-user
+    ApiUsage rows and shouldn't leak unauth.
     """
     ctx = await _ctx_for_tab(request, "llm-provider", session=session)
     if request.headers.get("HX-Request") == "true":

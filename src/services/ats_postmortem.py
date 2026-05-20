@@ -38,6 +38,40 @@ _SECRET_KEY_RE = re.compile(
 _REDACTED = "[REDACTED]"
 _TIMESTAMP_FMT = "%Y-%m-%dT%H-%M-%SZ"
 
+# Plan 56 / 0.2.7.18 — value-shape patterns that match auth material echoed
+# back in scraper-controlled response bodies (ATS error pages occasionally
+# mirror the request's auth header). Applied to `response_body_excerpt`
+# BEFORE the 32 KB truncate so the persisted trace.json + LLM postmortem
+# prompt input never see the literal token. Best-effort defense in depth,
+# not a comprehensive secrets scrubber — the canonical defense is the ATS
+# adapter never including auth material in `raw["text"]` in the first place.
+_VALUE_PATTERN_REDACTIONS = [
+    # Bearer / JWT — case-insensitive header form (length-min 20 chars after prefix)
+    re.compile(r"(?i)\b(?:bearer|jwt)\s+[A-Za-z0-9._\-+/=]{20,}"),
+    # JWT (3-segment base64url) — bare form even without bearer prefix
+    re.compile(r"\beyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+"),
+    # Set-Cookie / Cookie / Authorization HTTP header value — match whether
+    # the header sits at line start or follows scraper-prose like "failed: ".
+    # `^` would miss the latter; `\b` covers both.
+    re.compile(r"(?im)\b(?:Set-Cookie|Cookie|Authorization):\s*[^\n\r]+"),
+    # OAuth access / refresh / id token URL params (length-min 20 chars after `=`)
+    re.compile(r"(?i)(?:access_token|refresh_token|id_token)=[A-Za-z0-9._\-+/=]{20,}"),
+]
+
+
+def _redact_value_patterns(text: str) -> str:
+    """Apply value-shape regex redactions to a raw string.
+
+    Complements `_redact()` (which only walks dict keys) — `_redact()` never
+    sees `response_body_excerpt` since the response body arrives as a raw
+    string, not a dict. Used on the response body BEFORE truncate + persist
+    + LLM-prompt feed (see `_build_trace`).
+    """
+    out = text
+    for pat in _VALUE_PATTERN_REDACTIONS:
+        out = pat.sub(_REDACTED, out)
+    return out
+
 
 @dataclass(slots=True)
 class PostmortemTrace:
@@ -105,9 +139,12 @@ def _build_trace(
     if body is None:
         response_body_excerpt = None
     elif isinstance(body, str):
-        response_body_excerpt = body[:_RESPONSE_BODY_CAP]
+        # Plan 56 / 0.2.7.18 — value-pattern redact BEFORE truncate.
+        response_body_excerpt = _redact_value_patterns(body)[:_RESPONSE_BODY_CAP]
     else:
-        response_body_excerpt = json.dumps(body, default=str)[:_RESPONSE_BODY_CAP]
+        response_body_excerpt = _redact_value_patterns(json.dumps(body, default=str))[
+            :_RESPONSE_BODY_CAP
+        ]
 
     request_body = raw.get("request_body")
     request_body_redacted = _redact(request_body) if request_body is not None else None

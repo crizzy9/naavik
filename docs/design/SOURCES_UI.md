@@ -142,7 +142,7 @@ Per `AGENTS.md` § Workflow step 4, this design doc holds the **contract**. The 
 Follow-up rows tracked separately in ROADMAP:
 
 - `0.2.0.10a` (shipped) — `/api/v1/scheduler/*` endpoints; the Sources panel may grow Run / Pause / Resume buttons per row in a future polish row.
-- `0.2.5.04` — Scraper-run history page surfacing recent N `JobScrapeRun` rows per source; "View history →" link composes onto each Sources row.
+- `0.2.5.04` (shipped) — Scraper-run history table — landed as a single bottom-of-tab table aggregating recent N runs across all sources (vs. anticipated per-row "View history →" link). Surface lives in `pages/_settings_sources.html` § history section. Plan 56 / `0.2.7.21` doc-pointer correction.
 - `0.2.5.05` — Rate-limit JSONB editor at `/settings/rate-limits`; replaces the read-only `<details>` popover on the rate-limit cell.
 - `0.2.5.06` — Writable LinkedIn / Indeed keywords editor; replaces the read-only `<details>` popover for those sources.
 
