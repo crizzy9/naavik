@@ -381,6 +381,40 @@ WORKDAY_COMPANIES=salesforce/External,adobe/Adobe_Careers
 SCRAPER_RSSHUB_URL=                        # optional LinkedIn RSShub fallback base URL
 ```
 
+### Scraper sources (plan 33 / 0.2.0.07, plan 35 / 0.2.0.10, plan 38 / 0.2.0.13, plan 49 / 0.2.0.16)
+
+Each scraper is configured through a mix of env vars (company watchlists, RSShub fallback URL) and per-user `Settings` rows (LinkedIn / Indeed keywords, per-source enable toggle, rate-limit overrides). Split: env vars hold deployment-wide config (the company list a Workday tenant follows is a deployment concern); the Settings row holds per-user search intent (which keywords this user wants LinkedIn searched for).
+
+**Per-source config matrix:**
+
+| Source | Companies (env) | Keywords (DB) | Location (DB) | Schedule (DB) | Rate limit (DB) |
+|---|---|---|---|---|---|
+| LinkedIn | — | `Settings.linkedin_keywords` | `Settings.linkedin_location` | `Settings.source_schedules["linkedin"]` (cron) | `Settings.scraper_rate_limits["linkedin"]` |
+| Workday | `Settings.workday_companies` (per-user) | — | — | `Settings.source_schedules["workday"]` (cron) | `Settings.scraper_rate_limits["workday"]` |
+| Greenhouse | `GREENHOUSE_COMPANIES` | — | — | `Settings.source_schedules["greenhouse"]` (cron) | `Settings.scraper_rate_limits["greenhouse"]` |
+| Lever | `LEVER_COMPANIES` | — | — | `Settings.source_schedules["lever"]` (cron) | `Settings.scraper_rate_limits["lever"]` |
+| Ashby | `ASHBY_COMPANIES` | — | — | `Settings.source_schedules["ashby"]` (cron) | `Settings.scraper_rate_limits["ashby"]` |
+| Indeed | — | `Settings.indeed_keywords` | `Settings.indeed_location` | (IntervalTrigger 90 min, fixed) | `Settings.scraper_rate_limits["indeed"]` |
+| LinkedIn (RSShub fallback) | — | (reuses `linkedin_keywords`) | (reuses `linkedin_location`) | (same cron as LinkedIn) | (no rate limit; RSShub server) |
+
+**Operator workflow:**
+
+1. **Pick which sources to enable.** All 6 default to enabled; toggle off on the Settings · Sources sub-tab in the UI for any source you don't want to scrape.
+2. **For Workday:** edit the per-tenant watchlist via the Settings · Sources UI (currently surfaces existing `workday_companies` read-only; writable editor lands as a follow-up).
+3. **For Greenhouse / Lever / Ashby:** set the company watchlist in `.env` (CSV, e.g. `GREENHOUSE_COMPANIES=anthropic,scale,databricks`). Cron skips a source silently when its watchlist is unset. **Restart the app** after editing `.env` — `pydantic-settings` loads env once at boot.
+4. **For LinkedIn / Indeed:** set keywords + location via `PUT /api/v1/settings/sources` (writable UI editor lands as a follow-up row). Example payload:
+   ```bash
+   curl -b cookies.txt -H "X-CSRF-Token: $(jq -r .csrf cookies.txt)" \
+        -X PUT http://localhost:8000/api/v1/settings/sources \
+        -H "Content-Type: application/json" \
+        -d '{"linkedin_keywords":["staff engineer"],"linkedin_location":"Remote"}'
+   ```
+5. **For LinkedIn RSShub fallback:** set `SCRAPER_RSSHUB_URL` in `.env` to your RSShub instance base URL (e.g. `https://rsshub.luminolab.net`). This is a fallback path used by `LinkedinRSScraper`; the primary `LinkedinScraper` does not use it.
+
+**Verifying a source is configured:**
+
+The Settings · Sources sub-tab in the UI (`/settings/sources`) is the canonical surface — each row shows configured/unconfigured indicator + last-scrape-run timestamp + last-run status. Anti-detection / rate limiting is documented in `docs/design/SCRAPER_BASE.md § G`. Per-source overrides live in `Settings.scraper_rate_limits` (JSONB shape: `{"linkedin": {"rpm": 0.4, "delay_lo": 3.0, "delay_hi": 7.0}, ...}`). The Sources panel surfaces the resolved value read-only; the writable editor lands at `/settings/rate-limits` per a deferred follow-up row.
+
 ### Dev / test env vars (not user-facing)
 
 These exist for development and CI; production should leave them unset.
@@ -425,6 +459,25 @@ python -c 'import secrets; print(secrets.token_urlsafe(48))'
 nix run .#dev    # or `docker compose up -d --force-recreate naavik`
 # 4. Re-authenticate from the UI (existing cookies will be rejected with 401)
 ```
+
+### Verify scrapers run (plan 35 / 0.2.0.10, plan 49 / 0.2.0.16)
+
+After configuring `.env` + per-user keywords (§ Configuration · Scraper sources above), verify the chain end-to-end:
+
+1. **Check the Settings · Sources sub-tab** at `/settings/sources`. Each row shows:
+   - **Configured / not configured** — env-based for company-list sources (Workday / Greenhouse / Lever / Ashby); DB-based for LinkedIn / Indeed keywords.
+   - **Last-scrape-run timestamp** + status chip.
+   - **"Configure →" `<details>` popover** with env-var name + CSV example (for ATS sources) or current keywords + Edit-via-API hint (for LinkedIn / Indeed).
+   A source row marked "Not configured" means the watchlist (Workday / Greenhouse / Lever / Ashby) or keywords (LinkedIn / Indeed) is empty — cron will skip that source silently.
+2. **Trigger a one-off run** via the operator scheduler endpoint (`0.2.0.10a`):
+   ```bash
+   curl -b cookies.txt \
+        -H "X-CSRF-Token: $(jq -r .csrf cookies.txt)" \
+        -X POST \
+        http://localhost:8000/api/v1/scheduler/jobs/scraping.linkedin/run
+   ```
+3. **Check `/discover`** for new jobs. Empty queue with sources marked "configured" + last-run `SUCCESS` means the source returned zero matching listings — try broader keywords or add more companies.
+4. **Check the Sources panel** for last-run state. Status chips: `SUCCESS` (emerald), `PARTIAL` (amber — some listings failed extraction), `FAILED` (rose — top-level scrape error; the consecutive-failure counter is incrementing, Discord admin alert fires at 3), `TIMED_OUT` (rose), `running…` (indigo). The Discover queue surfaces jobs across all sources; the per-source counter lives only on the Sources panel.
 
 ### Scheduler endpoints (operator surface)
 

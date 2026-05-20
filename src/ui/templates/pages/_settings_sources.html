@@ -1,68 +1,58 @@
 {#
   Settings · Sources tab body.
+
   Args:
-    settings : Settings singleton (sources_enabled + source_schedules dicts)
+    settings    : Settings singleton (sources_enabled + source_schedules dicts + workday_companies)
+    sources_view : list[dict] — one entry per source per plan 49 § D.1 contract.
+      Each entry is the `view` arg to components/_source_row.html.
+
+  Plan 49 / 0.2.0.16 § D — 6 per-source rows. Each row composes configured /
+  unconfigured indicator (env-vs-DB), last-run timestamp + status chip,
+  resolved rate-limit (read-only), and a "Configure →" `<details>` popover
+  that degrades the per-source editor link until 0.2.5.05 / 0.2.5.06 ship.
 #}
 <div class="flex flex-col gap-6 max-w-3xl">
   <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
-    <header class="flex items-baseline justify-between gap-3 mb-4">
+    <header class="flex items-baseline justify-between gap-3 mb-2">
       <div>
         <h2 class="text-base font-medium text-slate-50">Job sources</h2>
-        <p class="text-xs text-slate-400 mt-0.5">Toggle scraping per source; cron schedule editable per row (cron syntax).</p>
+        <p class="text-xs text-slate-400 mt-0.5">
+          Per-source enable + configuration. Company-list sources read
+          <code class="font-mono text-slate-300">.env</code>; LinkedIn /
+          Indeed read per-user keywords. See
+          <a href="https://github.com/crizzy9/naavik#configuration"
+             class="text-indigo-300 hover:text-indigo-200 underline"
+             target="_blank" rel="noopener">README · Scraper sources</a>.
+        </p>
       </div>
-      <span class="text-xs text-slate-500 font-mono">
+      <span class="text-xs text-slate-500 font-mono shrink-0">
         {{ (settings.sources_enabled.values() | select | list | length) }} / {{ settings.sources_enabled | length }} enabled
       </span>
     </header>
 
     <ul class="flex flex-col divide-y divide-slate-800/50">
-      {% set _icons = {"linkedin": "linkedin", "workday": "briefcase", "greenhouse": "leaf",
-                       "lever": "lever", "ashby": "globe", "indeed": "search", "rss": "rss"} %}
-      {% for src, enabled in settings.sources_enabled.items() %}
-        {% set _label = src | title %}
-        {% set _schedule = settings.source_schedules.get(src, "0 * * * *") %}
-        <li class="flex items-center justify-between py-3 gap-3">
-          <div class="flex items-center gap-3 flex-1 min-w-0">
-            <i data-lucide="{{ _icons.get(src, 'globe') }}" class="h-4 w-4 text-slate-400 shrink-0" stroke-width="1.5"></i>
-            <div class="min-w-0">
-              <div class="text-sm text-slate-100">{{ _label }}</div>
-              <div class="text-xs text-slate-500 font-mono truncate">{{ _schedule }}</div>
-            </div>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer shrink-0">
-            <input type="checkbox" name="{{ src }}" {% if enabled %}checked{% endif %}
-                   hx-put="/api/v1/settings/sources"
-                   hx-trigger="change"
-                   hx-vals='{"source": "{{ src }}"}'
-                   hx-swap="none"
-                   class="sr-only peer">
-            <span class="w-9 h-5 bg-slate-700 rounded-full peer-checked:bg-indigo-500 transition relative
-                         after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-4 after:w-4
-                         after:bg-white after:rounded-full after:transition peer-checked:after:translate-x-4"></span>
-          </label>
-        </li>
+      {% for v in sources_view %}
+        {% with view=v %}
+          {% include "components/_source_row.html" %}
+        {% endwith %}
       {% endfor %}
     </ul>
   </section>
 
-  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
-    <h2 class="text-base font-medium text-slate-50">Workday companies</h2>
-    <p class="text-xs text-slate-400 mt-0.5">Per-tenant watchlist (Workday has no public discovery feed).</p>
-    <ul class="mt-4 flex flex-wrap gap-1.5">
-      {% for c in settings.workday_companies %}
-        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-mono">
-          {{ c }}
-          <button type="button" class="text-slate-500 hover:text-rose-300" aria-label="Remove">
-            <i data-lucide="x" class="h-3 w-3" stroke-width="1.5"></i>
-          </button>
-        </span>
-      {% else %}
-        <span class="text-xs text-slate-500 italic">No companies tracked.</span>
-      {% endfor %}
-    </ul>
-    <button type="button" class="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm transition">
-      <i data-lucide="plus" class="h-4 w-4" stroke-width="1.5"></i>
-      Add company
-    </button>
-  </section>
+  {% if settings.workday_companies %}
+    <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+      <h2 class="text-base font-medium text-slate-50">Workday companies tracked</h2>
+      <p class="text-xs text-slate-400 mt-0.5">
+        Per-tenant watchlist (Workday has no public discovery feed).
+        Currently from <code class="font-mono text-slate-300">Settings.workday_companies</code>.
+      </p>
+      <ul class="mt-4 flex flex-wrap gap-1.5">
+        {% for c in settings.workday_companies %}
+          <li class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-mono">
+            {{ c }}
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
 </div>

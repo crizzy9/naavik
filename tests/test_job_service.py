@@ -414,6 +414,57 @@ async def test_count_jobs_by_source_aggregates_into_enum_keys():
     }
 
 
+# ── list_recent_scrape_runs_by_source ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_recent_scrape_runs_by_source_empty_returns_dict():
+    """User with no JobScrapeRun rows → empty dict."""
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([])]
+
+    out = await job_service.list_recent_scrape_runs_by_source(session, user_id=1)
+    assert out == {}
+
+
+@pytest.mark.asyncio
+async def test_list_recent_scrape_runs_by_source_returns_latest_per_source():
+    """Sqlite fallback path: GROUP BY max(started_at) → per-source row fetch."""
+    now = datetime.now(UTC)
+    linkedin_old = SimpleNamespace(
+        id=10, source=JobSource.LINKEDIN, started_at=now - timedelta(hours=2)
+    )
+    linkedin_new = SimpleNamespace(
+        id=11, source=JobSource.LINKEDIN, started_at=now - timedelta(minutes=10)
+    )
+    greenhouse_only = SimpleNamespace(
+        id=12, source=JobSource.GREENHOUSE, started_at=now - timedelta(hours=1)
+    )
+
+    session = _FakeSession()
+    # Aggregate query yields one tuple per source.
+    session.exec_queue = [
+        _exec_all(
+            [
+                (JobSource.LINKEDIN, linkedin_new.started_at),
+                (JobSource.GREENHOUSE, greenhouse_only.started_at),
+            ]
+        ),
+        # Per-source fetch queries — order matches enum order in pairs.
+        _exec_one(linkedin_new),
+        _exec_one(greenhouse_only),
+    ]
+
+    out = await job_service.list_recent_scrape_runs_by_source(session, user_id=1)
+    assert set(out.keys()) == {JobSource.LINKEDIN, JobSource.GREENHOUSE}
+    assert out[JobSource.LINKEDIN].id == 11
+    assert out[JobSource.GREENHOUSE].id == 12
+    # The older linkedin row never surfaced.
+    assert out[JobSource.LINKEDIN].started_at == linkedin_new.started_at
+    # Reference unused fixture for static-analysis silence.
+    assert linkedin_old.id == 10
+
+
 # ── record_scrape_run ────────────────────────────────────────────────────
 
 

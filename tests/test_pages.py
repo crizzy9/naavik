@@ -114,11 +114,73 @@ def test_page_renders(client: TestClient, auth_cookies, slug, url, must_have, mu
         assert sub not in body, f"{slug}: forbidden {sub!r} in response"
 
 
-def test_settings_all_six_tabs(client: TestClient, auth_cookies):
-    """Plan 09 § H — Settings ships all 6 tabs."""
-    for tab in ("llm-provider", "deployment", "account", "notifications", "auto-apply", "sources"):
-        r = client.get(f"/settings/{tab}", cookies=auth_cookies)
-        assert r.status_code == 200, f"/settings/{tab}: HTTP {r.status_code}"
+def test_settings_all_six_tabs(client: TestClient, auth_cookies, monkeypatch):
+    """Plan 09 § H — Settings ships all 6 tabs.
+
+    `/settings/sources` requires `Depends(get_session)` (plan 49 / 0.2.0.16);
+    override + patch service layer so the test stays DB-independent.
+    """
+    from types import SimpleNamespace
+
+    from db.session import get_session
+    from main import app
+    from services import job_service, settings_service
+
+    class _NoopSession:
+        async def commit(self):
+            return None
+
+        async def rollback(self):
+            return None
+
+        async def close(self):
+            return None
+
+    async def _fake_get_session():
+        yield _NoopSession()
+
+    def _fake_sql_settings():
+        return SimpleNamespace(
+            user_id=1,
+            sources_enabled={
+                "linkedin": True,
+                "workday": True,
+                "greenhouse": True,
+                "lever": True,
+                "ashby": True,
+                "indeed": False,
+            },
+            source_schedules={},
+            workday_companies=[],
+            linkedin_keywords=None,
+            linkedin_location=None,
+            indeed_keywords=None,
+            indeed_location=None,
+            scraper_rate_limits={},
+        )
+
+    async def _fake_get_or_create(session, *, user_id):
+        return _fake_sql_settings()
+
+    async def _fake_runs(session, *, user_id):
+        return {}
+
+    monkeypatch.setattr(settings_service, "get_or_create", _fake_get_or_create)
+    monkeypatch.setattr(job_service, "list_recent_scrape_runs_by_source", _fake_runs)
+    app.dependency_overrides[get_session] = _fake_get_session
+    try:
+        for tab in (
+            "llm-provider",
+            "deployment",
+            "account",
+            "notifications",
+            "auto-apply",
+            "sources",
+        ):
+            r = client.get(f"/settings/{tab}", cookies=auth_cookies)
+            assert r.status_code == 200, f"/settings/{tab}: HTTP {r.status_code}"
+    finally:
+        app.dependency_overrides.pop(get_session, None)
 
 
 def test_settings_unknown_tab_returns_404(client: TestClient, auth_cookies):

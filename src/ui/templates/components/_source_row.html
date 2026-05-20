@@ -1,0 +1,149 @@
+{#
+  _source_row.html — one Settings · Sources row per JobSource.
+
+  Args:
+    view : dict with keys:
+      source       : str — JobSource.value (e.g. "linkedin")
+      label        : str — display label (e.g. "LinkedIn")
+      icon         : str — Lucide icon name
+      enabled      : bool — Settings.sources_enabled[source]
+      configured   : bool — env-vs-DB composition (env_secrets.scraper_source_configured)
+      last_run     : dict | None — {status, started_at_label, finished_at, duration_ms}
+      schedule     : str — cron string or interval label
+      rate_limit   : dict — {rpm, delay_lo, delay_hi}
+      configure    : dict — {kind ("env"|"db"), env_var?, keywords?, location?, hint}
+
+  Plan 49 / 0.2.0.16 § D.1. The "Configure →" link degrades universally to
+  a `<details>` popover (OQ.2 locked); the popover body documents the
+  configuration surface (env-var name + format example OR current keywords
+  + Edit-via-API hint).
+#}
+{% set v = view %}
+{% set _status_tone = {
+    "running": "indigo",
+    "success": "emerald",
+    "partial":  "amber",
+    "failed":   "rose",
+    "timed_out": "rose",
+} %}
+{% set _status_label = {
+    "running":  "running",
+    "success":  "SUCCESS",
+    "partial":  "PARTIAL",
+    "failed":   "FAILED",
+    "timed_out": "TIMED OUT",
+} %}
+<li data-source-row="{{ v.source }}" class="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:gap-4">
+  <div class="flex items-center gap-3 flex-1 min-w-0">
+    <span class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-800/80 text-slate-300 shrink-0">
+      <i data-lucide="{{ v.icon }}" class="h-4 w-4" stroke-width="1.5"></i>
+    </span>
+    <div class="min-w-0">
+      <div class="flex items-center flex-wrap gap-2">
+        <span class="text-sm font-medium text-slate-100">{{ v.label }}</span>
+        {% if v.configured %}
+          <span data-source-configured="true"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30">
+            <i data-lucide="check-circle-2" class="h-3 w-3" stroke-width="1.5"></i>
+            configured
+          </span>
+        {% else %}
+          <span data-source-configured="false"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-slate-800 text-slate-400 ring-1 ring-slate-700">
+            <i data-lucide="circle" class="h-3 w-3" stroke-width="1.5"></i>
+            not configured
+          </span>
+        {% endif %}
+      </div>
+
+      <div class="mt-1 text-xs text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-1">
+        {% if v.last_run %}
+          {% set _tone = _status_tone.get(v.last_run.status_value, "slate") %}
+          <span data-source-last-run="present" class="inline-flex items-center gap-1.5">
+            {% if v.last_run.status_value == "running" %}
+              <span data-source-status="running"
+                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/30">
+                running…
+              </span>
+            {% else %}
+              <span data-source-status="{{ v.last_run.status_value }}"
+                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono
+                           {% if _tone == 'emerald' %}bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30
+                           {% elif _tone == 'amber' %}bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/30
+                           {% elif _tone == 'rose' %}bg-rose-500/15 text-rose-200 ring-1 ring-rose-500/30
+                           {% else %}bg-slate-800 text-slate-300{% endif %}">
+                {{ _status_label.get(v.last_run.status_value, v.last_run.status_value) }}
+              </span>
+              <span class="text-slate-400">{{ v.last_run.started_at_label }}</span>
+            {% endif %}
+          </span>
+        {% else %}
+          <span data-source-last-run="never" class="text-slate-500 italic">never run</span>
+        {% endif %}
+        <span class="text-slate-700">·</span>
+        <span class="font-mono text-slate-500" data-source-schedule>{{ v.schedule }}</span>
+      </div>
+
+      <div class="mt-1 text-[11px] text-slate-500 font-mono" data-source-rate-limit>
+        {{ '%.2f' | format(v.rate_limit.rpm) }} rpm
+        · {{ '%.1f' | format(v.rate_limit.delay_lo) }}–{{ '%.1f' | format(v.rate_limit.delay_hi) }}s
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-start gap-3 sm:flex-col sm:items-end sm:gap-2 sm:shrink-0">
+    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+      <input type="checkbox" name="{{ v.source }}" {% if v.enabled %}checked{% endif %}
+             hx-put="/api/v1/settings/sources"
+             hx-trigger="change"
+             hx-vals='{"source": "{{ v.source }}"}'
+             hx-swap="none"
+             class="sr-only peer">
+      <span class="w-9 h-5 bg-slate-700 rounded-full peer-checked:bg-indigo-500 transition relative
+                   after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-4 after:w-4
+                   after:bg-white after:rounded-full after:transition peer-checked:after:translate-x-4"></span>
+    </label>
+
+    <details class="text-xs" data-source-configure>
+      <summary class="cursor-pointer list-none inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200">
+        Configure
+        <i data-lucide="chevron-down" class="h-3 w-3" stroke-width="1.5"></i>
+      </summary>
+      <div class="mt-2 p-3 rounded-md border border-slate-800 bg-slate-950/60 text-slate-300 max-w-xs sm:max-w-sm">
+        {% if v.configure.kind == "env" %}
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            Set <code class="font-mono text-slate-200">{{ v.configure.env_var }}</code>
+            in <code class="font-mono text-slate-200">.env</code> (CSV of company slugs).
+            Restart the app after editing — pydantic-settings loads env at boot.
+          </p>
+          {% if v.configure.example %}
+            <p class="mt-1.5 text-[11px] font-mono text-slate-500 break-all">{{ v.configure.example }}</p>
+          {% endif %}
+          {% if v.configure.current %}
+            <p class="mt-1.5 text-[11px] text-emerald-300">
+              Currently tracking: <span class="font-mono">{{ v.configure.current }}</span>
+            </p>
+          {% endif %}
+        {% elif v.configure.kind == "db" %}
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            Per-user keywords + location. Until <code class="font-mono">0.2.5.06</code>
+            ships the editor, update via <code class="font-mono text-slate-200">PUT /api/v1/settings/sources</code>.
+          </p>
+          {% if v.configure.keywords %}
+            <p class="mt-1.5 text-[11px] text-slate-300">
+              Keywords:
+              <span class="font-mono text-slate-200">{{ v.configure.keywords | join(", ") }}</span>
+            </p>
+          {% else %}
+            <p class="mt-1.5 text-[11px] text-slate-500 italic">No keywords set.</p>
+          {% endif %}
+          {% if v.configure.location %}
+            <p class="text-[11px] text-slate-300">
+              Location: <span class="font-mono text-slate-200">{{ v.configure.location }}</span>
+            </p>
+          {% endif %}
+        {% endif %}
+      </div>
+    </details>
+  </div>
+</li>

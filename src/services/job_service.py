@@ -382,6 +382,71 @@ async def count_jobs_by_source(session: AsyncSession, user_id: int) -> dict[JobS
     return out
 
 
+async def list_recent_scrape_runs_by_source(
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> dict[JobSource, JobScrapeRun]:
+    """Return the latest JobScrapeRun per source for the user.
+
+    Per plan 49 / 0.2.0.16 § D.4. Drives the Settings · Sources panel's
+    last-run timestamp + status chip per row. Postgres path uses
+    `DISTINCT ON (source) ... ORDER BY source, started_at DESC` for a
+    single-statement projection; sqlite test backend falls back to a
+    two-statement approach (max(started_at) GROUP BY source, then fetch
+    the matching rows) since `DISTINCT ON` is Postgres-only.
+    """
+    from sqlalchemy import func
+
+    dialect_name = (
+        session.bind.dialect.name
+        if session.bind is not None and hasattr(session.bind, "dialect")
+        else ""
+    )
+
+    if dialect_name == "postgresql":
+        stmt = (
+            select(JobScrapeRun)
+            .where(JobScrapeRun.user_id == user_id)
+            .order_by(JobScrapeRun.source, JobScrapeRun.started_at.desc())
+            .distinct(JobScrapeRun.source)
+        )
+        rows = (await session.exec(stmt)).all()
+        return {row.source: row for row in rows}
+
+    max_stmt = (
+        select(JobScrapeRun.source, func.max(JobScrapeRun.started_at))
+        .where(JobScrapeRun.user_id == user_id)
+        .group_by(JobScrapeRun.source)
+    )
+    max_rows = (await session.exec(max_stmt)).all()
+    pairs: list[tuple[JobSource, datetime]] = []
+    for row in max_rows:
+        if isinstance(row, tuple):
+            source, started = row
+        else:
+            source, started = row[0], row[1]
+        pairs.append((source, started))
+    if not pairs:
+        return {}
+
+    out: dict[JobSource, JobScrapeRun] = {}
+    for source, started in pairs:
+        stmt = (
+            select(JobScrapeRun)
+            .where(
+                JobScrapeRun.user_id == user_id,
+                JobScrapeRun.source == source,
+                JobScrapeRun.started_at == started,
+            )
+            .limit(1)
+        )
+        result = (await session.exec(stmt)).one_or_none()
+        if result is not None:
+            out[source] = result
+    return out
+
+
 async def record_scrape_run(
     session: AsyncSession,
     *,
