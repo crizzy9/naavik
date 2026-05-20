@@ -238,6 +238,7 @@ class Job(_Base):
 
     warm_intro_contact_id: int | None = None
     last_scrape_run_id: int | None = None
+    duplicate_of_id: int | None = None
     raw_meta: dict[str, Any] = Field(default_factory=dict)
 
     created_at: datetime
