@@ -30,12 +30,17 @@ from services import scraper_service
 
 class _FakeSession:
     """Mirror of tests/test_job_service.py:_FakeSession; tracks add()/flush()
-    and serves queued canned exec() results."""
+    and serves queued canned exec() results.
+
+    Exposes a sqlite-flavored `bind.dialect` so the tier-3 dedup query
+    (plan 34) picks the LIKE fallback branch.
+    """
 
     def __init__(self) -> None:
         self.added: list = []
         self.exec_queue: list = []
         self.flush_count = 0
+        self.bind = SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
 
     def add(self, obj):
         self.added.append(obj)
@@ -51,6 +56,11 @@ class _FakeSession:
 
 def _exec_one(value):
     return SimpleNamespace(one_or_none=lambda: value, all=lambda: [value] if value else [])
+
+
+def _exec_all_empty():
+    """Sentinel result for the tier-3 dedup candidate query — no matches."""
+    return SimpleNamespace(one_or_none=lambda: None, all=lambda: [], one=lambda: 0)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -100,21 +110,24 @@ class _RaisingScraper(ScraperBase):
 
 def _setup_session_for_sample(scraper: SampleScraper, *, all_new: bool = True) -> _FakeSession:
     """Wire a fake session whose exec() returns None for each upsert's
-    existence check — so every upsert creates a new row."""
+    existence check — so every upsert creates a new row.
+
+    Cold-cache upserts (tier-1 miss) issue a SECOND exec for tier-3 dedup
+    candidate lookup (plan 34 / 0.2.0.09); we queue an empty `_exec_all`
+    after each tier-1 None to keep the candidate filter benign.
+    """
     session = _FakeSession()
-    # 1 exec() for record_scrape_run (returns nothing meaningful;
-    # job_service.record_scrape_run just does add + flush). record_scrape_run
-    # does not call session.exec; sample yields 3 jobs so we queue 3 exec()
-    # results for the upsert existence-check.
     n_yields = 3
     if all_new:
         for _ in range(n_yields):
             session.exec_queue.append(_exec_one(None))
+            session.exec_queue.append(_exec_all_empty())
     else:
         # alternating new / existing — used to test the updated_jobs counter.
         for i in range(n_yields):
             if i % 2 == 0:
                 session.exec_queue.append(_exec_one(None))
+                session.exec_queue.append(_exec_all_empty())
             else:
                 session.exec_queue.append(
                     _exec_one(
@@ -211,7 +224,14 @@ async def test_run_scraper_partial_when_scraper_raises_after_some_yields():
     scraper = _RaisingScraper(yield_before=2, exc=RuntimeError("network blip"))
     session = _FakeSession()
     # 2 upsert existence checks return None → 2 new jobs land before raise.
-    session.exec_queue = [_exec_one(None), _exec_one(None)]
+    # Each cold-cache upsert also issues a tier-3 dedup candidate query
+    # (plan 34) which we satisfy with empty `_exec_all` results.
+    session.exec_queue = [
+        _exec_one(None),
+        _exec_all_empty(),
+        _exec_one(None),
+        _exec_all_empty(),
+    ]
 
     run = await scraper_service.run_scraper(
         session,  # type: ignore[arg-type]
@@ -261,7 +281,15 @@ async def test_run_scraper_per_listing_upsert_failure_becomes_partial():
 
     # Return values for the 3 upsert existence checks: first 2 succeed (None);
     # third triggers a write-side exception via a side-effect monkey-patch.
-    session.exec_queue = [_exec_one(None), _exec_one(None), _exec_one(None)]
+    # Each tier-1 None pairs with an empty tier-3 dedup candidate result.
+    session.exec_queue = [
+        _exec_one(None),
+        _exec_all_empty(),
+        _exec_one(None),
+        _exec_all_empty(),
+        _exec_one(None),
+        _exec_all_empty(),
+    ]
 
     real_flush = session.flush
     flush_calls = {"n": 0}

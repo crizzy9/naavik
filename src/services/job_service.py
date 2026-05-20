@@ -6,8 +6,10 @@ into this module — there is no raw-SQL fallback in the route layer.
 
 `upsert_job` is the load-bearing helper: idempotent on
 `(user_id, source, external_id)` per the partial-unique index created by
-migration 0005. Field-level merge logic intentionally minimal in plan 27 —
-full diff/refresh ships in 0.2.0.09 dedup work.
+migration 0005, plus tier-3 cross-source fuzzy dedup via
+`services.dedup.find_duplicate` (plan 34, 0.2.0.09) — when tier-1 misses
+and the incoming `(company, role)` matches a live cross-source Job
+≥ threshold, the new row lands with `duplicate_of_id` set.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from models import (
     RemotePolicy,
     VisaRestriction,
 )
+from services import dedup
 
 # ── Single-job CRUD ──────────────────────────────────────────────────────
 
@@ -56,6 +59,9 @@ async def list_jobs(
         filters = JobFilter()
 
     stmt = select(Job).where(Job.user_id == user_id, Job.deleted_at.is_(None))
+
+    if not filters.include_duplicates:
+        stmt = stmt.where(Job.duplicate_of_id.is_(None))
 
     if filters.company is not None:
         stmt = stmt.where(Job.company == filters.company)
@@ -190,8 +196,10 @@ async def upsert_job(
     """Idempotent on `(user_id, source, external_id)`. Returns `(job, created)`.
 
     On hit, refreshes `description_extracted_at`, merges `raw_meta`, and
-    bumps `last_scrape_run_id`. Field-level merge (e.g. diffing description
-    + skills against the new payload) is deferred to 0.2.0.09 dedup work.
+    bumps `last_scrape_run_id`. On miss, runs tier-3 fuzzy dedup
+    (plan 34 § D.7) — when the incoming `(company, role)` matches a live
+    cross-source Job at score ≥ 88.0, the new row lands with
+    `duplicate_of_id` pointing at the canonical existing row.
 
     `raw` is the scraper's normalized payload — required keys depend on
     whether the row is being created or updated. Create-path required keys:
@@ -209,11 +217,27 @@ async def upsert_job(
 
     now = datetime.now(UTC)
     if existing is None:
+        # Tier-3 fuzzy dedup (plan 34) — only fires when tier-1 missed.
+        company = raw.get("company")
+        role = raw.get("role")
+        duplicate_of_id: int | None = None
+        if company and role:
+            match = await dedup.find_duplicate(
+                session,
+                user_id=user_id,
+                company=company,
+                role=role,
+                source=source,
+            )
+            if match is not None:
+                duplicate_of_id = match.id
+
         job = Job(
             user_id=user_id,
             source=source,
             external_id=external_id,
             **_create_payload(raw),
+            duplicate_of_id=duplicate_of_id,
             found_at=now,
             created_at=now,
             updated_at=now,
@@ -232,7 +256,6 @@ async def upsert_job(
         existing.raw_meta = {**(existing.raw_meta or {}), **incoming_meta}
     if scrape_run_id is not None:
         existing.last_scrape_run_id = scrape_run_id
-    # Field-level diff intentionally minimal — 0.2.0.09 ships full refresh.
     session.add(existing)
     await session.flush()
     return existing, False
