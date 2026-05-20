@@ -489,3 +489,36 @@ async def test_enrich_raw_job_uses_description_text_when_html_absent() -> None:
     assert out.description_text == "Backend Engineer. Python, PostgreSQL. Remote."
     # The LLM input prompt should contain the original text
     assert "Backend Engineer" in provider.last_prompt
+
+
+# ── JobExtraction.tags Literal vocabulary (plan 46 / 0.2.0.08a) ──────
+
+
+def test_job_extraction_rejects_off_vocab_tags() -> None:
+    """Off-vocab tags fail Pydantic validation at the LLM-output boundary.
+
+    Closes hacker review on PR #106: LLM hallucinations carrying invented
+    tag strings now fail-fast rather than slipping through to the scorer
+    via raw_meta (where downstream consumers trust the vocabulary without
+    re-validation).
+    """
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        JobExtraction(
+            company_name="Acme",
+            position_title="Engineer",
+            description="x",
+            tags=["invalid-tag"],
+        )
+
+
+def test_job_extraction_accepts_canonical_tags() -> None:
+    """All 9 canonical tags accepted; multi-tag mix accepted."""
+    out = JobExtraction(
+        company_name="Acme",
+        position_title="Engineer",
+        description="x",
+        tags=["ai-ml", "backend", "platform", "genai"],
+    )
+    assert out.tags == ["ai-ml", "backend", "platform", "genai"]

@@ -214,15 +214,25 @@ def _telegram_text_for_event(
     application: Application | None = None,
     job: Job | None = None,
 ) -> str:
+    """Plain-text Telegram message body — no Markdown emphasis.
+
+    Mirrors `_telegram_text_for_scrape_run`'s no-parse_mode contract
+    (plan 46 / 0.2.0.12a). Scraper-controlled `role` / `company` strings
+    can carry `*` / `_` / `[]()` characters; emitting `*x*` bolding under
+    parse_mode=Markdown turned them into formatting / phishing-link
+    surfaces. We drop emphasis here and remove parse_mode in `send_telegram`
+    so any literal `*` / `_` / `[` / `(` in scraper output renders verbatim
+    rather than being interpreted by the Telegram client.
+    """
     if event == EVENT_NEW_HIGH_SCORE and job is not None:
         return (
-            f"📌 New match: *{job.role}* @ *{job.company}*\n"
-            f"Score: `{job.score:.2f}` · {job.location or 'Remote'}\n"
+            f"📌 New match: {job.role} @ {job.company}\n"
+            f"Score: {job.score:.2f} · {job.location or 'Remote'}\n"
             f"{job.url}"
         )
     if event == EVENT_APPLICATION_SENT and application is not None:
         return (
-            f"📤 Submitted: *{application.role}* @ *{application.company}* "
+            f"📤 Submitted: {application.role} @ {application.company} "
             f"({application.board.value if application.board else 'manual'})"
         )
     if event == EVENT_INTERVIEW_SCHEDULED and application is not None:
@@ -255,7 +265,10 @@ async def send_telegram(
         return False
     text = _telegram_text_for_event(event, application=application, job=job)
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    body = {"chat_id": chat, "text": text, "parse_mode": "Markdown"}
+    # No parse_mode (plan 46 / 0.2.0.12a): scraper-controlled role/company
+    # would otherwise allow Markdown injection. Telegram auto-linkifies URLs
+    # in plain-text mode; emphasis is intentionally dropped.
+    body = {"chat_id": chat, "text": text}
     client = http_client or httpx.AsyncClient(timeout=10.0)
     owns = http_client is None
     try:

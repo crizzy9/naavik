@@ -112,10 +112,23 @@ def test_discord_embed_for_auto_apply_failed_includes_message():
     assert "cookie expired" in embed["description"]
 
 
-def test_telegram_text_for_new_high_score_uses_markdown():
+def test_telegram_text_for_new_high_score_is_plaintext():
+    """Plan 46 / 0.2.0.12a: no `*x*` Markdown emphasis on company/role.
+
+    Scraper-controlled role/company would otherwise allow Markdown injection
+    under parse_mode=Markdown; we drop the emphasis here and the parse_mode
+    field in `send_telegram` so any literal `*` / `_` / `[` in scraper
+    output renders verbatim.
+    """
     text = _telegram_text_for_event(EVENT_NEW_HIGH_SCORE, job=_job())
-    assert "*Stripe*" in text
+    # Plain "Stripe", not "*Stripe*"; no Markdown emphasis anywhere.
+    assert "Stripe" in text
+    assert "*Stripe*" not in text
+    assert "*Senior Backend Engineer*" not in text
+    # Score still rendered (without backticks now).
     assert "0.92" in text
+    assert "`0.92`" not in text
+    # URL still present (Telegram auto-linkifies without parse_mode).
     assert "https://example.com/jobs/1" in text
 
 
@@ -204,7 +217,43 @@ async def test_send_telegram_posts_message():
     body = json.loads(captured["body"])
     assert body["chat_id"] == "42"
     assert "Stripe" in body["text"]
+    # Plan 46 / 0.2.0.12a: no parse_mode key — symmetric with the scrape-run
+    # path (`_send_telegram_scrape_run`). Markdown injection defense.
+    assert "parse_mode" not in body
     assert "api.telegram.org/botbot-token/sendMessage" in captured["url"]
+
+
+@pytest.mark.asyncio
+async def test_send_telegram_high_score_hostile_role_renders_as_plain_text():
+    """Plan 46 / 0.2.0.12a: scraper-controlled `role` / `company` carrying
+    Markdown link syntax `[phish](https://evil.example)` or `*pretend-bold*`
+    is sent verbatim — NOT as a clickable link or rendered emphasis —
+    because no parse_mode is set. Mirrors
+    `test_send_telegram_scrape_run_hostile_role_renders_as_plain_text` for
+    the symmetric `send_telegram` / `_telegram_text_for_event` path.
+    """
+    hostile = _job(
+        role="[phish](https://evil.example)",
+        company="*pretend-bold*",
+    )
+    s = _settings()
+    captured = {}
+    client = _mock_client(captured)
+    with (
+        patch("services.notifications._telegram_token", return_value="bot-token"),
+        patch("services.notifications._telegram_chat_id", return_value="42"),
+    ):
+        ok = await send_telegram(
+            settings=s, event=EVENT_NEW_HIGH_SCORE, job=hostile, http_client=client
+        )
+    await client.aclose()
+    assert ok is True
+    body = json.loads(captured["body"])
+    # Defense is the absent parse_mode, not sanitization — payload is
+    # verbatim hostile text.
+    assert "parse_mode" not in body
+    assert "[phish](https://evil.example)" in body["text"]
+    assert "*pretend-bold*" in body["text"]
 
 
 # ── High-score gate ─────────────────────────────────────────────────

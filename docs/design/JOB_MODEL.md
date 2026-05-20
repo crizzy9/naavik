@@ -356,7 +356,7 @@ In `src/models/job.py`:
 - `JobFilter` — query-param shape for `/api/v1/jobs` (Phase 2.0.11 surface): `company` / `source` / `board` / `visa` / `remote_only: bool` / `seniority` / `queue_state` / `score_min: float` / `score_max: float` / `tag` / `posted_within_days: int | None`.
 - `JobCreate` — input shape for `create_manual_job` (`+ Add by URL`): `url` / `board` / `company` / `role` / `description` / `team` / `location` / `remote_policy` / `seniority_level` / `salary_min` / `salary_max` / `visa_restrictions`.
 - `JobUpdate` — partial-update shape for future inline-edit UI.
-- `JobRead` — `/api/v1/jobs/{id}` output shape; includes all Job fields except `deleted_at`.
+- `JobRead` — `/api/v1/jobs/{id}` output shape; includes all Job fields except `deleted_at` and `raw_meta` (plan 46 / 0.2.0.11c: `raw_meta` JSONB is scraper-controlled and intentionally not part of the public API contract).
 
 In `src/models/job_scrape_run.py`:
 

@@ -18,7 +18,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.session import get_session
-from models import JobScrapeRun, User
+from models import JobRead, JobScrapeRun, User
 from services import job_service
 from services.auth import require_authed_session
 from ui import jobs_ctx
@@ -107,9 +107,10 @@ async def get_job_json(
 ):
     """JSON read of a Job (moved here from `ui/routes/discover.py` per plan 36 § A).
 
-    Enforces the same IDOR boundary as the HTML page. Returns the SQLModel's
-    `model_dump(mode="json")` so dates serialize ISO-8601 + enums emit their
-    .value strings.
+    Enforces the same IDOR boundary as the HTML page. Projects through
+    `JobRead` (not the raw SQLModel) so `raw_meta` JSONB does not leak via
+    the public API surface (plan 46 / 0.2.0.11c hardening). Dates serialize
+    ISO-8601 + enums emit `.value` strings via `model_dump(mode="json")`.
     """
     job = await _job_or_404(session, job_id, _effective_user_id(user))
-    return JSONResponse(content=job.model_dump(mode="json"))
+    return JSONResponse(content=JobRead.model_validate(job).model_dump(mode="json"))
