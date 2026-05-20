@@ -7,11 +7,13 @@ enrichment, composes a ScrapeQuery per source, invokes
 scraper_service.run_scraper, and lets the per-listing tier-1 + scraper-fatal
 tier-2 error handling persist results into JobScrapeRun.
 
-Consecutive-failure auto-skip (§ D.5): per-source counter persisted on
-Settings.consecutive_scrape_failures (JSON dict). Cron increments on FAILED,
-resets to 0 on SUCCESS / PARTIAL. At threshold=3 the next firing skips +
-emits one Discord admin alert; first SUCCESS / PARTIAL clears the counter
-and auto-resumes.
+Consecutive-failure counter (§ D.5): per-source counter persisted on
+Settings.consecutive_scrape_failures (JSON dict). Cron always runs the
+scrape; on FAILED the counter increments and SUCCESS / PARTIAL resets to 0.
+A single Discord admin alert fires when the counter transitions 2 → 3
+(threshold-cross) and stays silent until the next SUCCESS / PARTIAL clears
+the counter. Auto-resume on first SUCCESS — no deadlock, no notification
+storm.
 
 Indeed uses IntervalTrigger(minutes=90) — cron does not support 90-min steps
 (§ D.6 + § Risk row). All other sources use CronTrigger with the
@@ -84,38 +86,56 @@ def _compose_query(source: JobSource, settings: Settings) -> ScrapeQuery:
     return ScrapeQuery()
 
 
+async def _maybe_notify_threshold_cross(
+    *,
+    settings: Settings,
+    source: JobSource,
+    previous_failures: int,
+    new_failures: int,
+) -> None:
+    # Fire iff the counter just crossed _CONSECUTIVE_FAIL_THRESHOLD on this
+    # firing. Past-threshold failures stay silent until a SUCCESS / PARTIAL
+    # resets the counter — re-arming the alert for the next bad run.
+    if previous_failures >= _CONSECUTIVE_FAIL_THRESHOLD:
+        return
+    if new_failures < _CONSECUTIVE_FAIL_THRESHOLD:
+        return
+    log.info(
+        "scraping.%s for user=%s crossed consecutive-FAIL threshold %d",
+        source.value,
+        settings.user_id,
+        _CONSECUTIVE_FAIL_THRESHOLD,
+    )
+    await notify_admin_error(
+        settings=settings,
+        message=(
+            f"Scraping for {source.value} has failed "
+            f"{new_failures}x consecutively. Cron continues to run "
+            f"on schedule; counter clears on first SUCCESS / PARTIAL."
+        ),
+    )
+
+
 async def _scrape_one_user(session, *, settings: Settings, source: JobSource) -> None:
     """Run one (user, source) scrape; mutate Settings.consecutive_scrape_failures.
 
-    Skips when:
-    - `sources_enabled[source.value] is False` — operator explicitly disabled.
-    - `consecutive_scrape_failures[source.value] >= 3` — auto-skip; emit one
-      Discord admin alert per firing while skipped.
+    Skips only when `sources_enabled[source.value] is False` — operator
+    explicitly disabled. The consecutive-FAIL counter NEVER causes a skip;
+    the scrape always fires so the counter can recover. SUCCESS / PARTIAL
+    resets to 0. FAILED increments by 1. TIMED_OUT and other top-level
+    exceptions surface here as raised exceptions and also increment.
 
-    Resets the per-source counter to 0 on SUCCESS / PARTIAL; increments by 1
-    on FAILED. TIMED_OUT is not treated as a tier-2 failure (transient,
-    re-raised to APScheduler).
+    The Discord admin alert fires exactly ONCE, on the firing where the
+    counter transitions from `_CONSECUTIVE_FAIL_THRESHOLD - 1` →
+    `_CONSECUTIVE_FAIL_THRESHOLD` (e.g. 2 → 3). Subsequent failures stay
+    silent; first SUCCESS / PARTIAL clears the counter so the next
+    threshold-cross will alert again.
     """
     if settings.sources_enabled.get(source.value, True) is False:
         return
 
-    counters = dict(settings.consecutive_scrape_failures or {})
-    current_failures = int(counters.get(source.value, 0))
-    if current_failures >= _CONSECUTIVE_FAIL_THRESHOLD:
-        log.info(
-            "skipping scraping.%s for user=%s — %d consecutive FAILED",
-            source.value,
-            settings.user_id,
-            current_failures,
-        )
-        await notify_admin_error(
-            settings=settings,
-            message=(
-                f"Scraping for {source.value} has failed "
-                f"{current_failures}x consecutively — auto-skipping until first SUCCESS."
-            ),
-        )
-        return
+    counters: dict[str, int] = dict(settings.consecutive_scrape_failures or {})
+    previous_failures = int(counters.get(source.value, 0))
 
     try:
         provider = llm_get_provider(settings)
@@ -155,23 +175,37 @@ async def _scrape_one_user(session, *, settings: Settings, source: JobSource) ->
             settings.user_id,
             exc,
         )
-        # Treat as FAILED for the counter — don't punish on TIMED_OUT
-        # (re-raised by run_scraper) since that's transient. Other top-level
-        # exceptions reach here.
-        counters[source.value] = current_failures + 1
+        counters[source.value] = previous_failures + 1
         settings.consecutive_scrape_failures = counters
         session.add(settings)
+        # Tier-1 admin signal for top-level catastrophes (CancelledError,
+        # DB connect failures) — these never produced a JobScrapeRun row,
+        # so the operator has no other path to learn this happened.
+        await notify_admin_error(
+            settings=settings,
+            message=(
+                f"scraping.{source.value} cron raised at top level "
+                f"for user={settings.user_id}: {exc}"
+            ),
+        )
         return
 
     if run.status in (JobScrapeStatus.SUCCESS, JobScrapeStatus.PARTIAL):
-        if current_failures != 0:
+        if previous_failures != 0:
             counters[source.value] = 0
             settings.consecutive_scrape_failures = counters
             session.add(settings)
     elif run.status is JobScrapeStatus.FAILED:
-        counters[source.value] = current_failures + 1
+        new_failures = previous_failures + 1
+        counters[source.value] = new_failures
         settings.consecutive_scrape_failures = counters
         session.add(settings)
+        await _maybe_notify_threshold_cross(
+            settings=settings,
+            source=source,
+            previous_failures=previous_failures,
+            new_failures=new_failures,
+        )
 
 
 async def _scrape_source(source: JobSource) -> None:

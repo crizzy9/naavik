@@ -252,11 +252,16 @@ async def test_partial_also_resets_counter(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_threshold_three_triggers_auto_skip_and_alert(monkeypatch):
-    """At threshold=3, cron skips run_scraper + emits one notify_admin_error."""
+async def test_counter_at_or_above_threshold_still_runs_scrape(monkeypatch):
+    """Hacker REQUEST_CHANGES fix: counter at threshold MUST NOT block the scrape.
+
+    Pre-fix the cron skipped run_scraper once counter >= 3, which is a
+    deadlock — the counter could only be cleared by a SUCCESS, but
+    SUCCESS could only happen if run_scraper actually ran.
+    """
     called = {"scrape": 0, "alert": 0}
 
-    async def fake_run_scraper(*a, **kw):
+    async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
         called["scrape"] += 1
         return SimpleNamespace(status=JobScrapeStatus.SUCCESS)
 
@@ -267,26 +272,118 @@ async def test_threshold_three_triggers_auto_skip_and_alert(monkeypatch):
     monkeypatch.setattr(scraping, "notify_admin_error", fake_alert)
     monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
 
-    s = _make_settings(consecutive_scrape_failures={"linkedin": 3})
+    # Counter pinned past-threshold — scrape MUST still run + SUCCESS resets.
+    s = _make_settings(consecutive_scrape_failures={"linkedin": 5})
     session = _FakeSession()
     await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN)
-    assert called["scrape"] == 0
-    assert called["alert"] == 1
+    assert called["scrape"] == 1
+    assert called["alert"] == 0
+    assert s.consecutive_scrape_failures["linkedin"] == 0
 
 
 @pytest.mark.asyncio
-async def test_two_failed_below_threshold_still_runs(monkeypatch):
-    """count=2 < threshold=3 — run still fires, counter increments to 3."""
+async def test_threshold_cross_fires_one_alert(monkeypatch):
+    """Counter transition 2 → 3 fires exactly one notify_admin_error."""
+    called = {"alert": 0, "messages": []}
 
     async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
         return SimpleNamespace(status=JobScrapeStatus.FAILED)
 
+    async def fake_alert(*, settings, message, http_client=None):
+        called["alert"] += 1
+        called["messages"].append(message)
+
     monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
+    monkeypatch.setattr(scraping, "notify_admin_error", fake_alert)
     monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
 
     s = _make_settings(consecutive_scrape_failures={"linkedin": 2})
     session = _FakeSession()
     await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN)
+    assert s.consecutive_scrape_failures["linkedin"] == 3
+    assert called["alert"] == 1
+    assert "3x consecutively" in called["messages"][0]
+
+
+@pytest.mark.asyncio
+async def test_past_threshold_failed_run_does_not_re_alert(monkeypatch):
+    """Counter already past threshold — another FAILED firing does NOT re-alert.
+
+    Storm guard: hacker MEDIUM finding was "48 alerts/day/user". After
+    threshold-cross fires once, subsequent FAILED firings stay silent
+    until a SUCCESS / PARTIAL clears the counter.
+    """
+    called = {"alert": 0}
+
+    async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
+        return SimpleNamespace(status=JobScrapeStatus.FAILED)
+
+    async def fake_alert(*, settings, message, http_client=None):
+        called["alert"] += 1
+
+    monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
+    monkeypatch.setattr(scraping, "notify_admin_error", fake_alert)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+
+    s = _make_settings(consecutive_scrape_failures={"linkedin": 4})
+    session = _FakeSession()
+    await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN)
+    assert s.consecutive_scrape_failures["linkedin"] == 5
+    assert called["alert"] == 0
+
+
+@pytest.mark.asyncio
+async def test_first_failed_below_threshold_silent(monkeypatch):
+    """Counter 0 → 1: silent. Only the threshold-cross firing alerts."""
+    called = {"alert": 0}
+
+    async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
+        return SimpleNamespace(status=JobScrapeStatus.FAILED)
+
+    async def fake_alert(*, settings, message, http_client=None):
+        called["alert"] += 1
+
+    monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
+    monkeypatch.setattr(scraping, "notify_admin_error", fake_alert)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+
+    s = _make_settings()
+    session = _FakeSession()
+    await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN)
+    assert s.consecutive_scrape_failures["linkedin"] == 1
+    assert called["alert"] == 0
+
+
+@pytest.mark.asyncio
+async def test_threshold_cross_alert_re_arms_after_success(monkeypatch):
+    """After SUCCESS clears the counter, the NEXT threshold-cross fires again."""
+    alert_count = {"n": 0}
+    next_status: list[JobScrapeStatus] = [
+        JobScrapeStatus.FAILED,  # 0 -> 1
+        JobScrapeStatus.FAILED,  # 1 -> 2
+        JobScrapeStatus.FAILED,  # 2 -> 3 (alert)
+        JobScrapeStatus.FAILED,  # 3 -> 4 (silent)
+        JobScrapeStatus.SUCCESS,  # reset -> 0
+        JobScrapeStatus.FAILED,  # 0 -> 1
+        JobScrapeStatus.FAILED,  # 1 -> 2
+        JobScrapeStatus.FAILED,  # 2 -> 3 (alert again)
+    ]
+
+    async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
+        return SimpleNamespace(status=next_status.pop(0))
+
+    async def fake_alert(*, settings, message, http_client=None):
+        alert_count["n"] += 1
+
+    monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
+    monkeypatch.setattr(scraping, "notify_admin_error", fake_alert)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+
+    s = _make_settings()
+    session = _FakeSession()
+    for _ in range(8):
+        await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN)
+    assert alert_count["n"] == 2
     assert s.consecutive_scrape_failures["linkedin"] == 3
 
 
@@ -295,12 +392,18 @@ async def test_two_failed_below_threshold_still_runs(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_top_level_exception_does_not_propagate(monkeypatch):
-    """If run_scraper itself raises, _scrape_one_user catches + logs + bumps counter."""
+    """run_scraper raising — _scrape_one_user catches + logs + alerts + bumps."""
+    alert = {"count": 0, "msg": None}
 
     async def boom(*a, **kw):
         raise RuntimeError("database unreachable")
 
+    async def fake_alert(*, settings, message, http_client=None):
+        alert["count"] += 1
+        alert["msg"] = message
+
     monkeypatch.setattr(scraping, "run_scraper", boom)
+    monkeypatch.setattr(scraping, "notify_admin_error", fake_alert)
     monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
 
     s = _make_settings()
@@ -308,6 +411,10 @@ async def test_top_level_exception_does_not_propagate(monkeypatch):
     # Must not raise.
     await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN)
     assert s.consecutive_scrape_failures["linkedin"] == 1
+    # Hacker LOW finding: broad-except path now signals the operator.
+    assert alert["count"] == 1
+    assert "raised at top level" in alert["msg"]
+    assert "database unreachable" in alert["msg"]
 
 
 # ── register_scraping_jobs ──────────────────────────────────────────

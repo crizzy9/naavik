@@ -95,9 +95,11 @@ class Settings(SQLModel, table=True):
     indeed_location: str | None = None
 
     # Plan 35 (0.2.0.10): per-source consecutive-FAILED counter. Cron resets
-    # to 0 on first SUCCESS / PARTIAL; auto-skip after 3 with one Discord
-    # admin alert. Key = JobSource.value (e.g. "linkedin"); value = int.
-    consecutive_scrape_failures: dict = Field(
+    # to 0 on first SUCCESS / PARTIAL; one Discord admin alert fires when
+    # the counter crosses threshold=3 (2 → 3). Cron never skips on counter —
+    # always runs so the counter can recover. Key = JobSource.value (e.g.
+    # "linkedin"); value = int failure count.
+    consecutive_scrape_failures: dict[str, int] = Field(
         default_factory=dict,
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
