@@ -1,6 +1,7 @@
 # Naavik Screen Catalog
 
-> **Last updated:** 2026-05-02 (plan 09a · Issue 5A — sidebar label "Jobs" renamed to "Discover" so sidebar / URL / page heading align)
+> **Last updated:** 2026-05-20 (plan 36 / `0.2.0.11a` — added screen #12 Job detail at `/jobs/{id}`; canonical contract for the Job-UI surface lives at `docs/design/JOB_UI.md`)
+> Earlier line: 2026-05-02 (plan 09a · Issue 5A — sidebar label "Jobs" renamed to "Discover" so sidebar / URL / page heading align)
 > **Source of truth:** This file. Where this disagrees with mockups, archived prompts (`docs/prompts/archive/`), or older drafts, this wins.
 > **Companion files:** `DESIGN.md` (visual contract) · `docs/design/WORKFLOW.md` (UI sub-process pipeline).
 >
@@ -96,8 +97,9 @@ Tags render as chips: `bg-slate-800 text-slate-300 text-xs font-mono px-2 py-0.5
 | 9 | Tracking | `/tracking` | Tracking | 1 | [x] | [x] |
 | 10 | Outreach | `/outreach` | Outreach | 1 | [x] | [x] |
 | 11 | Settings | `/settings` (+ tab sub-routes) | Settings | 1 | [x] | [x] |
+| 12 | Job detail | `/jobs/{id}` | Discover (active — destination, not list) | 2 | [ ] | [x] |
 
-The MVP set is **11 screens**. The historical mockup PDF (committed at `docs/design/mockups/Naavik — MVP screens (print).pdf`) was generated when there were 12 sections; the prior standalone Cover-letter screen has been folded into Section 8 (Discover · review & apply). Once the next Claude Design handoff produces standalone exports, individual PNGs commit alongside the PDF using the naming `{nn}-{slug}-{desktop|mobile}.png`.
+The MVP set is **11 screens**; screen 12 (Job detail) ships in Phase 2.0 (`0.2.0.11`) as the read-only Job surface distinct from the application workspace at `/discover/{id}`. The historical mockup PDF (committed at `docs/design/mockups/Naavik — MVP screens (print).pdf`) was generated when there were 12 sections; the prior standalone Cover-letter screen has been folded into Section 8 (Discover · review & apply). Once the next Claude Design handoff produces standalone exports, individual PNGs commit alongside the PDF using the naming `{nn}-{slug}-{desktop|mobile}.png`.
 
 ---
 
@@ -350,7 +352,10 @@ These are funnel KPIs, not raw counts. (No "Jobs Found / Applied / Interviews / 
 #### Top
 - Title "Discover"
 - Subtitle "{N} new matches · sorted by score · swipe through your queue"
-- Top-right actions: `Saved · {N}` (bookmark) · **Filters** (sliders) · **+ Add by URL** (primary, manual entry)
+- Top-right actions: `Saved · {N}` (bookmark) · **Filters · {N}** (sliders; N = active chip count) · **+ Add by URL** (primary, manual entry)
+
+#### Filter toolbar (plan 36 / `0.2.0.11`)
+Sticky chip-row below the header; visible by default. Six chips, each maps 1:1 to a `JobFilter` field. Two are toggles (`remote_only`, `include_duplicates`); four are `<details>` popovers (`source`, `visa`, `seniority`, `score_min`). Each chip's form `hx-get`s `/_fragments/discover/queue?...` with `hx-push-url="true"` so the browser URL mirrors filter state and a refresh restores it. Clear · N affordance appears when any chip is active. The `Filters · N` button in the header toggles the toolbar's `hidden` class via a 2-line inline JS handler. Canonical contract + URL contract + per-axis values: `docs/design/JOB_UI.md` § C + § E.
 
 #### Stats strip
 `TODAY · {applied} APPLIED · ⚡ {auto} AUTO · ✏ {manual} MANUAL · 📑 {saved} SAVED · {skipped} SKIPPED` — right "queue refreshes hourly · {scanned} candidates scanned today"
@@ -394,8 +399,8 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
   - Skip → `POST /api/v1/discover/:job_id/skip` → next card
   - Save → `POST /api/v1/discover/:job_id/save`
   - Add by URL → modal: paste URL → scrape preview → confirm → enter queue at top
-- **States:** Empty queue ("No new matches today. Naavik scans hourly — check back soon."), API offline (rose banner), filter-active dot on Filters button.
-- **Components:** `swipe_card.html`, `score_circle.html`, `match_breakdown.html`, `discover_action_bar.html`, `discover_stats_strip.html`, `up_next_card.html`, `tip_card.html`
+- **States:** Empty queue ("No new matches today. Naavik scans hourly — check back soon."), filtered-zero ("No jobs match these filters." via `empty_state.html` with `icon="search-x"`; plan 36 § A), API offline (rose banner), filter-active dot / `Filters · N` counter on Filters button.
+- **Components:** `swipe_card.html`, `score_circle.html`, `match_breakdown.html`, `discover_action_bar.html`, `discover_stats_strip.html`, `up_next_card.html`, `tip_card.html`, `filter_toolbar.html` (plan 36), `_filter_hidden_inputs.html` (plan 36), `filter_chip` macro (plan 36)
 
 ---
 
@@ -627,11 +632,58 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 
 ---
 
+### 12. Job detail
+
+- **Mockup:** none committed; Playwright capture in `traces/2026-05-19T15-42-42_833f4a/qa/0.2.0.11/` at 1440×900 + 375×812.
+- **Route:** `/jobs/{job_id}` (full page) **OR** `/_fragments/jobs/{job_id}` (chrome-less body fragment for future drawer/preview surfaces).
+- **Sidebar label:** Discover (active) — `/jobs/{id}` is a destination from Discover, not a sibling nav entry. No `/jobs` list route exists; Discover IS the job list (Tinder-style swipe = filtered list with one big card at a time).
+- **Phase:** 2 (`0.2.0.11`, shipped 2026-05-19 via PR #112).
+- **Purpose:** Read-only view of a single persisted Job in isolation — distinct from `/discover/{id}` (the tailor + apply application workspace, SCREENS.md § 8). Surfaces source / scrape-run metadata, dedup status, action rail. Reachable from any future Tracking deep-link to a source Job, and (today) via direct URL or browser back from `/discover/{id}`.
+- **Layout:** sticky topbar (full-width) + two-column body (`1fr 320px` on lg+; single column on mobile).
+
+#### Topbar (full-width, sticky)
+- Left: ← `Back to Discover` link
+- Center: company letter tile (`avatar.html`) + role · team · company · location · salary chip
+- Right: source-tone chip (e.g. indigo for LinkedIn, cyan for Workday) + match score (mono cyan, tabular-nums) OR `unscored` slate chip when `Job.score == 0.0` + Open posting external link (`hx-boost="false"`)
+
+#### Body left + middle (composite, `1fr` of the grid)
+- **Duplicate-of banner** (only when `Job.duplicate_of_id` is non-null): amber inline alert linking to the canonical Job — "This listing is a tier-3 fuzzy duplicate of `job #{N}`. The canonical row is what surfaces in Discover by default."
+- **Job description card** — `bg-slate-900` rounded-xl panel. Header right-aligned chip: "extracted Nh ago · `model_name`" when `Job.description_extracted_at` is set. Body: `prose prose-invert` rendered description.
+- **What they want / Skills required two-up** (md+): "What they want" bulleted list (from `Job.criteria`) + "Skills required" tag-chip grid (from `Job.skills_required` via `tag_chip` macro).
+- **Scrape metadata card** — `<dl>` grid with: source · board · external_id · found_at · posted_at (+ original `posted_at_text` if present) · remote_policy · seniority_level (if set) · visa_restrictions. Below that, when `last_scrape_run_id` resolves: `chip` showing run status (emerald SUCCESS / amber PARTIAL / rose FAILED|TIMED_OUT / indigo RUNNING) + started/finished times + duration_ms + counters (requests · listings · new · updated) + per-error list.
+
+#### Body right rail (`320px` of the grid)
+- **Actions card:**
+  - **Review & apply** (primary indigo) → `<a href="/discover/{j.id}">` (full page nav to application workspace)
+  - **Open on `{SOURCE}`** (slate, external) → `<a href="{j.url}" target="_blank" rel="noopener" hx-boost="false">`
+  - **Save for later** (slate) → `hx-post="/api/v1/discover/{j.id}/save"` (pre-existing endpoint; CSRF hardening tracked at `0.2.0.11b`)
+  - **Skip** (slate) → `hx-post="/api/v1/discover/{j.id}/skip"` (same)
+- **Tags card** (only when `Job.tags` non-empty): tag-chip flex-wrap row via `tag_chip` macro.
+- **Status card:** `<dl>` with queue_state (e.g. `UNSWIPED`, `SAVED`, `SKIPPED`) + score (numeric `0.0–1.0` or `—` for unscored). `score_explanation` body paragraph below if non-null.
+
+- **Mobile:** stacks. Topbar wraps; right rail folds below the description card.
+- **Interactions:**
+  - IDOR boundary: cross-user requests return 404 (not 403); soft-deleted Jobs return 404 — see `docs/design/JOB_UI.md` § F.4 for rationale.
+  - Action rail Save / Skip wire to existing `/api/v1/discover/{id}/save` / `/skip` endpoints (`hx-target="closest [data-job-section]"` + `hx-swap="none"` is fire-and-forget today; future polish row adds toast on success).
+  - `/_fragments/jobs/{job_id}` returns the same body content as the page without the base layout — forward-compat for plan `0.2.0.12+` that may want to deep-link a Job preview into a Tracking drawer.
+- **States:**
+  - Default — populated detail page (all sections render conditionally on field presence).
+  - 404 — Job ID doesn't exist, belongs to a different user, or is soft-deleted (collapsed signals per IDOR pattern).
+  - 401 — fake-session caller without seeded user surrogate; cookie required for non-test paths.
+  - Duplicate — amber banner above body; canonical-row link uses `<a href="/jobs/{duplicate_of_id}">`.
+  - Unscored — topbar shows `unscored` slate chip; status card shows `—` for score.
+- **Components:** `job_topbar.html` (NEW), `avatar.html`, `chip` macro, `tag_chip` macro, `empty_state.html` (if applicable), Lucide icons (`arrow-left`, `external-link`, `sparkles`, `bookmark`, `x`, `copy`).
+- **Canonical contract:** `docs/design/JOB_UI.md` (full spec — URL contract, HTMX patterns, data accessors, IDOR boundary).
+
+---
+
 ## Phase mapping (vs ROADMAP.md)
 
 The mockups make Tracking and Outreach MVP-essential. ROADMAP.md still puts them in later phases — this needs reconciling in Block C of the design-realignment plan.
 
 **Phase 1 (MVP)** — Login · Onboarding · Overview · Profile · Profile editor · Bullet editor modal · Discover · Discover · review & apply · Tracking · Outreach · Settings (**11 sections**; all mockups committed in the historical 12-section PDF, but the standalone Cover-letter screen has been folded into Discover · review & apply).
+
+**Phase 2 (Job Scraping & Discovery)** — Job detail (screen #12 at `/jobs/{id}`); shipped 2026-05-19 via plan 36 (`0.2.0.11`). Canonical contract: `docs/design/JOB_UI.md`.
 
 **Deferred / Phase 2+** (no mockups yet)
 - Application detail slide-over (deeper view of submitted bundle, accessed from Tracking)
