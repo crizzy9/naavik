@@ -47,6 +47,7 @@ def _make_settings(
     indeed_keywords: list[str] | None = None,
     indeed_location: str | None = None,
     notify_on_errors: bool = True,
+    scraper_rate_limits: dict | None = None,
 ):
     """Lightweight Settings stand-in. SQLModel construction inside tests
     avoids the FastAPI app + db boot path."""
@@ -65,6 +66,7 @@ def _make_settings(
         llm_provider=None,
         llm_model="m",
         llm_fallback_provider=None,
+        scraper_rate_limits=scraper_rate_limits or {},
     )
 
 
@@ -530,6 +532,74 @@ class _NoopScraper(ScraperBase):
     async def scrape(self, query: ScrapeQuery) -> AsyncIterator[RawJob]:
         if False:  # pragma: no cover
             yield  # type: ignore[unreachable]
+
+
+# ── Plan 38 § D.1 — operator overrides flow into Crawl4AIClient ─────────
+
+
+@pytest.mark.asyncio
+async def test_scrape_one_user_uses_operator_override_for_rate_limit(monkeypatch):
+    """Settings.scraper_rate_limits override > class-attr fallback."""
+    captured = {}
+
+    async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
+        captured["rpm"] = scraper._client._rate_limit_per_minute
+        captured["delays"] = scraper._client._random_delay_seconds
+        return SimpleNamespace(status=JobScrapeStatus.SUCCESS)
+
+    monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+
+    s = _make_settings(
+        scraper_rate_limits={
+            "linkedin": {"rpm": 1.5, "delay_lo": 2.0, "delay_hi": 4.0},
+        }
+    )
+    session = _FakeSession()
+    await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN)
+
+    assert captured["rpm"] == 1.5
+    assert captured["delays"] == (2.0, 4.0)
+
+
+@pytest.mark.asyncio
+async def test_scrape_one_user_falls_back_when_no_override(monkeypatch):
+    """No `scraper_rate_limits` entry → class-attr fallback (LinkedIn: 0.4 rpm)."""
+    captured = {}
+
+    async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
+        captured["rpm"] = scraper._client._rate_limit_per_minute
+        return SimpleNamespace(status=JobScrapeStatus.SUCCESS)
+
+    monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+
+    s = _make_settings()  # scraper_rate_limits={} by default.
+    session = _FakeSession()
+    await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN)
+
+    # Class-attr fallback per `_CLASS_ATTR_FALLBACK[LINKEDIN]`.
+    assert captured["rpm"] == 0.4
+
+
+@pytest.mark.asyncio
+async def test_scrape_one_user_threads_undetected_adapter_class_attr(monkeypatch):
+    """`scraper_cls.use_undetected_adapter` threads into the Crawl4AIClient."""
+    captured = {}
+
+    async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
+        captured["undetected"] = scraper._client._use_undetected_adapter
+        return SimpleNamespace(status=JobScrapeStatus.SUCCESS)
+
+    monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+
+    # IndeedScraper.use_undetected_adapter inherits default False.
+    s = _make_settings()
+    session = _FakeSession()
+    await scraping._scrape_one_user(session, settings=s, source=JobSource.INDEED)
+
+    assert captured["undetected"] is False
 
 
 @pytest.mark.asyncio

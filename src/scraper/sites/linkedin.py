@@ -49,14 +49,17 @@ _VIEW_HREF_RE = re.compile(r"/jobs/view/(\d+)")
 class LinkedInScraper(_BaseSiteScraper):
     """LinkedIn guest-API scraper.
 
-    Conservative: 24 listings/hour ceiling (`rate_limit_per_minute = 0.4`
-    is interpreted as 1 request per 150s by `Crawl4AIClient`). RSShub
-    fallback only when explicitly configured.
+    Conservative: ~24 listings/hour ceiling (`rate_limit_per_minute = 0.4`
+    -> 1 request per 150s in `Crawl4AIClient._enforce_min_interval`).
+    RSShub fallback only when explicitly configured.
     """
 
     source = JobSource.LINKEDIN
     board = ApplicationBoard.LINKEDIN
-    rate_limit_per_minute = 1  # Crawl4AIClient floors to 1 req/min internally.
+    # 0.4 req/min = effective <=24/hr per research § 5. Plan 38 § D.8
+    # promoted `rate_limit_per_minute` from `int` to `float`, so 0.4 no
+    # longer floors to 1.
+    rate_limit_per_minute = 0.4
     random_delay_seconds = (3.0, 7.0)
 
     _LIST_BASE = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"

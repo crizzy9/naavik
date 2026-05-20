@@ -104,6 +104,16 @@ class Settings(SQLModel, table=True):
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
 
+    # Plan 38 (0.2.0.13): per-source operator-tunable rate-limit overrides.
+    # Nested shape `{"linkedin": {"rpm": 0.4, "delay_lo": 3.0, "delay_hi": 7.0}}`
+    # validated via `scraper/rate_limit.py:RateLimitConfig`. Empty dict
+    # falls through to the class-attr fallback table; missing per-source key
+    # also falls through. Operators tune via Settings · Sources UI (Phase 6+).
+    scraper_rate_limits: dict = Field(
+        default_factory=dict,
+        sa_column=Column(JSONB, nullable=False, server_default="{}"),
+    )
+
     # Deployment
     deployment_mode: DeploymentMode = Field(default=DeploymentMode.SELF_HOSTED)
 

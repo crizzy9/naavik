@@ -122,6 +122,21 @@ async def run_scraper(
         run.updated_jobs = updated_jobs
         run.errors = errors
         run.duration_ms = int((finished_at - started_at).total_seconds() * 1000)
+        # Plan 38 § D.7: per-scrape RL + adapter telemetry into raw_meta.
+        # Preserves existing raw_meta keys (scraper_name, query) set by
+        # record_scrape_run; getattr() guards against scrapers that don't
+        # use Crawl4AIClient (e.g. SampleScraper with stubbed client).
+        client = getattr(scraper, "_client", None)
+        adapter_used = "undetected" if scraper.use_undetected_adapter else "stealth"
+        rl_meta = {
+            "hits": getattr(client, "rate_limit_hits", 0),
+            "backoff_total_s": float(getattr(client, "backoff_total_s", 0.0)),
+            "ua": getattr(client, "user_agent", None),
+        }
+        existing_meta = dict(run.raw_meta or {})
+        existing_meta["rate_limit"] = rl_meta
+        existing_meta["adapter_used"] = adapter_used
+        run.raw_meta = existing_meta
         session.add(run)
         await session.flush()
 

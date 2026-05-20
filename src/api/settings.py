@@ -18,6 +18,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Request
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Plan 10b (item 6): the LLM PUT handler intentionally drops `Body()` from
@@ -208,18 +209,34 @@ async def put_sources(
     _user: User | None = Depends(require_authed_session),
 ):
     payload = payload or {}
-    s = await settings_service.update_sources(
-        session,
-        user_id=1,
-        sources_enabled=payload.get("sources_enabled"),
-        source_schedules=payload.get("source_schedules"),
-        workday_companies=payload.get("workday_companies"),
-    )
+    try:
+        s = await settings_service.update_sources(
+            session,
+            user_id=1,
+            sources_enabled=payload.get("sources_enabled"),
+            source_schedules=payload.get("source_schedules"),
+            workday_companies=payload.get("workday_companies"),
+            linkedin_keywords=payload.get("linkedin_keywords"),
+            linkedin_location=payload.get("linkedin_location"),
+            indeed_keywords=payload.get("indeed_keywords"),
+            indeed_location=payload.get("indeed_location"),
+            scraper_rate_limits=payload.get("scraper_rate_limits"),
+        )
+    except ValidationError as exc:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "invalid scraper_rate_limits", "errors": exc.errors()},
+        )
     await session.commit()
     return {
         "sources_enabled": s.sources_enabled,
         "source_schedules": s.source_schedules,
         "workday_companies": s.workday_companies,
+        "linkedin_keywords": s.linkedin_keywords,
+        "linkedin_location": s.linkedin_location,
+        "indeed_keywords": s.indeed_keywords,
+        "indeed_location": s.indeed_location,
+        "scraper_rate_limits": s.scraper_rate_limits,
     }
 
 
