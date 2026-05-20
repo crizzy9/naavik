@@ -36,6 +36,42 @@ def auth_cookies() -> dict[str, str]:
     return {"naavik_session": "fake-1"}
 
 
+class _NoopSession:
+    """Minimum surface for `Depends(get_session)` — never runs SQL."""
+
+    async def commit(self):  # pragma: no cover
+        return None
+
+    async def rollback(self):  # pragma: no cover
+        return None
+
+    async def close(self):  # pragma: no cover
+        return None
+
+
+async def _fake_get_session():
+    yield _NoopSession()
+
+
+@pytest.fixture(autouse=True)
+def _patch_db_dependencies(monkeypatch):
+    """Plan 54 / 0.2.5.03: `/settings/llm-provider` now `Depends(get_session)` to
+    drive the daily cost-cap widget. Stub the session + cost-tracker so the
+    existing assertions remain DB-free.
+    """
+    from db.session import get_session
+    from main import app
+    from services import llm_tracker
+
+    async def _fake_today_cost(session, *, user_id):
+        return 0.0
+
+    monkeypatch.setattr(llm_tracker, "today_cost_usd", _fake_today_cost)
+    app.dependency_overrides[get_session] = _fake_get_session
+    yield
+    app.dependency_overrides.pop(get_session, None)
+
+
 # ── Fragment endpoints — provider-aware swaps ────────────────────────────
 
 

@@ -17,8 +17,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db import sample_data as sd
 from db.session import get_session
-from models import JobSource, User
-from services import env_secrets, job_service, settings_service
+from models import JobScrapeRunRead, JobSource, User
+from services import application_service, env_secrets, job_service, llm_tracker, settings_service
 from services.auth import require_authed_session, require_password_complete
 from ui.templates_setup import templates
 
@@ -32,6 +32,7 @@ _TAB_TEMPLATES: dict[str, str] = {
     "notifications": "pages/_settings_notifications.html",
     "auto-apply": "pages/_settings_auto_apply.html",
     "sources": "pages/_settings_sources.html",
+    "submissions": "pages/_settings_submissions.html",
 }
 
 _VALID_TABS = set(_TAB_TEMPLATES.keys())
@@ -203,8 +204,44 @@ async def _ctx_for_tab(
 
     if tab == "sources":
         ctx["sources_view"] = await _build_sources_view(session)
+        ctx["recent_scrape_runs"] = await _recent_scrape_runs_view(session)
+
+    if tab == "submissions":
+        ctx["submission_failures"] = await _submission_failures_view(session)
+
+    if tab == "llm-provider":
+        today_cost, cap = await _llm_cost_cap_view(session, settings)
+        ctx["today_cost_usd"] = today_cost
+        ctx["cost_cap_usd"] = cap
 
     return ctx
+
+
+# ── Plan 54 / 0.2.5 dashboard views ────────────────────────────────────
+
+
+async def _recent_scrape_runs_view(session: AsyncSession | None) -> list[JobScrapeRunRead]:
+    """List recent JobScrapeRun rows projected via JobScrapeRunRead."""
+    if session is None:
+        return []
+    runs = await job_service.list_recent_scrape_runs(session, user_id=1, limit=50)
+    return [JobScrapeRunRead.model_validate(r, from_attributes=True) for r in runs]
+
+
+async def _submission_failures_view(session: AsyncSession | None) -> list[dict]:
+    """Per-(board, failure_kind) Application failure aggregates."""
+    if session is None:
+        return []
+    return await application_service.aggregate_submission_failures(session, user_id=1)
+
+
+async def _llm_cost_cap_view(session: AsyncSession | None, settings) -> tuple[float, float | None]:
+    """Today's spend + the configured daily cap (None if unset)."""
+    cap = getattr(settings, "daily_llm_cost_cap_usd", None) if settings else None
+    if session is None:
+        return 0.0, cap
+    today = await llm_tracker.today_cost_usd(session, user_id=1)
+    return today, cap
 
 
 # ── Sources panel context (plan 49 / 0.2.0.16) ──────────────────────────
@@ -398,6 +435,46 @@ async def get_settings_sources(
     ctx = await _ctx_for_tab(request, "sources", session=session)
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(request, "pages/_settings_sources.html", ctx)
+    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+
+
+@router.get("/settings/submissions", response_class=HTMLResponse, name="settings_submissions")
+async def get_settings_submissions(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+):
+    """Settings · Submissions sub-tab — plan 54 / 0.2.5.02.
+
+    Aggregated failure-kind dashboard per ATS adapter. Gated by
+    `require_authed_session` mirroring the Sources sub-tab pattern;
+    `Depends(get_session)` is the canonical entry.
+    """
+    ctx = await _ctx_for_tab(request, "submissions", session=session)
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(request, "pages/_settings_submissions.html", ctx)
+    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+
+
+@router.get(
+    "/settings/llm-provider",
+    response_class=HTMLResponse,
+    name="settings_llm_provider",
+)
+async def get_settings_llm_provider(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    """Settings · LLM Provider tab with daily cost-cap widget — plan 54 / 0.2.5.03.
+
+    Dedicated route (vs. catch-all `/settings/{tab}`) so we can `Depends(get_session)`
+    without changing the catch-all's signature (existing tests rely on it being
+    DB-free). Auth on the LLM tab tightens as a separate row; for now this
+    route is unauthed in line with the catch-all.
+    """
+    ctx = await _ctx_for_tab(request, "llm-provider", session=session)
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(request, "pages/_settings_llm.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 

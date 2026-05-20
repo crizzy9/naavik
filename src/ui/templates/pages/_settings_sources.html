@@ -55,4 +55,89 @@
       </ul>
     </section>
   {% endif %}
+
+  {# Plan 54 / 0.2.5.04 — recent scraper-run history table. #}
+  {% set _runs = recent_scrape_runs | default([]) %}
+  {% set _run_tone = {
+      "running":   "indigo",
+      "success":   "emerald",
+      "partial":   "amber",
+      "failed":    "rose",
+      "timed_out": "rose",
+  } %}
+  <section data-recent-scrape-runs class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <header class="flex items-baseline justify-between gap-3 mb-4">
+      <div>
+        <h2 class="text-base font-medium text-slate-50">Recent scraper runs</h2>
+        <p class="text-xs text-slate-400 mt-0.5">
+          Latest {{ _runs | length }} runs across all sources. Capped at 50.
+        </p>
+      </div>
+    </header>
+
+    {% if _runs %}
+      <div class="overflow-x-auto">
+        <table data-scrape-runs-table class="table w-full text-sm">
+          <thead>
+            <tr class="text-xs uppercase tracking-wide text-slate-400">
+              <th class="text-left font-medium">Source</th>
+              <th class="text-left font-medium">Status</th>
+              <th class="text-right font-medium">Started</th>
+              <th class="text-right font-medium">Duration</th>
+              <th class="text-right font-medium">Listings</th>
+              <th class="text-right font-medium">New</th>
+              <th class="text-left font-medium">Errors</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/50">
+            {% for run in _runs %}
+              {% set _status_value = run.status.value if run.status is not string else run.status %}
+              {% set _tone = _run_tone.get(_status_value, "slate") %}
+              <tr data-scrape-run-row data-status="{{ _status_value }}" data-source="{{ run.source.value if run.source is not string else run.source }}">
+                <td class="py-2.5 font-mono text-slate-200 uppercase text-xs">{{ run.source.value if run.source is not string else run.source }}</td>
+                <td class="py-2.5">
+                  <span data-scrape-run-status="{{ _status_value }}" class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono ring-1
+                       {% if _tone == 'emerald' %}bg-emerald-500/15 text-emerald-200 ring-emerald-500/30
+                       {% elif _tone == 'amber' %}bg-amber-500/15 text-amber-200 ring-amber-500/30
+                       {% elif _tone == 'rose' %}bg-rose-500/15 text-rose-200 ring-rose-500/30
+                       {% elif _tone == 'indigo' %}bg-indigo-500/15 text-indigo-200 ring-indigo-500/30
+                       {% else %}bg-slate-800 text-slate-300 ring-slate-700{% endif %}">
+                    {{ _status_value }}
+                  </span>
+                </td>
+                <td class="py-2.5 text-right tabular-nums text-slate-300 text-xs">
+                  {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}
+                </td>
+                <td class="py-2.5 text-right tabular-nums text-slate-400 text-xs">
+                  {% if run.duration_ms %}{{ run.duration_ms }}ms{% else %}—{% endif %}
+                </td>
+                <td class="py-2.5 text-right tabular-nums text-slate-200">{{ run.listings_returned }}</td>
+                <td class="py-2.5 text-right tabular-nums text-emerald-300">{{ run.new_jobs }}</td>
+                <td class="py-2.5 text-xs text-rose-300 max-w-xs">
+                  {% if run.errors %}
+                    <span data-scrape-run-errors class="truncate inline-block max-w-full align-middle" title="{{ run.errors[0] }}">{{ run.errors[0] | truncate(60) }}</span>
+                    {% if run.errors | length > 1 %}
+                      <span class="text-slate-500"> · +{{ run.errors | length - 1 }} more</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-slate-600">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div data-scrape-runs-empty class="flex flex-col items-center justify-center gap-2 py-8 text-center">
+        <span class="inline-flex h-10 w-10 items-center justify-center rounded-md bg-slate-800/80 text-slate-400">
+          <i data-lucide="rss" class="h-5 w-5" stroke-width="1.5"></i>
+        </span>
+        <p class="text-sm text-slate-300">No scraper runs yet.</p>
+        <p class="text-xs text-slate-500 max-w-sm">
+          Runs appear here when the scheduler fires the per-source cron.
+        </p>
+      </div>
+    {% endif %}
+  </section>
 </div>

@@ -382,6 +382,29 @@ async def count_jobs_by_source(session: AsyncSession, user_id: int) -> dict[JobS
     return out
 
 
+async def list_recent_scrape_runs(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    limit: int = 50,
+) -> list[JobScrapeRun]:
+    """Return up to ``limit`` most-recent JobScrapeRun rows for the user.
+
+    Plan 54 / 0.2.5.04. Drives the Settings · Sources panel's
+    "recent runs" history table. Ordered by ``started_at DESC``.
+    Caller projects via `JobScrapeRunRead.model_validate` before rendering —
+    defense-in-depth against any future `raw_meta` exposure in templates.
+    """
+    stmt = (
+        select(JobScrapeRun)
+        .where(JobScrapeRun.user_id == user_id)
+        .order_by(JobScrapeRun.started_at.desc())
+        .limit(limit)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
 async def list_recent_scrape_runs_by_source(
     session: AsyncSession,
     *,

@@ -1,0 +1,83 @@
+{#
+  Settings · Submissions tab body — plan 54 / 0.2.5.02.
+
+  Aggregated failure-kind counts per ATS adapter. Sourced from
+  `Application.submission_artifacts->'last_failure'->>'kind'` JSONB path.
+
+  Args:
+    submission_failures : list[dict] — one row per (board, failure_kind)
+      Each entry: {board: str, failure_kind: str, count: int, latest_at: datetime}
+#}
+{% set _kind_tone = {
+    "captcha":         "amber",
+    "auth_required":   "rose",
+    "rate_limited":    "slate",
+    "timeout":         "slate",
+    "validation":      "slate",
+    "service_error":   "rose",
+} %}
+<div class="flex flex-col gap-6 max-w-4xl">
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <header class="flex items-baseline justify-between gap-3 mb-4">
+      <div>
+        <h2 class="text-base font-medium text-slate-50">Submission failures</h2>
+        <p class="text-xs text-slate-400 mt-0.5">
+          Aggregated by ATS adapter + failure kind over the last 30 days.
+          Surfaced from <code class="font-mono text-slate-300">Application.submission_artifacts.last_failure</code>.
+        </p>
+      </div>
+      <span class="text-xs text-slate-500 font-mono shrink-0">
+        {{ submission_failures | length }} kinds
+      </span>
+    </header>
+
+    {% if submission_failures %}
+      <div class="overflow-x-auto">
+        <table data-submission-failures-table class="table w-full text-sm">
+          <thead>
+            <tr class="text-xs uppercase tracking-wide text-slate-400">
+              <th class="text-left font-medium">Board</th>
+              <th class="text-left font-medium">Failure kind</th>
+              <th class="text-right font-medium">Count</th>
+              <th class="text-right font-medium">Latest</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/50">
+            {% for row in submission_failures %}
+              {% set _kind = row.failure_kind | lower if row.failure_kind else 'unknown' %}
+              {% set _tone = _kind_tone.get(_kind, 'neutral') %}
+              <tr data-submission-failure-row data-board="{{ row.board or 'unknown' }}" data-kind="{{ row.failure_kind or 'unknown' }}">
+                <td class="py-2.5 font-mono text-slate-200 uppercase text-xs">{{ row.board or '—' }}</td>
+                <td class="py-2.5">
+                  <span data-failure-kind-chip class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono ring-1
+                       {% if _tone == 'amber' %}bg-amber-500/15 text-amber-200 ring-amber-500/30
+                       {% elif _tone == 'rose' %}bg-rose-500/15 text-rose-200 ring-rose-500/30
+                       {% elif _tone == 'slate' %}bg-slate-800 text-slate-300 ring-slate-700
+                       {% else %}bg-slate-800 text-slate-300 ring-slate-700{% endif %}">
+                    {{ row.failure_kind or 'unknown' }}
+                  </span>
+                </td>
+                <td class="py-2.5 text-right tabular-nums text-slate-100 font-medium" data-failure-count>{{ row.count }}</td>
+                <td class="py-2.5 text-right tabular-nums text-slate-500 text-xs">
+                  {% if row.latest_at %}
+                    {{ row.latest_at.strftime('%Y-%m-%d %H:%M') }}
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div data-submission-failures-empty class="flex flex-col items-center justify-center gap-2 py-10 text-center">
+        <span class="inline-flex h-10 w-10 items-center justify-center rounded-md bg-slate-800/80 text-slate-400">
+          <i data-lucide="inbox" class="h-5 w-5" stroke-width="1.5"></i>
+        </span>
+        <p class="text-sm text-slate-300">No submission failures recorded yet.</p>
+        <p class="text-xs text-slate-500 max-w-sm">
+          Failures appear here when an ATS adapter rejects a DRAFT (CAPTCHA, auth, rate-limit, etc.).
+        </p>
+      </div>
+    {% endif %}
+  </section>
+</div>
