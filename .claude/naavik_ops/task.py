@@ -86,19 +86,64 @@ def _priority_rank(p: str | None) -> int:
     return PRIORITY_RANK.get((p or "").upper(), 0)
 
 
+def _backlog_task_ids() -> set[str]:
+    """Return the set of task IDs currently in ROADMAP's `## Backlog` section.
+
+    Plan 40 (0.7.0.22) — Backlog is the parking lot for unprioritized work.
+    Task IDs in this set are EXCLUDED from `task list <release>` /
+    `task next-unblocked <release>` output even though their 4-level ID
+    (e.g. `0.2.0.14`) would otherwise match.
+    """
+    try:
+        from .lib.roadmap import BACKLOG_VERSION, parse_release_section
+
+        return {row.task_id for row in parse_release_section(BACKLOG_VERSION)}
+    except Exception:  # noqa: BLE001 — parser failure should not break task list
+        return set()
+
+
 def _list_release_tasks(version: str) -> list[dict]:
     """Return tasks for `version` from the issue map, sorted REV-3 priority key.
 
     Reads `.claude/github-issue-map.json:issues` for keys matching
     `<version>.<NN>`. Priority drawn from the same map's `priorities` sub-dict
     if present (populated by Wave 2 migration); else unset.
+
+    Plan 40: `version == "backlog"` lists tasks from ROADMAP's `## Backlog`
+    section instead. For regular release versions, filters out any task IDs
+    that have been moved to Backlog.
     """
     data = _load_map()
     issues = data.get("issues") or {}
     priorities = data.get("priorities") or {}
     deps = data.get("deps") or {}
 
-    rows: list[dict] = []
+    if version == "backlog":
+        # Synthetic version — read ROADMAP's Backlog section, look up issue
+        # numbers from the map.
+        backlog_ids = _backlog_task_ids()
+        rows: list[dict] = []
+        for task_id in backlog_ids:
+            try:
+                _, _, _, position = semver.parse(task_id)
+            except semver.InvalidVersion:
+                continue
+            if position is None:
+                continue
+            rows.append(
+                {
+                    "id": task_id,
+                    "position": position,
+                    "priority": priorities.get(task_id, ""),
+                    "issue": issues.get(task_id, 0),
+                    "blocked_by": (deps.get(task_id) or {}).get("blocked_by") or [],
+                }
+            )
+        rows.sort(key=lambda r: r["id"])
+        return rows
+
+    backlog_ids = _backlog_task_ids()
+    rows = []
     for task_id, issue_num in issues.items():
         try:
             major, minor, patch, position = semver.parse(task_id)
@@ -107,6 +152,9 @@ def _list_release_tasks(version: str) -> list[dict]:
         if position is None:
             continue
         if semver.format(major, minor, patch) != version:
+            continue
+        if task_id in backlog_ids:
+            # Task lives in ROADMAP Backlog section — exclude from release listing.
             continue
         priority = priorities.get(task_id, "")
         blocked_by = (deps.get(task_id) or {}).get("blocked_by") or []
@@ -152,19 +200,24 @@ def _read_package_nix_version() -> str | None:
 
 
 def cmd_list(rest: Sequence[str]) -> int:
-    """list <version> [--status <s>] [--include-done] [--json]"""
+    """list <version> [--status <s>] [--include-done] [--json]
+
+    Plan 40: `version == "backlog"` lists tasks from the `## Backlog` section.
+    """
     if not rest:
-        sys.stderr.write("usage: naavik-ops task list <version> [--json]\n")
+        sys.stderr.write("usage: naavik-ops task list <version|backlog> [--json]\n")
         return 2
 
     version = rest[0]
     args = list(rest[1:])
     as_json = "--json" in args
 
-    try:
-        semver.parse(version)
-    except semver.InvalidVersion as e:
-        raise NaavikOpsError(str(e)) from e
+    # Plan 40 — backlog is a synthetic version; skip semver validation.
+    if version != "backlog":
+        try:
+            semver.parse(version)
+        except semver.InvalidVersion as e:
+            raise NaavikOpsError(str(e)) from e
 
     rows = _list_release_tasks(version)
 
@@ -187,11 +240,24 @@ def cmd_list(rest: Sequence[str]) -> int:
 
 
 def cmd_next_unblocked(rest: Sequence[str]) -> int:
-    """next-unblocked <version>"""
+    """next-unblocked <version>
+
+    Plan 40: backlog tasks (in `## Backlog` section) are excluded — they are
+    deferred + not part of the active cycle. `version == "backlog"` is a no-op
+    that prints the section's contents but never returns "next" — Backlog isn't
+    a cycle.
+    """
     if not rest:
         sys.stderr.write("usage: naavik-ops task next-unblocked <version>\n")
         return 2
     version = rest[0]
+
+    if version == "backlog":
+        sys.stdout.write(
+            "(backlog is unprioritized + not a cycle — use `task list backlog` to enumerate)\n"
+        )
+        return 0
+
     try:
         semver.parse(version)
     except semver.InvalidVersion as e:

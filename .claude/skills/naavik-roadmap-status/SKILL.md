@@ -1,10 +1,10 @@
 ---
-description: Load the current phase status + active work + recently shipped from `docs/ROADMAP_OVERVIEW.md` (one-page executive digest) and dive into `ROADMAP.md § <phase>` for the per-task ledger. Use whenever any agent needs phase state, when the user asks "where are we", "what's the status of <phase>", "what's done", or before picking up scope. Shared cross-agent skill. Triggers on phrases like "roadmap status", "what phase", "where are we", "what's done", "what's shipped", "current phase", "next phase", "phase a", "phase 2", "what's open", "what's blocked".
+description: Load the current phase status + active work + recently shipped from `ROADMAP.md` (one-page executive digest) and dive into `ROADMAP.md § <phase>` for the per-task ledger. Use whenever any agent needs phase state, when the user asks "where are we", "what's the status of <phase>", "what's done", or before picking up scope. Shared cross-agent skill. Triggers on phrases like "roadmap status", "what phase", "where are we", "what's done", "what's shipped", "current phase", "next phase", "phase a", "phase 2", "what's open", "what's blocked".
 ---
 
 # naavik-roadmap-status
 
-`ROADMAP.md` = authoritative 800-line ledger. `docs/ROADMAP_OVERVIEW.md` = one-page executive digest. Cross-agent lookup — every role needs phase state. Read overview first; drill ROADMAP only when scope work requires.
+`ROADMAP.md` = authoritative 800-line ledger. `ROADMAP.md` = one-page executive digest. Cross-agent lookup — every role needs phase state. Read overview first; drill ROADMAP only when scope work requires.
 
 ## When to invoke
 
@@ -18,7 +18,7 @@ description: Load the current phase status + active work + recently shipped from
 ### 1 — Read executive digest
 
 ```
-Read docs/ROADMAP_OVERVIEW.md
+Read ROADMAP.md
 ```
 
 130 lines, full. Sections:
@@ -92,7 +92,7 @@ Proposals to extend either rejected at architect/manager/hacker review. See `arc
 
 ## Canonical references
 
-- `docs/ROADMAP_OVERVIEW.md` — executive digest.
+- `ROADMAP.md` — executive digest.
 - `ROADMAP.md` — 800-line authoritative ledger.
 - `AGENTS.md` § Roadmap Maintenance Rules.
 - `AGENTS.md` § Single-doc-tracking principle.
@@ -101,7 +101,7 @@ Proposals to extend either rejected at architect/manager/hacker review. See `arc
 
 ## When NOT to invoke
 
-- Already loaded ROADMAP_OVERVIEW or ROADMAP this turn.
+- Already loaded ROADMAP § Index or ROADMAP this turn.
 - Only need task ID for known scope (use grep + issue-map directly).
 - Compaction events.
 

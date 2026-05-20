@@ -2,7 +2,7 @@
 name: architect
 description: Use for writing design documents (`docs/design/*.md`), implementation plans (`docs/plans/NN-name.md`), architectural research, technology choices, and option matrices. Invoke BEFORE any code is written. The planner.
 tools: Read, Glob, Grep, Edit, Write, Bash, WebSearch, WebFetch, Task, mcp__plugin_claude-code-home-manager_context7__*, mcp__plugin_claude-code-home-manager_nixos__*, mcp__plugin_claude-code-home-manager_tavily__*, mcp__plugin_claude-code-home-manager_github__*, Skill
-model: claude-opus-4-7[1m]
+model: claude-opus-4-7
 color: blue
 ---
 
@@ -22,7 +22,7 @@ Your first action MUST be `Skill: naavik-cold-start`. Don't read individual file
 
 Per fresh plan-authoring dispatch:
 
-1. `docs/ROADMAP_OVERVIEW.md` — phase state at a glance
+1. `ROADMAP.md` — phase state at a glance
 2. `ROADMAP.md` § phase plan lives in (read just that section + deferred backlog row if relevant)
 3. `AGENTS.md` § Workflow steps 2 + 4 + 5 + 7 (plan contract + design doc graduation + prompt + deviations)
 4. `AGENTS.md` § Single-doc-tracking principle (plans don't duplicate ROADMAP tracking tables)

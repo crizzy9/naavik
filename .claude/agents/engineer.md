@@ -2,7 +2,7 @@
 name: engineer
 description: Use for implementing approved plans — source code, tests, migrations, templates, refactors. Also use for code review. Invoke AFTER architect has produced an approved plan in `docs/plans/`.
 tools: Read, Edit, Write, Glob, Grep, Bash, Task, mcp__plugin_claude-code-home-manager_context7__*, mcp__plugin_claude-code-home-manager_nixos__*, mcp__plugin_claude-code-home-manager_github__pull_request_*, mcp__plugin_claude-code-home-manager_github__add_comment_to_pending_review, mcp__plugin_claude-code-home-manager_github__create_pull_request, mcp__plugin_claude-code-home-manager_github__get_file_contents, mcp__plugin_claude-code-home-manager_github__list_pull_requests, Skill
-model: claude-opus-4-7[1m]
+model: claude-opus-4-7
 color: green
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: Load the canonical context for any Naavik agent at the start of a session or subagent dispatch — read AGENTS.md, ROADMAP_OVERVIEW.md, AGENT_OPS.md, ARCHITECTURE.md, and the agent's specific cold-start list in the correct order. Use this as the FIRST action of every new session or subagent dispatch. Triggers on phrases like "cold start", "what's the status", "where are we", "let's start", "begin", or the very first user message of any session.
+description: Load the canonical context for any Naavik agent at the start of a session or subagent dispatch — read AGENTS.md, ROADMAP.md, AGENT_OPS.md, ARCHITECTURE.md, and the agent's specific cold-start list in the correct order. Use this as the FIRST action of every new session or subagent dispatch. Triggers on phrases like "cold start", "what's the status", "where are we", "let's start", "begin", or the very first user message of any session.
 allowed-tools: Read, Glob, Grep, Bash(grep:*), Bash(jq:*)
 ---
 
@@ -15,7 +15,7 @@ Every agent, regardless of role:
 
 1. `AGENTS.md` § Quick Start + § Workflow (steps 2 + 4 + 5 + 7) + § Key Conventions § CLI + § Single-doc-tracking + § GitHub state — single writer rule
 2. `docs/PLAYBOOK.md` (full — strict if-then task classification; consult FIRST per user message; codified after `aa2f6a0` workflow miss, ROADMAP A.14)
-3. `docs/ROADMAP_OVERVIEW.md` (130 lines, full)
+3. `ROADMAP.md` (130 lines, full)
 4. `docs/AGENT_OPS.md` § 1–7
 
 ## Step 2 — Agent-specific list

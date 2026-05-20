@@ -41,7 +41,7 @@ Phases halt at boundaries for user review. Don't auto-advance.
 1. `AGENTS.md` § Workflow + § Single-doc-tracking + § GitHub state — single writer rule + § Roadmap Maintenance Rules
 2. `CLAUDE.md` § GitHub state — single writer rule + § Claude Code Specific Notes
 3. `docs/AGENT_OPS.md` § 1–7 (full operational reference)
-4. `docs/ROADMAP_OVERVIEW.md` (130 lines, full)
+4. `ROADMAP.md` (130 lines, full)
 5. `.claude/agents/manager.md` (your own prompt) + the other 5 specialist prompts under `.claude/agents/`
 6. `.claude/commands/` directory listing (slash command inventory)
 7. `.claude/naavik_ops/gh.py` (skim — you'll be invoking subcommands)

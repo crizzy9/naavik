@@ -35,7 +35,7 @@ Eight design decisions (D.1–D.8) below. Each carries an option matrix where al
 | **B. Bottom (after last release section `### 0.7.0`, before `## Agent System (mirror conventions)`)** (LOCKED) | Active releases stay at the top of the doc; Backlog is the "everything else" pile | Reader must scroll past 0.1.0–0.7.0 first | Backlog out of sight is fine — it's deferred work | Low | Low |
 | C. Between `## Phases` heading and first `### 0.1.0` | Visually segregates "future-deferred" before "phase history" | Awkward narrative — Backlog before the shipped release | Conceptually wrong — Backlog ≠ pre-history | Low | Low |
 
-**Lock: B.** Active-release proximity wins. `docs/ROADMAP_OVERVIEW.md § 6` already serves the "look at deferred work" surface for executive scans.
+**Lock: B.** Active-release proximity wins. `ROADMAP.md § 6` already serves the "look at deferred work" surface for executive scans.
 
 ### D.2 — Task ID scheme within Backlog
 

@@ -83,6 +83,15 @@ RE_FOUR_LEVEL = re.compile(r"^(\d+\.\d+\.\d+)\.(\d{2})$")
 #: Heading like "### 0.2.0 — Phase 2 Core Backend".
 RE_RELEASE_HEADER = re.compile(r"^###\s+(?P<version>\d+\.\d+\.\d+)\s+[—–-]\s+(?P<title>.+?)\s*$")
 
+#: Backlog section heading. Synthetic "release-version" `backlog` for the unprioritized
+#: parking-lot section. Plan 40 — first migrant 0.2.0.14 (n8n migration). Tasks inside
+#: keep their 4-level release IDs; section is a parser-side filter, not an ID-scheme.
+RE_BACKLOG_HEADER = re.compile(r"^##\s+Backlog\b.*$")
+
+#: Synthetic version-name for the backlog section. Used as `version` arg to
+#: `parse_release_section` + `task list <BACKLOG_VERSION>` etc.
+BACKLOG_VERSION = "backlog"
+
 
 @dataclass
 class TaskRow:
@@ -349,10 +358,16 @@ def parse_release_section(version: str, *, roadmap_text: str | None = None) -> l
 
     Returns rows in document order (== position order). Empty list if the
     section has no 4-level task IDs.
+
+    Plan 40: the synthetic version `backlog` reads the `## Backlog (unprioritized)`
+    h2 section instead of a `### X.Y.Z — Title` h3 release section. Tasks inside
+    Backlog keep their original 4-level release IDs (e.g. `0.2.0.14`); section is
+    a parser-side filter, not an ID-scheme.
     """
     text = roadmap_text if roadmap_text is not None else _read_roadmap()
     lines = text.splitlines()
 
+    is_backlog = version == BACKLOG_VERSION
     in_section = False
     in_table = False
     cols: dict[str, int] | None = None
@@ -361,9 +376,21 @@ def parse_release_section(version: str, *, roadmap_text: str | None = None) -> l
     for raw in lines:
         line = raw.rstrip("\n")
 
+        # Backlog section detection (h2). When the requested version is `backlog`,
+        # entering the h2 enters the section; entering any OTHER h2 (or any h3 release
+        # header) exits it.
+        if is_backlog and RE_BACKLOG_HEADER.match(line):
+            in_section = True
+            in_table = False
+            cols = None
+            continue
+
         m_rel = RE_RELEASE_HEADER.match(line)
         if m_rel:
-            in_section = m_rel.group("version") == version
+            if is_backlog:
+                in_section = False
+            else:
+                in_section = m_rel.group("version") == version
             in_table = False
             cols = None
             continue
@@ -372,8 +399,14 @@ def parse_release_section(version: str, *, roadmap_text: str | None = None) -> l
             continue
 
         # Stop at any next top-level ## heading (a NEW release header at ###
-        # will have already swapped state via the m_rel match above).
+        # will have already swapped state via the m_rel match above). When parsing
+        # backlog, ENTRY came from RE_BACKLOG_HEADER (also ## ); use a different
+        # heading as the stop sentinel.
         if line.startswith("## ") and not line.startswith("### "):
+            if is_backlog and RE_BACKLOG_HEADER.match(line):
+                # Re-entering the same backlog header (impossible in practice;
+                # defensive) — keep state.
+                continue
             in_section = False
             continue
 
@@ -396,6 +429,17 @@ def parse_release_section(version: str, *, roadmap_text: str | None = None) -> l
             in_table = False
             cols = None
     return rows
+
+
+def is_in_backlog(task_id: str, *, roadmap_text: str | None = None) -> bool:
+    """Return True if `task_id` lives in the `## Backlog (unprioritized)` section.
+
+    Plan 40: used by callers that need to differentiate active release tasks
+    from deferred-but-not-deleted ones (e.g. `task next-unblocked` should skip
+    backlog rows even when their 4-level ID would otherwise match a release).
+    """
+    backlog_rows = parse_release_section(BACKLOG_VERSION, roadmap_text=roadmap_text)
+    return any(r.task_id == task_id for r in backlog_rows)
 
 
 def _parse_release_row(cells: list[str], cols: dict[str, int], raw_line: str) -> ReleaseRow | None:

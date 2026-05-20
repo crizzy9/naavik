@@ -704,7 +704,7 @@ The agent system relies on a small set of canonical guides. Each is the single s
 
 | Guide | Path | Read when... |
 |---|---|---|
-| **Roadmap overview** | `docs/ROADMAP_OVERVIEW.md` | You need state-at-a-glance + plan-to-phase mapping + active work + recently shipped. Faster than the 800-line ROADMAP. |
+| **Roadmap overview** | `ROADMAP.md` | You need state-at-a-glance + plan-to-phase mapping + active work + recently shipped. Faster than the 800-line ROADMAP. |
 | **Architecture guide** | `docs/ARCHITECTURE.md` | You're about to author a plan, ship code, or reason about layer responsibilities + cross-cutting concerns (auth / vault / async / LLM observability / HTMX patterns). Entry point to BACKEND.md + DATA_MODEL.md + INTERACTIONS.md. |
 | **Visual contract** | `DESIGN.md` (root) | You're doing UI work. Tokens, type, icons, voice. Frozen. |
 | **UI sub-process** | `docs/design/WORKFLOW.md` | You're doing UI work. Skill routing, read-order, per-screen checklist, accessibility, common patterns, anti-patterns, mockup conventions. Pairs with DESIGN.md. |
