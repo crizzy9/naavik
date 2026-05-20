@@ -24,7 +24,7 @@
 | **0.1.1** | Legacy bash → Python rewrite + CHANGELOG sanitization | ✅ Complete | 2026-05-19 |
 | **0.2.0** | Job Scraping & Discovery (vault sunset + 6 site scrapers + AI extraction + dedup + scheduler + UI + notifications + rate-limiting + release ceremony) | 🟢 Active | 14/14 core shipped 2026-05-20 (n8n migration 0.2.0.14 closed-as-moot); 3 new release-readiness rows filed (0.2.0.15 release ceremony + 0.2.0.16 self-host walkthrough + 0.2.0.17 observation window) + 6 follow-up letter rows remain |
 | 0.2.1 | Security cleanup (DEF) | ✅ Complete (2026-05-20) | 0.2.1.04 + 0.2.1.05 shipped; 0.2.1.01 + 0.2.1.02 deferred to 0.2.7 |
-| 0.2.2 | UI cleanup (DEF) | 🟡 Queued | — |
+| 0.2.2 | UI cleanup (DEF) | ✅ Complete (2026-05-20) | 0.2.2.02/03/04 shipped; 0.2.2.01 light mode deferred to 0.2.7 |
 | 0.2.3 | ATS / scraper cleanup (DEF) | 🟡 Queued | — |
 | 0.2.4 | Tracking cleanup (DEF) | 🟡 Queued | — |
 | 0.2.5 | Observability cleanup (DEF) | 🟡 Queued | — |
@@ -237,9 +237,9 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 | # | Task | Status | Priority | Legacy ID | Notes |
 |---|---|---|---|---|---|
 | 0.2.2.01 | Light mode | [ ] | — | DEF-18 | **DEFERRED to 0.2.7.09 (sweep 2026-05-20).** Phase 6 explicit marker. From DESIGN.md. |
-| 0.2.2.02 | Restore Lucide via CDN | [ ] | — | DEF-19 | Self-hosted at `/static/lucide.min.js` for now to fix "no icons render" issue. Production should serve from a CDN — investigate why unpkg failed (content-blocker / CSP / rate-limit), pick a stable URL or fallback chain, drop the local file. From plan 09a follow-up 2026-05-02. |
-| 0.2.2.03 | Sidebar mobile-toggle reliability after navigation | [ ] | — | DEF-20 | Idempotent script guards fixed the most common failure mode; user reports it's "still kind of wonky" after navigating away. Repro on real device, isolate the remaining timing issue (likely Tailwind JIT vs HTMX swap order). Not a blocker. From plan 09a follow-up 2026-05-02. |
-| 0.2.2.04 | Discover card max-w cap on ultra-wide screens | [ ] | — | DEF-21 | 09a-follow-up dropped the `max-w-7xl` page cap on Discover so the card fills available space. On 4K+ monitors the card may stretch >1500px and feel sparse — add a `2xl:max-w-[1400px]` cap if user feedback comes in. From plan 09a follow-up 2026-05-02. |
+| 0.2.2.02 | Restore Lucide via CDN | [x] | — | DEF-19 | **Plan 51 EXECUTED 2026-05-20 via PR #151 squash `b74a19f`.** jsDelivr CDN @ `lucide@0.469.0` (version pinned to vendored banner) primary + `/static/lucide.min.js` `onerror` fallback. ~5 LOC `base.html` + 3 tests. SRI deferred (consistent with existing htmx/Sortable/Tailwind play posture — backlog candidate). |
+| 0.2.2.03 | Sidebar mobile-toggle reliability after navigation | [x] | — | DEF-20 | **Plan 51 EXECUTED 2026-05-20 via PR #151 squash `b74a19f`.** `syncSidebarAria()` wired to `DOMContentLoaded` + `htmx:afterSwap` (was only on click). Hamburger ARIA stays consistent after back-button restore / history pop / hx-boost swap. ~8 LOC `base.js` + 1 test in `tests/test_mobile_sidebar.py`. |
+| 0.2.2.04 | Discover card max-w cap on ultra-wide screens | [x] | — | DEF-21 | **Plan 51 EXECUTED 2026-05-20 via PR #151 squash `b74a19f`.** `2xl:max-w-[1400px] 2xl:mx-auto` on Discover wrapper. Tailwind 2xl = ≥1536px so 1440 monitors unaffected. ~3 LOC + 2 tests in new `tests/test_discover_max_w_cap.py`. |
 
 **Deliverable (0.2.2):** Light mode shipped; sidebar stable; Lucide CDN-served; Discover card width-capped.
 
