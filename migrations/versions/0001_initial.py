@@ -16,9 +16,10 @@ Single migration covering the full Phase 1 schema:
 Implementation: drives DDL straight from `SQLModel.metadata` so future
 schema changes can use Alembic autogenerate against the live DB.
 """
+
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 from sqlmodel import SQLModel
@@ -28,9 +29,9 @@ import models  # noqa: F401
 
 # revision identifiers, used by Alembic.
 revision: str = "0001_initial"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

@@ -27,6 +27,7 @@ ritual that let 5 of 8 plans archive empty in run
 from __future__ import annotations
 
 import argparse
+import contextlib
 import re
 import subprocess
 import sys
@@ -251,13 +252,13 @@ def _has_nonempty_deviations_section(plan_path: Path) -> bool:
     # Closes hacker MEDIUM finding from PR #127: substring match accepted
     # negation-bypass like "we don't have no material deviations because there
     # are many" — anchored form rejects this.
-    if re.search(
-        r"^\s*No material deviations(?:\s*[—.\-:].*)?\s*$",
-        stripped,
-        re.IGNORECASE | re.MULTILINE,
-    ):
-        return True
-    return False
+    return bool(
+        re.search(
+            r"^\s*No material deviations(?:\s*[—.\-:].*)?\s*$",
+            stripped,
+            re.IGNORECASE | re.MULTILINE,
+        )
+    )
 
 
 def _append_deviations_section(plan_path: Path, bullets: Sequence[str]) -> None:
@@ -336,10 +337,8 @@ def _git_mv_plan_and_prompt(plan_path: Path, *, original_text: str | None = None
         except SystemExit:
             # Plan already moved successfully; prompt-mv failure is partial.
             # Roll back plan-mv to keep the working tree internally consistent.
-            try:
+            with contextlib.suppress(SystemExit):
                 _run_git("mv", str(target), str(plan_path))
-            except SystemExit:
-                pass  # Best-effort; surface original error.
             if original_text is not None and plan_path.exists():
                 plan_path.write_text(original_text, encoding="utf-8")
             raise
@@ -465,10 +464,7 @@ def _entry_to_bullet(e: DeviationEntry) -> str:
     title = _derive_title(e.what)
     surface = _detect_surface(e.impact)
     # 0.7.0.21b — periods between fields for readability (plan 39 § C.7).
-    return (
-        f"- **{title}** — what: {e.what}. why: {e.why}. "
-        f"impact: {e.impact}. surface: {surface}."
-    )
+    return f"- **{title}** — what: {e.what}. why: {e.why}. impact: {e.impact}. surface: {surface}."
 
 
 def _derive_title(what: str) -> str:
