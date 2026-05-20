@@ -39,6 +39,10 @@ All notable changes to Naavik are documented here. Format is based on [Keep a Ch
 - **Operators on 0.1.x with leftover `naavik vault status` scripts**: the binary still exists (now boots the server), so cached operator scripts that call `naavik vault status` will receive `argparse: unrecognized argument` from the implicit uvicorn entry rather than the prior 0.2.0 deprecation hint. Update scripts to `cat .env`-style inspection — values live in `.env` now.
 
 
+
+## [0.2.6] - 2026-05-20
+
+Release bundle for 0.2.6. Detailed entries reconstructed from closed Issues post-merge.
 ## [0.2.0] - 2026-XX-XX
 
 (in flight — partial; release ceremony lands once all `0.2.0.NN` rows ship)

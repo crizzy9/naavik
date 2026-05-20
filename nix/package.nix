@@ -7,7 +7,7 @@ let
 in
 py.pkgs.buildPythonApplication {
   pname = "naavik";
-  version = "0.1.1";
+  version = "0.2.6";
   pyproject = true;
 
   src = ./..;
