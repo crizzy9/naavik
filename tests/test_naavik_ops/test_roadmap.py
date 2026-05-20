@@ -315,9 +315,7 @@ class TestBacklogParser:
         assert not roadmap.is_in_backlog("0.3.0.01", roadmap_text=SAMPLE_ROADMAP_WITH_BACKLOG)
 
     def test_no_backlog_section_yields_empty(self):
-        rows = roadmap.parse_release_section(
-            roadmap.BACKLOG_VERSION, roadmap_text=SAMPLE_ROADMAP
-        )
+        rows = roadmap.parse_release_section(roadmap.BACKLOG_VERSION, roadmap_text=SAMPLE_ROADMAP)
         assert rows == []
 
     def test_backlog_stops_at_next_h2(self):

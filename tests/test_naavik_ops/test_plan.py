@@ -452,6 +452,7 @@ class TestNoMaterialDeviationsSentinelAnchored:
 
     def _has_section(self, content: str, tmp_path):
         from naavik_ops.plan import _has_nonempty_deviations_section
+
         p = tmp_path / "test_plan.md"
         p.write_text(f"# Plan\n\n## Deviations from plan\n\n{content}\n", encoding="utf-8")
         return _has_nonempty_deviations_section(p)
