@@ -423,14 +423,18 @@ def _embed_for_scrape_run(run: JobScrapeRun, top_jobs: list[Job]) -> dict[str, A
 
 
 def _telegram_text_for_scrape_run(run: JobScrapeRun, top_jobs: list[Job]) -> str:
-    """Markdown-formatted summary for Telegram sendMessage.
+    """Plain-text summary for Telegram sendMessage.
+
+    No parse_mode is used; scraper-controlled `role`/`company`/`url` would
+    otherwise allow Markdown injection (e.g. `[phish](url)`). URLs still
+    auto-linkify in Telegram clients without parse_mode.
 
     Stays well under the 4096-byte payload limit via the top-N cap.
     """
     source = run.source.value
     total_new = run.new_jobs
 
-    lines = [f"📌 *{total_new} new jobs from {source}*"]
+    lines = [f"📌 {total_new} new jobs from {source}"]
     for job in top_jobs[:_SCRAPE_RUN_TOP_N]:
         role = job.role or "—"
         company = job.company or "—"
@@ -505,7 +509,7 @@ async def _send_telegram_scrape_run(
         return False
     text = _telegram_text_for_scrape_run(run, top_jobs)
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    body = {"chat_id": chat, "text": text, "parse_mode": "Markdown"}
+    body = {"chat_id": chat, "text": text}
     client = http_client or httpx.AsyncClient(timeout=10.0)
     owns = http_client is None
     try:

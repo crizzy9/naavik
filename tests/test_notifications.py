@@ -470,8 +470,11 @@ async def test_send_discord_scrape_run_posts_embed():
 
 
 @pytest.mark.asyncio
-async def test_send_telegram_scrape_run_posts_markdown():
-    """Telegram outbound payload carries chat_id + parse_mode=Markdown."""
+async def test_send_telegram_scrape_run_posts_plaintext():
+    """Telegram outbound payload carries chat_id + NO parse_mode (markdown
+    injection defense — scraper-controlled role/company/url could otherwise
+    forge `[phish](url)` clickable links).
+    """
     from services.notifications import _send_telegram_scrape_run
 
     s = _settings()
@@ -489,6 +492,45 @@ async def test_send_telegram_scrape_run_posts_markdown():
     assert ok is True
     body = json.loads(captured["body"])
     assert body["chat_id"] == "42"
-    assert body["parse_mode"] == "Markdown"
+    assert "parse_mode" not in body
     assert "5 new jobs from linkedin" in body["text"]
+
+
+@pytest.mark.asyncio
+async def test_send_telegram_scrape_run_hostile_role_renders_as_plain_text():
+    """A scraper-controlled `role` carrying Markdown link syntax
+    `[phish](https://evil.example)` is sent verbatim, NOT as a clickable
+    link — because no parse_mode is set, Telegram falls back to text
+    rendering and the brackets/parens stay literal.
+    """
+    from services.notifications import _send_telegram_scrape_run
+
+    hostile = [
+        SimpleNamespace(
+            id=999,
+            role="[phish](https://evil.example)",
+            company="*pretend-bold*",
+            url="https://legit.example/jobs/999",
+        )
+    ]
+    s = _settings()
+    run = _scrape_run(new_jobs=1)
+    captured = {}
+    client = _mock_client(captured)
+    with (
+        patch("services.notifications._telegram_token", return_value="bot-token"),
+        patch("services.notifications._telegram_chat_id", return_value="42"),
+    ):
+        ok = await _send_telegram_scrape_run(
+            settings=s, run=run, top_jobs=hostile, http_client=client
+        )
+    await client.aclose()
+    assert ok is True
+    body = json.loads(captured["body"])
+    # No parse_mode → Telegram won't interpret the bracket syntax as a link.
+    assert "parse_mode" not in body
+    # Hostile text is in the payload verbatim — defense is the absent
+    # parse_mode, not sanitization.
+    assert "[phish](https://evil.example)" in body["text"]
+    assert "*pretend-bold*" in body["text"]
     assert "api.telegram.org/botbot-token/sendMessage" in captured["url"]
