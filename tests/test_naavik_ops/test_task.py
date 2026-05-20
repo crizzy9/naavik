@@ -9,7 +9,13 @@ import pytest
 
 @pytest.fixture
 def sandbox_task(tmp_path, monkeypatch):
-    """Sandbox the task module against a temp ROADMAP + map + pyproject + flake."""
+    """Sandbox the task module against a temp ROADMAP + map + pyproject + flake.
+
+    Closes 0.7.0.27 — ROADMAP is source of truth for which tasks exist + their
+    status. Issue-map is consulted only for Issue # cross-ref. Default fixture
+    writes 3 open 0.2.0.NN tasks (.01 HIGH unblocked, .02 unset blocked-by-.01,
+    .05 HIGH unblocked) — all `[ ]`.
+    """
     from naavik_ops import task
 
     issue_map = tmp_path / ".claude" / "github-issue-map.json"
@@ -21,17 +27,12 @@ def sandbox_task(tmp_path, monkeypatch):
                     "0.2.0.01": 20,
                     "0.2.0.02": 21,
                     "0.2.0.05": 14,
-                    "0.1.0.50": 71,  # ignored when filtering 0.2.0
-                },
-                "priorities": {
-                    "0.2.0.01": "HIGH",
-                    "0.2.0.05": "HIGH",
+                    "0.1.0.50": 71,
                 },
                 "deps": {
                     "0.2.0.02": {"blocks": [], "blocked_by": ["0.2.0.01"]},
                     "0.2.0.01": {"blocks": ["0.2.0.02"], "blocked_by": []},
                 },
-                "statuses": {},
             }
         ),
         encoding="utf-8",
@@ -45,7 +46,17 @@ def sandbox_task(tmp_path, monkeypatch):
     package_nix.write_text('{ }: { version = "0.1.0"; }\n', encoding="utf-8")
 
     roadmap = tmp_path / "ROADMAP.md"
-    roadmap.write_text("# stub\n", encoding="utf-8")
+    roadmap.write_text(
+        "# Roadmap\n\n"
+        "### 0.2.0 — Test release\n\n"
+        "| # | Task | Status | Priority | Legacy ID | Notes |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 0.2.0.01 | Task one | [ ] | HIGH | x | First |\n"
+        "| 0.2.0.02 | Task two | [ ] | — | x | Blocked |\n"
+        "| 0.2.0.05 | Task five | [ ] | HIGH | x | Free |\n"
+        "\n",
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(task, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(task, "ISSUE_MAP_PATH", issue_map)
@@ -54,6 +65,23 @@ def sandbox_task(tmp_path, monkeypatch):
     monkeypatch.setattr(task, "ROADMAP_PATH", roadmap)
 
     return task
+
+
+@pytest.fixture
+def sandbox_with_mixed_status(sandbox_task):
+    """Same as sandbox_task but with one shipped, one in-progress, one open."""
+    sandbox_task.ROADMAP_PATH.write_text(
+        "# Roadmap\n\n"
+        "### 0.2.0 — Test release\n\n"
+        "| # | Task | Status | Priority | Legacy ID | Notes |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 0.2.0.01 | Task one | [x] | HIGH | x | Shipped |\n"
+        "| 0.2.0.02 | Task two | [~] | — | x | In progress; blocked-by .01 done |\n"
+        "| 0.2.0.05 | Task five | [ ] | HIGH | x | Free |\n"
+        "\n",
+        encoding="utf-8",
+    )
+    return sandbox_task
 
 
 class TestList:
@@ -80,6 +108,30 @@ class TestList:
         assert rc == 0
         payload = json.loads(capsys.readouterr().out)
         assert len(payload) == 3
+        # Status should be parsed from ROADMAP cell.
+        statuses = {r["id"]: r["status"] for r in payload}
+        assert statuses["0.2.0.01"] == " "
+
+    def test_list_hides_done_by_default(self, sandbox_with_mixed_status, capsys):
+        """Closes 0.7.0.27 — `[x]` rows hidden from `list` by default."""
+        rc = sandbox_with_mixed_status.cmd_list(["0.2.0"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        # 0.2.0.01 is [x] — should NOT appear as a row (rows start with task-id).
+        # The dep mention in BLOCKED-BY column is fine.
+        task_id_lines = [line for line in out.splitlines() if line.startswith("0.2.0.")]
+        ids = {line.split()[0] for line in task_id_lines}
+        assert "0.2.0.01" not in ids
+        assert "0.2.0.02" in ids
+        assert "0.2.0.05" in ids
+
+    def test_list_include_done(self, sandbox_with_mixed_status, capsys):
+        """--include-done surfaces shipped rows."""
+        rc = sandbox_with_mixed_status.cmd_list(["0.2.0", "--include-done"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "0.2.0.01" in out
+        assert "[x]" in out
 
 
 class TestNextUnblocked:
@@ -90,6 +142,42 @@ class TestNextUnblocked:
         # 0.2.0.01 HIGH unblocked (no blocked_by), should be first.
         assert "0.2.0.01" in out
         assert "HIGH" in out
+
+    def test_skips_done_picks_next_open(self, sandbox_with_mixed_status, capsys):
+        """Closes 0.7.0.27 — `next-unblocked` no longer returns shipped rows."""
+        rc = sandbox_with_mixed_status.cmd_next_unblocked(["0.2.0"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        # 0.2.0.01 is [x] — skip. 0.2.0.02 [~] is blocked-by 0.2.0.01 (which IS
+        # done now), so .02 is unblocked. .02 has unset priority while .05 is
+        # HIGH — but sort is priority DESC → position ASC, so HIGH .05 wins.
+        assert "0.2.0.05" in out
+        assert "0.2.0.01" not in out
+
+    def test_all_done_returns_no_unblocked(self, sandbox_task, capsys):
+        """When everything is [x], reports no unblocked tasks."""
+        sandbox_task.ROADMAP_PATH.write_text(
+            "# Roadmap\n\n"
+            "### 0.2.0 — Test release\n\n"
+            "| # | Task | Status | Priority | Legacy ID | Notes |\n"
+            "|---|---|---|---|---|---|\n"
+            "| 0.2.0.01 | Task one | [x] | HIGH | x | Done |\n"
+            "| 0.2.0.05 | Task five | [x] | HIGH | x | Done |\n",
+            encoding="utf-8",
+        )
+        rc = sandbox_task.cmd_next_unblocked(["0.2.0"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "no unblocked tasks" in out
+
+    def test_blocked_by_unshipped_dep_skips(self, sandbox_task, capsys):
+        """If blocked_by dep is open in ROADMAP, the row stays blocked."""
+        # All 3 open + .02 depends on .01 → only .01 + .05 are unblocked.
+        # Picks .01 (HIGH, position 1) over .05 (HIGH, position 5).
+        rc = sandbox_task.cmd_next_unblocked(["0.2.0"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "0.2.0.01" in out
 
 
 class TestCheck:
