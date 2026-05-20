@@ -141,10 +141,17 @@ def test_api_settings_put_403_when_flagged(client: TestClient, flag_real_jwt):
 
 
 def test_ui_route_discover_save_403_when_flagged(client: TestClient, flag_real_jwt):
-    """POST /api/v1/discover/{id}/save with a flagged-user JWT → 403."""
+    """POST /api/v1/discover/{id}/save with a flagged-user JWT → 403.
+
+    Plan 44 (0.2.0.11b) added `Depends(require_csrf)` to this endpoint;
+    matching CSRF pair threaded through so the auth-gate is the only
+    remaining gate (not short-circuited by CSRF 403).
+    """
+    csrf = "matching-csrf-flagged-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     r = client.post(
         "/api/v1/discover/1/save",
-        cookies={"naavik_session": "fake-jwt-token"},
+        cookies={"naavik_session": "fake-jwt-token", "naavik_csrf": csrf},
+        headers={"X-CSRF-Token": csrf},
     )
     assert r.status_code == 403, f"expected 403, got {r.status_code}: {r.text}"
     assert r.headers.get("hx-redirect") == "/auth/change-password"
@@ -196,10 +203,15 @@ def test_fake_session_caller_unaffected_across_groups(client: TestClient):
     """
     gate_codes = {303, 307, 401, 403}
 
-    # ui/routes/discover — in-memory sample_data
+    # ui/routes/discover — in-memory sample_data. Plan 44 (0.2.0.11b) added
+    # `Depends(require_csrf)` to discover_save; matching CSRF pair threaded
+    # so the gate-under-test (fake-session pass-through) isn't masked by
+    # a CSRF 403.
+    csrf = "matching-csrf-fake-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     r = client.post(
         "/api/v1/discover/1/save",
-        cookies={"naavik_session": "fake-1"},
+        cookies={"naavik_session": "fake-1", "naavik_csrf": csrf},
+        headers={"X-CSRF-Token": csrf},
     )
     assert r.status_code not in gate_codes, f"ui/discover gate misfired on fake-1: {r.status_code}"
 
