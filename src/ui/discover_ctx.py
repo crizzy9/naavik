@@ -307,6 +307,7 @@ async def build_discover_ctx(
         v = up_next_dict(job)
         v["state"] = "stuck"
         v["last_failure"] = (app.submission_artifacts or {}).get("last_failure")
+        v["application_id"] = app.id
         stuck_views.append(v)
 
     return {
