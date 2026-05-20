@@ -1,0 +1,264 @@
+"""Phase 2 scraping crons — one job per JobSource in scraper.sites:scrapers.
+
+Per docs/plans/35-0.2.0.10-apscheduler.md § D (graduating to
+docs/design/SCHEDULER.md on archive). Each cron iterates Settings rows for
+users who have not disabled the source, resolves their LLM provider for AI
+enrichment, composes a ScrapeQuery per source, invokes
+scraper_service.run_scraper, and lets the per-listing tier-1 + scraper-fatal
+tier-2 error handling persist results into JobScrapeRun.
+
+Consecutive-failure auto-skip (§ D.5): per-source counter persisted on
+Settings.consecutive_scrape_failures (JSON dict). Cron increments on FAILED,
+resets to 0 on SUCCESS / PARTIAL. At threshold=3 the next firing skips +
+emits one Discord admin alert; first SUCCESS / PARTIAL clears the counter
+and auto-resumes.
+
+Indeed uses IntervalTrigger(minutes=90) — cron does not support 90-min steps
+(§ D.6 + § Risk row). All other sources use CronTrigger with the
+BACKEND.md § I.1 defaults.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+from sqlmodel import select
+
+from db.session import async_session
+from llm import get_provider as llm_get_provider
+from llm.base import LLMProviderError
+from models import JobScrapeStatus, JobSource, Settings
+from scraper.crawl4ai_client import Crawl4AIClient
+from scraper.sites import scrapers as scraper_registry
+from scraper.types import ScrapeQuery
+from services.notifications import notify_admin_error
+from services.scraper_service import run_scraper
+
+log = logging.getLogger(__name__)
+
+
+# Per-source cron defaults sourced from BACKEND.md § I.1. Treated as the
+# "operator left Settings.source_schedules empty" fallback. Indeed is absent
+# here — see _INDEED_INTERVAL_MINUTES; cron does not support 90-min steps.
+_DEFAULT_CRON_SCHEDULES: dict[str, str] = {
+    JobSource.LINKEDIN.value: "*/30 * * * *",
+    JobSource.WORKDAY.value: "0 * * * *",
+    JobSource.GREENHOUSE.value: "0 * * * *",
+    JobSource.LEVER.value: "0 * * * *",
+    JobSource.ASHBY.value: "0 * * * *",
+}
+
+_INDEED_INTERVAL_MINUTES = 90
+
+_CONSECUTIVE_FAIL_THRESHOLD = 3
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────
+
+
+def _compose_query(source: JobSource, settings: Settings) -> ScrapeQuery:
+    """Build a per-source ScrapeQuery from Settings + env-loaded config."""
+    from config import settings as app_settings
+
+    if source is JobSource.WORKDAY:
+        return ScrapeQuery(company_filter=list(settings.workday_companies or []))
+    if source is JobSource.GREENHOUSE:
+        return ScrapeQuery(company_filter=list(app_settings.greenhouse_companies or []))
+    if source is JobSource.LEVER:
+        return ScrapeQuery(company_filter=list(app_settings.lever_companies or []))
+    if source is JobSource.ASHBY:
+        return ScrapeQuery(company_filter=list(app_settings.ashby_companies or []))
+    if source is JobSource.LINKEDIN:
+        return ScrapeQuery(
+            keywords=list(settings.linkedin_keywords or []),
+            location=settings.linkedin_location,
+        )
+    if source is JobSource.INDEED:
+        return ScrapeQuery(
+            keywords=list(settings.indeed_keywords or []),
+            location=settings.indeed_location,
+        )
+    return ScrapeQuery()
+
+
+async def _scrape_one_user(session, *, settings: Settings, source: JobSource) -> None:
+    """Run one (user, source) scrape; mutate Settings.consecutive_scrape_failures.
+
+    Skips when:
+    - `sources_enabled[source.value] is False` — operator explicitly disabled.
+    - `consecutive_scrape_failures[source.value] >= 3` — auto-skip; emit one
+      Discord admin alert per firing while skipped.
+
+    Resets the per-source counter to 0 on SUCCESS / PARTIAL; increments by 1
+    on FAILED. TIMED_OUT is not treated as a tier-2 failure (transient,
+    re-raised to APScheduler).
+    """
+    if settings.sources_enabled.get(source.value, True) is False:
+        return
+
+    counters = dict(settings.consecutive_scrape_failures or {})
+    current_failures = int(counters.get(source.value, 0))
+    if current_failures >= _CONSECUTIVE_FAIL_THRESHOLD:
+        log.info(
+            "skipping scraping.%s for user=%s — %d consecutive FAILED",
+            source.value,
+            settings.user_id,
+            current_failures,
+        )
+        await notify_admin_error(
+            settings=settings,
+            message=(
+                f"Scraping for {source.value} has failed "
+                f"{current_failures}x consecutively — auto-skipping until first SUCCESS."
+            ),
+        )
+        return
+
+    try:
+        provider = llm_get_provider(settings)
+    except LLMProviderError as exc:
+        log.warning(
+            "LLM provider unavailable user=%s source=%s: %s",
+            settings.user_id,
+            source.value,
+            exc,
+        )
+        provider = None
+
+    scraper_cls = scraper_registry[source.value]
+    client = Crawl4AIClient(
+        rate_limit_per_minute=scraper_cls.rate_limit_per_minute,
+        random_delay_seconds=scraper_cls.random_delay_seconds,
+    )
+    scraper = scraper_cls(
+        client=client,
+        session=session,
+        user_id=settings.user_id,
+        provider=provider,
+    )
+
+    try:
+        run = await run_scraper(
+            session,
+            scraper=scraper,
+            user_id=settings.user_id,
+            query=_compose_query(source, settings),
+            triggered_by="cron",
+        )
+    except Exception as exc:  # noqa: BLE001 — per-user isolation
+        log.exception(
+            "scraping.%s failed for user=%s: %s",
+            source.value,
+            settings.user_id,
+            exc,
+        )
+        # Treat as FAILED for the counter — don't punish on TIMED_OUT
+        # (re-raised by run_scraper) since that's transient. Other top-level
+        # exceptions reach here.
+        counters[source.value] = current_failures + 1
+        settings.consecutive_scrape_failures = counters
+        session.add(settings)
+        return
+
+    if run.status in (JobScrapeStatus.SUCCESS, JobScrapeStatus.PARTIAL):
+        if current_failures != 0:
+            counters[source.value] = 0
+            settings.consecutive_scrape_failures = counters
+            session.add(settings)
+    elif run.status is JobScrapeStatus.FAILED:
+        counters[source.value] = current_failures + 1
+        settings.consecutive_scrape_failures = counters
+        session.add(settings)
+
+
+async def _scrape_source(source: JobSource) -> None:
+    """Job body for `scraping.<source>`. One firing → iterate enabled users."""
+    async with async_session() as session:
+        rows = (await session.exec(select(Settings))).all()
+        for s in rows:
+            await _scrape_one_user(session, settings=s, source=source)
+        await session.commit()
+
+
+# ── Per-source job entrypoints (named so APScheduler can serialize them) ─
+
+
+async def scrape_linkedin() -> None:
+    await _scrape_source(JobSource.LINKEDIN)
+
+
+async def scrape_workday() -> None:
+    await _scrape_source(JobSource.WORKDAY)
+
+
+async def scrape_greenhouse() -> None:
+    await _scrape_source(JobSource.GREENHOUSE)
+
+
+async def scrape_lever() -> None:
+    await _scrape_source(JobSource.LEVER)
+
+
+async def scrape_ashby() -> None:
+    await _scrape_source(JobSource.ASHBY)
+
+
+async def scrape_indeed() -> None:
+    await _scrape_source(JobSource.INDEED)
+
+
+_JOB_FUNCS = {
+    JobSource.LINKEDIN.value: scrape_linkedin,
+    JobSource.WORKDAY.value: scrape_workday,
+    JobSource.GREENHOUSE.value: scrape_greenhouse,
+    JobSource.LEVER.value: scrape_lever,
+    JobSource.ASHBY.value: scrape_ashby,
+    JobSource.INDEED.value: scrape_indeed,
+}
+
+
+# ── Registration ────────────────────────────────────────────────────────
+
+
+def register_scraping_jobs(scheduler: AsyncIOScheduler) -> None:
+    """Register one cron per JobSource present in scraper.sites:scrapers.
+
+    Indeed uses IntervalTrigger(minutes=90) because cron does not support
+    90-min steps. All other sources use CronTrigger with the BACKEND.md
+    § I.1 defaults. All registrations carry `jitter=30` to smear the
+    minute-boundary burst.
+    """
+    for source_value in scraper_registry:
+        job_func = _JOB_FUNCS[source_value]
+        if source_value == JobSource.INDEED.value:
+            trigger = IntervalTrigger(minutes=_INDEED_INTERVAL_MINUTES, jitter=30)
+        else:
+            trigger = CronTrigger.from_crontab(
+                _DEFAULT_CRON_SCHEDULES[source_value],
+                timezone="UTC",
+            )
+            trigger.jitter = 30
+        scheduler.add_job(
+            job_func,
+            trigger,
+            id=f"scraping.{source_value}",
+            name=f"scraping.{source_value}",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=300,
+        )
+
+
+__all__ = [
+    "register_scraping_jobs",
+    "scrape_ashby",
+    "scrape_greenhouse",
+    "scrape_indeed",
+    "scrape_lever",
+    "scrape_linkedin",
+    "scrape_workday",
+]
