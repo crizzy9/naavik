@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
 from db import sample_data as sd
 from db.session import get_session
 from models import User
@@ -98,6 +99,7 @@ async def post_skip(
     job_id: int,
     fail: Annotated[str | None, Query()] = None,
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     if fail:
         raise HTTPException(status_code=502, detail="Couldn't skip")
@@ -110,6 +112,7 @@ async def post_save(
     request: Request,
     job_id: int,
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     await sd._set_job_queue_state(job_id, JobQueueState.SAVED)
     return await _next_card_response(request)
@@ -124,6 +127,7 @@ async def post_auto_submit(
     request: Request,
     job_id: int,
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     """Right-swipe — flip Job → QUEUED_FOR_AUTO_APPLY + create DRAFT."""
     await sd._set_job_queue_state(job_id, JobQueueState.QUEUED_FOR_AUTO_APPLY)

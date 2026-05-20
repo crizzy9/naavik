@@ -25,6 +25,13 @@ def _skip_if_no_db() -> None:
         pytest.skip("set NAAVIK_LIVE_DB=1 to run DB-backed integration tests")
 
 
+# Matching CSRF pair threaded through any POST that hits a `require_csrf`-gated
+# route (plan 44 / 0.2.0.11b — discover swipe endpoints). HTMX `base.html` injects
+# the header globally in production; tests have to thread it explicitly.
+_CSRF_TOKEN = "csrf-cookie-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+_CSRF_HEADERS = {"X-CSRF-Token": _CSRF_TOKEN}
+
+
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     """TestClient carrying the plan-09 fake-session cookie by default.
@@ -36,11 +43,16 @@ def client() -> TestClient:
     match the way every other stub-endpoint test in the suite already calls.
     Individual tests that want to test the unauthenticated path can clear
     the cookie via `client.cookies.clear()`.
+
+    Plan 44 (0.2.0.11b) added `Depends(require_csrf)` to the discover swipe
+    endpoints; the fixture also seeds the CSRF cookie so the matching header
+    threaded through each affected call passes the double-submit check.
     """
     from main import app
 
     c = TestClient(app, raise_server_exceptions=True)
     c.cookies.set("naavik_session", "fake-1")
+    c.cookies.set("naavik_csrf", _CSRF_TOKEN)
     return c
 
 
@@ -204,18 +216,18 @@ def test_jobs_by_url(client):
 
 
 def test_discover_skip_returns_swipe_card(client):
-    r = client.post("/api/v1/discover/124/skip")
+    r = client.post("/api/v1/discover/124/skip", headers=_CSRF_HEADERS)
     assert r.status_code == 200
     assert 'id="discover-card"' in r.text
 
 
 def test_discover_skip_fail(client):
-    r = client.post("/api/v1/discover/124/skip?fail=1")
+    r = client.post("/api/v1/discover/124/skip?fail=1", headers=_CSRF_HEADERS)
     assert r.status_code == 502
 
 
 def test_discover_save_returns_swipe_card(client):
-    r = client.post("/api/v1/discover/115/save")
+    r = client.post("/api/v1/discover/115/save", headers=_CSRF_HEADERS)
     assert r.status_code == 200
 
 
@@ -223,7 +235,7 @@ def test_auto_submit_creates_draft(client):
     from db import sample_data as sd
 
     n_before = len([a for a in sd.APPLICATIONS if a.status.value == "DRAFT"])
-    r = client.post("/api/v1/applications/126/auto-submit")
+    r = client.post("/api/v1/applications/126/auto-submit", headers=_CSRF_HEADERS)
     assert r.status_code == 200
     n_after = len([a for a in sd.APPLICATIONS if a.status.value == "DRAFT"])
     assert n_after == n_before + 1
