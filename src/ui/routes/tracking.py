@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 
+from api.auth import require_csrf
 from db import sample_data as sd
 from models import User
 from models.enums import ApplicationStatus
@@ -153,7 +154,11 @@ async def post_application_manual(
     salary_max: Annotated[int | None, Form()] = None,
     notes: Annotated[str | None, Form()] = None,
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
+    # Plan 56 / 0.2.7.19 — CSRF-gated. The manual-application form template
+    # rides HTMX's `X-CSRF-Token` header injection from `base.html` (plan 45 /
+    # 0.2.0.11d Jinja context-processor). Mirrors the swipe-endpoint pattern.
     await sd._append_manual_application(
         company=company,
         role=role,

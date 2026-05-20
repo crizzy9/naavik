@@ -170,3 +170,77 @@ def test_discover_auto_submit_accepts_matching_csrf() -> None:
     finally:
         _restore(app)
     assert r.status_code != 403
+
+
+# ── Plan 56 · item 6 (0.2.7.19) — twin CSRF gaps ─────────────────────────
+
+
+def test_post_job_by_url_rejects_mismatched_csrf() -> None:
+    """POST /api/v1/jobs/by-url with mismatched cookie/header → 403."""
+    app, client = _build_csrf_test_client()
+    try:
+        r = client.post(
+            "/api/v1/jobs/by-url",
+            json={"url": "https://example.com/jobs/123"},
+            cookies={"naavik_csrf": "cookie-token-jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"},
+            headers={"X-CSRF-Token": "header-token-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"},
+        )
+    finally:
+        _restore(app)
+    assert r.status_code == 403
+    assert "CSRF" in r.text or "csrf" in r.text
+
+
+def test_post_job_by_url_accepts_matching_csrf() -> None:
+    """POST /api/v1/jobs/by-url with matching cookie + header → not 403.
+
+    The gate accepts; the body short-circuits at sample_data with a 200
+    JSON return (stub `_append_scraped_job`).
+    """
+    app, client = _build_csrf_test_client()
+    try:
+        matching = "matching-token-llllllllllllllllllllllllllllllllll"
+        r = client.post(
+            "/api/v1/jobs/by-url",
+            json={"url": "https://example.com/jobs/123"},
+            cookies={"naavik_csrf": matching},
+            headers={"X-CSRF-Token": matching},
+        )
+    finally:
+        _restore(app)
+    assert r.status_code != 403
+
+
+def test_post_application_manual_rejects_mismatched_csrf() -> None:
+    """POST /api/v1/applications/manual with mismatched cookie/header → 403."""
+    app, client = _build_csrf_test_client()
+    try:
+        r = client.post(
+            "/api/v1/applications/manual",
+            data={"company": "Acme", "role": "Engineer"},
+            cookies={"naavik_csrf": "cookie-token-mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"},
+            headers={"X-CSRF-Token": "header-token-nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"},
+        )
+    finally:
+        _restore(app)
+    assert r.status_code == 403
+    assert "CSRF" in r.text or "csrf" in r.text
+
+
+def test_post_application_manual_accepts_matching_csrf() -> None:
+    """POST /api/v1/applications/manual with matching cookie + header → not 403.
+
+    Body short-circuits at sample_data with a 204 + HX-Redirect.
+    """
+    app, client = _build_csrf_test_client()
+    try:
+        matching = "matching-token-ooooooooooooooooooooooooooooooooo"
+        r = client.post(
+            "/api/v1/applications/manual",
+            data={"company": "Acme", "role": "Engineer"},
+            cookies={"naavik_csrf": matching},
+            headers={"X-CSRF-Token": matching},
+        )
+    finally:
+        _restore(app)
+    assert r.status_code != 403

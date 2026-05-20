@@ -260,8 +260,15 @@ async def get_jobs(
 async def post_job_by_url(
     payload: Annotated[dict[str, Any], Body()],
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
-    """Stub `+ Add by URL` — append a synthetic Job + return it."""
+    """Stub `+ Add by URL` — append a synthetic Job + return it.
+
+    Plan 56 / 0.2.7.19 — CSRF-gated (mirrors `post_skip` / `post_save` /
+    `post_auto_submit`). The `+ Add by URL` modal in Discover wires this
+    via HTMX form post; `X-CSRF-Token` rides on every HTMX request via
+    the `base.html` Jinja context-processor (plan 45 / 0.2.0.11d).
+    """
     url = payload.get("url", "").strip()
     if not url:
         raise HTTPException(status_code=422, detail="URL required")
