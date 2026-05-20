@@ -40,12 +40,12 @@ from services.auth import (
     hash_password_with_complexity_check,
     is_rate_limited,
     issue_csrf_token,
-    issue_jwt,
+    issue_jwt_async,
     record_login_attempt,
     revoke_jwt,
     validate_csrf,
     validate_password_complexity,
-    verify_jwt,
+    verify_jwt_async,
     verify_password,
 )
 
@@ -131,7 +131,7 @@ async def post_login(
     await session.commit()
 
     secure = not request.app.debug if hasattr(request.app, "debug") else True
-    jwt_value = issue_jwt(user.id, keep_signed_in=bool(keep_signed_in))
+    jwt_value = await issue_jwt_async(session, user_id=user.id, keep_signed_in=bool(keep_signed_in))
     csrf_value = issue_csrf_token()
 
     response = Response(status_code=204)
@@ -255,7 +255,7 @@ async def post_signup(
     record_login_attempt(ip, success=True)
 
     secure = not request.app.debug if hasattr(request.app, "debug") else True
-    jwt_value = issue_jwt(user.id, keep_signed_in=bool(keep_signed_in))
+    jwt_value = await issue_jwt_async(session, user_id=user.id, keep_signed_in=bool(keep_signed_in))
     csrf_value = issue_csrf_token()
 
     response = Response(status_code=204)
@@ -331,9 +331,9 @@ async def post_change_password(
     # Plan 50 (0.2.1.04): revoke the CURRENT jti before issuing the new
     # JWT so an attacker holding the pre-rotation cookie cannot use it
     # after rotation completes. `get_current_user` already validated the
-    # cookie, so verify_jwt round-trips deterministically here.
+    # cookie, so verify_jwt_async round-trips deterministically here.
     if naavik_session:
-        result = verify_jwt(naavik_session)
+        result = await verify_jwt_async(session, naavik_session)
         if result is not None:
             old_user_id, old_jti, old_exp = result
             await revoke_jwt(
@@ -359,7 +359,7 @@ async def post_change_password(
 
     # Rotate session + CSRF cookies on credential change (auth event).
     secure = not request.app.debug if hasattr(request.app, "debug") else True
-    jwt_value = issue_jwt(user.id, keep_signed_in=False)
+    jwt_value = await issue_jwt_async(session, user_id=user.id, keep_signed_in=False)
     csrf_value = issue_csrf_token()
 
     response = Response(status_code=204)

@@ -415,3 +415,41 @@ async def get_deployment(session: AsyncSession = Depends(get_session)):
     info = await settings_service.get_deployment_info(session, user_id=1)
     await session.commit()
     return info
+
+
+# ── JWT signing-key rotation (plan 62 / 0.2.7.07) ────────────────────────
+
+
+@router.post(
+    "/api/v1/settings/security/rotate-jwt-key",
+    name="api_settings_security_rotate_jwt_key",
+)
+async def post_rotate_jwt_key(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Operator-triggered JWT signing-key rotation.
+
+    Issues a fresh RS256 keypair, demotes the current ACTIVE key to
+    RETIRING (in-flight tokens still verify within `Settings.jwt_rotation_grace_days`),
+    and persists. Returns the re-rendered Settings · Security card HTML for
+    HTMX swap. CSRF + IDOR enforced via deps.
+
+    Self-host single-tenant: `tenant_id = user_id` per the 1:1 mapping
+    documented in plan 62 § C.9. Cloud multi-tenancy (`0.8.0.NN`) replaces
+    this with per-request tenant resolution.
+    """
+    from services.jwt_rotation_service import rotate_tenant_key
+    from ui.routes.settings import _build_security_view, _effective_user_id
+    from ui.templates_setup import templates
+
+    user_id = _effective_user_id(_user)
+    actor = f"ui:{_user.email}" if _user is not None else "ui:dev"
+
+    await rotate_tenant_key(session, tenant_id=user_id, actor=actor)
+    await session.commit()
+
+    ctx = {"security": await _build_security_view(session, user_id=user_id)}
+    return templates.TemplateResponse(request, "pages/_settings_security.html", ctx)

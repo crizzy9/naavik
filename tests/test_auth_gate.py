@@ -100,7 +100,7 @@ def flag_real_jwt(monkeypatch):
     fake_exp = datetime.now(UTC) + timedelta(hours=1)
     fake_result = (1, "fake-jti-test-aaaaaaaaaaaaaaaaaaaaa", fake_exp)
 
-    def fake_verify_jwt(token: str):
+    async def fake_verify_jwt_async(session, token: str, *, tenant_id=1):
         if token == "fake-1":
             return None
         return fake_result
@@ -111,7 +111,7 @@ def flag_real_jwt(monkeypatch):
     async def fake_is_jwt_revoked(session, *, jti: str) -> bool:
         return False
 
-    monkeypatch.setattr(auth_svc, "verify_jwt", fake_verify_jwt)
+    monkeypatch.setattr(auth_svc, "verify_jwt_async", fake_verify_jwt_async)
     monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
     monkeypatch.setattr(auth_svc, "is_jwt_revoked", fake_is_jwt_revoked)
 
@@ -126,7 +126,7 @@ def real_jwt_unflagged(monkeypatch):
     fake_exp = datetime.now(UTC) + timedelta(hours=1)
     fake_result = (1, "fake-jti-test-aaaaaaaaaaaaaaaaaaaaa", fake_exp)
 
-    def fake_verify_jwt(token: str):
+    async def fake_verify_jwt_async(session, token: str, *, tenant_id=1):
         if token == "fake-1":
             return None
         return fake_result
@@ -137,7 +137,7 @@ def real_jwt_unflagged(monkeypatch):
     async def fake_is_jwt_revoked(session, *, jti: str) -> bool:
         return False
 
-    monkeypatch.setattr(auth_svc, "verify_jwt", fake_verify_jwt)
+    monkeypatch.setattr(auth_svc, "verify_jwt_async", fake_verify_jwt_async)
     monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
     monkeypatch.setattr(auth_svc, "is_jwt_revoked", fake_is_jwt_revoked)
 

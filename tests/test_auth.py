@@ -512,11 +512,14 @@ def test_require_authed_session_invalid_jwt_401(monkeypatch) -> None:
     app = _build_authed_session_test_app()
     client = TestClient(app)
 
-    # verify_jwt returns None on the patched call (mimicking an invalid token).
-    # NOTE: wrapper imports verify_jwt by bare name at services/auth.py:338;
-    # if verify_jwt moves to a sibling module, switch this monkeypatch to the
-    # wrapper's own import path or this test silently no-ops.
-    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: None)
+    # verify_jwt_async returns None on the patched call (mimicking an invalid
+    # token). Plan 62 (0.2.7.07): wrapper uses verify_jwt_async — patch that
+    # entry point. Tests covering the sync legacy verifier (kid='env-legacy')
+    # use a separate fixture.
+    async def _fake_verify(_session, _token, *, tenant_id=1):
+        return None
+
+    monkeypatch.setattr(auth_svc, "verify_jwt_async", _fake_verify)
     monkeypatch.setattr(auth_svc, "is_jwt_revoked", _async_return(False))
 
     r = client.post(
@@ -548,7 +551,10 @@ def test_require_authed_session_real_jwt_unflagged_passes(monkeypatch) -> None:
             must_change_password=False,
         )
 
-    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: _FAKE_JWT_TUPLE)
+    async def _fake_verify(_session, _token, *, tenant_id=1):
+        return _FAKE_JWT_TUPLE
+
+    monkeypatch.setattr(auth_svc, "verify_jwt_async", _fake_verify)
     monkeypatch.setattr(auth_svc, "is_jwt_revoked", _async_return(False))
     monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
 
@@ -580,7 +586,10 @@ def test_require_authed_session_real_jwt_flagged_403_on_api(monkeypatch) -> None
             must_change_password=True,
         )
 
-    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: _FAKE_JWT_TUPLE)
+    async def _fake_verify(_session, _token, *, tenant_id=1):
+        return _FAKE_JWT_TUPLE
+
+    monkeypatch.setattr(auth_svc, "verify_jwt_async", _fake_verify)
     monkeypatch.setattr(auth_svc, "is_jwt_revoked", _async_return(False))
     monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
 
@@ -615,7 +624,10 @@ def test_require_authed_session_real_jwt_flagged_307_on_ui(monkeypatch) -> None:
             must_change_password=True,
         )
 
-    monkeypatch.setattr(auth_svc, "verify_jwt", lambda token: _FAKE_JWT_TUPLE)
+    async def _fake_verify(_session, _token, *, tenant_id=1):
+        return _FAKE_JWT_TUPLE
+
+    monkeypatch.setattr(auth_svc, "verify_jwt_async", _fake_verify)
     monkeypatch.setattr(auth_svc, "is_jwt_revoked", _async_return(False))
     monkeypatch.setattr(auth_svc, "get_user_by_id", fake_get_user_by_id)
 
