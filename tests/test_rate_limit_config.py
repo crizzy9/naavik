@@ -158,6 +158,18 @@ def test_resolver_unknown_source_returns_default_fallback():
     assert cfg.rpm == _DEFAULT_FALLBACK.rpm
 
 
+@pytest.mark.parametrize(
+    "hostile",
+    ["not-a-dict", [], ["linkedin"], 42, True],
+    ids=["string", "empty-list", "list", "int", "bool"],
+)
+def test_resolver_handles_non_dict_scraper_rate_limits(hostile):
+    """Corrupted JSONB row (non-dict) falls back instead of AttributeError."""
+    s = SimpleNamespace(scraper_rate_limits=hostile)
+    cfg = resolve_rate_limit(s, JobSource.LINKEDIN)
+    assert cfg.rpm == 0.4  # Class-attr fallback, no crash.
+
+
 # ── Settings round-trip via settings_service.update_sources ──────────────
 
 

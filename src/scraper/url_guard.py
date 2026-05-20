@@ -61,6 +61,8 @@ _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 # matches the per-process cron load (~100 listings/hour, far fewer hosts).
 # Single-process + single-asyncio-loop usage today; if multi-process workers
 # ship in Phase 2+, add a `threading.Lock` around get/set.
+# TODO(0.2.0.NN): wrap _DNS_CACHE access in threading.Lock when multi-worker
+# scrape orchestration ships. cachetools.TTLCache is not thread-safe.
 _DNS_CACHE: TTLCache[str, tuple[str, ...]] = TTLCache(maxsize=256, ttl=60.0)
 
 

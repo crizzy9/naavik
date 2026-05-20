@@ -81,6 +81,10 @@ def resolve_rate_limit(settings: Settings, source: JobSource) -> RateLimitConfig
     3. No operator override → class-attr fallback.
     """
     overrides = settings.scraper_rate_limits or {}
+    if not isinstance(overrides, dict):
+        # Corrupted JSONB row or test fixture passing a non-dict — treat as
+        # "no overrides" rather than crash the scraper.
+        overrides = {}
     raw = overrides.get(source.value)
     if raw is not None:
         try:
