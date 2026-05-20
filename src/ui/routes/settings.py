@@ -332,9 +332,14 @@ async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> 
     from scraper.rate_limit import resolve_rate_limit
 
     if session is None:
-        # The /settings/sources route always provides a session via
-        # Depends(get_session); None here is unreachable in production.
-        return []
+        # Plan 56 / 0.2.7.03 — defense in depth. The /settings/sources route
+        # always provides a session via Depends(get_session); reaching this
+        # branch means a caller forgot the dep wiring. Raise loudly so the
+        # bug surfaces instead of degrading to a silently-empty panel.
+        raise RuntimeError(
+            "_build_sources_view requires an AsyncSession — "
+            "callers must pass Depends(get_session) (plan 49 / 0.2.0.16 contract)"
+        )
 
     settings_obj = await settings_service.get_or_create(session, user_id=user_id)
     last_runs = await job_service.list_recent_scrape_runs_by_source(session, user_id=user_id)

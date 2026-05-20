@@ -341,3 +341,18 @@ def test_effective_user_id_resolves_fake_session_to_one():
 
     assert settings_routes._effective_user_id(None) == 1
     assert settings_routes._effective_user_id(SimpleNamespace(id=99)) == 99
+
+
+# ── Plan 56 · item 2 (0.2.7.03) — loud raise on None session ─────────────
+
+
+def test_build_sources_view_raises_on_none_session():
+    """Programming-bug branch: `session is None` must raise loudly, not return []."""
+    import asyncio
+
+    import pytest as _pytest
+
+    from ui.routes import settings as settings_routes
+
+    with _pytest.raises(RuntimeError, match="AsyncSession"):
+        asyncio.run(settings_routes._build_sources_view(None, user_id=1))
