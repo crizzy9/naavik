@@ -275,7 +275,7 @@ async def test_archive_job_soft_deletes_alive_row():
     session = _FakeSession()
     session.exec_queue = [_exec_one(job)]
 
-    await job_service.archive_job(session, 11)
+    await job_service.archive_job(session, 11, user_id=1)
     assert job.deleted_at is not None
     assert job in session.added
 
@@ -286,10 +286,24 @@ async def test_archive_job_noop_when_already_deleted():
     session = _FakeSession()
     session.exec_queue = [_exec_one(job)]
 
-    await job_service.archive_job(session, 12)
+    await job_service.archive_job(session, 12, user_id=1)
     # Already-deleted: no flush, no add.
     assert session.added == []
     assert session.flush_count == 0
+
+
+@pytest.mark.asyncio
+async def test_archive_job_raises_when_user_id_mismatch():
+    """0.7.0.15 IDOR — archive_job rejects cross-user mutation."""
+    job = _make_job(jid=13, user_id=1, deleted_at=None)
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(job)]
+
+    with pytest.raises(PermissionError, match="does not belong to user"):
+        await job_service.archive_job(session, 13, user_id=2)
+    # No mutation when boundary trips.
+    assert job.deleted_at is None
+    assert session.added == []
 
 
 @pytest.mark.asyncio
@@ -299,7 +313,7 @@ async def test_restore_job_clears_deleted_at_when_no_collision():
     # 1. get_job lookup, 2. collision check (None).
     session.exec_queue = [_exec_one(archived), _exec_one(None)]
 
-    out = await job_service.restore_job(session, 21)
+    out = await job_service.restore_job(session, 21, user_id=1)
     assert out is archived
     assert archived.deleted_at is None
 
@@ -312,8 +326,21 @@ async def test_restore_job_raises_on_live_collision():
     session.exec_queue = [_exec_one(archived), _exec_one(live_dup)]
 
     with pytest.raises(ValueError, match="cannot restore"):
-        await job_service.restore_job(session, 21)
+        await job_service.restore_job(session, 21, user_id=1)
     # deleted_at stays set — caller must resolve collision first.
+    assert archived.deleted_at is not None
+
+
+@pytest.mark.asyncio
+async def test_restore_job_raises_when_user_id_mismatch():
+    """0.7.0.15 IDOR — restore_job rejects cross-user mutation."""
+    archived = _make_job(jid=23, user_id=1, deleted_at=datetime.now(UTC))
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(archived)]
+
+    with pytest.raises(PermissionError, match="does not belong to user"):
+        await job_service.restore_job(session, 23, user_id=2)
+    # No mutation when boundary trips.
     assert archived.deleted_at is not None
 
 

@@ -25,6 +25,7 @@ from ui.routes import (
     email,
     fragments,
     integrations,
+    jobs,
     outreach,
     overview,
     profile,
@@ -124,6 +125,7 @@ app.include_router(api_portfolio.router)
 app.include_router(overview.router)
 app.include_router(profile.router)
 app.include_router(discover.router)
+app.include_router(jobs.router)
 app.include_router(tracking.router)
 app.include_router(outreach.router)
 app.include_router(ui_settings.router)

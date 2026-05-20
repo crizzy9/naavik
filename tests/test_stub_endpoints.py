@@ -164,7 +164,34 @@ def test_jobs_list(client):
     assert len(body["items"]) > 0
 
 
-def test_jobs_get_by_id(client):
+def test_jobs_get_by_id(client, monkeypatch):
+    """Plan 36 § A moved `GET /api/v1/jobs/{id}` from `ui/routes/discover.py`
+    to `ui/routes/jobs.py` and tightened it to require auth + scope to the
+    requesting user. Test now stubs `job_service.get_job` so the endpoint's
+    shape stays covered without needing a live DB connection.
+    """
+    from types import SimpleNamespace
+
+    from services import job_service
+
+    async def _get_job(session, job_id):
+        if job_id != 101:
+            return None
+        return SimpleNamespace(
+            id=101,
+            user_id=1,
+            company="Stripe",
+            role="Senior Engineer",
+            deleted_at=None,
+            model_dump=lambda mode="json": {
+                "id": 101,
+                "user_id": 1,
+                "company": "Stripe",
+                "role": "Senior Engineer",
+            },
+        )
+
+    monkeypatch.setattr(job_service, "get_job", _get_job)
     r = client.get("/api/v1/jobs/101")
     assert r.status_code == 200
     assert r.json()["company"] == "Stripe"

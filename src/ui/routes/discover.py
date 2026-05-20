@@ -7,8 +7,11 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import ValidationError
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db import sample_data as sd
+from db.session import get_session
 from models import User
 from models.enums import (
     JobQueueState,
@@ -21,14 +24,44 @@ from ui.templates_setup import templates
 router = APIRouter()
 
 
+def _effective_user_id(user: User | None) -> int | None:
+    """Resolve the per-request user_id for live-DB scoping.
+
+    Returns `user.id` for real JWT sessions; `None` for the fake-session
+    transitional stub. When `None`, `build_discover_ctx` skips the live
+    `job_service.list_jobs` call and falls through to `db.sample_data` —
+    the path the fake-session has used since plan 09. Real-auth callers
+    that wire through `Depends(require_password_complete)` always get
+    the live-DB path.
+    """
+    return user.id if user is not None else None
+
+
+def _parse_filters_or_422(request: Request) -> dctx.JobFilter:
+    """Parse the request querystring; surface Pydantic errors as 422."""
+    try:
+        return dctx.parse_filters_from_query(request.query_params)
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Page handlers
 # ─────────────────────────────────────────────────────────────────────────
 
 
 @router.get("/discover", response_class=HTMLResponse, name="discover")
-async def get_discover(request: Request):
-    ctx = await dctx.build_discover_ctx()
+async def get_discover(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    filters = _parse_filters_or_422(request)
+    ctx = await dctx.build_discover_ctx(
+        session,
+        user_id=_effective_user_id(user),
+        filters=filters,
+    )
     ctx["active_sidebar"] = "jobs"
     ctx["active_template_path"] = "/discover"
     return templates.TemplateResponse(request, "pages/discover.html", ctx)
@@ -164,13 +197,25 @@ async def fragment_expanded(request: Request, job_id: int):
     response_class=HTMLResponse,
     name="discover_queue_fragment",
 )
-async def fragment_queue(request: Request):
-    """Plan 09a · Issue 8D — return the swipe queue grid as an inline fragment.
+async def fragment_queue(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Plan 09a / 36 — swipe queue grid as an HTMX-swappable fragment.
 
-    Used by the "Back to queue" button inside the expanded review fragment to
-    restore the 2-column queue layout in ``#discover-main``.
+    Two callers:
+      • "Back to queue" button inside the expanded review fragment.
+      • Filter toolbar (plan 36 § A) — hx-get with the active filter
+        querystring; we re-build the ctx with the parsed JobFilter so the
+        chip row + the queue render in sync.
     """
-    ctx = await dctx.build_discover_ctx()
+    filters = _parse_filters_or_422(request)
+    ctx = await dctx.build_discover_ctx(
+        session,
+        user_id=_effective_user_id(user),
+        filters=filters,
+    )
     return templates.TemplateResponse(request, "pages/_discover_queue.html", ctx)
 
 
@@ -205,14 +250,6 @@ async def get_jobs(
     if score_min is not None:
         items = [j for j in items if j.score >= score_min]
     return {"items": [j.model_dump(mode="json") for j in items], "next_cursor": None}
-
-
-@router.get("/api/v1/jobs/{job_id}", name="jobs_get")
-async def get_job_by_id(job_id: int):
-    job = await sd.get_job(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job.model_dump(mode="json")
 
 
 @router.post("/api/v1/jobs/by-url", name="jobs_by_url")
