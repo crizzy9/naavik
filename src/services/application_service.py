@@ -911,3 +911,64 @@ async def stuck_drafts(session: AsyncSession, *, user_id: int) -> list[Applicati
     return [
         a for a in apps if a.submission_artifacts and a.submission_artifacts.get("last_failure")
     ]
+
+
+# ── Submission-result observability (plan 54 / 0.2.5.02) ───────────────
+
+
+async def aggregate_submission_failures(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    since_days: int = 30,
+) -> list[dict]:
+    """Aggregate `last_failure.kind` counts per board for Settings · Submissions.
+
+    Plan 54 / 0.2.5.02. Single SELECT over `Application` grouped by
+    `(board, last_failure.kind)`. Soft-deleted + null-artifacts rows are
+    excluded. Returns rows shaped ``{board, failure_kind, count, latest_at}``
+    ordered by ``count DESC``. Empty list for users with no failed DRAFTs.
+
+    Postgres path uses ``func.jsonb_extract_path_text`` — typed expression
+    API, never raw SQL. Tests without a Postgres engine override this helper
+    via monkeypatch at the route layer (no on-disk JSONB query runs).
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=since_days)
+    kind_expr = func.jsonb_extract_path_text(
+        Application.submission_artifacts, "last_failure", "kind"
+    )
+    stmt = (
+        select(
+            Application.board,
+            kind_expr.label("failure_kind"),
+            func.count().label("cnt"),
+            func.max(Application.updated_at).label("latest_at"),
+        )
+        .where(
+            Application.user_id == user_id,
+            Application.deleted_at.is_(None),
+            Application.submission_artifacts.is_not(None),
+            Application.submission_artifacts.has_key("last_failure"),
+            Application.updated_at >= cutoff,
+            kind_expr.is_not(None),
+        )
+        .group_by(Application.board, kind_expr)
+        .order_by(func.count().desc())
+    )
+    rows = (await session.exec(stmt)).all()
+    out: list[dict] = []
+    for row in rows:
+        # session.exec over `select(col, ...)` yields tuples; unpack defensively.
+        if isinstance(row, tuple):
+            board, kind, count, latest_at = row
+        else:
+            board, kind, count, latest_at = row[0], row[1], row[2], row[3]
+        out.append(
+            {
+                "board": board.value if board is not None else None,
+                "failure_kind": kind,
+                "count": int(count),
+                "latest_at": latest_at,
+            }
+        )
+    return out

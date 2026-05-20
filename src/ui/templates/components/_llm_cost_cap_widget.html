@@ -1,0 +1,76 @@
+{#
+  _llm_cost_cap_widget.html — Settings · LLM Provider daily cost-cap progress.
+
+  Plan 54 / 0.2.5.03. Three states:
+    1. cost_cap_usd is None  → render "no cap set" placeholder w/ .env hint.
+    2. today_cost_usd < cap  → render emerald progress bar w/ pct + "$X.XX of $Y.YY today".
+    3. today_cost_usd ≥ cap  → render rose progress bar w/ triangle-alert + "Cap exceeded — Wave 6 throttles" note.
+
+  Args:
+    today_cost_usd : float       — sum of ApiUsage.cost_usd since UTC midnight today
+    cost_cap_usd   : float | None — Settings.daily_llm_cost_cap_usd (None if unset)
+#}
+{% set _pct = (100.0 * today_cost_usd / cost_cap_usd) if cost_cap_usd and cost_cap_usd > 0 else 0.0 %}
+{% set _over = cost_cap_usd is not none and cost_cap_usd > 0 and today_cost_usd >= cost_cap_usd %}
+<section
+  data-llm-cost-cap-widget
+  class="bg-slate-900 border border-slate-800 rounded-lg p-4"
+  aria-labelledby="llm-cost-cap-title">
+  <header class="flex items-center justify-between gap-3 mb-3">
+    <div>
+      <h3 id="llm-cost-cap-title" class="text-sm font-medium text-slate-50">Daily cost cap</h3>
+      <p class="text-xs text-slate-400 mt-0.5">Resets at midnight UTC.</p>
+    </div>
+    {% if cost_cap_usd is none %}
+      <span data-llm-cap-state="unset"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase tracking-wide bg-slate-800 text-slate-400 ring-1 ring-slate-700">
+        <i data-lucide="circle" class="h-3 w-3" stroke-width="1.5"></i>
+        no cap set
+      </span>
+    {% elif _over %}
+      <span data-llm-cap-state="over"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase tracking-wide bg-rose-500/15 text-rose-200 ring-1 ring-rose-500/30">
+        <i data-lucide="triangle-alert" class="h-3 w-3" stroke-width="1.5"></i>
+        cap exceeded
+      </span>
+    {% else %}
+      <span data-llm-cap-state="ok"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase tracking-wide bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30">
+        <i data-lucide="check-circle-2" class="h-3 w-3" stroke-width="1.5"></i>
+        ok
+      </span>
+    {% endif %}
+  </header>
+
+  {% if cost_cap_usd is none %}
+    <div class="text-xs text-slate-400 leading-relaxed" data-llm-cap-placeholder>
+      No daily cap set. Set
+      <code class="font-mono text-slate-200">DAILY_LLM_COST_CAP_USD</code>
+      in <code class="font-mono text-slate-200">.env</code> to gate runaway LLM spend.
+    </div>
+    <div class="mt-2 text-xs text-slate-500 tabular-nums">
+      <span data-llm-cost-today>${{ '%.2f' | format(today_cost_usd) }}</span>
+      spent today.
+    </div>
+  {% else %}
+    <progress
+      data-llm-cap-progress
+      class="progress {{ 'progress-error' if _over else 'progress-primary' }} w-full h-2"
+      value="{{ today_cost_usd }}"
+      max="{{ cost_cap_usd }}"></progress>
+    <div class="mt-2 flex items-baseline justify-between gap-2 text-xs tabular-nums">
+      <span class="text-slate-300">
+        <span data-llm-cost-today>${{ '%.2f' | format(today_cost_usd) }}</span>
+        of
+        <span data-llm-cost-cap>${{ '%.2f' | format(cost_cap_usd) }}</span>
+        today
+      </span>
+      <span data-llm-cost-pct class="text-slate-400">{{ '%.0f' | format(_pct) }}%</span>
+    </div>
+    {% if _over %}
+      <p class="mt-2 text-[11px] text-rose-300 leading-relaxed" data-llm-cap-warning>
+        Cap exceeded — Wave 6 will throttle new LLM calls when enforcement ships.
+      </p>
+    {% endif %}
+  {% endif %}
+</section>

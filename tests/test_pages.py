@@ -114,17 +114,18 @@ def test_page_renders(client: TestClient, auth_cookies, slug, url, must_have, mu
         assert sub not in body, f"{slug}: forbidden {sub!r} in response"
 
 
-def test_settings_all_six_tabs(client: TestClient, auth_cookies, monkeypatch):
-    """Plan 09 § H — Settings ships all 6 tabs.
+def test_settings_all_seven_tabs(client: TestClient, auth_cookies, monkeypatch):
+    """Plan 54 / 0.2.5 closeout — Settings now ships 7 tabs (adds `submissions`).
 
-    `/settings/sources` requires `Depends(get_session)` (plan 49 / 0.2.0.16);
-    override + patch service layer so the test stays DB-independent.
+    `/settings/sources`, `/settings/submissions`, and `/settings/llm-provider`
+    each `Depends(get_session)` (plans 49 + 54). Override + patch service
+    layer so the test stays DB-independent.
     """
     from types import SimpleNamespace
 
     from db.session import get_session
     from main import app
-    from services import job_service, settings_service
+    from services import application_service, job_service, llm_tracker, settings_service
 
     class _NoopSession:
         async def commit(self):
@@ -165,8 +166,20 @@ def test_settings_all_six_tabs(client: TestClient, auth_cookies, monkeypatch):
     async def _fake_runs(session, *, user_id):
         return {}
 
+    async def _fake_recent_runs(session, *, user_id, limit=50):
+        return []
+
+    async def _fake_failures(session, *, user_id, since_days=30):
+        return []
+
+    async def _fake_today_cost(session, *, user_id):
+        return 0.0
+
     monkeypatch.setattr(settings_service, "get_or_create", _fake_get_or_create)
     monkeypatch.setattr(job_service, "list_recent_scrape_runs_by_source", _fake_runs)
+    monkeypatch.setattr(job_service, "list_recent_scrape_runs", _fake_recent_runs)
+    monkeypatch.setattr(application_service, "aggregate_submission_failures", _fake_failures)
+    monkeypatch.setattr(llm_tracker, "today_cost_usd", _fake_today_cost)
     app.dependency_overrides[get_session] = _fake_get_session
     try:
         for tab in (
@@ -176,6 +189,7 @@ def test_settings_all_six_tabs(client: TestClient, auth_cookies, monkeypatch):
             "notifications",
             "auto-apply",
             "sources",
+            "submissions",
         ):
             r = client.get(f"/settings/{tab}", cookies=auth_cookies)
             assert r.status_code == 200, f"/settings/{tab}: HTTP {r.status_code}"
@@ -427,19 +441,50 @@ def test_settings_deployment_on_disk_panel_lists_env_not_vault(
 def test_settings_llm_tab_renders_env_indicators_not_api_key_input(
     client: TestClient,
     auth_cookies,
+    monkeypatch,
 ):
-    """Plan 26: API-key password input removed; env-presence indicators rendered."""
-    r = client.get("/settings/llm-provider", cookies=auth_cookies)
-    assert r.status_code == 200
-    body = r.text
-    # No password input or hidden api_key form field.
-    assert 'name="api_key"' not in body
-    assert 'name="ollama_base_url"' not in body
-    # New env indicators present.
-    assert 'data-env-indicator="anthropic"' in body
-    assert "ANTHROPIC_API_KEY" in body
-    assert "OPENAI_API_KEY" in body
-    assert "OLLAMA_BASE_URL" in body
+    """Plan 26: API-key password input removed; env-presence indicators rendered.
+
+    Plan 54 / 0.2.5.03: `/settings/llm-provider` is now its own route w/
+    `Depends(get_session)` so the daily cost-cap widget can query ApiUsage.
+    Override session + stub `today_cost_usd` for DB-free render.
+    """
+    from db.session import get_session
+    from main import app
+    from services import llm_tracker
+
+    class _NoopSession:
+        async def commit(self):
+            return None
+
+        async def rollback(self):
+            return None
+
+        async def close(self):
+            return None
+
+    async def _fake_get_session():
+        yield _NoopSession()
+
+    async def _fake_today_cost(session, *, user_id):
+        return 0.0
+
+    monkeypatch.setattr(llm_tracker, "today_cost_usd", _fake_today_cost)
+    app.dependency_overrides[get_session] = _fake_get_session
+    try:
+        r = client.get("/settings/llm-provider", cookies=auth_cookies)
+        assert r.status_code == 200
+        body = r.text
+        # No password input or hidden api_key form field.
+        assert 'name="api_key"' not in body
+        assert 'name="ollama_base_url"' not in body
+        # New env indicators present.
+        assert 'data-env-indicator="anthropic"' in body
+        assert "ANTHROPIC_API_KEY" in body
+        assert "OPENAI_API_KEY" in body
+        assert "OLLAMA_BASE_URL" in body
+    finally:
+        app.dependency_overrides.pop(get_session, None)
 
 
 def test_settings_notifications_tab_renders_env_indicators_not_inputs(

@@ -118,6 +118,14 @@
         {% endwith %}
       </div>
 
+      {# Plan 54 / 0.2.5.03 — daily cost-cap progress widget. #}
+      <div class="mt-4">
+        {% with today_cost_usd=(today_cost_usd | default(0.0)),
+                cost_cap_usd=(cost_cap_usd | default(None)) %}
+          {% include "components/_llm_cost_cap_widget.html" %}
+        {% endwith %}
+      </div>
+
       <div class="mt-4 flex items-center gap-2 text-xs text-slate-500">
         <i data-lucide="lock" class="h-3.5 w-3.5" stroke-width="1.5"></i>
         Naavik never sends your API key to any third party. Filesystem permissions on <code class="font-mono">.env</code> are the operative defense.

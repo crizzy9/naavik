@@ -23,8 +23,11 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import func
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from llm.base import (
@@ -194,3 +197,27 @@ async def tracked_call(
             error_kind=None,
         )
         return result
+
+
+# ── Daily cost-cap aggregate (plan 54 / 0.2.5.03) ──────────────────────
+
+
+async def today_cost_usd(session: AsyncSession, *, user_id: int) -> float:
+    """Sum of `ApiUsage.cost_usd` for `user_id` since midnight UTC today.
+
+    Plan 54 / 0.2.5.03. Drives the Settings · LLM Provider daily-cap progress
+    widget. Single SELECT with `func.coalesce(func.sum(...), 0)` so an empty
+    set returns ``0.0`` cleanly without a None branch in the caller.
+    Boundary uses ``datetime.now(UTC).replace(hour=0, minute=0, second=0,
+    microsecond=0)`` — local-tz `combine(date.today(), time.min)` would roll
+    spend into the wrong window for non-UTC operators.
+    """
+    midnight = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    stmt = select(func.coalesce(func.sum(ApiUsage.cost_usd), 0.0)).where(
+        ApiUsage.user_id == user_id,
+        ApiUsage.occurred_at >= midnight,
+    )
+    result = await session.exec(stmt)
+    row = result.one()
+    value = row[0] if isinstance(row, tuple) else row
+    return float(value or 0.0)

@@ -126,6 +126,7 @@ def _patch_route_helpers(monkeypatch):
     state: dict = {
         "settings": _make_settings(),
         "runs": {},
+        "recent_runs": [],
     }
 
     async def _fake_get_or_create(session, *, user_id):
@@ -134,8 +135,12 @@ def _patch_route_helpers(monkeypatch):
     async def _fake_runs(session, *, user_id):
         return state["runs"]
 
+    async def _fake_recent_runs(session, *, user_id, limit=50):
+        return state["recent_runs"][:limit]
+
     monkeypatch.setattr(settings_service, "get_or_create", _fake_get_or_create)
     monkeypatch.setattr(job_service, "list_recent_scrape_runs_by_source", _fake_runs)
+    monkeypatch.setattr(job_service, "list_recent_scrape_runs", _fake_recent_runs)
     app.dependency_overrides[get_session] = _fake_get_session
     yield state
     app.dependency_overrides.pop(get_session, None)
