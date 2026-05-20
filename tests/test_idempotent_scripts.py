@@ -45,6 +45,10 @@ def test_lucide_is_self_hosted(client: TestClient) -> None:
 def test_base_html_references_self_hosted_lucide(
     client: TestClient,
 ) -> None:
+    """Plan 51 / 0.2.2.02 — jsDelivr primary, `/static/lucide.min.js` as
+    `onerror` fallback. Both references must be present so the chain resolves
+    when the CDN flakes; unpkg stays forbidden per the 09a archive."""
     body = client.get("/login").text
-    assert 'src="/static/lucide.min.js"' in body
+    assert "cdn.jsdelivr.net/npm/lucide" in body, "primary Lucide source is jsDelivr"
+    assert "/static/lucide.min.js" in body, "vendored fallback must remain referenced"
     assert "unpkg.com/lucide" not in body, "should not load Lucide from unpkg"
