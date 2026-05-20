@@ -1,0 +1,57 @@
+{#
+  _rate_limit_editor.html — per-source rate-limit form (rpm + delay_lo + delay_hi).
+
+  Args:
+    view : dict with keys `source` (str), `rate_limit` ({rpm, delay_lo, delay_hi}).
+
+  Plan 58 / 0.2.7.06. HTMX form posts to PUT /api/v1/settings/sources;
+  server reassembles flat `<source>_rpm` / `<source>_lo` / `<source>_hi` form
+  fields into the nested `scraper_rate_limits` JSONB shape and validates via
+  RateLimitConfig (rpm in [0.1, 600]; delay in [0, 600]; lo <= hi). CSRF
+  token injected by plan 45 Jinja context-processor.
+#}
+{% set v = view %}
+<form data-rate-limit-form="{{ v.source }}"
+      hx-put="/api/v1/settings/sources"
+      hx-headers='{"X-CSRF-Token": "{{ csrf_token | default("") }}"}'
+      hx-target="closest [data-source-editor]"
+      hx-swap="outerHTML"
+      class="mt-2 flex flex-col gap-2 text-xs">
+  <h4 class="text-[10px] uppercase tracking-wide text-slate-500">Rate limit</h4>
+  <div class="grid grid-cols-3 gap-2">
+    <label class="flex flex-col gap-1">
+      <span class="text-[10px] text-slate-400">rpm</span>
+      <input type="number" step="0.1" min="0.1" max="600"
+             name="{{ v.source }}_rpm"
+             value="{{ '%.2f' | format(v.rate_limit.rpm) }}"
+             required
+             class="w-full px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-100 font-mono text-xs" />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-[10px] text-slate-400">delay lo (s)</span>
+      <input type="number" step="0.1" min="0" max="600"
+             name="{{ v.source }}_lo"
+             value="{{ '%.1f' | format(v.rate_limit.delay_lo) }}"
+             required
+             class="w-full px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-100 font-mono text-xs" />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-[10px] text-slate-400">delay hi (s)</span>
+      <input type="number" step="0.1" min="0" max="600"
+             name="{{ v.source }}_hi"
+             value="{{ '%.1f' | format(v.rate_limit.delay_hi) }}"
+             required
+             class="w-full px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-100 font-mono text-xs" />
+    </label>
+  </div>
+  <p class="text-[10px] text-slate-500">
+    rpm in [0.1, 600]; delay in [0, 600]s; lo &le; hi.
+  </p>
+  <div class="flex items-center gap-2">
+    <button type="submit"
+            class="px-2.5 py-1 rounded bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-medium">
+      Save
+    </button>
+    <span data-rate-limit-save-status="{{ v.source }}" class="text-[10px] text-slate-500"></span>
+  </div>
+</form>

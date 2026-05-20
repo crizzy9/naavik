@@ -27,9 +27,19 @@ def client() -> TestClient:
     return TestClient(app)
 
 
+_CSRF = "x" * 48
+
+
 @pytest.fixture(scope="module")
 def auth_cookies() -> dict[str, str]:
-    return {"naavik_session": "fake-1"}
+    # Plan 58 / 0.2.7.06 — PUT /api/v1/settings/sources is now gated by
+    # `require_csrf`; tests must send matching cookie + header.
+    return {"naavik_session": "fake-1", "naavik_csrf": _CSRF}
+
+
+@pytest.fixture(scope="module")
+def csrf_headers() -> dict[str, str]:
+    return {"X-CSRF-Token": _CSRF}
 
 
 class _FakeSession:
@@ -55,7 +65,7 @@ async def _fake_get_session():
 
 
 def test_put_sources_rejects_invalid_scraper_rate_limits_with_422(
-    client: TestClient, auth_cookies, monkeypatch
+    client: TestClient, auth_cookies, csrf_headers, monkeypatch
 ):
     """`update_sources` raising `ValidationError` → 422 at the route boundary."""
     from db.session import get_session
@@ -88,6 +98,7 @@ def test_put_sources_rejects_invalid_scraper_rate_limits_with_422(
                 },
             },
             cookies=auth_cookies,
+            headers=csrf_headers,
         )
     finally:
         app.dependency_overrides.pop(get_session, None)
@@ -100,7 +111,9 @@ def test_put_sources_rejects_invalid_scraper_rate_limits_with_422(
     assert len(body["errors"]) >= 1
 
 
-def test_put_sources_passes_all_kwargs_to_service(client: TestClient, auth_cookies, monkeypatch):
+def test_put_sources_passes_all_kwargs_to_service(
+    client: TestClient, auth_cookies, csrf_headers, monkeypatch
+):
     """All 8 kwargs (incl. scraper_rate_limits + keyword/location pairs) reach the service."""
     from db.session import get_session
     from main import app
@@ -138,6 +151,7 @@ def test_put_sources_passes_all_kwargs_to_service(client: TestClient, auth_cooki
             "/api/v1/settings/sources",
             json=payload,
             cookies=auth_cookies,
+            headers=csrf_headers,
         )
     finally:
         app.dependency_overrides.pop(get_session, None)
@@ -164,7 +178,7 @@ _LIVE = os.environ.get("NAAVIK_LIVE_DB", "").strip().lower() in {"1", "true", "y
     not _LIVE,
     reason="set NAAVIK_LIVE_DB=1 (and DATABASE_URL) to run live-DB sources round-trip",
 )
-def test_put_sources_round_trip_persists_all_fields(client: TestClient, auth_cookies):
+def test_put_sources_round_trip_persists_all_fields(client: TestClient, auth_cookies, csrf_headers):
     """All 8 update_sources kwargs round-trip through HTTP + live Postgres."""
     payload = {
         "linkedin_keywords": ["staff engineer", "principal"],
@@ -175,7 +189,9 @@ def test_put_sources_round_trip_persists_all_fields(client: TestClient, auth_coo
             "linkedin": {"rpm": 1.5, "delay_lo": 2.0, "delay_hi": 4.0},
         },
     }
-    r = client.put("/api/v1/settings/sources", json=payload, cookies=auth_cookies)
+    r = client.put(
+        "/api/v1/settings/sources", json=payload, cookies=auth_cookies, headers=csrf_headers
+    )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["linkedin_keywords"] == ["staff engineer", "principal"]

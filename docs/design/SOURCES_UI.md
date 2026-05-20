@@ -2,9 +2,10 @@
 
 > **Canonical reference** — graduated from `docs/plans/49-0.2.0.16-first-run-walkthrough.md` per `AGENTS.md` § Workflow step 4 (filed as ROADMAP row `0.2.0.16`).
 > **Status:** Active. Single source for the Settings · Sources sub-tab — the per-source row contract, the env-vs-DB configured-state composition, the `list_recent_scrape_runs_by_source` projection, and the IDOR + CSRF boundaries the panel relies on.
-> **Last updated:** 2026-05-20 (`0.2.0.16` ships this doc).
-> **Companion docs:** `docs/design/SCREENS.md` § 11 (Settings tab spec), `docs/design/COMPONENTS.md` § H.11 (Settings group — registers `_source_row.html`), `docs/design/JOB_MODEL.md` § F (`job_service` + `JobScrapeRun` references), `docs/design/SCRAPER_BASE.md` § G (rate-limit substrate surfaced read-only).
-> **Downstream plans depending on this contract:** `0.2.0.10a` (operator scheduler control buttons compose into the row's `<details>` popover), `0.2.5.04` (recent-runs history table — "View history →" link from each row), `0.2.5.05` (rate-limit JSONB editor — replaces the read-only `<details>` popover with a writable form), `0.2.5.06` (LinkedIn/Indeed keywords editor — replaces the keywords `<details>` popover with chip-add UX).
+> **Last updated:** 2026-05-20 (`0.2.7.06` ships paired writable editors — `_rate_limit_editor.html` per-source + `_keywords_editor.html` for LinkedIn/Indeed. `<details>` popover bodies switch from read-only prose to inline HTMX forms posting to `PUT /api/v1/settings/sources` (CSRF-gated; flat-field rate-limit unpack + comma-split keywords server-side). No new routes.).
+> Earlier: 2026-05-20 (`0.2.0.16` ships this doc).
+> **Companion docs:** `docs/design/SCREENS.md` § 11 (Settings tab spec), `docs/design/COMPONENTS.md` § H.11 (Settings group — registers `_source_row.html` + `_rate_limit_editor.html` + `_keywords_editor.html`), `docs/design/JOB_MODEL.md` § F (`job_service` + `JobScrapeRun` references), `docs/design/SCRAPER_BASE.md` § G (rate-limit substrate surfaced read-only).
+> **Downstream plans depending on this contract:** `0.2.0.10a` (operator scheduler control buttons compose into the row's `<details>` popover), `0.2.5.04` (recent-runs history table — "View history →" link from each row).
 
 ---
 
@@ -21,6 +22,8 @@ The Settings · Sources sub-tab is the operator-facing surface for "is each scra
 | Sources page (full HTML) | `GET /settings/sources` | full page (`base.html`) | `src/ui/routes/settings.py:get_settings_sources` |
 | Sources fragment (HX-Request: true) | `GET /settings/sources` (HX-Request header) | HTMX fragment | same handler — branches on `request.headers["HX-Request"]` |
 | Per-source row partial | `src/ui/templates/components/_source_row.html` | include | registered in COMPONENTS.md § H.11 (count 7 → 8; total 88 → 89) |
+| Rate-limit editor partial (plan 58) | `src/ui/templates/components/_rate_limit_editor.html` | include | registered in COMPONENTS.md § H.11 (count 8 → 9; total 89 → 90). Renders inside every popover; flat HTMX form fields `<source>_rpm` / `_lo` / `_hi` reassemble server-side. |
+| Keywords editor partial (plan 58) | `src/ui/templates/components/_keywords_editor.html` | include | registered in COMPONENTS.md § H.11 (count 9 → 10; total 90 → 91). Renders inside LinkedIn + Indeed popovers (`kind="db"` branch only). Comma-split server-side. |
 | Tab body | `src/ui/templates/pages/_settings_sources.html` | include from `pages/settings.html` | rewritten in `0.2.0.16`; orchestrates 6 `_source_row.html` includes |
 
 Pre-existing surfaces this contract does **not** modify:
@@ -143,10 +146,9 @@ Follow-up rows tracked separately in ROADMAP:
 
 - `0.2.0.10a` (shipped) — `/api/v1/scheduler/*` endpoints; the Sources panel may grow Run / Pause / Resume buttons per row in a future polish row.
 - `0.2.5.04` (shipped) — Scraper-run history table — landed as a single bottom-of-tab table aggregating recent N runs across all sources (vs. anticipated per-row "View history →" link). Surface lives in `pages/_settings_sources.html` § history section. Plan 56 / `0.2.7.21` doc-pointer correction.
-- `0.2.5.05` — Rate-limit JSONB editor at `/settings/rate-limits`; replaces the read-only `<details>` popover on the rate-limit cell.
-- `0.2.5.06` — Writable LinkedIn / Indeed keywords editor; replaces the read-only `<details>` popover for those sources.
+- `0.2.7.06` (shipped) — Paired writable editors: `_rate_limit_editor.html` (every source) + `_keywords_editor.html` (LinkedIn/Indeed). Inline forms inside the `<details>` popover post to `PUT /api/v1/settings/sources` (CSRF-gated; flat `<source>_rpm` / `_lo` / `_hi` form fields collapse server-side into the `scraper_rate_limits[<source>]` nested-dict shape; `<source>_keywords` comma-split into `list[str]`). HTMX form-encoded path returns the re-rendered Sources panel partial; JSON path unchanged. Plan 58.
 
-Manager files `0.2.5.05` + `0.2.5.06` as new ROADMAP rows during BOOKKEEPING per plan 49 OQ.3 lock.
+(Plan 49 OQ.3 originally filed `0.2.5.05` (rate-limit editor) + `0.2.5.06` (keywords editor) as separate rows; the `0.2.5` milestone closed out before either shipped and both got merged into `0.2.7.06` per ROADMAP.md line 321.)
 
 ---
 
