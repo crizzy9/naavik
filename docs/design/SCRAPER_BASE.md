@@ -369,7 +369,7 @@ Naavik does NOT honor `robots.txt`. Industry precedent for job-discovery tools (
 
 ### G.11 — IP rotation / proxy
 
-Out of scope for `0.2.0.13`. Deferred to `0.2.3.03` (Phase 6+) per ROADMAP. When that row lands, a new `Settings.scraper_proxy_url` field + `Crawl4AIClient(proxy_config=...)` plumbing extends this section.
+LinkedIn-specific proxy support shipped in `0.2.7.11` (plan 64). Canonical reference: `docs/design/LINKEDIN_PROXY.md`. Single env var `LINKEDIN_PROXY_URL` (basic-auth-in-URL); `Crawl4AIClient(proxy_config=...)` threads it via `CrawlerRunConfig.proxy_config` per the Crawl4AI 0.8.6 contract. Sticky-per-`Crawl4AIClient`-instance (natural per-cron-firing window); FAIL LOUDLY on proxy failure (never degrade to direct — the silent-fallback-to-residential-IP path is what gets LinkedIn accounts banned). Multi-source proxy infra (Indeed / generic) is deferred to `0.8.0.NN`.
 
 ### G.12 — `consecutive_scrape_failures` interaction
 

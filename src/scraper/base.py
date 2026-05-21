@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from llm.base import LLMProvider
 
     from .crawl4ai_client import Crawl4AIClient
+    from .proxy import ProxyURLConfig
 
 
 class ScraperBase(ABC):
@@ -61,6 +62,7 @@ class ScraperBase(ABC):
         session: AsyncSession | None = None,
         user_id: int | None = None,
         provider: LLMProvider | None = None,
+        proxy_config: ProxyURLConfig | None = None,
     ) -> None:
         if client is None:
             from .crawl4ai_client import Crawl4AIClient
@@ -69,6 +71,7 @@ class ScraperBase(ABC):
                 rate_limit_per_minute=self.rate_limit_per_minute,
                 random_delay_seconds=self.random_delay_seconds,
                 use_undetected_adapter=self.use_undetected_adapter,
+                proxy_config=proxy_config,
             )
         self._client = client
         # AI extraction context (plan 33 § D.3 / D.4). All optional so substrate

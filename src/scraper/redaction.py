@@ -30,11 +30,18 @@ def _strip_control_chars(s: str) -> str:
 
 
 def safe_url(url: str | None) -> str:
-    """Strip query string + fragment; preserve scheme + host + path.
+    """Strip query string + fragment + Basic-auth userinfo; preserve scheme + host + path.
 
     Returns `"<no-url>"` for None / empty input. Non-http(s) schemes return
     `"<scheme-blocked: {scheme} '{path}'>"` so forensics keeps the offending
     input visible without dereferencing risk.
+
+    Plan 64 § D.8: also strips the `user:pass@` userinfo segment of the
+    AUTHORITY. Prior to plan 64 `safe_url` preserved `netloc` verbatim, which
+    leaked `LINKEDIN_PROXY_URL` credentials into log lines + `JobScrapeRun.errors[]`
+    when a proxy-tunneled URL flowed through it. Userinfo strip is now the
+    chokepoint regardless of caller (no separate `safe_proxy_host` required for
+    pass-through URLs).
     """
     if not url:
         return "<no-url>"
@@ -45,7 +52,12 @@ def safe_url(url: str | None) -> str:
     scheme = parts.scheme.lower()
     if scheme and scheme not in _ALLOWED_SCHEMES:
         return f"<scheme-blocked: {scheme} '{parts.path}'>"
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+    # Reconstruct netloc without userinfo (drop `user:pass@`). `parts.hostname`
+    # + `parts.port` preserve IPv6-bracketed hosts (`[::1]:80`) correctly.
+    host = parts.hostname or ""
+    if parts.port is not None:
+        host = f"{host}:{parts.port}"
+    return urlunsplit((parts.scheme, host, parts.path, "", ""))
 
 
 def safe_exc(exc: BaseException) -> str:

@@ -34,6 +34,7 @@ from llm import get_provider as llm_get_provider
 from llm.base import LLMProviderError
 from models import JobScrapeStatus, JobSource, Settings
 from scraper.crawl4ai_client import Crawl4AIClient
+from scraper.proxy import resolve_proxy_config, safe_proxy_host
 from scraper.rate_limit import resolve_rate_limit
 from scraper.sites import scrapers as scraper_registry
 from scraper.types import ScrapeQuery
@@ -57,6 +58,11 @@ _DEFAULT_CRON_SCHEDULES: dict[str, str] = {
 _INDEED_INTERVAL_MINUTES = 90
 
 _CONSECUTIVE_FAIL_THRESHOLD = 3
+
+# Plan 64 § D.6 — emit the LinkedIn-without-proxy warning ONCE per process to
+# avoid drowning per-firing logs. The flag flips True on first observation;
+# subsequent firings stay silent.
+_LINKEDIN_PROXY_WARNED: bool = False
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -155,11 +161,32 @@ async def _scrape_one_user(session, *, settings: Settings, source: JobSource) ->
     # fallback when no operator override exists or when the override fails
     # validation.
     rl_config = resolve_rate_limit(settings, source)
+    # Plan 64 § D — proxy resolution. LinkedIn-only this plan; non-LinkedIn
+    # sources always get None back. Boot-time validation in `config.py`
+    # already caught a malformed env-var; resolver returning None for
+    # LinkedIn means env-var unset (warn once, continue per § D.6 "fail loud
+    # iff configured BUT broken" — unset is a different failure mode).
+    proxy_config = resolve_proxy_config(source)
+    global _LINKEDIN_PROXY_WARNED
+    if source is JobSource.LINKEDIN and proxy_config is None and not _LINKEDIN_PROXY_WARNED:
+        log.warning(
+            "LINKEDIN_PROXY_URL not set; LinkedIn scrapes will use direct "
+            "connection — proxy strongly recommended for production deployments"
+        )
+        _LINKEDIN_PROXY_WARNED = True
     client = Crawl4AIClient(
         rate_limit_per_minute=rl_config.rpm,
         random_delay_seconds=(rl_config.delay_lo, rl_config.delay_hi),
         use_undetected_adapter=scraper_cls.use_undetected_adapter,
+        proxy_config=proxy_config,
     )
+    if proxy_config is not None:
+        log.info(
+            "scraping.%s for user=%s routing through proxy=%s",
+            source.value,
+            settings.user_id,
+            safe_proxy_host(proxy_config.url),
+        )
     scraper = scraper_cls(
         client=client,
         session=session,

@@ -26,6 +26,38 @@ def test_safe_url_blocks_non_http_schemes():
     assert safe_url("javascript:alert(1)") == "<scheme-blocked: javascript 'alert(1)'>"
 
 
+# ── Plan 64 § D.8 — safe_url strips Basic-auth userinfo ──────────────────
+
+
+def test_safe_url_strips_basic_auth_userinfo():
+    """The pre-plan-64 safe_url preserved netloc; plan 64 fixed it."""
+    assert safe_url("https://user:pass@example.com/jobs/1") == "https://example.com/jobs/1"
+
+
+def test_safe_url_strips_userinfo_with_port():
+    assert (
+        safe_url("http://user:pass@gate.example.com:7000/path")
+        == "http://gate.example.com:7000/path"
+    )
+
+
+def test_safe_url_strips_userinfo_with_special_chars():
+    # URL-encoded passwords are common from provider dashboards.
+    assert (
+        safe_url("http://user-sess-XYZ:pass%21word@gate.smartproxy.com:7000/x")
+        == "http://gate.smartproxy.com:7000/x"
+    )
+
+
+def test_safe_url_strips_userinfo_combined_with_query_strip():
+    """Both userinfo AND query string are stripped in one call."""
+    out = safe_url("https://leaked:creds@example.com/jobs/1?token=abc#section")
+    assert out == "https://example.com/jobs/1"
+    assert "leaked" not in out
+    assert "creds" not in out
+    assert "token" not in out
+
+
 def test_safe_exc_truncates_long_message():
     exc = ValueError("x" * 500)
     redacted = safe_exc(exc)
