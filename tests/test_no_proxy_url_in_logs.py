@@ -67,22 +67,19 @@ def test_safe_url_strips_userinfo_no_port():
 # ── ProxyURLConfig: the structured config never re-emits creds in repr ────
 
 
-def test_proxyurlconfig_repr_contains_value_but_only_intended_call_to_str():
-    """Pydantic models repr their fields; the URL itself is the field.
+def test_proxyurlconfig_repr_redacts_credentials():
+    """Plan 64 PR #165 delta-fix LOW-1: `__repr__` override scrubs creds.
 
-    This test acknowledges that the operator-supplied URL IS the value of
-    the `url` field and `repr(c)` reproduces it. The contract is that
-    `repr()` is never written to logs by ANY caller; callers route through
-    `safe_proxy_host(c.url)` or `safe_url(c.url)` first. This test just
-    documents the boundary: if you see a leak in logs, the bug is in the
-    log-call site, not in the model.
+    Pre-fix Pydantic's default repr re-emitted every field verbatim. A future
+    `log.warning("config: %r", cfg)` would leak `user:pass`. Override now
+    routes the URL through `safe_proxy_host` so repr is host:port-only.
     """
     c = ProxyURLConfig(url=PROXY_URL_WITH_LEAK)
-    # repr does carry the URL (this is expected; the model is opaque to
-    # log formatting).
-    assert LEAKED_USER_SENTINEL in repr(c)
-    # But `safe_proxy_host(c.url)` is the safe form callers MUST use.
-    _assert_no_creds_anywhere(safe_proxy_host(c.url))
+    r = repr(c)
+    _assert_no_creds_anywhere(r)
+    # But the safe form (host:port) IS in the repr — operators can still
+    # eyeball which proxy a Settings dump corresponds to.
+    assert "gate.example.com:7000" in r
 
 
 # ── crawl4ai_client log paths (the primary risk surface) ──────────────────
@@ -170,3 +167,181 @@ def test_lint_sentinels_unique_enough_to_catch_leaks():
     # leak. (No assertion needed — just declarative documentation.)
     assert "sentinel" in LEAKED_USER_SENTINEL
     assert "sentinel" in LEAKED_PASS_SENTINEL
+
+
+# ── Plan 64 PR #165 delta-fix HIGH-1 + HIGH-2: scheduler/scraping.py ────
+
+
+@pytest.mark.asyncio
+async def test_scheduler_top_level_exception_does_not_leak_proxy_creds_in_logs(
+    monkeypatch, caplog: pytest.LogCaptureFixture
+):
+    """HIGH-2: pre-fix `log.exception` in scheduler/scraping.py:206 dumped the
+    full traceback (which calls repr on every chained exception), leaking the
+    credentialed proxy URL embedded by upstream libraries.
+
+    Simulates a top-level exception whose message contains the proxy URL
+    verbatim, and asserts no sentinel survives in caplog.
+    """
+    import logging as _logging
+    from types import SimpleNamespace
+
+    from models import JobSource
+    from scheduler import scraping
+
+    class _FakeProxyError(Exception):
+        """Stand-in for httpx.ProxyError — message embeds credentialed URL."""
+
+    async def boom(*a, **kw):
+        # The shape upstream libraries produce.
+        raise _FakeProxyError(f"connect to {PROXY_URL_WITH_LEAK} failed: TCP RST")
+
+    captured_messages: list[str] = []
+
+    async def fake_alert(*, settings, message, http_client=None):
+        captured_messages.append(message)
+
+    monkeypatch.setattr(scraping, "run_scraper", boom)
+    monkeypatch.setattr(scraping, "notify_admin_error", fake_alert)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+
+    settings = SimpleNamespace(
+        user_id=99,
+        sources_enabled={},
+        consecutive_scrape_failures={},
+        workday_companies=[],
+        linkedin_keywords=None,
+        linkedin_location=None,
+        indeed_keywords=None,
+        indeed_location=None,
+        notify_on_errors=True,
+        notify_threshold=0.8,
+        notifications_enabled={},
+        llm_provider=None,
+        llm_model="m",
+        llm_fallback_provider=None,
+        scraper_rate_limits={},
+    )
+
+    class _FakeSession:
+        def __init__(self):
+            self.added = []
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def flush(self):
+            pass
+
+        async def commit(self):
+            pass
+
+    session = _FakeSession()
+
+    with caplog.at_level(_logging.DEBUG, logger="scheduler.scraping"):
+        await scraping._scrape_one_user(session, settings=settings, source=JobSource.LINKEDIN)
+
+    # Assertion 1 (HIGH-2 regression): NO log record contains the sentinels.
+    # Walk every captured record's formatted message AND the underlying exc_info
+    # if present (caplog captures exc_info via record.exc_text).
+    for record in caplog.records:
+        formatted = record.getMessage()
+        _assert_no_creds_anywhere(formatted)
+        # If log.exception was somehow used, exc_text would carry the traceback.
+        if record.exc_text:
+            _assert_no_creds_anywhere(record.exc_text)
+
+    # Assertion 2 (HIGH-1 regression): the Discord webhook body (passed via
+    # notify_admin_error's `message` kwarg) MUST NOT contain the sentinels.
+    assert len(captured_messages) == 1, "expected exactly one admin alert"
+    _assert_no_creds_anywhere(captured_messages[0])
+    # The alert STILL surfaces enough info to be useful — the class name +
+    # safe URL host:port slice are preserved.
+    assert "_FakeProxyError" in captured_messages[0]
+    assert "gate.example.com:7000" in captured_messages[0]
+
+
+@pytest.mark.asyncio
+async def test_scheduler_chained_exception_does_not_leak_proxy_creds(
+    monkeypatch, caplog: pytest.LogCaptureFixture
+):
+    """HIGH-2 + redaction chain walk: `raise NewError from OriginalProxyError`.
+
+    The original wrapped exception carries the credentialed URL; the wrapper
+    has a clean message. Pre-fix the chain walk via `log.exception` would
+    expose the original via the traceback. Post-fix `safe_exc` walks the
+    chain via `__cause__` and URL-strips each level.
+    """
+    import logging as _logging
+    from types import SimpleNamespace
+
+    from models import JobSource
+    from scheduler import scraping
+
+    class _UpstreamProxyError(Exception):
+        pass
+
+    class _ScraperFatal(Exception):
+        pass
+
+    async def boom(*a, **kw):
+        try:
+            raise _UpstreamProxyError(f"proxy connect failed: {PROXY_URL_WITH_LEAK}")
+        except _UpstreamProxyError as cause:
+            raise _ScraperFatal("scraper invocation failed") from cause
+
+    captured_messages: list[str] = []
+
+    async def fake_alert(*, settings, message, http_client=None):
+        captured_messages.append(message)
+
+    monkeypatch.setattr(scraping, "run_scraper", boom)
+    monkeypatch.setattr(scraping, "notify_admin_error", fake_alert)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+
+    settings = SimpleNamespace(
+        user_id=99,
+        sources_enabled={},
+        consecutive_scrape_failures={},
+        workday_companies=[],
+        linkedin_keywords=None,
+        linkedin_location=None,
+        indeed_keywords=None,
+        indeed_location=None,
+        notify_on_errors=True,
+        notify_threshold=0.8,
+        notifications_enabled={},
+        llm_provider=None,
+        llm_model="m",
+        llm_fallback_provider=None,
+        scraper_rate_limits={},
+    )
+
+    class _FakeSession:
+        def __init__(self):
+            self.added = []
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def flush(self):
+            pass
+
+        async def commit(self):
+            pass
+
+    session = _FakeSession()
+
+    with caplog.at_level(_logging.DEBUG, logger="scheduler.scraping"):
+        await scraping._scrape_one_user(session, settings=settings, source=JobSource.LINKEDIN)
+
+    for record in caplog.records:
+        _assert_no_creds_anywhere(record.getMessage())
+        if record.exc_text:
+            _assert_no_creds_anywhere(record.exc_text)
+
+    assert len(captured_messages) == 1
+    _assert_no_creds_anywhere(captured_messages[0])
+    # Chain class names preserved for forensics.
+    assert "_ScraperFatal" in captured_messages[0]
+    assert "_UpstreamProxyError" in captured_messages[0]

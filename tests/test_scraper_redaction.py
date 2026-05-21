@@ -1,4 +1,4 @@
-"""Redaction helper tests — plan 31 § D.7 #1-#4 + plan 32 § D.2-D.3.
+"""Redaction helper tests — plan 31 § D.7 #1-#4 + plan 32 § D.2-D.3 + plan 64 PR #165 fix.
 
 Pure-function tests; no DB, no fixtures, no Crawl4AI.
 """
@@ -96,3 +96,167 @@ def test_safe_exc_strips_ansi_escape_sequences():
     assert "\x00" not in redacted
     assert "boom" in redacted
     assert "secret" in redacted
+
+
+# ── Plan 64 PR #165 delta-fix — safe_msg URL-strip (MED) ──────────────────
+
+
+def test_safe_msg_strips_proxy_userinfo_from_embedded_url():
+    """MED: pre-fix safe_msg left embedded URLs intact, leaking proxy creds.
+
+    Upstream libraries (httpx, Playwright, crawl4ai) routinely embed the
+    target URL verbatim in their error messages. With Basic-auth in URL form
+    that URL carries `user:pass@`, so the leak path was free-text errors
+    flowing through safe_msg into log.warning.
+    """
+    raw = "connect failed for https://leakeduser123:leakedpass456@proxy.example.com:8080/path"
+    redacted = safe_msg(raw)
+    assert "leakeduser123" not in redacted
+    assert "leakedpass456" not in redacted
+    assert "proxy.example.com:8080" in redacted
+
+
+def test_safe_msg_strips_multiple_embedded_urls():
+    """Two URLs in one message — both get URL-stripped."""
+    raw = "tried http://user1:pass1@a.example:7000 then https://user2:pass2@b.example:8443/path"
+    redacted = safe_msg(raw)
+    assert "user1" not in redacted
+    assert "pass1" not in redacted
+    assert "user2" not in redacted
+    assert "pass2" not in redacted
+    assert "a.example:7000" in redacted
+    assert "b.example:8443" in redacted
+
+
+def test_safe_msg_preserves_message_without_url():
+    raw = "fatal: index out of range"
+    redacted = safe_msg(raw)
+    assert redacted == "fatal: index out of range"
+
+
+def test_safe_msg_url_strip_runs_before_truncation():
+    """Credentials at the start of a long message survive the URL-strip even if
+    the message would otherwise be capped past them."""
+    raw = "https://leakuserSTART:leakpassSTART@gate.example.com:7000 " + ("x" * 400)
+    redacted = safe_msg(raw)
+    assert "leakuserSTART" not in redacted
+    assert "leakpassSTART" not in redacted
+
+
+# ── Plan 64 PR #165 delta-fix — safe_exc chain walk + URL strip (HIGH) ────
+
+
+def test_safe_exc_flat_strips_proxy_url_from_message():
+    """HIGH: a flat exception carrying a proxy URL in its message must redact."""
+
+    class ProxyError(Exception):
+        pass
+
+    exc = ProxyError("connect to https://leakuser:leakpass@proxy.example.com:8080 failed")
+    redacted = safe_exc(exc)
+    assert "leakuser" not in redacted
+    assert "leakpass" not in redacted
+    assert "proxy.example.com:8080" in redacted
+    assert redacted.startswith("ProxyError: ")
+
+
+def test_safe_exc_walks_chained_cause():
+    """HIGH: chained-exception `raise X from Y` — both levels URL-stripped."""
+
+    class OriginalProxyError(Exception):
+        pass
+
+    class WrapperError(Exception):
+        pass
+
+    try:
+        try:
+            raise OriginalProxyError(
+                "tcp connect to https://leakuser:leakpass@proxy.example.com:8080 timed out"
+            )
+        except OriginalProxyError as cause:
+            raise WrapperError("scrape failed during fetch") from cause
+    except WrapperError as exc:
+        redacted = safe_exc(exc)
+
+    assert "leakuser" not in redacted
+    assert "leakpass" not in redacted
+    assert "WrapperError" in redacted
+    assert "OriginalProxyError" in redacted
+    assert "caused by:" in redacted
+    assert "proxy.example.com:8080" in redacted
+
+
+def test_safe_exc_walks_implicit_context():
+    """During-handling-of chaining (`__context__`) — same redaction."""
+
+    class A(Exception):
+        pass
+
+    class B(Exception):
+        pass
+
+    try:
+        try:
+            raise A("first: http://leakuserA:leakpassA@a.example:7000")
+        except A:
+            # No `from` → context only, not cause.
+            raise B("wrapper")  # noqa: B904
+    except B as exc:
+        redacted = safe_exc(exc)
+
+    assert "leakuserA" not in redacted
+    assert "leakpassA" not in redacted
+    assert "B:" in redacted
+    assert "A:" in redacted
+
+
+def test_safe_exc_truncates_at_max_len():
+    """Default max_len=500 truncates a chain that would otherwise be longer."""
+
+    class E1(Exception):
+        pass
+
+    class E2(Exception):
+        pass
+
+    try:
+        try:
+            raise E1("x" * 300)
+        except E1 as cause:
+            raise E2("y" * 300) from cause
+    except E2 as exc:
+        redacted = safe_exc(exc)
+
+    assert len(redacted) <= 500
+
+
+def test_safe_exc_custom_max_len():
+    """`max_len` parameter caps the joined output."""
+    exc = ValueError("a" * 1000)
+    redacted = safe_exc(exc, max_len=50)
+    assert len(redacted) <= 50
+
+
+def test_safe_exc_depth_limit_terminates_self_referential_chain():
+    """Pathological self-referential chain doesn't infinite-loop."""
+
+    class Looping(Exception):
+        pass
+
+    exc = Looping("looped")
+    # Cycle by hand — __cause__ pointing back at itself.
+    exc.__cause__ = exc  # noqa: PLW0177  not really; this is the cycle
+    # Must terminate (the seen-set guard catches the cycle).
+    redacted = safe_exc(exc)
+    assert "Looping" in redacted
+
+
+def test_safe_exc_signature_backward_compatible():
+    """Single-arg call still works (existing test contract)."""
+    exc = ValueError("x" * 500)
+    redacted = safe_exc(exc)
+    # Single level → per-level msg cap is 200, prefix is "ValueError: ".
+    assert redacted.startswith("ValueError: ")
+    # safe_msg caps message at 200; total len = "ValueError: " + 200 = 212
+    assert len(redacted) <= 220

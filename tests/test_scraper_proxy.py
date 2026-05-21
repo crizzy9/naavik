@@ -106,6 +106,52 @@ class TestProxyURLConfigValidator:
         assert pc.username == "user"
         assert pc.password == "pass"
 
+    # ── Plan 64 PR #165 delta-fix LOW-2: reject degenerate userinfo ──────
+
+    def test_empty_password_in_userinfo_rejected(self):
+        """`user:@host:port` — empty password after the colon."""
+        with pytest.raises(ValidationError):
+            ProxyURLConfig(url="http://user:@gate.example.com:7000")
+
+    def test_empty_username_in_userinfo_rejected(self):
+        """`:pass@host:port` — empty username before the colon."""
+        with pytest.raises(ValidationError):
+            ProxyURLConfig(url="http://:pass@gate.example.com:7000")
+
+    # ── Plan 64 PR #165 delta-fix LOW-1: __repr__ must not leak creds ────
+
+    def test_repr_does_not_expose_basic_auth_credentials(self):
+        """`repr(cfg)` must NOT contain `user:pass`.
+
+        Pydantic's default repr re-emits every field value. If any future log
+        site does `log.warning("config: %r", cfg)` the credentials leak. The
+        override produces host:port-only via `safe_proxy_host`.
+        """
+        c = ProxyURLConfig(url="http://verysecretuser:verysecretpass@gate.example.com:7000")
+        r = repr(c)
+        assert "verysecretuser" not in r
+        assert "verysecretpass" not in r
+        # But the safe form IS in the repr.
+        assert "gate.example.com:7000" in r
+
+    def test_repr_includes_provider_hint(self):
+        c = ProxyURLConfig(
+            url="http://user:pass@gate.example.com:7000",
+            provider_hint="smartproxy",
+        )
+        r = repr(c)
+        assert "smartproxy" in r
+        assert "user" not in r
+        assert "pass" not in r
+
+    def test_repr_shape_is_stable(self):
+        """The repr shape stays human-readable for forensics."""
+        c = ProxyURLConfig(url="http://u:p@gate.example.com:7000")
+        r = repr(c)
+        assert r.startswith("ProxyURLConfig(")
+        assert "url=" in r
+        assert "provider_hint=" in r
+
 
 # ── safe_proxy_host redaction ─────────────────────────────────────────────
 

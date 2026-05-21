@@ -36,6 +36,7 @@ from models import JobScrapeStatus, JobSource, Settings
 from scraper.crawl4ai_client import Crawl4AIClient
 from scraper.proxy import resolve_proxy_config, safe_proxy_host
 from scraper.rate_limit import resolve_rate_limit
+from scraper.redaction import safe_exc
 from scraper.sites import scrapers as scraper_registry
 from scraper.types import ScrapeQuery
 from services.notifications import notify_admin_error
@@ -203,23 +204,36 @@ async def _scrape_one_user(session, *, settings: Settings, source: JobSource) ->
             triggered_by="cron",
         )
     except Exception as exc:  # noqa: BLE001 — per-user isolation
-        log.exception(
+        # Plan 64 PR #165 delta-fix HIGH-1 + HIGH-2: `log.exception` would
+        # attach the full traceback (which embeds `repr(exc)` for every
+        # chained level); upstream libraries like httpx / Playwright /
+        # crawl4ai routinely embed the credentialed proxy URL in their
+        # exception messages. Switch to `log.error` + `safe_exc` so the
+        # chain is URL-stripped before reaching the log handler. Trade-off:
+        # we lose the stack trace; we gain guaranteed credential redaction.
+        # Telemetry surfaces (JobScrapeRun.errors, raw_meta) carry the
+        # safe form too; full traceback is recoverable via debugger if a
+        # repro is needed.
+        redacted = safe_exc(exc)
+        log.error(
             "scraping.%s failed for user=%s: %s",
             source.value,
             settings.user_id,
-            exc,
+            redacted,
         )
         counters[source.value] = previous_failures + 1
         settings.consecutive_scrape_failures = counters
         session.add(settings)
         # Tier-1 admin signal for top-level catastrophes (CancelledError,
         # DB connect failures) — these never produced a JobScrapeRun row,
-        # so the operator has no other path to learn this happened.
+        # so the operator has no other path to learn this happened. The
+        # `redacted` form goes into the Discord webhook body too; raw
+        # `str(exc)` would leak creds via the chain.
         await notify_admin_error(
             settings=settings,
             message=(
                 f"scraping.{source.value} cron raised at top level "
-                f"for user={settings.user_id}: {exc}"
+                f"for user={settings.user_id}: {redacted}"
             ),
         )
         return

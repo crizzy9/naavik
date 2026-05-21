@@ -77,11 +77,35 @@ class ProxyURLConfig(BaseModel):
             raise ValueError("proxy URL must not carry query string")
         if parts.fragment:
             raise ValueError("proxy URL must not carry fragment")
+        # Plan 64 PR #165 delta-fix LOW-2: reject degenerate userinfo shapes
+        # `user:@host:port` (empty pass) + `:pass@host:port` (empty user).
+        # `urlsplit` accepts both but proxy auth requires both halves to be
+        # non-empty — empty halves are an operator-misconfig footgun that
+        # would otherwise reach Crawl4AI's `ProxyConfig.from_string` and
+        # produce confusing 407 Auth Required errors at scrape-time.
+        if parts.username is not None or parts.password is not None:
+            if not parts.username:
+                raise ValueError("proxy URL has empty username in userinfo")
+            if not parts.password:
+                raise ValueError("proxy URL has empty password in userinfo")
         return v
 
     def to_crawl4ai(self) -> ProxyConfig:
         """Convert to a Crawl4AI `ProxyConfig` via `ProxyConfig.from_string`."""
         return ProxyConfig.from_string(self.url)
+
+    def __repr__(self) -> str:
+        """Plan 64 PR #165 delta-fix LOW-1: redacted repr — never expose creds.
+
+        Pydantic's default `__repr__` reproduces every field value verbatim,
+        which includes the operator's `user:pass@host:port` URL. If any
+        future log site does `log.warning("config: %r", cfg)` the credentials
+        leak. Override to a host:port-only shape via `safe_proxy_host`.
+        """
+        return (
+            f"ProxyURLConfig(url='{safe_proxy_host(self.url)}', "
+            f"provider_hint={self.provider_hint!r})"
+        )
 
 
 def safe_proxy_host(url: str | None) -> str:
