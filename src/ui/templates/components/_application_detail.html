@@ -148,7 +148,24 @@
     {% endif %}
 
     <section data-testid="detail-documents">
-      <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Documents</div>
+      <div class="flex items-baseline justify-between mb-2 gap-3">
+        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Documents</div>
+        {# Plan 86 § W3.2 / 0.4.5.08 — Regenerate cover letter via existing
+           plan 66 bundle generator. Single-click; cost-cap + rate-limit
+           dependencies enforced server-side. #}
+        {% if a.job_id %}
+          <button type="button"
+                  data-testid="regenerate-bundle"
+                  hx-post="/api/v1/applications/{{ a.id }}/generate-bundle"
+                  hx-headers='{"X-CSRF-Token": "{{ csrf_token }}", "Content-Type": "application/json"}'
+                  hx-vals='{"regenerate_kind": "cover_letter"}'
+                  hx-swap="none"
+                  class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-indigo-200 bg-indigo-500/20 hover:bg-indigo-500/30 transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+            <i data-lucide="refresh-cw" class="h-3 w-3" stroke-width="1.5"></i>
+            Regenerate
+          </button>
+        {% endif %}
+      </div>
       {% if documents %}
         <ul class="flex flex-col gap-1.5">
           {% for d in documents %}
@@ -162,6 +179,37 @@
         <p class="text-sm text-slate-500">No generated documents yet.</p>
       {% endif %}
     </section>
+
+    {# Plan 86 § W3.2 / 0.4.5.08 — per-application bullet override toggles.
+       Cycles null → always_include → never_include → null on click. Writes
+       go to PUT /api/v1/applications/{id}/bullet-override; fragment swap. #}
+    {% if bullets_used %}
+      <section data-testid="detail-bullet-overrides">
+        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Bullets in resume</div>
+        <ul class="flex flex-col gap-1.5">
+          {% for b in bullets_used %}
+            <li class="flex items-start justify-between gap-2 text-sm" data-testid="bullet-override-row-{{ b.id }}">
+              <span class="text-slate-300 flex-1 min-w-0 truncate">{{ b.text }}</span>
+              <button type="button"
+                      data-testid="bullet-override-toggle-{{ b.id }}"
+                      hx-put="/api/v1/applications/{{ a.id }}/bullet-override"
+                      hx-vals='{"bullet_id": {{ b.id }}, "current": "{{ b.override or '' }}"}'
+                      hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                      hx-target="closest section"
+                      hx-swap="outerHTML"
+                      class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide transition
+                             {% if b.override == 'always_include' %}bg-emerald-500/30 text-emerald-100 hover:bg-emerald-500/40
+                             {% elif b.override == 'never_include' %}bg-rose-500/30 text-rose-100 hover:bg-rose-500/40
+                             {% else %}bg-slate-800 text-slate-400 hover:bg-slate-700{% endif %}">
+                {% if b.override == 'always_include' %}always
+                {% elif b.override == 'never_include' %}never
+                {% else %}auto{% endif %}
+              </button>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
 
     <section data-testid="detail-contacts">
       <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Contacts</div>

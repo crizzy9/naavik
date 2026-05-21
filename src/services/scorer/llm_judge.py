@@ -38,12 +38,19 @@ async def cost_cap_exhausted(
     Pre-flight probe — runs before each per-job LLM dispatch. The estimate
     is conservative (`_ESTIMATED_JUDGE_COST_USD = 0.015`); over-blocking
     one borderline job beats overshooting the cap.
+
+    Plan 86 / 0.4.5.01 — delegates to `llm_tracker.acquire_cost_cap_slot`
+    which runs the check under a `SELECT ... FOR UPDATE` row lock on
+    Postgres. The lock holds until the caller's surrounding transaction
+    commits, serializing concurrent rescore + cron probes.
     """
-    cap = settings.daily_llm_cost_cap_usd
-    if cap is None:
-        return False
-    today_spend = await llm_tracker.today_cost_usd(session, user_id=user_id)
-    return (today_spend + _ESTIMATED_JUDGE_COST_USD) > cap
+    slot_available = await llm_tracker.acquire_cost_cap_slot(
+        session,
+        user_id=user_id,
+        estimated_cost_usd=_ESTIMATED_JUDGE_COST_USD,
+        cap_usd=settings.daily_llm_cost_cap_usd,
+    )
+    return not slot_available
 
 
 def _compose_profile_summary(profile: Profile) -> str:

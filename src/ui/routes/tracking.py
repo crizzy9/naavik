@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field, ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
@@ -128,9 +129,20 @@ async def fragment_followup(
 
 
 async def _application_or_404(session: AsyncSession, application_id: int, user: User | None):
-    """Fetch an Application and enforce user_id boundary (IDOR → 404, never 403)."""
+    """Fetch an Application and enforce user_id + soft-delete boundary (IDOR → 404, never 403).
+
+    Plan 86 / 0.4.5.11 — explicit `deleted_at IS NULL` gate aligns with the
+    broader soft-delete pattern in `application_service.list_applications`;
+    soft-deleted rows must not be addressable even by their owner. Uses
+    `getattr` to tolerate test fixtures that build minimal `SimpleNamespace`
+    application stand-ins without the soft-delete column.
+    """
     a = await application_service.get_application(session, application_id)
-    if a is None or a.user_id != _effective_user_id(user):
+    if (
+        a is None
+        or a.user_id != _effective_user_id(user)
+        or getattr(a, "deleted_at", None) is not None
+    ):
         raise HTTPException(status_code=404, detail="Application not found")
     return a
 
@@ -358,6 +370,17 @@ async def fragment_timeline(
 _NOTES_MAX_CHARS = 2000
 
 
+class NotesPayload(BaseModel):
+    """Notes-write body (plan 86 / 0.4.5.10).
+
+    `max_length=2000` fires at the Pydantic validator layer so an oversize
+    payload is rejected BEFORE the route body runs — eliminates the DoS
+    amplification where a 50MB JSON body parsed before the manual cap.
+    """
+
+    notes: str = Field(min_length=0, max_length=_NOTES_MAX_CHARS)
+
+
 @router.put("/api/v1/applications/{application_id}/notes", name="api_applications_put_notes")
 async def put_application_notes(
     request: Request,
@@ -370,38 +393,101 @@ async def put_application_notes(
 
     Boundary checks:
     - CSRF-gated via `require_csrf`.
-    - IDOR via `_application_or_404` (404 on cross-user).
+    - IDOR via `_application_or_404` (404 on cross-user / soft-deleted).
     - Accepts form-encoded (HTMX default) OR JSON; 422 on missing `notes` or
-      overflow (cap 2000 chars per plan § D.3).
+      overflow (cap 2000 chars enforced via `NotesPayload` validator).
     """
     application = await _application_or_404(session, application_id, user)
     content_type = (request.headers.get("content-type") or "").lower()
     if "application/json" in content_type:
         try:
-            payload = await request.json()
+            raw_payload = await request.json()
         except Exception:  # noqa: BLE001 — invalid JSON treated as missing notes
-            payload = {}
-        if not isinstance(payload, dict):
-            payload = {}
+            raw_payload = {}
+        if not isinstance(raw_payload, dict):
+            raw_payload = {}
     else:
         form = await request.form()
-        payload = dict(form.items())
+        raw_payload = dict(form.items())
 
-    if "notes" not in payload:
-        raise HTTPException(status_code=422, detail="`notes` required")
-    raw = payload.get("notes")
-    if not isinstance(raw, str):
-        raise HTTPException(status_code=422, detail="`notes` must be a string")
-    text = raw.strip()
-    if len(text) > _NOTES_MAX_CHARS:
-        raise HTTPException(
-            status_code=422,
-            detail=f"`notes` exceeds {_NOTES_MAX_CHARS}-char limit",
-        )
+    try:
+        payload = NotesPayload.model_validate(raw_payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+    text = payload.notes.strip()
     application.notes = text or None
     session.add(application)
     await session.commit()
     return Response(status_code=204)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Plan 86 § W3.2 / 0.4.5.08 — per-application bullet override toggle
+# ─────────────────────────────────────────────────────────────────────────
+
+
+_BULLET_OVERRIDE_STATES = (None, "always_include", "never_include")
+
+
+class BulletOverridePayload(BaseModel):
+    """Form-encoded body for the bullet-override cycle endpoint."""
+
+    bullet_id: int = Field(ge=1)
+    current: str = Field(default="", max_length=20)
+
+
+@router.put(
+    "/api/v1/applications/{application_id}/bullet-override",
+    response_class=HTMLResponse,
+    name="api_applications_put_bullet_override",
+)
+async def put_bullet_override(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Cycle a bullet's per-application override: null → always → never → null.
+
+    Plan 86 / 0.4.5.08. Override lives at
+    `Application.submission_artifacts["bullet_overrides"][bullet_id]`.
+    Returns the re-rendered bullets-used section so the toggle pill updates
+    in place via HTMX outerHTML swap.
+    """
+    application = await _application_or_404(session, application_id, user)
+    form = await request.form()
+    try:
+        payload = BulletOverridePayload.model_validate(dict(form.items()))
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+    current_idx = (
+        _BULLET_OVERRIDE_STATES.index(payload.current)
+        if payload.current in (s for s in _BULLET_OVERRIDE_STATES if s)
+        else 0
+    )
+    next_state = _BULLET_OVERRIDE_STATES[(current_idx + 1) % len(_BULLET_OVERRIDE_STATES)]
+
+    artifacts = dict(application.submission_artifacts or {})
+    overrides = dict(artifacts.get("bullet_overrides") or {})
+    key = str(payload.bullet_id)
+    if next_state is None:
+        overrides.pop(key, None)
+    else:
+        overrides[key] = next_state
+    artifacts["bullet_overrides"] = overrides
+    application.submission_artifacts = artifacts
+    session.add(application)
+    await session.commit()
+
+    detail_ctx = await tctx.build_application_detail_ctx(session, application)
+    return templates.TemplateResponse(
+        request,
+        "components/_application_detail.html",
+        {**detail_ctx, "csrf_token": ""},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────

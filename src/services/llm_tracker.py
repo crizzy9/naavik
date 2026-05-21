@@ -225,6 +225,63 @@ async def today_cost_usd(session: AsyncSession, *, user_id: int) -> float:
     return float(value or 0.0)
 
 
+# ── Atomic cost-cap probe (plan 86 / 0.4.5.01) ─────────────────────────
+
+
+def _dialect_supports_for_update(session: AsyncSession) -> bool:
+    """Postgres supports row-locking; sqlite (in-memory parity tests) does not."""
+    bind = getattr(session, "bind", None)
+    dialect = getattr(bind, "dialect", None) if bind is not None else None
+    return getattr(dialect, "name", None) == "postgresql"
+
+
+async def acquire_cost_cap_slot(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    estimated_cost_usd: float,
+    cap_usd: float | None,
+) -> bool:
+    """Atomic check-and-acquire of a cost-cap slot for the LLM judge probe.
+
+    Plan 86 / 0.4.5.01. Tightens the previous racy `today_cost_usd + est >
+    cap` pre-flight: concurrent callers (rescore + cron firing in the same
+    tick) could each observe `today_cost == 0.95`, both decide "headroom
+    for $0.015", and both fire — overshooting the cap by ~$0.075 worst case.
+
+    Atomicity strategy:
+    - Postgres: take a row-level lock on all of today's ApiUsage rows for
+      `user_id` via `SELECT ... FOR UPDATE`. Holds the lock until the
+      caller's transaction commits — concurrent callers serialize through
+      the same predicate read.
+    - sqlite (in-memory parity tests): degrade to non-atomic fallback with
+      a single WARN log. Production path always hits Postgres.
+
+    Returns True iff slot acquired (the caller may proceed with the LLM
+    call). Returns False iff `cap_usd` is set AND `today_cost + estimated
+    > cap`. Caller commits the surrounding transaction either way; the
+    lock releases on commit. Pass `cap_usd=None` to short-circuit True
+    (no cap configured).
+    """
+    if cap_usd is None:
+        return True
+    if _dialect_supports_for_update(session):
+        midnight = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        stmt = (
+            select(ApiUsage.cost_usd)
+            .where(ApiUsage.user_id == user_id)
+            .where(ApiUsage.occurred_at >= midnight)
+            .with_for_update()
+        )
+        result = await session.exec(stmt)
+        rows = result.all()
+        today_spend = float(sum(r[0] if isinstance(r, tuple) else r for r in rows) or 0.0)
+    else:
+        log.warning("acquire_cost_cap_slot: sqlite dialect — degrading to non-atomic fallback")
+        today_spend = await today_cost_usd(session, user_id=user_id)
+    return (today_spend + estimated_cost_usd) <= cap_usd
+
+
 # ── Recent-usage + summary (plan 60 / 0.2.7.17) ────────────────────────
 
 
