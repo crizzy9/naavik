@@ -106,6 +106,8 @@ _SERVICE_DIRECT_TEST_MODULES = frozenset(
         "test_scoring_history",
         "test_screener_idor",
         "test_rate_limit",
+        # Plan 81 § D.4 — analytics service uses real sqlite
+        "test_plan_81_application_analytics",
     }
 )
 

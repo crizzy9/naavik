@@ -1,0 +1,35 @@
+{#
+  analytics_kpi_strip.html — 4-card strip showing application KPIs over a
+  fixed window (default 90d). Plan 81 § D.4.
+
+  Args:
+    kpis        : services.application_analytics.ApplicationKpis dataclass
+    window_days : int (e.g. 90)
+#}
+<section data-testid="analytics-kpi-strip"
+         class="grid grid-cols-2 md:grid-cols-4 gap-3">
+  {# Card 1 — Total applied #}
+  <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Total applied</div>
+    <div class="mt-2 font-mono tabular-nums text-2xl text-slate-50">{{ kpis.applied_in_window }}</div>
+    <div class="text-[11px] text-slate-500 mt-1">last {{ window_days }}d</div>
+  </div>
+  {# Card 2 — Response rate (≥ recruiter) #}
+  <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Response rate</div>
+    <div class="mt-2 font-mono tabular-nums text-2xl text-cyan-300">{{ "%.0f" | format(kpis.response_rate * 100) }}<span class="text-base text-slate-400 ml-0.5">%</span></div>
+    <div class="text-[11px] text-slate-500 mt-1">≥ recruiter screen</div>
+  </div>
+  {# Card 3 — Onsite rate (≥ onsite loop) #}
+  <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Onsite rate</div>
+    <div class="mt-2 font-mono tabular-nums text-2xl text-amber-300">{{ "%.0f" | format(kpis.onsite_rate * 100) }}<span class="text-base text-slate-400 ml-0.5">%</span></div>
+    <div class="text-[11px] text-slate-500 mt-1">≥ onsite loop</div>
+  </div>
+  {# Card 4 — Offer rate (≥ offer) #}
+  <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Offer rate</div>
+    <div class="mt-2 font-mono tabular-nums text-2xl text-emerald-300">{{ "%.0f" | format(kpis.offer_rate * 100) }}<span class="text-base text-slate-400 ml-0.5">%</span></div>
+    <div class="text-[11px] text-slate-500 mt-1">offers received</div>
+  </div>
+</section>

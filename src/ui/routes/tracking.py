@@ -18,7 +18,7 @@ from config import settings as app_settings
 from db.session import get_session
 from models import User
 from models.enums import AppEventKind, ApplicationStatus, ClosedReason
-from services import application_service
+from services import application_analytics, application_service
 from services.auth import require_authed_session
 from ui import tracking_ctx as tctx
 from ui.templates_setup import templates
@@ -133,6 +133,49 @@ async def _application_or_404(session: AsyncSession, application_id: int, user: 
     if a is None or a.user_id != _effective_user_id(user):
         raise HTTPException(status_code=404, detail="Application not found")
     return a
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Application analytics dashboard (plan 81 § D.4 / 0.4.0.07)
+#
+# IMPORTANT: literal `/tracking/analytics` MUST be registered BEFORE the
+# dynamic `/tracking/{application_id}` route — FastAPI scans routes in
+# insertion order. Test: `test_tracking_analytics_route_order_precedence`.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/tracking/analytics", response_class=HTMLResponse, name="tracking_analytics")
+async def get_tracking_analytics(
+    request: Request,
+    window_days: Annotated[int, Query()] = 90,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Application KPI dashboard (plan 81 § D.4).
+
+    Pure aggregation over AppEvent + Application — no LLM, no scraper.
+    Funnel + 4 KPIs (Applied · Response · Onsite · Offer rates) +
+    top-N companies, all scoped to the requester's `user_id`.
+
+    `window_days` is clamped to [1, 365]; default 90 per DATA_MODEL.md § F.
+    """
+    if window_days < 1 or window_days > 365:
+        window_days = 90
+    user_id = _effective_user_id(user)
+    kpis = await application_analytics.compute_kpis(
+        session, user_id=user_id, window_days=window_days
+    )
+    by_company = await application_analytics.kpis_by_company(
+        session, user_id=user_id, window_days=window_days
+    )
+    ctx = {
+        "active_sidebar": "tracking",
+        "active_template_path": "/tracking",
+        "kpis": kpis,
+        "by_company": by_company,
+        "window_days": window_days,
+    }
+    return templates.TemplateResponse(request, "pages/tracking_analytics.html", ctx)
 
 
 @router.get("/tracking/{application_id}", response_class=HTMLResponse, name="tracking_detail")
