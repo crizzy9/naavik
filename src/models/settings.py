@@ -51,6 +51,19 @@ class Settings(SQLModel, table=True):
     # to DRAFT + surface in manual-review queue. Per-adapter PRs source the
     # `confidence` field; this knob is the operator-tunable threshold.
     auto_apply_adapter_confidence_threshold: float = Field(default=0.7)
+    # Plan 78 § D.3 (0.4.0.13) — per-board operator-tunable daily caps.
+    # JSONB shape `{ApplicationBoard.value: int}`; missing key → no per-board
+    # limit; empty dict → fall through to the global `auto_apply_daily_cap`.
+    # Operator tunes via Settings · Auto-apply UI.
+    auto_apply_per_board_daily_caps: dict[str, int] = Field(
+        default_factory=dict,
+        sa_column=Column(JSONB, nullable=False, server_default="{}"),
+    )
+    # Plan 78 § D.5 (0.4.0.20) — auto-apply dry-run mode. When True,
+    # `process_auto_apply_queue` short-circuits BEFORE `submit_draft` so no
+    # ATS network call ever fires; `submission_artifacts.dry_run_at` records
+    # what would have submitted on a real cron tick.
+    auto_apply_dry_run: bool = Field(default=False)
 
     # Cost-aware DRAFT generation
     eager_review_generation: bool = Field(default=True)

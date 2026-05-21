@@ -528,6 +528,37 @@ async def submit_draft(
         )
         return application
 
+    # Plan 78 § D.2 — adapter-confidence gate. HTTP adapters always emit
+    # confidence=1.0 (passes any threshold); Generic LLM-form-fill adapter
+    # may emit lower. Below threshold → revert to DRAFT + record as failure
+    # so the operator reviews. Defense in depth over the adapter's `ok` flag.
+    if (
+        result.confidence is not None
+        and user_settings is not None
+        and result.confidence < float(user_settings.auto_apply_adapter_confidence_threshold)
+    ):
+        threshold_str = f"{float(user_settings.auto_apply_adapter_confidence_threshold):.2f}"
+        confidence_str = f"{float(result.confidence):.2f}"
+        await _record_failure(
+            session,
+            application,
+            kind="low_confidence",
+            message=(f"adapter confidence {confidence_str} < threshold {threshold_str}"),
+            raw={"confidence": result.confidence, **(result.raw or {})},
+            settings=user_settings,
+        )
+        await _emit_event(
+            session,
+            user_id=application.user_id,
+            application_id=application.id,
+            kind=AppEventKind.DOCS_FAILED,
+            payload={
+                "kind": "low_confidence",
+                "message": f"confidence {confidence_str} below threshold {threshold_str}",
+            },
+        )
+        return application
+
     # Success — flip state in one transaction.
     now = datetime.now(UTC)
     application.status = ApplicationStatus.APPLIED
@@ -760,10 +791,59 @@ async def process_auto_apply_queue(
         today_count[uid] = int(c or 0)
         return today_count[uid]
 
+    # Plan 78 § D.3 — per-board daily counter cache. Keyed by (uid, board.value)
+    # so concurrent multi-board submissions count independently. Cron lifetime
+    # only — re-queries each cron run.
+    today_count_per_board: dict[tuple[int, str], int] = {}
+
+    async def _today_submitted_per_board(uid: int, board_value: str) -> int:
+        key = (uid, board_value)
+        if key in today_count_per_board:
+            return today_count_per_board[key]
+        from models import ApplicationBoard
+
+        today_start = datetime.combine(datetime.now(UTC).date(), datetime.min.time(), tzinfo=UTC)
+        try:
+            board_enum = ApplicationBoard(board_value)
+        except ValueError:
+            today_count_per_board[key] = 0
+            return 0
+        c = (
+            await session.exec(
+                select(func.count(Application.id)).where(
+                    Application.user_id == uid,
+                    Application.board == board_enum,
+                    Application.status != ApplicationStatus.DRAFT,
+                    Application.applied_at >= today_start,
+                )
+            )
+        ).one()
+        if isinstance(c, tuple):
+            c = c[0]
+        today_count_per_board[key] = int(c or 0)
+        return today_count_per_board[key]
+
     for application, job in rows:
         out.processed += 1
         s = await _settings_for(application.user_id)
         if not s.auto_apply_enabled:
+            continue
+        # Plan 78 § D.1 — belt-and-suspenders score gate. Right-swipe in
+        # Discover already gates upstream, but the score may have drifted
+        # between queue + dispatch (re-scoring cron, profile change, etc.).
+        # Re-check here against the live threshold; below → pull out of queue.
+        threshold = getattr(s, "auto_apply_score_threshold", None)
+        job_score = getattr(job, "score", None)
+        if threshold is not None and job_score is not None and float(job_score) < float(threshold):
+            log.info(
+                "auto-apply skipped application %s: score %s below threshold %s",
+                application.id,
+                job_score,
+                threshold,
+            )
+            job.queue_state = JobQueueState.SAVED
+            job.updated_at = datetime.now(UTC)
+            session.add(job)
             continue
         if s.auto_apply_daily_cap is not None:
             already = await _today_submitted_count(application.user_id)
@@ -775,7 +855,56 @@ async def process_auto_apply_queue(
             await validate_submittable(session, application)
         except ValidationError as exc:
             log.info("auto-apply skipped application %s: %s", application.id, exc)
+            # Plan 78 § fold-in (0.4.0.22) — visa-incompatible DRAFTs in the
+            # queue tight-loop on every cron tick. Pull out of queue + emit
+            # AUTO_APPLY_VISA_BLOCKED so the operator can re-evaluate.
+            if exc.code == "visa_incompatible":
+                job.queue_state = JobQueueState.SAVED
+                job.updated_at = datetime.now(UTC)
+                session.add(job)
+                await _emit_event(
+                    session,
+                    user_id=application.user_id,
+                    application_id=application.id,
+                    kind=AppEventKind.AUTO_APPLY_VISA_BLOCKED,
+                    payload={"message": str(exc)},
+                )
             continue
+
+        # Plan 78 § D.5 — dry-run mode short-circuits BEFORE submit_draft so no
+        # ATS network call ever fires. Stamps `submission_artifacts.dry_run_at`
+        # so the UI can show what would have submitted on a real cron tick.
+        if getattr(s, "auto_apply_dry_run", False):
+            artifacts = dict(application.submission_artifacts or {})
+            artifacts["dry_run_at"] = datetime.now(UTC).isoformat()
+            application.submission_artifacts = artifacts
+            application.updated_at = datetime.now(UTC)
+            session.add(application)
+            await _emit_event(
+                session,
+                user_id=application.user_id,
+                application_id=application.id,
+                kind=AppEventKind.AUTO_APPLY_DRY_RUN,
+                payload={
+                    "score": float(job_score) if job_score is not None else None,
+                    "board": application.board.value if application.board else None,
+                },
+            )
+            continue
+
+        # Plan 78 § D.3 — per-board daily cap check. Operator-configurable
+        # JSONB on Settings keyed by ApplicationBoard.value. Empty dict /
+        # missing board key = no per-board limit (global cap still applies).
+        per_board_caps = getattr(s, "auto_apply_per_board_daily_caps", None) or {}
+        if application.board is not None:
+            board_cap = per_board_caps.get(application.board.value)
+            if board_cap is not None:
+                already_board = await _today_submitted_per_board(
+                    application.user_id, application.board.value
+                )
+                if already_board >= int(board_cap):
+                    out.skipped_by_cap += 1
+                    continue
 
         before = application.status
         try:
@@ -793,6 +922,10 @@ async def process_auto_apply_queue(
         if after.status == ApplicationStatus.APPLIED:
             out.submitted += 1
             today_count[application.user_id] = today_count.get(application.user_id, 0) + 1
+            # Plan 78 § D.3 — bump per-board counter for in-cron-lifetime caps.
+            if application.board is not None:
+                key = (application.user_id, application.board.value)
+                today_count_per_board[key] = today_count_per_board.get(key, 0) + 1
         else:
             out.failed += 1
             # Persistent failure — pull job out of the auto-apply queue.
@@ -805,6 +938,80 @@ async def process_auto_apply_queue(
 
 
 # ── Status transitions (manual override) ────────────────────────────────
+
+
+async def drain_auto_apply_queue(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    reason: str | None = None,
+) -> int:
+    """Plan 78 § D.4 — global drain: flip every QUEUED_FOR_AUTO_APPLY Job back
+    to SAVED for the given user; emit one `AUTO_APPLY_DRAINED` AppEvent per
+    drained Application. Returns the count drained.
+
+    Use case: operator flips `Settings.auto_apply_enabled = False` and wants
+    to clear the queued backlog so the queue doesn't auto-process if they
+    later flip it back ON.
+    """
+    stmt = (
+        select(Application, Job)
+        .join(Job, Job.id == Application.job_id)
+        .where(
+            Application.user_id == user_id,
+            Application.status == ApplicationStatus.DRAFT,
+            Application.deleted_at.is_(None),
+            Job.queue_state == JobQueueState.QUEUED_FOR_AUTO_APPLY,
+        )
+    )
+    rows = (await session.exec(stmt)).all()
+    drained = 0
+    now = datetime.now(UTC)
+    for application, job in rows:
+        job.queue_state = JobQueueState.SAVED
+        job.updated_at = now
+        session.add(job)
+        await _emit_event(
+            session,
+            user_id=user_id,
+            application_id=application.id,
+            kind=AppEventKind.AUTO_APPLY_DRAINED,
+            payload={"reason": reason},
+        )
+        drained += 1
+    if drained:
+        await session.flush()
+    return drained
+
+
+async def pause_auto_apply_for_job(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    job_id: int,
+) -> Job | None:
+    """Plan 78 § D.4 — per-job pause: flip Job.queue_state QUEUED_FOR_AUTO_APPLY
+    → SAVED if the Job is owned by `user_id` and currently queued. Returns the
+    updated Job, or None if not found / not queued.
+    """
+    job = (
+        await session.exec(
+            select(Job).where(
+                Job.id == job_id,
+                Job.user_id == user_id,
+                Job.deleted_at.is_(None),
+            )
+        )
+    ).one_or_none()
+    if job is None:
+        return None
+    if job.queue_state != JobQueueState.QUEUED_FOR_AUTO_APPLY:
+        return job
+    job.queue_state = JobQueueState.SAVED
+    job.updated_at = datetime.now(UTC)
+    session.add(job)
+    await session.flush()
+    return job
 
 
 async def update_status(

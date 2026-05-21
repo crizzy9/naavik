@@ -97,6 +97,8 @@ async def update_auto_apply(
     eager_review_generation: bool | None = None,
     daily_llm_cost_cap_usd: float | None = None,
     auto_apply_immediate_dispatch: bool | None = None,
+    auto_apply_per_board_daily_caps: dict[str, int] | None = None,
+    auto_apply_dry_run: bool | None = None,
 ) -> Settings:
     s = await get_or_create(session, user_id)
     if auto_apply_enabled is not None:
@@ -111,6 +113,26 @@ async def update_auto_apply(
         s.daily_llm_cost_cap_usd = float(daily_llm_cost_cap_usd)
     if auto_apply_immediate_dispatch is not None:
         s.auto_apply_immediate_dispatch = auto_apply_immediate_dispatch
+    # Plan 78 § D.3 — per-board daily caps. Validator: drop unknown boards,
+    # coerce values to int ≥ 0, drop non-positive entries.
+    if auto_apply_per_board_daily_caps is not None:
+        from models import ApplicationBoard
+
+        validated: dict[str, int] = {}
+        valid_boards = {b.value for b in ApplicationBoard}
+        for board, cap in auto_apply_per_board_daily_caps.items():
+            if board not in valid_boards:
+                continue
+            try:
+                v = int(cap)
+            except (TypeError, ValueError):
+                continue
+            if v > 0:
+                validated[board] = v
+        s.auto_apply_per_board_daily_caps = validated
+    # Plan 78 § D.5 — dry-run toggle.
+    if auto_apply_dry_run is not None:
+        s.auto_apply_dry_run = bool(auto_apply_dry_run)
     s.updated_at = datetime.now(UTC)
     session.add(s)
     await session.flush()

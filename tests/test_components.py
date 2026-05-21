@@ -527,6 +527,11 @@ _CASES: list[tuple[str, dict]] = [
         "linkedin_status_chip.html",
         {"connected": True, "handle": "shyampadia", "dms_today": 7, "connections": 487},
     ),
+    # Plan 78 § D.6 (0.4.0.15) — visa_status_chip catalogue entry.
+    (
+        "visa_status_chip.html",
+        {"restriction": "sponsorship_available"},
+    ),
     (
         "outreach_timeline.html",
         {
@@ -593,7 +598,7 @@ _CASES: list[tuple[str, dict]] = [
     ("bullet_edit_row_skeleton.html", {}),
 ]
 
-assert len(_CASES) == 86, f"Expected 86 components, got {len(_CASES)}"
+assert len(_CASES) == 87, f"Expected 87 components, got {len(_CASES)}"
 
 
 @pytest.mark.parametrize(

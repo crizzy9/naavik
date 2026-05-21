@@ -106,6 +106,28 @@ class InterviewScheduledPayload(BaseModel):
     calendar_event_id: str | None = None
 
 
+class AutoApplyDryRunPayload(BaseModel):
+    """Plan 78 § D.5 — `process_auto_apply_queue` short-circuit observation."""
+
+    kind: Literal[AppEventKind.AUTO_APPLY_DRY_RUN] = AppEventKind.AUTO_APPLY_DRY_RUN
+    score: float | None = None
+    board: str | None = None
+
+
+class AutoApplyDrainedPayload(BaseModel):
+    """Plan 78 § D.4 — global drain queue → SAVED on auto-apply OFF flip."""
+
+    kind: Literal[AppEventKind.AUTO_APPLY_DRAINED] = AppEventKind.AUTO_APPLY_DRAINED
+    reason: str | None = None
+
+
+class AutoApplyVisaBlockedPayload(BaseModel):
+    """Plan 78 fold-in (0.4.0.22) — cron de-queues visa-incompatible DRAFTs."""
+
+    kind: Literal[AppEventKind.AUTO_APPLY_VISA_BLOCKED] = AppEventKind.AUTO_APPLY_VISA_BLOCKED
+    message: str | None = None
+
+
 AppEventPayload = Annotated[
     StatusChangePayload
     | DocsGeneratedPayload
@@ -117,7 +139,10 @@ AppEventPayload = Annotated[
     | LinkedInDmSentPayload
     | LinkedInDmRepliedPayload
     | NoteAddedPayload
-    | InterviewScheduledPayload,
+    | InterviewScheduledPayload
+    | AutoApplyDryRunPayload
+    | AutoApplyDrainedPayload
+    | AutoApplyVisaBlockedPayload,
     Field(discriminator="kind"),
 ]
 
@@ -134,6 +159,9 @@ _PAYLOAD_BY_KIND: dict[AppEventKind, type[BaseModel]] = {
     AppEventKind.LINKEDIN_DM_REPLIED: LinkedInDmRepliedPayload,
     AppEventKind.NOTE_ADDED: NoteAddedPayload,
     AppEventKind.INTERVIEW_SCHEDULED: InterviewScheduledPayload,
+    AppEventKind.AUTO_APPLY_DRY_RUN: AutoApplyDryRunPayload,
+    AppEventKind.AUTO_APPLY_DRAINED: AutoApplyDrainedPayload,
+    AppEventKind.AUTO_APPLY_VISA_BLOCKED: AutoApplyVisaBlockedPayload,
 }
 
 

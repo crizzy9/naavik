@@ -194,6 +194,10 @@ class AppEventKind(StrEnum):
     LINKEDIN_DM_REPLIED = "linkedin_dm_replied"
     NOTE_ADDED = "note_added"
     INTERVIEW_SCHEDULED = "interview_scheduled"
+    # Plan 78 — auto-apply hardening event kinds.
+    AUTO_APPLY_DRY_RUN = "auto_apply_dry_run"
+    AUTO_APPLY_DRAINED = "auto_apply_drained"
+    AUTO_APPLY_VISA_BLOCKED = "auto_apply_visa_blocked"
 
 
 class StatusChangeTrigger(StrEnum):
