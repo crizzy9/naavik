@@ -768,6 +768,129 @@ async def test_retry_failed_idor_returns_404():
         await svc.retry_failed(session, app_row.id, user_id=1)
 
 
+# ── Plan 80 / 0.4.0.09 — bulk actions on /tracking list ─────────────
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_status_forward_only_skips_backwards():
+    """Backwards transitions surface in the failed list, not the success count."""
+    from models import ApplicationStatus
+
+    a1 = _make_app(aid=1, status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
+    a2 = _make_app(aid=2, status=ApplicationStatus.OFFER, applied_at=datetime.now(UTC))
+    session = _FakeSession()
+    # bulk_update_status loads app, then update_status loads it again — 2 exec/id.
+    session.exec_queue = [
+        _exec_one(a1),  # bulk: load a1
+        _exec_one(a1),  # update_status: re-load a1 (forward OFFER target → fail)
+        _exec_one(a2),  # bulk: load a2
+        _exec_one(a2),  # update_status: re-load a2 (OFFER → CLOSED missing reason → fail)
+    ]
+
+    success, failed = await svc.bulk_update_status(
+        session,
+        user_id=1,
+        application_ids=[1, 2],
+        new_status=ApplicationStatus.CLOSED,
+    )
+    # closed_reason is None → ValidationError on every CLOSED transition; both fail.
+    assert success == 0
+    assert sorted(failed) == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_status_cross_user_silent_fail():
+    """IDOR — cross-user IDs surface in failed list without raising."""
+    from models import ApplicationStatus
+
+    mine = _make_app(aid=10, status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
+    yours = _make_app(aid=11, user_id=2, status=ApplicationStatus.APPLIED)
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_one(mine),
+        _exec_one(mine),  # update_status re-load
+        _exec_one(yours),  # bulk: cross-user → goes straight to failed (no re-load)
+    ]
+    success, failed = await svc.bulk_update_status(
+        session,
+        user_id=1,
+        application_ids=[10, 11],
+        new_status=ApplicationStatus.RECRUITER_SCREEN,
+    )
+    assert success == 1
+    assert failed == [11]
+
+
+@pytest.mark.asyncio
+async def test_bulk_archive_sets_user_archived_reason():
+    """bulk_archive — APPLIED → CLOSED w/ closed_reason=USER_ARCHIVED."""
+    from models import ApplicationStatus, ClosedReason
+
+    a = _make_app(aid=42, status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(a), _exec_one(a)]
+    success, failed = await svc.bulk_archive(session, user_id=1, application_ids=[42])
+    assert success == 1
+    assert failed == []
+    assert a.status == ApplicationStatus.CLOSED
+    assert a.closed_reason == ClosedReason.USER_ARCHIVED
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_rejects_over_50_ids():
+    """Cap at 50 IDs — raises ValidationError before any DB work."""
+    from models import ApplicationStatus
+
+    session = _FakeSession()
+    ids = list(range(1, 52))  # 51 IDs
+    with pytest.raises(ValidationError) as exc:
+        await svc.bulk_update_status(
+            session,
+            user_id=1,
+            application_ids=ids,
+            new_status=ApplicationStatus.RECRUITER_SCREEN,
+        )
+    assert exc.value.code == "bulk_limit_exceeded"
+    assert session.exec_queue == []  # no DB load on cap rejection
+
+
+@pytest.mark.asyncio
+async def test_bulk_export_csv_includes_only_authorized_apps():
+    """list_for_export — single SELECT, owner-only rows surface."""
+    from models import ApplicationStatus
+
+    a1 = _make_app(aid=1, status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
+    a2 = _make_app(aid=2, status=ApplicationStatus.RECRUITER_SCREEN, applied_at=datetime.now(UTC))
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([a1, a2])]
+    rows = await svc.list_for_export(session, user_id=1, application_ids=[1, 2])
+    assert len(rows) == 2
+    assert rows[0]["company"] == "Stripe"
+    assert rows[0]["status"] == "APPLIED"
+    assert rows[1]["status"] == "RECRUITER_SCREEN"
+    assert rows[0]["board"] == "greenhouse"
+    assert "applied_at" in rows[0]
+
+
+@pytest.mark.asyncio
+async def test_bulk_export_csv_idor_filters():
+    """Cross-user IDs filtered by service-layer WHERE clause; not in CSV."""
+    from models import ApplicationStatus
+
+    # The fake-session exec returns only what the DB would — emulate the
+    # SQL filter by passing back just the owner's row.
+    mine = _make_app(aid=10, status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([mine])]
+    rows = await svc.list_for_export(
+        session,
+        user_id=1,
+        application_ids=[10, 99],  # 99 is another user's
+    )
+    assert len(rows) == 1
+    assert rows[0]["company"] == "Stripe"
+
+
 @pytest.mark.asyncio
 async def test_retry_failed_emits_app_event():
     """Successful retry emits AUTO_APPLY_QUEUED with trigger=retry_requested + previous_retry_count."""

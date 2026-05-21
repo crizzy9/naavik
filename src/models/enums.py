@@ -24,6 +24,8 @@ class ClosedReason(StrEnum):
     WITHDRAWN_BY_ME = "withdrawn_by_me"
     GHOSTED = "ghosted"
     ACCEPTED_OTHER = "accepted_other"
+    # Plan 80 / 0.4.0.09 — bulk-archive on /tracking list view.
+    USER_ARCHIVED = "user_archived"
 
 
 class DocsState(StrEnum):

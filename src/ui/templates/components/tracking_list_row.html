@@ -8,6 +8,25 @@
 #}
 {% set a = application %}
 <tr class="border-b border-slate-800 hover:bg-slate-800/30 transition">
+  <td class="px-3 py-3 align-middle w-8">
+    {# Plan 80 / 0.4.0.09 — bulk-select checkbox. Hidden form input pairs with
+       each <input type="checkbox"> so hx-include="[name='application_ids']"
+       picks the selected ids when the toolbar submits. The hidden input's
+       `disabled` attribute is toggled by trackingBulkSelectionChange() so
+       only checked rows contribute. #}
+    <input type="checkbox"
+           data-tracking-row-select
+           data-application-id="{{ a.id }}"
+           value="{{ a.id }}"
+           onchange="trackingBulkSelectionChange()"
+           class="rounded border-slate-700 bg-slate-900 text-indigo-500 focus:ring-indigo-500/40 cursor-pointer"
+           aria-label="Select {{ a.company }} {{ a.role }}">
+    <input type="hidden"
+           name="application_ids"
+           value="{{ a.id }}"
+           data-application-id-input="{{ a.id }}"
+           disabled>
+  </td>
   <td class="px-4 py-3 align-middle">
     <div class="flex items-center gap-3 min-w-0">
       {% with kind="company", text=a.company_initial | default(a.company[:1] | upper), size="sm", color_override=a.company_color | default("bg-slate-700") %}

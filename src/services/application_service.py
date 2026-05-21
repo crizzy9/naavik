@@ -1599,3 +1599,117 @@ async def aggregate_submission_failures(
             }
         )
     return out
+
+
+# ── Bulk operations on /tracking list (plan 80 / 0.4.0.09) ──────────────
+
+
+BULK_MAX_IDS = 50
+
+
+async def bulk_update_status(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    application_ids: list[int],
+    new_status: ApplicationStatus,
+    closed_reason: ClosedReason | None = None,
+) -> tuple[int, list[int]]:
+    """Bulk-update status. Returns ``(success_count, failed_ids)``.
+
+    Iterates per-ID and routes through ``update_status`` so the existing
+    forward-transition + closed_reason rules + AppEvent emission still fire.
+    Failed IDs cover three buckets: missing application, cross-user IDOR
+    (silently ignored), and `update_status` raising
+    ``IllegalStateTransition`` / ``ValidationError``.
+
+    Caps `application_ids` at ``BULK_MAX_IDS`` (50) to keep transaction
+    duration bounded.
+    """
+    if len(application_ids) > BULK_MAX_IDS:
+        raise ValidationError(
+            f"Bulk operation limit is {BULK_MAX_IDS} applications per request",
+            code="bulk_limit_exceeded",
+        )
+
+    success = 0
+    failed: list[int] = []
+    for app_id in application_ids:
+        application = await get_application(session, app_id)
+        if application is None or application.user_id != user_id:
+            failed.append(app_id)
+            continue
+        try:
+            await update_status(
+                session,
+                app_id,
+                new_status,
+                closed_reason=closed_reason,
+            )
+            success += 1
+        except (IllegalStateTransition, ValidationError):
+            failed.append(app_id)
+    return success, failed
+
+
+async def bulk_archive(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    application_ids: list[int],
+) -> tuple[int, list[int]]:
+    """Bulk archive: status=CLOSED, closed_reason=USER_ARCHIVED.
+
+    Wraps ``bulk_update_status`` with the USER_ARCHIVED reason so the
+    audit-event payload distinguishes operator-initiated archive from
+    rejection / withdrawal / ghosting.
+    """
+    return await bulk_update_status(
+        session,
+        user_id=user_id,
+        application_ids=application_ids,
+        new_status=ApplicationStatus.CLOSED,
+        closed_reason=ClosedReason.USER_ARCHIVED,
+    )
+
+
+async def list_for_export(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    application_ids: list[int],
+) -> list[dict]:
+    """Fetch + denormalize selected applications for CSV export.
+
+    Honors ``user_id`` boundary (cross-user IDs silently filtered out) and
+    skips soft-deleted rows. Returns a list of dicts matching the CSV
+    fieldnames in the export route.
+    """
+    if not application_ids:
+        return []
+    if len(application_ids) > BULK_MAX_IDS:
+        raise ValidationError(
+            f"Bulk operation limit is {BULK_MAX_IDS} applications per request",
+            code="bulk_limit_exceeded",
+        )
+    stmt = select(Application).where(
+        Application.user_id == user_id,
+        Application.id.in_(application_ids),
+        Application.deleted_at.is_(None),
+    )
+    rows = (await session.exec(stmt)).all()
+    return [
+        {
+            "company": a.company,
+            "role": a.role,
+            "team": a.team or "",
+            "location": a.location or "",
+            "status": a.status.value,
+            "applied_at": a.applied_at.isoformat() if a.applied_at else "",
+            "salary_min": a.salary_min if a.salary_min is not None else "",
+            "salary_max": a.salary_max if a.salary_max is not None else "",
+            "board": a.board.value if a.board else "",
+            "external_url": a.external_url or "",
+        }
+        for a in rows
+    ]

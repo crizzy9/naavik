@@ -1,0 +1,80 @@
+{#
+  tracking_bulk_action_bar.html — sticky bulk-action toolbar on /tracking list view.
+
+  Surfaces when one or more per-row checkboxes are checked. JS in base.js
+  toggles `hidden` and updates the live count text via
+  `trackingBulkSelectionChange()`.
+
+  Args:
+    csrf_token : str (inherited from request ctx; used by hx-headers globally)
+
+  Plan 80 / 0.4.0.09 — bulk actions on /tracking list.
+#}
+{# The `hidden` attribute alone is overridden by Tailwind's `flex` utility
+   (Tailwind specificity). `data-bulk-active="false"` + the matching CSS rule
+   in styles.css (`[data-bulk-active="false"] { display: none !important; }`)
+   makes the toggle robust. JS flips data-bulk-active and the bar paints
+   when the count is non-zero. #}
+<div id="tracking-bulk-action-bar"
+     class="sticky top-0 z-10 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 mb-3 items-center gap-3 flex-wrap hidden data-[bulk-active=true]:flex"
+     data-bulk-count-current="0"
+     data-bulk-active="false">
+  <span class="inline-flex items-center gap-2 text-xs text-slate-300 font-mono">
+    <i data-lucide="check-square" class="h-3.5 w-3.5 text-indigo-400" stroke-width="1.5"></i>
+    <span data-bulk-count>0 selected</span>
+  </span>
+
+  <span class="h-4 w-px bg-slate-700" aria-hidden="true"></span>
+
+  <form id="tracking-bulk-move-form"
+        hx-post="/_fragments/tracking/bulk/move-stage"
+        hx-include="[name='application_ids']:not([disabled])"
+        hx-target="#tracking-main"
+        hx-swap="innerHTML"
+        class="inline-flex items-center gap-2">
+    <select name="new_status"
+            class="bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 px-2 py-1 focus:ring-2 focus:ring-indigo-500/40 focus:outline-none"
+            data-bulk-move-select
+            aria-label="Move selected applications to stage">
+      <option value="">Move to stage…</option>
+      <option value="APPLIED">APPLIED</option>
+      <option value="RECRUITER_SCREEN">RECRUITER SCREEN</option>
+      <option value="ONSITE_LOOP">ONSITE / LOOP</option>
+      <option value="OFFER">OFFER</option>
+    </select>
+    <button type="button"
+            onclick="trackingBulkSubmitMove(event)"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 text-xs hover:bg-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+            data-bulk-move-btn>
+      <i data-lucide="move" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      Move
+    </button>
+  </form>
+
+  <button type="button"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs hover:bg-amber-500/25"
+          hx-post="/_fragments/tracking/bulk/archive"
+          hx-include="[name='application_ids']:not([disabled])"
+          hx-target="#tracking-main"
+          hx-swap="innerHTML"
+          hx-confirm="Archive selected applications? This sets status=CLOSED and they leave the active list.">
+    <i data-lucide="archive" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+    Archive
+  </button>
+
+  <button type="button"
+          onclick="trackingBulkExportCsv()"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-slate-200 text-xs hover:bg-slate-700">
+    <i data-lucide="download" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+    Export CSV
+  </button>
+
+  <div class="ml-auto">
+    <button type="button"
+            onclick="trackingBulkClearSelection()"
+            class="text-xs text-slate-400 hover:text-slate-200 px-1.5 py-0.5"
+            aria-label="Clear selection">
+      Clear
+    </button>
+  </div>
+</div>
