@@ -224,11 +224,14 @@ def _make_run(
 # ── 0.2.5.02 — Submissions dashboard ───────────────────────────────────
 
 
-def test_submissions_tab_unauth_returns_401(client: TestClient):
-    """No session cookie → 401 (parity with /settings/sources)."""
+def test_submissions_tab_unauth_redirects_to_login(client: TestClient):
+    """Plan 0.7.0.39: browser top-nav to a gated UI route (no cookie, no
+    HX-Request header) → 307 + Location: /login.
+    """
     bare = TestClient(client.app, raise_server_exceptions=True)
-    r = bare.get("/settings/submissions")
-    assert r.status_code == 401
+    r = bare.get("/settings/submissions", follow_redirects=False)
+    assert r.status_code == 307
+    assert r.headers.get("location") == "/login"
 
 
 def test_submissions_tab_empty_renders_inbox_empty_state(client: TestClient, auth_cookies):

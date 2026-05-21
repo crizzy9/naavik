@@ -88,10 +88,14 @@ def _clear_ats_env(monkeypatch):
     monkeypatch.setattr(app_settings, "ats_generic_llm_confidence_threshold", 0.7)
 
 
-def test_submissions_panel_unauthed_returns_401(client: TestClient):
+def test_submissions_panel_unauthed_redirects_to_login(client: TestClient):
+    """Plan 0.7.0.39: browser top-nav to a gated UI route (no cookie, no
+    HX-Request header) → 307 + Location: /login, not a bare 401 JSON page.
+    """
     bare = TestClient(client.app, raise_server_exceptions=True)
-    r = bare.get("/settings/submissions")
-    assert r.status_code == 401
+    r = bare.get("/settings/submissions", follow_redirects=False)
+    assert r.status_code == 307
+    assert r.headers.get("location") == "/login"
 
 
 def test_submissions_panel_renders_ats_credentials_section(
