@@ -345,3 +345,58 @@ async def test_get_score_history_returns_blob_when_present() -> None:
     profile = _StubProfile(user_id=1, score_history=blob)
     session = _FakeSession(profiles={1: profile})
     assert await get_score_history(session, 1) == blob
+
+
+# ── 5. Plan 75 / 0.3.3.18 — _parse_scored_at defensive parsing ───────────
+
+
+def test_parse_scored_at_rejects_epoch_int_string() -> None:
+    """Epoch ints look numeric but aren't ISO 8601 — return None."""
+    from services.scoring_history import _parse_scored_at
+
+    assert _parse_scored_at("1716285600") is None
+
+
+def test_parse_scored_at_rejects_natural_language() -> None:
+    """Non-digit start fails the early rejection check."""
+    from services.scoring_history import _parse_scored_at
+
+    assert _parse_scored_at("yesterday") is None
+    assert _parse_scored_at("today") is None
+    assert _parse_scored_at("now") is None
+
+
+def test_parse_scored_at_accepts_naive_iso() -> None:
+    """Naive ISO timestamps get UTC attached (preserves existing tolerance)."""
+    from services.scoring_history import _parse_scored_at
+
+    out = _parse_scored_at("2026-05-21T10:00:00")
+    assert out is not None
+    assert out.tzinfo is not None
+    assert out.year == 2026
+    assert out.hour == 10
+
+
+def test_parse_scored_at_accepts_zulu_suffix() -> None:
+    """Zulu (`Z`) suffix is converted to `+00:00`."""
+    from services.scoring_history import _parse_scored_at
+
+    out = _parse_scored_at("2026-05-21T10:00:00Z")
+    assert out is not None
+    assert out.utcoffset().total_seconds() == 0
+
+
+def test_parse_scored_at_accepts_bare_date() -> None:
+    """Bare YYYY-MM-DD is valid ISO 8601 — accept it."""
+    from services.scoring_history import _parse_scored_at
+
+    out = _parse_scored_at("2026-05-21")
+    assert out is not None
+    assert out.year == 2026
+
+
+def test_parse_scored_at_empty_string_returns_none() -> None:
+    from services.scoring_history import _parse_scored_at
+
+    assert _parse_scored_at("") is None
+    assert _parse_scored_at("   ") is None
