@@ -97,6 +97,7 @@ def swipe_card_dict(j: SQLJob, *, warm_intro_label: str | None = None) -> dict[s
     location, work_mode = (j.location, None)
     if j.location and " · " in j.location:
         location, work_mode = j.location.split(" · ", 1)
+    mb = j.match_breakdown or {}
     return {
         "id": j.id,
         "company": j.company,
@@ -118,7 +119,14 @@ def swipe_card_dict(j: SQLJob, *, warm_intro_label: str | None = None) -> dict[s
         "match_breakdown": j.match_breakdown,
         "match_overall": j.score,
         "visa_friendly": j.visa_restrictions == VisaRestriction.SPONSORSHIP_AVAILABLE,
-        "visa_concern": (j.match_breakdown or {}).get("visa_concern", False),
+        "visa_concern": mb.get("visa_concern", False),
+        # Plan 72 § Surface 1 — defensive projections so page templates can
+        # read strengths/gaps/visa_note without diving into the JSONB blob.
+        # score_card.html still reads from match_breakdown directly; these
+        # mirror them as top-level keys for ad-hoc consumers.
+        "strengths": mb.get("strengths") or [],
+        "gaps": mb.get("gaps") or [],
+        "visa_note": mb.get("visa_note"),
     }
 
 

@@ -91,6 +91,12 @@ async def _initial_trace(*, settings: Settings, corpus: VoiceCorpus | None) -> d
         "total_latency_ms": 0,
         "llm_calls": 0,
         "bullet_selections": [],
+        # Plan 72 § Surface 2 — per-bullet selection ledger with rationale.
+        # Each entry: {bullet_id, selected: bool, why_selected: str|null,
+        # why_dropped: str|null}. Drives the inline rationale line under each
+        # tailored_bullet_row on Discover · review. Additive to bullet_selections;
+        # existing readers of bullet_selections are unaffected.
+        "bullet_selection_log": [],
         "jd_keywords_extracted": [],
         "cover_letter_format": "standard",
         "hiring_manager": None,
@@ -339,10 +345,34 @@ async def generate_bundle(
         result.resume = resume
         trace["stages_run"].append("resume")
         if resume.bullet_selection:
+            selected_ids = list(resume.bullet_selection.get("selected_ids") or [])
             trace["bullet_selections"] = [
-                {"bullet_id": bid, "jd_signal": "", "citation": ""}
-                for bid in (resume.bullet_selection.get("selected_ids") or [])
+                {"bullet_id": bid, "jd_signal": "", "citation": ""} for bid in selected_ids
             ]
+            # Plan 72 § Surface 2 — bullet_selection_log carries the per-bullet
+            # rationale shape the Discover · review UI renders. Rationale text
+            # is left empty here; the LLM-judge per-bullet "why kept / why
+            # dropped" enrichment is deferred to a follow-up plan (the shape is
+            # in place so UI consumers don't have to special-case missing keys).
+            log_entries: list[dict[str, object]] = []
+            seen_ids: set[int] = set()
+            for bid in selected_ids:
+                try:
+                    bid_int = int(bid)
+                except (TypeError, ValueError):
+                    continue
+                if bid_int in seen_ids:
+                    continue
+                seen_ids.add(bid_int)
+                log_entries.append(
+                    {
+                        "bullet_id": bid_int,
+                        "selected": True,
+                        "why_selected": None,
+                        "why_dropped": None,
+                    }
+                )
+            trace["bullet_selection_log"] = log_entries
     except dg.CostCapExceededError:
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"

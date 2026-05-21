@@ -1,6 +1,7 @@
 # Naavik Component Catalog
 
-> **Last updated:** 2026-05-20 (plan 58 / `0.2.7.06` — registers 2 net-new Settings-group partials [`_rate_limit_editor.html` + `_keywords_editor.html`] for the Settings · Sources writable-popover editors. Net total: 91 partials. Canonical contract: `docs/design/SOURCES_UI.md` § H.)
+> **Last updated:** 2026-05-21 (plan 72 / `0.3.2.01` — registers 1 net-new Discover-group partial [`score_card.html`] as the Variant B linear-bento composite wrapping `score_circle` + `match_breakdown` + strengths/gaps/visa_note overlay. Also extends `tailored_bullet_row.html` API with an optional `rationale` arg for the Variant A inline-ledger bullet-selection preview (additive; backward compatible). Net total: 92 partials. Canonical contract: `docs/design/MOCKUP_HANDOFF-0.3.2.md` § Surface 1 + § Surface 2.)
+> Earlier line: 2026-05-20 (plan 58 / `0.2.7.06` — registers 2 net-new Settings-group partials [`_rate_limit_editor.html` + `_keywords_editor.html`] for the Settings · Sources writable-popover editors. Net total: 91 partials. Canonical contract: `docs/design/SOURCES_UI.md` § H.)
 > Earlier line: 2026-05-20 (plan 49 / `0.2.0.16` — registers 1 net-new Settings-group partial `_source_row.html` for the Settings · Sources sub-tab rewrite. Net total: 89 partials. Canonical contract: `docs/design/SOURCES_UI.md`.)
 > Earlier line: 2026-05-20 (plan 36 / `0.2.0.11a` — registers 3 net-new Discover-group partials [`filter_toolbar.html`, `_filter_hidden_inputs.html`, `job_topbar.html`] + 1 new `filter_chip` macro. Net total: 88 partials + macro count grows by 1 in § I. Canonical Job-UI contract: `docs/design/JOB_UI.md`.)
 > Earlier line: 2026-04-30
@@ -12,7 +13,7 @@
 
 ## A · Inventory
 
-The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 91 components** across 12 groups.
+The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 92 components** across 12 groups.
 
 | Group | Count | Components |
 |---|---|---|
@@ -22,13 +23,13 @@ The library lives at `src/ui/templates/components/`. Components grouped by respo
 | Onboarding | 5 | `step_indicator.html`, `dropzone.html`, `extraction_checklist.html`, `extracted_field_row.html`, `progress_bar.html` |
 | Profile / Bullet | 11 | `profile_hero.html`, `contact_chip.html`, `experience_card.html`, `bullet_row.html`, `section_anchor_nav.html`, `application_readiness_card.html`, `application_qs_form.html`, `bullet_edit_row.html`, `tag_picker.html`, `selection_override.html`, `bullet_textarea.html` |
 | Overview | 4 | `kpi_card.html`, `priority_action_row.html`, `email_signal_row.html`, `pipeline_strip.html` |
-| Discover | 11 | `swipe_card.html`, `match_breakdown.html`, `discover_action_bar.html`, `swipe_action_btn.html`, `discover_stats_strip.html`, `up_next_card.html`, `tip_card.html`, `keyboard_hints.html`, `filter_toolbar.html` (plan 36), `_filter_hidden_inputs.html` (plan 36), `job_topbar.html` (plan 36) |
+| Discover | 12 | `swipe_card.html`, `match_breakdown.html`, `discover_action_bar.html`, `swipe_action_btn.html`, `discover_stats_strip.html`, `up_next_card.html`, `tip_card.html`, `keyboard_hints.html`, `filter_toolbar.html` (plan 36), `_filter_hidden_inputs.html` (plan 36), `job_topbar.html` (plan 36), `score_card.html` (plan 72) |
 | Discover · review & apply | 6 | `apply_topbar.html`, `warm_intro_card.html`, `tailored_bullet_row.html`, `cover_letter_section.html`, `screener_question_card.html`, `apply_action_bar.html` |
 | Tracking | 8 | `view_toggle.html`, `provider_chip.html`, `integration_card.html`, `followup_banner.html`, `stage_column.html`, `tracking_card.html`, `tracking_list_row.html`, `tracking_board.html` |
 | Outreach | 6 | `outreach_app_row.html`, `recommended_move_card.html`, `outreach_message_card.html`, `contact_card.html`, `linkedin_status_chip.html`, `outreach_timeline.html` |
 | Settings | 10 | `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `deployment_status_card.html`, `log_tail.html`, `on_disk_card.html`, `connection_status_card.html`, `_source_row.html` (plan 49), `_rate_limit_editor.html` (plan 58), `_keywords_editor.html` (plan 58) |
 | Skeletons | 5 | `swipe_card_skeleton.html`, `tracking_card_skeleton.html`, `priority_action_row_skeleton.html`, `email_signal_row_skeleton.html`, `bullet_edit_row_skeleton.html` |
-| **Total** | **91** | |
+| **Total** | **92** | |
 
 Cover letter generation lives inside Discover · review & apply (no standalone screen) — its components (`cover_letter_section.html`, `screener_question_card.html`) are listed under that group. The standalone Cover Letter generator's earlier components (`letter_editor.html`, `tone_picker.html`, `output_mode_card.html`, `model_attribution_chip.html`) are NOT in MVP and dropped.
 
@@ -1512,6 +1513,29 @@ Mobile variant: circular `h-14 w-14 rounded-full` with icon only.
 ```
 **Mockup reference:** none (Playwright capture in `traces/2026-05-19T15-42-42_833f4a/qa/0.2.0.11/`).
 
+#### `score_card.html`
+
+**Purpose:** Variant B (linear bento) composite container surfacing score + per-dimension breakdown + AI-judged STRENGTHS + WHAT'S MISSING + optional provenance footer. Wraps `score_circle.html` + `match_breakdown.html` and reads the 18-key `Job.match_breakdown` JSONB via defensive `.get()` so legacy rows render gracefully.
+**Used by:** Screen 7 (Discover · `swipe_card.html` lower body), Screen 8 (Discover · review LEFT column). Designed for reuse on Screen 12 (Job detail topbar) when that surface adopts the composite.
+**API:**
+| Variable | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `score` | int 0-100 | yes | — | Threaded into nested `score_circle.html` |
+| `match_breakdown` | dict | yes | — | 18-key shape (see `DATA_MODEL.md § Job.match_breakdown`); subkeys read defensively: `per_dimension`, `strengths`, `gaps`, `visa_concern`, `visa_note`, `layers_run`, `layer_4_provider`, `layer_4_model`, `judge_skipped`, `scored_at` |
+| `expanded` | bool | no | `false` | When `true`, renders the provenance footer (layers, layer-4 provider/model, scored_at) below the 3-zone body |
+| `size` | enum (`compact` / `default` / `hero`) | no | `default` | Sizes the embedded score circle |
+
+**Visual spec:** `grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-5`. LEFT zone (md:col-span-3): `MATCH` micro-label + `score_circle` + llm-judged pulse dot (cyan) or `layer-3 only` amber chip when `judge_skipped`. MIDDLE zone (md:col-span-4): `PER-DIMENSION` micro-label + `match_breakdown.html` per-dim bars. RIGHT zone (md:col-span-5): two tinted panels stacked — `STRENGTHS` (emerald: `bg-emerald-500/5 ring-1 ring-emerald-500/20`) over `WHAT'S MISSING` (amber: `bg-amber-500/5 ring-1 ring-amber-500/20`), each with `+` / `−` semantic bullets. Optional VISA panel (rose tint) appears when `visa_concern=true` and `visa_note` is set. Expanded footer: layer-provenance chips (slate for layers_run, cyan for `provider · model`) + `scored {{ scored_at }}` right-aligned. Mobile (<md): zones stack vertically.
+**Lucide icons:** none directly (composed children own icon use).
+**Variants:** collapsed (`expanded=false`, default) vs expanded (provenance footer visible); each combined with size (`compact` / `default` / `hero`).
+**Example invocation:**
+```jinja
+{% with score=86, match_breakdown=job.match_breakdown or {}, expanded=true %}
+  {% include "components/score_card.html" %}
+{% endwith %}
+```
+**Mockup reference:** `docs/design/mockups/0.3.2/score-card-variant-b-desktop.png` + `-mobile.png` (gitignored).
+
 ---
 
 ### H.8 Discover · review & apply
@@ -1555,7 +1579,7 @@ Mobile variant: circular `h-14 w-14 rounded-full` with icon only.
 
 #### `tailored_bullet_row.html`
 
-**Purpose:** One bullet row on Discover · review middle column — checkbox + AI-trimmed line + chip row.
+**Purpose:** One bullet row on Discover · review middle column — checkbox + AI-trimmed line + chip row + optional inline rationale ledger (plan 72 § Surface 2 — Variant A).
 **Used by:** Screen 8 (Discover · review tailored resume column).
 **API:**
 | Variable | Type | Required | Default | Description |
@@ -1564,19 +1588,21 @@ Mobile variant: circular `h-14 w-14 rounded-full` with icon only.
 | `selected` | bool | yes | — | Whether AI selected for this resume |
 | `trimmed_line` | string | no | — | The AI-trimmed line for selected; full text for excluded |
 | `chips` | list[string] | no | — | Tag-like chips: `# jd`, `# personalization`, `# scale`, `# edited for jd`, `# you tweaked`, `# duplicate signal`, `# trimmed`, `# older role` |
+| `rationale` | dict \| null | no | `null` | Plan 72: `{selected: bool, why_selected: str\|null, why_dropped: str\|null}`. When set, renders an italic micro-copy line below the bullet: cyan-tinted "why kept · {why_selected}" when `selected=true`; slate-tinted "why dropped · {why_dropped}" when `selected=false`. Omit (or pass `null`) for legacy bundles without `Application.generation_trace.bullet_selection_log`. |
 
-**Visual spec:** `flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/30`. Checkbox: 16px, indigo-tinted when checked. Body: trimmed line (`text-sm text-slate-200 leading-relaxed` if selected, `text-slate-500 line-through` if excluded). Chips: `flex flex-wrap gap-1 mt-1.5` (smaller variants of `chip` macro). Click → opens `/_modal/bullet-editor/{{bullet.id}}` with the trimmed-for-this-JD version pre-filled.
-**Lucide icons:** none.
-**Variants:** `selected` vs excluded.
+**Visual spec:** `flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/30`. Checkbox: 16px, indigo-tinted when checked. Body: trimmed line (`text-sm text-slate-200 leading-relaxed` if selected, `text-slate-500 line-through` if excluded). Rationale (when set): `italic ml-5 border-l-2 pl-2 mt-1 text-xs leading-relaxed` — `text-cyan-300 border-cyan-400/40` for selected, `text-slate-400 border-slate-700` for dropped, with a mono `why kept · ` / `why dropped · ` prefix. Chips: `flex flex-wrap gap-1 mt-1.5` (smaller variants of `chip` macro). Click → opens `/_modal/bullet-editor/{{bullet.id}}` with the trimmed-for-this-JD version pre-filled.
+**Lucide icons:** `pencil` (edit hover, stroke 1.5).
+**Variants:** `selected` vs excluded; each combined with rationale-present vs rationale-absent.
 **Example invocation:**
 ```jinja
 {% include "components/tailored_bullet_row.html" with {
   "bullet": bullet, "selected": true,
   "trimmed_line": "Built Intuit's ML personalization platform; +23% homepage CTR / $4.2M revenue",
-  "chips": ["jd", "scale", "personalization"]
+  "chips": ["jd", "scale", "personalization"],
+  "rationale": {"selected": true, "why_selected": "matches JD ai-ml + scale signals", "why_dropped": null}
 } %}
 ```
-**Mockup reference:** bundle `screens/DiscoverDetail.jsx:DDBulletRow` line 209.
+**Mockup reference:** bundle `screens/DiscoverDetail.jsx:DDBulletRow` line 209; rationale ledger from `docs/design/mockups/0.3.2/bullet-preview-variant-a-desktop.png` (gitignored).
 
 #### `cover_letter_section.html`
 
@@ -2254,8 +2280,8 @@ Add per-domain macros only when a domain grows past ~10 macros.
 | 4 Profile | `sidebar`, `profile_hero`, `contact_chip`, `experience_card`, `bullet_row`, `tag_chip`, `section_anchor_nav`, `application_readiness_card`, `avatar`, `empty_state` (per-section) |
 | 5 Profile editor | `sidebar`, `editor_field`, `editor_card`, `bullet_edit_row`, `application_qs_form`, `autosave_indicator`, `tag_picker`, `bullet_edit_row_skeleton`, `confirm_modal` (Discard / Remove role) |
 | 6 Bullet editor (modal) | `modal`, `tag_picker`, `selection_override`, `bullet_textarea`, `field_label`, `info_card`, `confirm_modal` (Delete bullet) |
-| 7 Discover | `sidebar`, `swipe_card`, `score_circle`, `match_breakdown`, `discover_action_bar`, `swipe_action_btn`, `discover_stats_strip`, `up_next_card`, `tip_card`, `keyboard_hints`, `kbd`, `swipe_card_skeleton`, `empty_state`, `tag_chip`, `avatar`, `filter_toolbar` (plan 36), `_filter_hidden_inputs` (plan 36), `filter_chip` macro (plan 36) |
-| 8 Discover · review & apply | `sidebar`, `apply_topbar`, `match_breakdown`, `warm_intro_card`, `tailored_bullet_row`, `cover_letter_section`, `screener_question_card`, `apply_action_bar`, `ai_badge`, `tag_chip`, `avatar`, `confirm_modal` (Discard draft) |
+| 7 Discover | `sidebar`, `swipe_card`, `score_circle`, `match_breakdown`, `score_card` (plan 72), `discover_action_bar`, `swipe_action_btn`, `discover_stats_strip`, `up_next_card`, `tip_card`, `keyboard_hints`, `kbd`, `swipe_card_skeleton`, `empty_state`, `tag_chip`, `avatar`, `filter_toolbar` (plan 36), `_filter_hidden_inputs` (plan 36), `filter_chip` macro (plan 36) |
+| 8 Discover · review & apply | `sidebar`, `apply_topbar`, `match_breakdown`, `score_card` (plan 72), `warm_intro_card`, `tailored_bullet_row` (rationale arg per plan 72), `cover_letter_section`, `screener_question_card`, `apply_action_bar`, `ai_badge`, `tag_chip`, `avatar`, `confirm_modal` (Discard draft) |
 | 9 Tracking | `sidebar`, `tracking_board`, `tracking_card`, `tracking_list_row`, `integration_card`, `provider_chip`, `followup_banner`, `stage_column`, `view_toggle`, `tracking_card_skeleton`, `status_badge`, `score_circle`, `avatar`, `empty_state` |
 | 10 Outreach | `sidebar`, `outreach_app_row`, `outreach_message_card`, `contact_card`, `recommended_move_card`, `linkedin_status_chip`, `provider_chip`, `outreach_timeline`, `ai_badge`, `avatar`, `confirm_modal` (Disconnect LinkedIn) |
 | 11 Settings | `sidebar`, `settings_tabs`, `provider_card`, `cost_card`, `deployment_status_card`, `log_tail`, `on_disk_card`, `connection_status_card`, `_source_row` (plan 49), `integration_card`, `deployment_badge`, `confirm_modal` (Delete account / Disconnect Gmail) |

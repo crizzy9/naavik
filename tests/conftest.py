@@ -97,6 +97,7 @@ _SERVICE_DIRECT_TEST_MODULES = frozenset(
         "test_scorer",
         "test_orchestrator",
         "test_bundle_generator",
+        "test_bundle_generator_bullet_log",
         "test_document_generator",
         "test_ats_postmortem",
         "test_score_orchestrator",

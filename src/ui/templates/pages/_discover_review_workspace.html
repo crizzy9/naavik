@@ -80,8 +80,11 @@
         </section>
 
         <section class="bg-slate-900 border border-slate-800 rounded-lg p-5">
-          {% with breakdown=job.match_breakdown, overall=job.match_overall, title="MATCH BREAKDOWN" %}
-            {% include "components/match_breakdown.html" %}
+          {# Plan 72 § Surface 1 — score_card (Variant B) replaces the bare
+             match_breakdown include. `expanded=true` because this is the
+             dedicated review-page surface (more screen real estate). #}
+          {% with score=job.score, match_breakdown=job.match_breakdown or {}, expanded=true %}
+            {% include "components/score_card.html" %}
           {% endwith %}
         </section>
 

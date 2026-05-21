@@ -7,8 +7,12 @@
     selected     : bool — whether AI selected for this resume
     trimmed_line : string — the AI-trimmed line for selected; full text for excluded
     chips        : list[str] — tag-like chips ("jd", "personalization", "scale", ...)
+    rationale    : dict | None — plan 72: {selected: bool, why_selected: str|null,
+                                            why_dropped: str|null}. When set, renders
+                                            italic micro-copy below the bullet text.
 #}
 {% set selected = selected | default(false) %}
+{% set rationale = rationale | default(none) %}
 <div class="flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/30 transition group">
   <input type="checkbox"
          class="mt-1 h-4 w-4 accent-indigo-500 shrink-0"
@@ -19,6 +23,17 @@
               {% if selected %}text-slate-200{% else %}text-slate-500 line-through{% endif %}">
       {{ trimmed_line | default(bullet.text) }}
     </p>
+    {% if rationale %}
+      {% if selected and rationale.why_selected %}
+        <p class="italic text-cyan-300 ml-5 border-l-2 border-cyan-400/40 pl-2 mt-1 text-xs leading-relaxed">
+          <span class="font-mono text-[10px] uppercase tracking-wide text-cyan-400/80">why kept · </span>{{ rationale.why_selected }}
+        </p>
+      {% elif not selected and rationale.why_dropped %}
+        <p class="italic text-slate-400 ml-5 border-l-2 border-slate-700 pl-2 mt-1 text-xs leading-relaxed">
+          <span class="font-mono text-[10px] uppercase tracking-wide text-slate-500">why dropped · </span>{{ rationale.why_dropped }}
+        </p>
+      {% endif %}
+    {% endif %}
     {% if chips %}
       <div class="mt-1.5 flex flex-wrap gap-1">
         {% for c in chips %}

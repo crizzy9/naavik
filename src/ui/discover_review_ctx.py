@@ -46,12 +46,62 @@ def _bullet_tags(b) -> list[str]:
     return [t.value if hasattr(t, "value") else str(t) for t in (b.tags or [])]
 
 
-async def tailored_bullet_groups(session: AsyncSession, *, user_id: int) -> list[dict[str, object]]:
+def _rationale_index_from_trace(
+    application: Application | None,
+) -> dict[int, dict[str, object]]:
+    """Project `generation_trace.bullet_selection_log` into a per-bullet rationale map.
+
+    Plan 72 § Surface 2 — bundle_generator writes
+    `bullet_selection_log: list[{bullet_id, selected, why_selected, why_dropped}]`
+    onto `Application.generation_trace`. We index by bullet_id so the row
+    builder can look up rationale in O(1) without re-iterating the log.
+
+    Returns an empty dict when the application has no trace yet (lazy path),
+    no log key (legacy bundles pre-plan-72), or a malformed entry — the
+    template guards via `{% if rationale %}` so the row degrades gracefully.
+    """
+    if application is None:
+        return {}
+    # Defensive — sample_data Application rows don't pass the generation_trace
+    # kwarg, so SQLModel/Pydantic raises AttributeError on plain attribute
+    # access. `getattr(..., None)` makes the read tolerant for legacy and
+    # fixture-only Applications (graceful degrade — UI renders without ledger).
+    trace = getattr(application, "generation_trace", None) or {}
+    log = trace.get("bullet_selection_log") or []
+    out: dict[int, dict[str, object]] = {}
+    for entry in log:
+        if not isinstance(entry, dict):
+            continue
+        bid = entry.get("bullet_id")
+        try:
+            bid_int = int(bid) if bid is not None else None
+        except (TypeError, ValueError):
+            continue
+        if bid_int is None:
+            continue
+        out[bid_int] = {
+            "selected": bool(entry.get("selected", False)),
+            "why_selected": entry.get("why_selected"),
+            "why_dropped": entry.get("why_dropped"),
+        }
+    return out
+
+
+async def tailored_bullet_groups(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    application: Application | None = None,
+) -> list[dict[str, object]]:
     """Group bullets by experience for the middle column.
 
     The first 7 are 'selected for this resume'; the rest 'excluded with reason'.
+    When `application` is supplied and its `generation_trace` carries a
+    `bullet_selection_log`, each row picks up a `rationale` dict so the
+    template can render the inline ledger (plan 72 § Surface 2).
     """
     experiences = await profile_service.list_experiences(session, user_id)
+    rationale_index = _rationale_index_from_trace(application)
     out = []
     selected_count = 7
     seen = 0
@@ -69,6 +119,7 @@ async def tailored_bullet_groups(session: AsyncSession, *, user_id: int) -> list
                     "trimmed_line": b.text if not is_selected else _trim(b.text),
                     "chips": chips,
                     "tags": _bullet_tags(b),
+                    "rationale": rationale_index.get(b.id),
                 }
             )
         out.append(
@@ -170,7 +221,9 @@ async def build_review_ctx(
         "eager": eager,
         "warm_intro": warm_intro,
         "tailored_bullet_groups": (
-            await tailored_bullet_groups(session, user_id=user_id) if application else []
+            await tailored_bullet_groups(session, user_id=user_id, application=application)
+            if application
+            else []
         ),
         "cover_sections": sections,
         "screener_answers": screener_views,
