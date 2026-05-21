@@ -42,6 +42,18 @@ class Settings(BaseSettings):
     lever_companies: list[str] | None = None
     ashby_companies: list[str] | None = None
 
+    # ATS adapter credentials — plan 63 / 0.2.7.10 § D.3. Env-based per
+    # post-vault pattern. Each slot is OPTIONAL; the adapter's `submit()`
+    # returns `FAILURE_AUTH_REQUIRED` predictably when the slot is unset.
+    # `services/env_secrets.py` exposes presence indicators for Settings UI.
+    # Adapter implementations land in 0.4.0.NN (Workday) + 0.8.0.NN
+    # (LinkedIn / Indeed / Generic); these slots are reserved + read at
+    # adapter-instantiation time (NOT once at startup).
+    workday_login_token: str | None = None
+    linkedin_session_cookie: str | None = None
+    indeed_session_cookie: str | None = None
+    ats_generic_llm_confidence_threshold: float = 0.7
+
     @field_validator(
         "workday_companies",
         "greenhouse_companies",

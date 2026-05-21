@@ -10,6 +10,7 @@ swallows + returns None; never raises into `_record_failure`.
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import json
 import logging
@@ -86,7 +87,10 @@ class PostmortemTrace:
     request_body_redacted: Any
     response_status: int | None
     response_body_excerpt: str | None
-    screenshot_path: str | None = None  # 0.2.3.01 placeholder
+    # Plan 63 / 0.2.7.10 § C.5 — relative-to-data_dir path to a PNG capture
+    # emitted by Playwright-driven adapters via `raw["screenshot_b64"]`.
+    # Always None for the 3 HTTP adapters (Greenhouse / Lever / Ashby).
+    screenshot_path: str | None = None
 
 
 def _postmortems_root() -> Path:
@@ -119,6 +123,7 @@ def _build_trace(
     failure_message: str,
     raw: dict | None,
     captured_at: datetime,
+    screenshot_path: str | None = None,
 ) -> PostmortemTrace:
     raw = raw or {}
     request_url = raw.get("request_url")
@@ -131,7 +136,7 @@ def _build_trace(
 
     # The 3 shipped adapters populate `raw={"text": response.text}` on failure.
     # `request_url` / `response_status` / `response_body` are honored when present
-    # (forward-compat for richer adapter shapes, including 0.2.3.01 Playwright).
+    # (forward-compat for richer adapter shapes, including plan 63 Playwright).
     body = raw.get("response_body")
     if body is None:
         body = raw.get("text")
@@ -159,7 +164,37 @@ def _build_trace(
         request_body_redacted=request_body_redacted,
         response_status=response_status,
         response_body_excerpt=response_body_excerpt,
+        screenshot_path=screenshot_path,
     )
+
+
+def _write_screenshot(target_dir: Path, screenshot_b64: str) -> str | None:
+    """Atomic-write a base64-PNG into the postmortem dir; return relative filename.
+
+    Best-effort: malformed base64 / I/O error → log + return None. Per plan 63
+    § C.5, the postmortem layer does NOT redact PNG content — that's the
+    adapter's responsibility (e.g. Workday SSN page → adapter elects not to
+    populate `raw["screenshot_b64"]`).
+    """
+    try:
+        png_bytes = base64.b64decode(screenshot_b64, validate=False)
+    except Exception as exc:  # noqa: BLE001 — diagnostic; never block
+        log.warning("postmortem screenshot decode failed: %s", exc)
+        return None
+    if not png_bytes:
+        return None
+    target_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        fd, tmp = tempfile.mkstemp(dir=str(target_dir), prefix=".tmp-")
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(png_bytes)
+        os.replace(tmp, target_dir / "screenshot.png")
+    except OSError as exc:
+        log.warning("postmortem screenshot write failed: %s", exc)
+        with contextlib.suppress(OSError, NameError):
+            os.unlink(tmp)
+        return None
+    return "screenshot.png"
 
 
 async def _analyze(
@@ -255,18 +290,29 @@ async def capture_postmortem(
     try:
         now = datetime.now(UTC)
         ts = now.strftime(_TIMESTAMP_FMT)
+        root = _postmortems_root()
+        target_dir = root / str(application.id) / ts
+
+        # Plan 63 / 0.2.7.10 § C.5 — write Playwright screenshot bytes BEFORE
+        # building the trace dataclass so the relative path makes it into
+        # trace.json. HTTP adapters never emit `raw["screenshot_b64"]`, so
+        # `screenshot_path` stays None for them.
+        screenshot_path: str | None = None
+        screenshot_b64 = (raw or {}).get("screenshot_b64")
+        if isinstance(screenshot_b64, str) and screenshot_b64:
+            screenshot_path = _write_screenshot(target_dir, screenshot_b64)
+
         trace = _build_trace(
             application=application,
             failure_kind=failure_kind,
             failure_message=failure_message,
             raw=raw,
             captured_at=now,
+            screenshot_path=screenshot_path,
         )
         analysis = await _analyze(
             session=session, application=application, settings=settings, trace=trace
         )
-        root = _postmortems_root()
-        target_dir = root / str(application.id) / ts
         _atomic_write(target_dir / "trace.json", json.dumps(asdict(trace), indent=2, default=str))
         _atomic_write(target_dir / "analysis.md", _render_markdown(trace, analysis))
         return f"postmortems/{application.id}/{ts}"
