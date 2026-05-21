@@ -383,6 +383,12 @@ async def count_jobs_by_source(session: AsyncSession, user_id: int) -> dict[JobS
     return out
 
 
+async def get_scrape_run(session: AsyncSession, scrape_run_id: int) -> JobScrapeRun | None:
+    """Single JobScrapeRun by id — used by `/jobs/{id}` to render last-run metadata."""
+    stmt = select(JobScrapeRun).where(JobScrapeRun.id == scrape_run_id)
+    return (await session.exec(stmt)).one_or_none()
+
+
 async def list_recent_scrape_runs(
     session: AsyncSession,
     *,

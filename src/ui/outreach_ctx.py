@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from db import sample_data as sd
-from db.sample_data_models import Application, Contact
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from models import Application, Contact
 from models.enums import (
     AppEventKind,
     OutreachIntent,
@@ -13,6 +14,7 @@ from models.enums import (
     RecruiterState,
     ReferralState,
 )
+from services import application_service, contact_tracker, outreach_service
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",
@@ -36,10 +38,14 @@ def _initial_color(s: str) -> tuple[str, str]:
     return initial, _COMPANY_COLORS.get(initial, "bg-slate-700")
 
 
+def _aware(when: datetime) -> datetime:
+    return when if when.tzinfo is not None else when.replace(tzinfo=UTC)
+
+
 def _relative_label(when: datetime | None) -> str:
     if when is None:
         return "—"
-    delta = sd.TODAY - when
+    delta = datetime.now(UTC) - _aware(when)
     days = delta.days
     if days < 1:
         return "today"
@@ -84,17 +90,18 @@ def _contact_view(c: Contact, *, recent_outreach: list) -> dict[str, object]:
     state = "cold"
     last_om = recent_outreach[0] if recent_outreach else None
     if last_om and last_om.status == OutreachStatus.REPLIED:
-        # Did the contact provide a referral?
         state = (
             "referred_you"
             if last_om.intent == OutreachIntent.REFERRAL_REQUEST
             else "awaiting_reply"
         )
     elif last_om and last_om.status in {OutreachStatus.SENT, OutreachStatus.OPENED}:
-        if (sd.TODAY - (last_om.sent_at or sd.TODAY)).days >= 7:
-            state = "no_reply_7d"
-        else:
+        sent_at = last_om.sent_at
+        if sent_at is None:
             state = "awaiting_reply"
+        else:
+            days_since = (datetime.now(UTC) - _aware(sent_at)).days
+            state = "no_reply_7d" if days_since >= 7 else "awaiting_reply"
     last_activity = None
     if last_om and last_om.replied_at:
         last_activity = f"replied {_relative_label(last_om.replied_at)}"
@@ -116,14 +123,21 @@ def _contact_view(c: Contact, *, recent_outreach: list) -> dict[str, object]:
     }
 
 
-async def build_outreach_ctx(*, selected_app_id: int | None = None) -> dict[str, object]:
-    visible = await sd.applications_visible_in_tracking()
-    followup = await sd.applications_in_followup_state()
+async def build_outreach_ctx(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    selected_app_id: int | None = None,
+) -> dict[str, object]:
+    visible = await application_service.list_visible_in_tracking(session, user_id)
+    followup = await application_service.list_in_followup(session, user_id)
     followup_ids = {a.id for a in followup}
 
     contact_counts: dict[int, int] = {}
     for a in visible:
-        contact_counts[a.id] = len(await sd.contacts_for_application(a.id))
+        contact_counts[a.id] = len(
+            await contact_tracker.list_contacts_for_application(session, a.id)
+        )
 
     followup_apps = [_row_view(a, contact_counts.get(a.id, 0)) for a in followup]
     active_apps = [
@@ -132,7 +146,7 @@ async def build_outreach_ctx(*, selected_app_id: int | None = None) -> dict[str,
 
     selected_app: Application | None = None
     if selected_app_id is not None:
-        selected_app = await sd.get_application(selected_app_id)
+        selected_app = await application_service.get_application(session, selected_app_id)
     if selected_app is None and visible:
         selected_app = visible[0]
 
@@ -154,13 +168,11 @@ async def build_outreach_ctx(*, selected_app_id: int | None = None) -> dict[str,
             "match_score": 0.86,
         }
 
-        contacts = await sd.contacts_for_application(selected_app.id)
+        contacts = await contact_tracker.list_contacts_for_application(session, selected_app.id)
         for c in contacts:
-            recent = await sd.outreach_messages_for_contact(c.id)
+            recent = await outreach_service.list_messages_for_contact(session, c.id)
             contacts_view.append(_contact_view(c, recent_outreach=recent))
 
-        # Recommended move — if any contact has a recent reply, suggest a follow-up;
-        # else suggest the most-recent silent contact.
         primary = next((c for c in contacts), None)
         if primary:
             recommended_move = {
@@ -179,7 +191,7 @@ async def build_outreach_ctx(*, selected_app_id: int | None = None) -> dict[str,
                 ),
             }
 
-        events = await sd.app_events_for_application(selected_app.id)
+        events = await application_service.list_events_for(session, selected_app.id)
         for e in events[:8]:
             kind_map = {
                 AppEventKind.LINKEDIN_DM_SENT: "linkedin_dm",

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from db import sample_data as sd
-from db.sample_data_models import Application, Job
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from models import Application, Job
+from services import application_service, contact_tracker, profile_service
 from ui.discover_ctx import _initial_color, _salary_range
 
 COVER_LABELS = {
@@ -40,16 +42,21 @@ COVER_SECTION_TEXT: dict[str, str] = {
 }
 
 
-async def tailored_bullet_groups() -> list[dict[str, object]]:
-    """Group bullets by experience for the middle column. The first 7 are
-    'selected for this resume'; the rest 'excluded with reason'.
+def _bullet_tags(b) -> list[str]:
+    return [t.value if hasattr(t, "value") else str(t) for t in (b.tags or [])]
+
+
+async def tailored_bullet_groups(session: AsyncSession, *, user_id: int) -> list[dict[str, object]]:
+    """Group bullets by experience for the middle column.
+
+    The first 7 are 'selected for this resume'; the rest 'excluded with reason'.
     """
-    experiences = await sd.get_experiences()
+    experiences = await profile_service.list_experiences(session, user_id)
     out = []
     selected_count = 7
     seen = 0
     for e in experiences:
-        bullets = await sd.get_bullets_for_experience(e.id)
+        bullets = await profile_service.get_bullets_for_experience(session, e.id)
         rows = []
         for b in bullets:
             seen += 1
@@ -61,7 +68,7 @@ async def tailored_bullet_groups() -> list[dict[str, object]]:
                     "selected": is_selected,
                     "trimmed_line": b.text if not is_selected else _trim(b.text),
                     "chips": chips,
-                    "tags": [t.value for t in b.tags],
+                    "tags": _bullet_tags(b),
                 }
             )
         out.append(
@@ -82,12 +89,16 @@ def _trim(text: str, max_chars: int = 160) -> str:
 
 
 async def build_review_ctx(
-    *, job: Job, application: Application | None, eager: bool
+    session: AsyncSession,
+    *,
+    user_id: int,
+    job: Job,
+    application: Application | None,
+    eager: bool,
 ) -> dict[str, object]:
     """Build the full Discover · review template context."""
     initial, color = _initial_color(job.company)
 
-    # Right column tabs default
     sections = [
         {"id": "intro", "label": COVER_LABELS["intro"], "text": COVER_SECTION_TEXT["intro"]},
         {"id": "body", "label": COVER_LABELS["body"], "text": COVER_SECTION_TEXT["body"]},
@@ -101,7 +112,7 @@ async def build_review_ctx(
 
     warm_intro = None
     if job.warm_intro_contact_id:
-        c = await sd.get_contact(job.warm_intro_contact_id)
+        c = await contact_tracker.get_contact(session, job.warm_intro_contact_id)
         if c:
             warm_intro = {
                 "name": c.name,
@@ -110,11 +121,10 @@ async def build_review_ctx(
                 "linkedin_degree": c.linkedin_degree or "1st",
             }
 
-    # Screener answers
-    screener_views = []
+    screener_views: list[dict[str, object]] = []
     unreviewed = 0
     if application:
-        rows = await sd.screener_answers_for_application(application.id)
+        rows = await application_service.list_screener_answers_for(session, application.id)
         for s in rows:
             if s.required and s.reviewed_at is None:
                 unreviewed += 1
@@ -128,7 +138,6 @@ async def build_review_ctx(
                 }
             )
 
-    # Failure banner — shown when the DRAFT carries last_failure
     failure = None
     if application and application.submission_artifacts:
         failure = application.submission_artifacts.get("last_failure")
@@ -160,7 +169,9 @@ async def build_review_ctx(
         else None,
         "eager": eager,
         "warm_intro": warm_intro,
-        "tailored_bullet_groups": await tailored_bullet_groups() if application else [],
+        "tailored_bullet_groups": (
+            await tailored_bullet_groups(session, user_id=user_id) if application else []
+        ),
         "cover_sections": sections,
         "screener_answers": screener_views,
         "unreviewed_count": unreviewed,

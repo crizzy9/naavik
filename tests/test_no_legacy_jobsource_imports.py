@@ -50,6 +50,16 @@ def test_discover_ctx_wires_job_service_list_jobs():
         "sample_data shim, update this lint + document the regression in the "
         "plan's ## Deviations section."
     )
-    assert "from services import job_service" in body or "from services.job_service" in body, (
+    # Accept either a dedicated `from services import job_service` line, the
+    # combined `from services import …, job_service, …` form (used after the
+    # plan-69 service-layer expansion), or the long-form `from services.job_service`
+    # alias. The lint exists to catch a regression to `sd.discover_queue()`, not
+    # to police import grouping.
+    import_pattern = re.compile(
+        r"^\s*from\s+services\s+import\s+[^\n]*\bjob_service\b|"
+        r"^\s*from\s+services\.job_service\s+import\b",
+        re.MULTILINE,
+    )
+    assert import_pattern.search(body), (
         "src/ui/discover_ctx.py must import job_service (plan 36 § A wiring)."
     )

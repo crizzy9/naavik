@@ -1,5 +1,5 @@
-"""Shape SAMPLE_DATA Profile/Experience/Bullet rows into the dicts the
-profile components expect.
+"""Project Profile/Experience/Bullet rows into the dicts the profile
+components expect.
 
 Lives in `ui/` (not `db/`) because the shape is presentation-bound; the DB
 models stay free of these projections.
@@ -7,10 +7,9 @@ models stay free of these projections.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from db import sample_data as sd
-from db.sample_data_models import (
+from models import (
     Bullet,
     Certification,
     Education,
@@ -33,13 +32,18 @@ def _company_initial_color(company: str) -> tuple[str, str]:
     return initial, _INITIAL_COLORS.get(initial, "bg-slate-700")
 
 
+def _tag_values(tags) -> list[str]:
+    """Normalize `tags` across shadow `list[Tag]` enum + real `list[str]`."""
+    return [t.value if hasattr(t, "value") else str(t) for t in (tags or [])]
+
+
 def _format_dates(start: datetime, end: datetime | None) -> tuple[str, str]:
     """Return ("Jan 2017 — Present", "5y 2mo")."""
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     s = f"{months[start.month - 1]} {start.year}"
     if end is None:
         e = "Present"
-        end_for_dur = sd.TODAY
+        end_for_dur = datetime.now(UTC)
     else:
         e = f"{months[end.month - 1]} {end.year}"
         end_for_dur = end
@@ -126,7 +130,7 @@ def bullet_dict(b: Bullet) -> dict[str, object]:
     return {
         "id": b.id,
         "text": b.text,
-        "tags": [t.value for t in b.tags],
+        "tags": _tag_values(b.tags),
         "selection_override": b.selection_override.value if b.selection_override else None,
     }
 
@@ -260,7 +264,7 @@ def project_dicts(projects: list[Project]) -> list[dict[str, object]]:
         {
             "title": p.title,
             "text": p.text,
-            "tags": [t.value for t in p.tags],
+            "tags": _tag_values(p.tags),
             "link": p.link,
         }
         for p in projects

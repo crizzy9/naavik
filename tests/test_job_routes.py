@@ -199,18 +199,41 @@ async def test_build_discover_ctx_uses_job_service_when_session_present(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_build_discover_ctx_falls_back_when_live_returns_empty(monkeypatch):
-    """Empty live DB → sample-data fallback so a fresh fork doesn't render blank."""
-    from services import job_service
+async def test_build_discover_ctx_empty_live_returns_empty_queue(monkeypatch):
+    """Plan 69 (`0.3.3.12`) removed the sample-data fallback in `build_discover_ctx`.
+
+    Empty live DB → empty queue surface (the fresh-fork blank-Discover problem is
+    handled at the seed layer + the swipe_card.html `{% if not current_card %}`
+    empty-state guard). This test pins the new contract; the legacy fallback path
+    no longer exists.
+    """
+    from services import application_service, contact_tracker, job_service
 
     async def _empty_list_jobs(*a, **kw):
         return []
 
+    async def _empty_stuck_drafts(*a, **kw):
+        return []
+
+    async def _empty_auto_apply_queue(*a, **kw):
+        return []
+
+    async def _empty_list_jobs_by_queue_state(*a, **kw):
+        return []
+
+    async def _none_get_contact(*a, **kw):
+        return None
+
     monkeypatch.setattr(job_service, "list_jobs", _empty_list_jobs)
+    monkeypatch.setattr(job_service, "list_jobs_by_queue_state", _empty_list_jobs_by_queue_state)
+    monkeypatch.setattr(job_service, "auto_apply_queue", _empty_auto_apply_queue)
+    monkeypatch.setattr(application_service, "stuck_drafts", _empty_stuck_drafts)
+    monkeypatch.setattr(contact_tracker, "get_contact", _none_get_contact)
 
     ctx = await dctx.build_discover_ctx(SimpleNamespace(), user_id=1)
-    # Sample data has plenty of UNSWIPED rows seeded.
-    assert ctx["unswiped_count"] > 0
+    assert ctx["unswiped_count"] == 0
+    assert ctx["current_card"] is None
+    assert ctx["up_next"] == []
 
 
 def test_discover_route_passes_filters_through(client, auth_cookies):
@@ -410,18 +433,13 @@ async def test_job_detail_renders_scrape_run_metadata(monkeypatch):
     async def _get(session, job_id):
         return target
 
-    class _ExecResult:
-        def one_or_none(self_inner):
-            return fake_run
-
-    async def _exec(self_inner, _stmt):
-        return _ExecResult()
+    async def _get_scrape_run(session, scrape_run_id):
+        return fake_run if scrape_run_id == 77 else None
 
     monkeypatch.setattr(job_service, "get_job", _get)
-    # The scrape_run lookup uses session.exec directly; patch that path.
-    from sqlmodel.ext.asyncio import session as _async_session_mod
-
-    monkeypatch.setattr(_async_session_mod.AsyncSession, "exec", _exec)
+    # Plan 69 (`0.3.3.12`): `_last_scrape_run` was refactored to call
+    # `job_service.get_scrape_run` instead of `session.exec(...)` directly.
+    monkeypatch.setattr(job_service, "get_scrape_run", _get_scrape_run)
 
     client = TestClient(app, raise_server_exceptions=True)
     r = client.get("/jobs/505", cookies={"naavik_session": "fake-1"})

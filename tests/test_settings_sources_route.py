@@ -59,6 +59,14 @@ def _make_settings(**overrides):
         "indeed_keywords": None,
         "indeed_location": None,
         "scraper_rate_limits": {},
+        # Plan 69 (`0.3.3.12`) routes every Settings tab through `_ctx_for_tab`,
+        # which includes the LLM tab via the daily-cost widget. Templates
+        # rendered along that path read `semantic_match_threshold` etc.
+        "semantic_match_enabled": False,
+        "semantic_match_threshold": 0.65,
+        "embedding_provider": None,
+        "semantic_match_sync_on_upsert": False,
+        "daily_llm_cost_cap_usd": None,
     }
     base.update(overrides)
     return SimpleNamespace(**base)

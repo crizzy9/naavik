@@ -121,8 +121,6 @@ def test_settings_all_seven_tabs(client: TestClient, auth_cookies, monkeypatch):
     each `Depends(get_session)` (plans 49 + 54). Override + patch service
     layer so the test stays DB-independent.
     """
-    from types import SimpleNamespace
-
     from db.session import get_session
     from main import app
     from services import application_service, job_service, llm_tracker, settings_service
@@ -141,24 +139,16 @@ def test_settings_all_seven_tabs(client: TestClient, auth_cookies, monkeypatch):
         yield _NoopSession()
 
     def _fake_sql_settings():
-        return SimpleNamespace(
-            user_id=1,
-            sources_enabled={
-                "linkedin": True,
-                "workday": True,
-                "greenhouse": True,
-                "lever": True,
-                "ashby": True,
-                "indeed": False,
-            },
-            source_schedules={},
-            workday_companies=[],
-            linkedin_keywords=None,
-            linkedin_location=None,
-            indeed_keywords=None,
-            indeed_location=None,
-            scraper_rate_limits={},
-        )
+        # Plan 69 (`0.3.3.12`) collapsed every Settings tab through
+        # `_ctx_for_tab`, which now reads many more attributes than the
+        # original SimpleNamespace covered. Build a real `models.Settings`
+        # SQLModel instance from the shadow payload so every attribute
+        # access resolves (shadow types lack SQLModel-only fields like
+        # `linkedin_keywords`).
+        from db import sample_data as sd
+        from models import Settings as SQLSettings
+
+        return SQLSettings.model_validate(sd.SETTINGS.model_dump())
 
     async def _fake_get_or_create(session, *, user_id):
         return _fake_sql_settings()

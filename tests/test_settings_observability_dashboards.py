@@ -133,6 +133,12 @@ def _patch_route_helpers(monkeypatch):
 
 
 def _make_sources_settings(**overrides):
+    # Plan 69 (`0.3.3.12`) widened `_ctx_for_tab` to read llm_provider /
+    # llm_model / deployment_mode unconditionally; add those defaults so
+    # the existing test cases don't break when their SimpleNamespace
+    # reaches the tab body.
+    from models.enums import DeploymentMode, LLMProvider
+
     base = {
         "user_id": 1,
         "sources_enabled": {
@@ -151,6 +157,31 @@ def _make_sources_settings(**overrides):
         "indeed_location": None,
         "scraper_rate_limits": {},
         "daily_llm_cost_cap_usd": None,
+        "llm_provider": LLMProvider.ANTHROPIC,
+        "llm_model": "claude-3.5-sonnet-20250219",
+        "deployment_mode": DeploymentMode.SELF_HOSTED,
+        # Plan 61 (`0.2.7.14` / `0.2.7.16`): semantic-match template partial
+        # reads these unconditionally; default OFF.
+        "semantic_match_enabled": False,
+        "semantic_match_threshold": 0.65,
+        "embedding_provider": None,
+        "semantic_match_sync_on_upsert": False,
+        # Other route paths (Sources / Submissions tabs etc.) probe these.
+        "auto_apply_enabled": False,
+        "auto_apply_score_threshold": 0.85,
+        "auto_apply_daily_cap": None,
+        "auto_apply_immediate_dispatch": False,
+        "auto_apply_adapter_confidence_threshold": 0.7,
+        "eager_review_generation": False,
+        "consecutive_scrape_failures": {},
+        "notify_threshold": 0.80,
+        "notify_on_errors": True,
+        "notifications_enabled": {},
+        "portfolio_cors_allowed_origins": ["https://crypticsoul.dev"],
+        "allow_multiple_users": False,
+        "jwt_rotation_days": 90,
+        "jwt_rotation_grace_days": 7,
+        "debug": False,
     }
     base.update(overrides)
     return SimpleNamespace(**base)
