@@ -50,6 +50,7 @@
       hx-post="/api/v1/auth/login"
       {% endif %}
       hx-target="#login-card"
+      hx-target-error="#login-card"
       hx-swap="outerHTML"
       hx-disabled-elt="find button[type=submit]">
       <div>
