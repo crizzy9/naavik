@@ -667,6 +667,130 @@ async def test_stuck_drafts_filters_to_apps_with_last_failure():
     assert rows[0] is failed
 
 
+# ── Plan 79 / 0.4.0.11 — retry-failed-application ───────────────────
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_clears_last_failure():
+    """DRAFT with `last_failure` → retry strips the marker; retry_count preserved."""
+    app_row = _make_app(
+        submission_artifacts={
+            "last_failure": {"kind": "rate_limit", "message": "429"},
+            "retry_count": 2,
+        }
+    )
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(app_row), _exec_one(None)]  # app load; no Job lookup needed
+    # Re-queue path requires Job lookup; supply None so we skip it.
+
+    out = await svc.retry_failed(session, app_row.id, user_id=1)
+    assert "last_failure" not in (out.submission_artifacts or {})
+    assert out.submission_artifacts.get("retry_count") == 2
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_requeues_when_auto_apply_enabled():
+    """Job in SAVED + Settings.auto_apply_enabled=True → Job flips to QUEUED_FOR_AUTO_APPLY."""
+    from models import JobQueueState
+
+    app_row = _make_app(
+        submission_artifacts={"last_failure": {"kind": "unknown", "message": "boom"}}
+    )
+    job_row = _make_job(queue_state=JobQueueState.SAVED)
+    settings_row = _make_settings(auto_apply_enabled=True)
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_one(app_row),  # get_application
+        _exec_one(job_row),  # Job lookup
+        _exec_one(settings_row),  # Settings lookup
+    ]
+
+    await svc.retry_failed(session, app_row.id, user_id=1)
+    assert job_row.queue_state == JobQueueState.QUEUED_FOR_AUTO_APPLY
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_no_requeue_when_auto_apply_disabled():
+    """Job in SAVED + Settings.auto_apply_enabled=False → Job stays SAVED."""
+    from models import JobQueueState
+
+    app_row = _make_app(
+        submission_artifacts={"last_failure": {"kind": "captcha", "message": "blocked"}}
+    )
+    job_row = _make_job(queue_state=JobQueueState.SAVED)
+    settings_row = _make_settings(auto_apply_enabled=False)
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_one(app_row),
+        _exec_one(job_row),
+        _exec_one(settings_row),
+    ]
+
+    await svc.retry_failed(session, app_row.id, user_id=1)
+    assert job_row.queue_state == JobQueueState.SAVED
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_rejects_non_draft():
+    """status=APPLIED → IllegalStateTransition (route → 409)."""
+    from models import ApplicationStatus
+
+    app_row = _make_app(
+        status=ApplicationStatus.APPLIED,
+        submission_artifacts={"last_failure": {"kind": "unknown", "message": "x"}},
+    )
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(app_row)]
+    with pytest.raises(IllegalStateTransition):
+        await svc.retry_failed(session, app_row.id, user_id=1)
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_rejects_no_failure():
+    """DRAFT with empty artifacts → IllegalStateTransition (route → 409)."""
+    app_row = _make_app(submission_artifacts={})
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(app_row)]
+    with pytest.raises(IllegalStateTransition):
+        await svc.retry_failed(session, app_row.id, user_id=1)
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_idor_returns_404():
+    """Cross-user attempt → ApplicationServiceError (route swallows → 404)."""
+    app_row = _make_app(
+        user_id=2,
+        submission_artifacts={"last_failure": {"kind": "unknown", "message": "x"}},
+    )
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(app_row)]
+    with pytest.raises(svc.ApplicationServiceError):
+        await svc.retry_failed(session, app_row.id, user_id=1)
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_emits_app_event():
+    """Successful retry emits AUTO_APPLY_QUEUED with trigger=retry_requested + previous_retry_count."""
+    from models import AppEvent, AppEventKind
+
+    app_row = _make_app(
+        submission_artifacts={
+            "last_failure": {"kind": "low_confidence", "message": "0.6 < 0.7"},
+            "retry_count": 3,
+        }
+    )
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(app_row), _exec_one(None)]
+
+    await svc.retry_failed(session, app_row.id, user_id=1)
+    events = [obj for obj in session.added if isinstance(obj, AppEvent)]
+    assert len(events) == 1
+    ev = events[0]
+    assert ev.kind == AppEventKind.AUTO_APPLY_QUEUED
+    assert ev.payload["trigger"] == "retry_requested"
+    assert ev.payload["previous_retry_count"] == 3
+
+
 # ── Plan 77 / 0.4.0.17 — notification parity on manual submit_draft ──
 
 

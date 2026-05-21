@@ -680,6 +680,66 @@ async def cleanup_stale_drafts(
     return archived
 
 
+async def retry_failed(
+    session: AsyncSession,
+    application_id: int,
+    *,
+    user_id: int,
+) -> Application:
+    """Plan 79 / 0.4.0.11 — clear `submission_artifacts.last_failure` + re-queue.
+
+    Returns the updated Application. Raises `ApplicationServiceError` when the
+    application doesn't exist or belongs to a different user (route swallows
+    to 404). Raises `IllegalStateTransition` when the application isn't a
+    DRAFT, or when it has no `last_failure` to retry (route maps to 409).
+
+    Idempotent over re-runs in the no-failure path (raises 409, never mutates).
+    Job re-queue is gated on `Settings.auto_apply_enabled`; with auto-apply OFF,
+    the DRAFT is cleaned + left for manual submit (Job stays SAVED).
+    """
+    application = await get_application(session, application_id)
+    if application is None or application.user_id != user_id:
+        raise ApplicationServiceError(f"application {application_id} not found")
+    if application.status != ApplicationStatus.DRAFT:
+        raise IllegalStateTransition(f"can only retry DRAFTs (was {application.status.value})")
+    if (
+        application.submission_artifacts is None
+        or "last_failure" not in application.submission_artifacts
+    ):
+        raise IllegalStateTransition("no last_failure to retry")
+
+    artifacts = dict(application.submission_artifacts)
+    previous_retry_count = int(artifacts.get("retry_count", 0))
+    artifacts.pop("last_failure", None)
+    application.submission_artifacts = artifacts
+    application.updated_at = datetime.now(UTC)
+    session.add(application)
+
+    if application.job_id:
+        job = (await session.exec(select(Job).where(Job.id == application.job_id))).one_or_none()
+        if job is not None and job.queue_state == JobQueueState.SAVED:
+            settings = (
+                await session.exec(select(Settings).where(Settings.user_id == user_id))
+            ).one_or_none()
+            if settings is not None and settings.auto_apply_enabled:
+                job.queue_state = JobQueueState.QUEUED_FOR_AUTO_APPLY
+                job.updated_at = datetime.now(UTC)
+                session.add(job)
+
+    await _emit_event(
+        session,
+        user_id=user_id,
+        application_id=application_id,
+        kind=AppEventKind.AUTO_APPLY_QUEUED,
+        payload={
+            "trigger": "retry_requested",
+            "previous_retry_count": previous_retry_count,
+        },
+    )
+    await session.flush()
+    return application
+
+
 async def discard_draft(session: AsyncSession, application_id: int) -> Application:
     """DRAFT → CLOSED `withdrawn_by_me` + soft-delete."""
     application = await get_application(session, application_id)

@@ -198,6 +198,8 @@ class AppEventKind(StrEnum):
     AUTO_APPLY_DRY_RUN = "auto_apply_dry_run"
     AUTO_APPLY_DRAINED = "auto_apply_drained"
     AUTO_APPLY_VISA_BLOCKED = "auto_apply_visa_blocked"
+    # Plan 79 / 0.4.0.11 — retry-failed-application re-queue audit trail.
+    AUTO_APPLY_QUEUED = "auto_apply_queued"
 
 
 class StatusChangeTrigger(StrEnum):
