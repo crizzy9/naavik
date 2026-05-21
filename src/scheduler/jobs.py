@@ -127,6 +127,32 @@ async def cleanup_revoked_jwts() -> None:
     log.info("cleanup_revoked_jwts pruned %d rows", n)
 
 
+async def expire_retiring_signing_keys() -> None:
+    """`admin.expire_retiring_signing_keys` — nightly 04:00 UTC.
+
+    Plan 62 (0.2.7.07). Sweeps `tenant_signing_key` rows in RETIRING and
+    flips to RETIRED once `retired_at + Settings.jwt_rotation_grace_days`
+    has passed. Settings rows are read per-tenant; the grace window
+    defaults to 7 days when no per-tenant override exists.
+    """
+    from models import Settings as SettingsRow
+    from services.jwt_rotation_service import expire_retiring_keys
+
+    async with async_session() as session:
+        # Scalar select to avoid hydrating JSONB columns the cron doesn't need.
+        rows = (
+            await session.exec(select(SettingsRow.user_id, SettingsRow.jwt_rotation_grace_days))
+        ).all()
+        grace_by_tenant: dict[int, int] = {}
+        for user_id, grace in rows:
+            # Self-host: user_id == tenant_id (1:1 until plan 0.8.0.NN
+            # introduces a proper Tenant↔User mapping).
+            grace_by_tenant[int(user_id)] = int(grace)
+        flipped = await expire_retiring_keys(session, grace_days_by_tenant=grace_by_tenant)
+        await session.commit()
+    log.info("expire_retiring_signing_keys flipped=%d", flipped)
+
+
 async def daily_db_snapshot() -> None:
     """`admin.daily_db_snapshot` — daily 02:00.
 
@@ -255,6 +281,15 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         coalesce=True,
     )
+    # Plan 62 (0.2.7.07): nightly RETIRING → RETIRED sweep.
+    scheduler.add_job(
+        expire_retiring_signing_keys,
+        CronTrigger(hour=4, minute=0, timezone="UTC"),
+        id="admin.expire_retiring_signing_keys",
+        name="admin.expire_retiring_signing_keys",
+        replace_existing=True,
+        coalesce=True,
+    )
     scheduler.add_job(
         daily_db_snapshot,
         CronTrigger(hour=2, minute=0, timezone="UTC"),
@@ -312,6 +347,7 @@ __all__ = [
     "daily_db_snapshot",
     "embed_orphan_sweep",
     "embed_pending_jobs",
+    "expire_retiring_signing_keys",
     "refresh_oauth_tokens",
     "register_all",
     "registered_job_ids",

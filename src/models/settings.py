@@ -130,6 +130,15 @@ class Settings(SQLModel, table=True):
     semantic_match_threshold: float = Field(default=0.65)
     semantic_match_sync_on_upsert: bool = Field(default=False)
 
+    # Plan 62 (0.2.7.07): JWT signing-key rotation cadence + dual-key grace.
+    # `jwt_rotation_days` — cron promotes ACTIVE → RETIRING when an ACTIVE
+    # key's `created_at` is older than this. Default 90, configurable 30-365.
+    # `jwt_rotation_grace_days` — RETIRING rows are still accepted for
+    # verification for this many days, then flipped RETIRED. Default 7,
+    # configurable 1-30. Operator tunes via Settings · Security.
+    jwt_rotation_days: int = Field(default=90)
+    jwt_rotation_grace_days: int = Field(default=7)
+
     # Deployment
     deployment_mode: DeploymentMode = Field(default=DeploymentMode.SELF_HOSTED)
 

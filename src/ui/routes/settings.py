@@ -33,6 +33,7 @@ _TAB_TEMPLATES: dict[str, str] = {
     "auto-apply": "pages/_settings_auto_apply.html",
     "sources": "pages/_settings_sources.html",
     "submissions": "pages/_settings_submissions.html",
+    "security": "pages/_settings_security.html",
 }
 
 _VALID_TABS = set(_TAB_TEMPLATES.keys())
@@ -214,6 +215,9 @@ async def _ctx_for_tab(
         today_cost, cap = await _llm_cost_cap_view(session, settings, user_id=user_id)
         ctx["today_cost_usd"] = today_cost
         ctx["cost_cap_usd"] = cap
+
+    if tab == "security":
+        ctx["security"] = await _build_security_view(session, user_id=user_id)
 
     return ctx
 
@@ -439,6 +443,127 @@ async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> 
     return rows
 
 
+async def _build_security_view(session: AsyncSession | None, *, user_id: int) -> dict[str, object]:
+    """Compose the Settings · Security panel context — plan 62 (0.2.7.07).
+
+    Reads the tenant's ACTIVE + RETIRING signing keys + the Settings
+    rotation cadence/grace columns. Self-host single-tenant: tenant_id
+    derives from user_id (1:1 mapping until plan `0.8.0.NN` introduces
+    a real Tenant↔User mapping).
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlmodel import func, select
+
+    from models import (
+        Settings as SettingsRow,
+    )
+    from models import (
+        TenantSigningKey,
+        TenantSigningKeyStatus,
+    )
+
+    rotation_days = 90
+    rotation_grace_days = 7
+    if session is not None:
+        # Scalar select avoids loading the full Settings row (JSONB columns
+        # tests don't materialize on sqlite). Mirrors the `allow_multi_scalar`
+        # pattern in `api/auth.py:post_signup`.
+        row = (
+            await session.exec(
+                select(SettingsRow.jwt_rotation_days, SettingsRow.jwt_rotation_grace_days)
+                .where(SettingsRow.user_id == user_id)
+                .limit(1)
+            )
+        ).one_or_none()
+        if row is not None:
+            rotation_days = int(row[0])
+            rotation_grace_days = int(row[1])
+
+    if session is None:
+        return {
+            "active_key": None,
+            "retiring_keys": [],
+            "retired_count": 0,
+            "rotation_days": rotation_days,
+            "rotation_grace_days": rotation_grace_days,
+        }
+
+    tenant_id = user_id  # 1:1 self-host mapping (plan 62 § C.9 / D9).
+
+    active = (
+        await session.exec(
+            select(TenantSigningKey).where(
+                TenantSigningKey.tenant_id == tenant_id,
+                TenantSigningKey.status == TenantSigningKeyStatus.ACTIVE,
+            )
+        )
+    ).one_or_none()
+    retiring_rows = (
+        await session.exec(
+            select(TenantSigningKey)
+            .where(
+                TenantSigningKey.tenant_id == tenant_id,
+                TenantSigningKey.status == TenantSigningKeyStatus.RETIRING,
+            )
+            .order_by(TenantSigningKey.retired_at.desc())  # type: ignore[union-attr]
+        )
+    ).all()
+    retired_count_row = await session.exec(
+        select(func.count(TenantSigningKey.id)).where(
+            TenantSigningKey.tenant_id == tenant_id,
+            TenantSigningKey.status == TenantSigningKeyStatus.RETIRED,
+        )
+    )
+    retired_count = int(retired_count_row.one() or 0)
+
+    def _fmt_dt(dt) -> str:
+        if dt is None:
+            return ""
+        return _format_started_at(dt)
+
+    def _expires_in_label(retired_at, grace_days: int) -> str:
+        if retired_at is None:
+            return "—"
+        ra = retired_at if retired_at.tzinfo else retired_at.replace(tzinfo=UTC)
+        cutoff = ra + timedelta(days=grace_days)
+        delta = cutoff - datetime.now(UTC)
+        secs = int(delta.total_seconds())
+        if secs <= 0:
+            return "any moment"
+        days = secs // 86400
+        if days >= 1:
+            return f"{days}d"
+        hours = secs // 3600
+        if hours >= 1:
+            return f"{hours}h"
+        return f"{max(secs // 60, 1)}m"
+
+    return {
+        "active_key": (
+            {
+                "kid": active.kid,
+                "algorithm": active.algorithm.value,
+                "created_at_label": _fmt_dt(active.created_at),
+            }
+            if active is not None
+            else None
+        ),
+        "retiring_keys": [
+            {
+                "kid": row.kid,
+                "algorithm": row.algorithm.value,
+                "retired_at_label": _fmt_dt(row.retired_at),
+                "expires_in_label": _expires_in_label(row.retired_at, rotation_grace_days),
+            }
+            for row in retiring_rows
+        ],
+        "retired_count": retired_count,
+        "rotation_days": rotation_days,
+        "rotation_grace_days": rotation_grace_days,
+    }
+
+
 async def _deployment_render_info(settings) -> dict[str, object]:
     """Build the `deployment` ctx dict consumed by `_settings_deployment.html`.
 
@@ -525,6 +650,27 @@ async def get_settings_llm_provider(
     )
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(request, "pages/_settings_llm.html", ctx)
+    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+
+
+@router.get("/settings/security", response_class=HTMLResponse, name="settings_security")
+async def get_settings_security(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+):
+    """Settings · Security sub-tab — plan 62 (0.2.7.07).
+
+    Shows active + retiring JWT signing keys + the "Rotate now" button.
+    Gated by `require_authed_session` mirroring the Sources sub-tab pattern;
+    `Depends(get_session)` is the canonical entry. `_effective_user_id`
+    threads through to close the IDOR — never read another tenant's keys.
+    """
+    ctx = await _ctx_for_tab(
+        request, "security", session=session, user_id=_effective_user_id(_user)
+    )
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(request, "pages/_settings_security.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 

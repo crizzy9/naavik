@@ -415,3 +415,58 @@ async def get_deployment(session: AsyncSession = Depends(get_session)):
     info = await settings_service.get_deployment_info(session, user_id=1)
     await session.commit()
     return info
+
+
+# ── JWT signing-key rotation (plan 62 / 0.2.7.07) ────────────────────────
+
+# Single-tenant Naavik deployments pin tenant_id=1. Cloud multi-tenancy
+# (`0.8.0.NN`) will introduce a per-request tenant resolver that derives the
+# tenant from the authenticated user (or org membership).
+_SELF_HOST_TENANT_ID = 1
+
+
+@router.post(
+    "/api/v1/settings/security/rotate-jwt-key",
+    name="api_settings_security_rotate_jwt_key",
+)
+async def post_rotate_jwt_key(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Operator-triggered JWT signing-key rotation.
+
+    Issues a fresh RS256 keypair, demotes the current ACTIVE key to
+    RETIRING (in-flight tokens still verify within `Settings.jwt_rotation_grace_days`),
+    and persists. Returns the re-rendered Settings · Security card HTML for
+    HTMX swap. CSRF + IDOR enforced via deps.
+
+    Single-tenant: rotation targets `_SELF_HOST_TENANT_ID` (= 1). Cloud
+    multi-tenancy follow-up `0.8.0.NN` swaps this for per-request tenant
+    resolution.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from services.jwt_rotation_service import rotate_tenant_key
+    from ui.routes.settings import _build_security_view, _effective_user_id
+    from ui.templates_setup import templates
+
+    user_id = _effective_user_id(_user)
+    actor = f"ui:{_user.email}" if _user is not None else "ui:dev"
+
+    try:
+        await rotate_tenant_key(session, tenant_id=_SELF_HOST_TENANT_ID, actor=actor)
+        await session.commit()
+    except IntegrityError:
+        # Partial unique index `ix_tenant_signing_key_one_active_per_tenant`
+        # fired — concurrent rotation win/lose race. Rollback + tell caller
+        # to retry; the other rotation already produced a fresh ACTIVE.
+        await session.rollback()
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "another rotation is in progress; refresh to see the new key"},
+        )
+
+    ctx = {"security": await _build_security_view(session, user_id=user_id)}
+    return templates.TemplateResponse(request, "pages/_settings_security.html", ctx)

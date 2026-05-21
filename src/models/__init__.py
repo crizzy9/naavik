@@ -51,8 +51,10 @@ from .enums import (
     ScreenerAnswerSource,
     ScreenerQuestionType,
     SeniorityLevel,
+    SigningAlgorithm,
     StatusChangeTrigger,
     Tag,
+    TenantSigningKeyStatus,
     VeteranStatus,
     VisaRestriction,
     VisaSponsorship,
@@ -66,6 +68,8 @@ from .profile import Bullet, Certification, Education, Experience, Profile, Proj
 from .profile_answer import ProfileAnswer
 from .revoked_jwt import RevokedJwt
 from .settings import Settings
+from .tenant import Tenant
+from .tenant_signing_key import TenantSigningKey
 from .user import User
 
 __all__ = [
@@ -94,6 +98,8 @@ __all__ = [
     "ApiUsage",
     "RevokedJwt",
     "Settings",
+    "Tenant",
+    "TenantSigningKey",
     # Constants
     "EMBEDDING_DIM",
     # Pydantic API schemas
@@ -130,8 +136,10 @@ __all__ = [
     "ScreenerAnswerSource",
     "ScreenerQuestionType",
     "SeniorityLevel",
+    "SigningAlgorithm",
     "StatusChangeTrigger",
     "Tag",
+    "TenantSigningKeyStatus",
     "VeteranStatus",
     "VisaRestriction",
     "VisaSponsorship",

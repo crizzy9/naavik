@@ -32,7 +32,7 @@ from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from config import settings as app_settings
-from models import RevokedJwt, User
+from models import RevokedJwt, Tenant, TenantSigningKey, User
 from services.auth import (
     JWT_ALGORITHM,
     cleanup_expired_revoked_jwts,
@@ -47,9 +47,10 @@ from services.auth import (
 async def _session():
     """Per-test sqlite engine + session.
 
-    Only `user` + `revoked_jwt` are created; the full `SQLModel.metadata`
+    Only the auth-relevant tables are created; the full `SQLModel.metadata`
     contains Postgres ARRAY columns (`JobScrapeRun.errors`) that sqlite
-    cannot compile.
+    cannot compile. Plan 62 (0.2.7.07) — `tenant` + `tenant_signing_key`
+    added so the new `issue_jwt_async` ACTIVE-key lookup compiles.
     """
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -60,7 +61,12 @@ async def _session():
         await conn.run_sync(
             lambda sync_conn: SQLModel.metadata.create_all(
                 sync_conn,
-                tables=[User.__table__, RevokedJwt.__table__],
+                tables=[
+                    User.__table__,
+                    RevokedJwt.__table__,
+                    Tenant.__table__,
+                    TenantSigningKey.__table__,
+                ],
             )
         )
     sm = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

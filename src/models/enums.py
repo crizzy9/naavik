@@ -278,3 +278,16 @@ class LLMProvider(StrEnum):
 class DeploymentMode(StrEnum):
     SELF_HOSTED = "self_hosted"
     CLOUD = "cloud"
+
+
+# Plan 62 (0.2.7.07): per-tenant JWT signing-key rotation.
+class SigningAlgorithm(StrEnum):
+    HS256 = "HS256"
+    RS256 = "RS256"
+    EDDSA = "EdDSA"
+
+
+class TenantSigningKeyStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    RETIRING = "RETIRING"
+    RETIRED = "RETIRED"

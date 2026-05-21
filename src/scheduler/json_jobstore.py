@@ -56,6 +56,8 @@ FUNC_REF_ALLOWLIST: frozenset[str] = frozenset(
         # Plan 61 (0.2.7.16): semantic-match nightly batch + orphan sweep.
         "scheduler.jobs:embed_pending_jobs",
         "scheduler.jobs:embed_orphan_sweep",
+        # Plan 62 (0.2.7.07): RETIRING signing-key sweep.
+        "scheduler.jobs:expire_retiring_signing_keys",
         "scheduler.jobs:refresh_oauth_tokens",
         # src/scheduler/scraping.py
         "scheduler.scraping:scrape_linkedin",
