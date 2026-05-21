@@ -103,6 +103,7 @@ _SERVICE_DIRECT_TEST_MODULES = frozenset(
         "test_ats_postmortem",
         "test_score_orchestrator",
         "test_dedup",
+        "test_scoring_history",
     }
 )
 
