@@ -73,6 +73,34 @@ class IllegalStateTransition(ApplicationServiceError):
     """Backwards / forbidden status transition."""
 
 
+# ── CSV formula-injection defang (plan 85 / 0.4.0.23) ───────────────────
+
+# OWASP A03:2021 — Injection. Excel / LibreOffice / Numbers treat any cell
+# whose first character is one of these as a formula expression. Operator-
+# typed fields (company / role / team / location / external_url) can be
+# trivially weaponized via `=cmd|'/c calc'!A1`. Defang by prefixing a
+# single-quote leader — CSV-RFC-4180 quote semantics are unaffected.
+_CSV_FORMULA_LEADERS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _defang_csv_cell(value: object) -> str:
+    """Return `value` as a CSV-injection-safe string.
+
+    Prefixes a single-quote to any value whose first character is a known
+    formula leader (`=` / `+` / `-` / `@` / tab / CR). Applied to every
+    operator-controllable cell in `list_for_export`; also applied (defense-
+    in-depth) to typed / enum cells so future schema additions can't leak.
+
+    None → empty string. Non-string values are coerced via `str()` first.
+    """
+    if value is None:
+        return ""
+    s = str(value)
+    if s and s[0] in _CSV_FORMULA_LEADERS:
+        return "'" + s
+    return s
+
+
 # ── Status-transition rules ─────────────────────────────────────────────
 
 
@@ -1698,18 +1726,22 @@ async def list_for_export(
         Application.deleted_at.is_(None),
     )
     rows = (await session.exec(stmt)).all()
+    # Plan 85 / 0.4.0.23 — defang every cell to mitigate Excel/LibreOffice
+    # formula injection. Operator-controlled fields (company / role / team /
+    # location / external_url) are the high-risk path; enum / typed fields
+    # are defense-in-depth.
     return [
         {
-            "company": a.company,
-            "role": a.role,
-            "team": a.team or "",
-            "location": a.location or "",
-            "status": a.status.value,
-            "applied_at": a.applied_at.isoformat() if a.applied_at else "",
-            "salary_min": a.salary_min if a.salary_min is not None else "",
-            "salary_max": a.salary_max if a.salary_max is not None else "",
-            "board": a.board.value if a.board else "",
-            "external_url": a.external_url or "",
+            "company": _defang_csv_cell(a.company),
+            "role": _defang_csv_cell(a.role),
+            "team": _defang_csv_cell(a.team),
+            "location": _defang_csv_cell(a.location),
+            "status": _defang_csv_cell(a.status.value),
+            "applied_at": _defang_csv_cell(a.applied_at.isoformat() if a.applied_at else None),
+            "salary_min": _defang_csv_cell(a.salary_min),
+            "salary_max": _defang_csv_cell(a.salary_max),
+            "board": _defang_csv_cell(a.board.value if a.board else None),
+            "external_url": _defang_csv_cell(a.external_url),
         }
         for a in rows
     ]

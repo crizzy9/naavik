@@ -441,7 +441,14 @@ async def regen_bullet_for_variance(
         # no provider is configured — same failure surface as a runtime LLM
         # call. Tests that don't pre-configure a provider (the bulk of the
         # bundle_generator suite) tolerate the regen no-op via this path.
-        log.warning("regen_bullet_for_variance failed: %s", exc)
+        #
+        # Plan 85 / 0.3.3.24 — bumped to ERROR (was WARNING) so debuggers
+        # reading prod logs notice that a regen attempt was made and failed.
+        # The caller (bundle_generator) marks `burstiness_regen_failed=True`
+        # in the audit trail when the helper returns the same `original_text`
+        # via the structured return path; this log line is the in-process
+        # complement that survives without the caller's trace context.
+        log.error("regen_bullet_for_variance failed; preserving original: %s", exc)
         return original_text
 
 

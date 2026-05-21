@@ -317,14 +317,15 @@ async def test_burstiness_regen_triggers_when_std_below_threshold():
 async def test_burstiness_regen_skipped_on_cost_cap():
     """Cost-cap exhausted before burstiness regen → skip flag recorded.
 
-    Uses a counting cost-cap probe: first 6 calls return False (lets the
-    pre-flight + resume + headline + cover-letter + screeners + cover-fidelity
-    stages all complete), then the 7th probe (burstiness branch) returns True.
-    The exact ordering may shift if the pipeline gains more probes, but the
-    invariant — last probe is the burstiness one — holds because burstiness
-    is the final stage before parse-fidelity / keyword-coverage / ethics
-    (none of which probe cost-cap).
+    Plan 85 / 0.3.3.24 — replaces the prior counting probe (`len(probes) >= 6`)
+    with a deterministic stack-frame inspection: `is_cost_capped` returns True
+    iff the burstiness branch has already written `burstiness_std_pre_regen`
+    into the caller's `trace` dict (the regen-gating probe is the only one
+    invoked after that marker is set). This is robust to pipeline changes
+    that add new cost-cap probes earlier in the flow.
     """
+    import inspect
+
     session = AsyncMock()
     session.flush = AsyncMock()
     session.add = lambda x: None
@@ -357,22 +358,21 @@ async def test_burstiness_regen_skipped_on_cost_cap():
         )
     )
 
-    # Count probes; the LAST probe (after all stages succeed) is the burstiness
-    # branch. Make every probe except the last return False so the pipeline
-    # proceeds; flip the last to True to gate the regen LLM call only.
-    probe_history: list[bool] = []
-
     async def _capped_at_burstiness(_session, _user_id, _settings):
-        # Resume hasn't been generated yet on the very first probe.
-        # After that, all stages need False to proceed. The burstiness probe
-        # is wrapped in `if not report.passed and worst_offender_idx is not None`
-        # — only fires for uniform bullets (our fixture). Use a sentinel: the
-        # only way to know we're in the burstiness branch is to check the
-        # bullet_selection mutation. Simpler: count + flip on last expected.
-        probe_history.append(False)
-        # Pre-flight (1) + resume (2-or-not?) + headline + cover (3-4) +
-        # screeners (5) + burstiness (6). Flip on probe 6 onwards.
-        return len(probe_history) >= 6
+        # Look up the caller's locals for the `trace` dict. The burstiness
+        # branch writes `trace["burstiness_std_pre_regen"]` IMMEDIATELY
+        # before its cost-cap probe (`bundle_generator.py:530-532`); every
+        # OTHER probe in the pipeline runs before that key is set. So a
+        # truthy lookup means we're at the burstiness gate; otherwise False
+        # so the pipeline keeps making progress.
+        frame = inspect.currentframe()
+        # Walk back through frames; the bundle_generator call site holds `trace`.
+        while frame is not None:
+            trace = frame.f_locals.get("trace")
+            if isinstance(trace, dict):
+                return "burstiness_std_pre_regen" in trace
+            frame = frame.f_back
+        return False
 
     regen_mock = AsyncMock(return_value="should-never-be-called")
 
@@ -417,14 +417,14 @@ async def test_burstiness_regen_skipped_on_cost_cap():
         result = await generate_bundle(session, application, settings=settings, job=job)
 
     trace = result.generation_trace
-    # If the burstiness branch was reached AND cost-cap fired there, the skip
-    # flag was set. If a prior stage caught the cap first, we'd see
-    # `degraded_reason="cost_cap_reached"` instead — equally acceptable since
-    # the regen LLM call wasn't made either way.
-    if trace.get("burstiness_std_pre_regen") is not None:
-        # Reached burstiness branch — regen must be skip-flagged.
-        assert trace.get("burstiness_regen_skipped_cost_cap") is True
-    # The regen LLM call was NOT made in either path.
+    # Plan 85 / 0.3.3.24 — assertions are now deterministic. The stack-frame
+    # inspection guarantees the burstiness branch IS reached (all prior
+    # cost-cap probes return False) AND the regen-gating probe IS the only
+    # one that returns True. So `burstiness_std_pre_regen` is always set and
+    # the skip flag is always recorded — no conditional escape hatch needed.
+    assert trace.get("burstiness_std_pre_regen") is not None
+    assert trace.get("burstiness_regen_skipped_cost_cap") is True
+    # The regen LLM call was NOT made.
     regen_mock.assert_not_awaited()
 
 
@@ -463,4 +463,51 @@ async def test_burstiness_regen_insufficient_when_post_still_low():
 
     trace = result.generation_trace
     assert trace.get("burstiness_regen_insufficient") is True
+    assert result._regen_mock.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_burstiness_regen_failed_marks_trace_when_helper_returns_original():
+    """Plan 85 / 0.3.3.24 — regen helper swallows `LLMProviderError` and returns
+    the original text unchanged; bundle marks `burstiness_regen_failed=True`
+    in the audit trail so a debugger reading the trace can distinguish
+    "regen attempted + failed" from "regen never ran" (skipped by cost-cap
+    or non-burstiness branch). Hard cap of 1 regen still holds.
+    """
+    session = AsyncMock()
+    session.flush = AsyncMock()
+    session.add = lambda x: None
+    application = _make_application()
+    settings = _make_settings()
+    job = _make_job()
+
+    uniform_bullets = {
+        "1": "shipped the payment platform to users",
+        "2": "designed the ML pipeline at scale",
+        "3": "led the data team across geos",
+        "4": "built the model serving at rate",
+    }
+    fake_resume = SimpleNamespace(
+        id=1,
+        path="/tmp/r.pdf",
+        bullet_selection={
+            "selected_ids": [1, 2, 3, 4],
+            "trimmed_lines": uniform_bullets,
+        },
+    )
+
+    # Mirror the production fallback: helper catches `LLMProviderError` and
+    # returns the original_text unchanged.
+    async def _failed_regen(*, original_text, **_kw):
+        return original_text
+
+    result = await _run_bundle(
+        session, application, settings, job, fake_resume, regen=_failed_regen
+    )
+
+    trace = result.generation_trace
+    assert trace.get("burstiness_regen_failed") is True
+    # No substitution → `burstiness_regen_insufficient` is NOT also set
+    # (the helper return-equivalent-to-original is its own bucket).
+    assert trace.get("burstiness_regen_insufficient") is not True
     assert result._regen_mock.await_count == 1

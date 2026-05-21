@@ -891,6 +891,62 @@ async def test_bulk_export_csv_idor_filters():
     assert rows[0]["company"] == "Stripe"
 
 
+# ── Plan 85 / 0.4.0.23 — CSV formula-injection defang ─────────────────
+
+
+def test_defang_csv_cell_prefixes_formula_leaders():
+    """Cells starting with =, +, -, @ get a single-quote prefix."""
+    from services.application_service import _defang_csv_cell
+
+    assert _defang_csv_cell("=cmd|'/c calc'!A1") == "'=cmd|'/c calc'!A1"
+    assert _defang_csv_cell("+SUM(A1:B2)") == "'+SUM(A1:B2)"
+    assert _defang_csv_cell("-12+cmd") == "'-12+cmd"
+    assert _defang_csv_cell("@HYPERLINK(...)") == "'@HYPERLINK(...)"
+
+
+def test_defang_csv_cell_prefixes_whitespace_leaders():
+    """Tab and CR leaders also get defanged (smuggle past naive eyeballing)."""
+    from services.application_service import _defang_csv_cell
+
+    assert _defang_csv_cell("\t=cmd") == "'\t=cmd"
+    assert _defang_csv_cell("\rmalicious") == "'\rmalicious"
+
+
+def test_defang_csv_cell_leaves_safe_values_untouched():
+    """Normal alphanumeric / None / numeric inputs surface verbatim (no '-prefix)."""
+    from services.application_service import _defang_csv_cell
+
+    assert _defang_csv_cell("Stripe") == "Stripe"
+    assert _defang_csv_cell("Senior Engineer") == "Senior Engineer"
+    assert _defang_csv_cell(None) == ""
+    assert _defang_csv_cell(180000) == "180000"
+    assert _defang_csv_cell("https://boards.greenhouse.io/x") == "https://boards.greenhouse.io/x"
+
+
+@pytest.mark.asyncio
+async def test_list_for_export_defangs_company_with_formula_leader():
+    """End-to-end: an Application whose company starts with `=` surfaces as
+    `'=...` in the export dict. Verifies the defang call site, not just the
+    helper.
+    """
+    from models import ApplicationStatus
+
+    # Owner-typed company field with weaponized leader.
+    weaponized = _make_app(
+        aid=42,
+        status=ApplicationStatus.APPLIED,
+        applied_at=datetime.now(UTC),
+        company="=cmd|'/c calc'!A1",
+    )
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([weaponized])]
+    rows = await svc.list_for_export(session, user_id=1, application_ids=[42])
+    assert len(rows) == 1
+    assert rows[0]["company"] == "'=cmd|'/c calc'!A1"
+    # status (enum value "APPLIED") is unaffected by defang.
+    assert rows[0]["status"] == "APPLIED"
+
+
 @pytest.mark.asyncio
 async def test_retry_failed_emits_app_event():
     """Successful retry emits AUTO_APPLY_QUEUED with trigger=retry_requested + previous_retry_count."""

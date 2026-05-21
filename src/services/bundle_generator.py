@@ -544,7 +544,16 @@ async def generate_bundle(
                         system=preamble,
                         cache_system=cache_preamble,
                     )
-                    if regen_text and regen_text != values[worst_idx]:
+                    # Plan 85 / 0.3.3.24 — when the helper swallows an
+                    # `LLMProviderError` it returns the unchanged original
+                    # (same text, same length). Record the failure shape
+                    # in the audit trail so a debugger reading a
+                    # degraded-looking trace can tell "regen attempted but
+                    # failed" apart from the legitimate no-substitution
+                    # branch (regen ran but returned identical text).
+                    if not regen_text or regen_text == values[worst_idx]:
+                        trace["burstiness_regen_failed"] = True
+                    else:
                         # Substitute + recompute. Hard cap = 1 regen per bundle.
                         trimmed[worst_key] = regen_text
                         values[worst_idx] = regen_text

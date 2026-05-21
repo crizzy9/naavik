@@ -42,7 +42,15 @@ async def submit(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_password_complete),
 ):
-    """DRAFT → APPLIED. Validates first; returns the row or 409 with the reason."""
+    """DRAFT → APPLIED. Validates first; returns the row or 409 with the reason.
+
+    Plan 85 / 0.4.0.21 — IDOR boundary: 404 on cross-user / missing app.
+    Mirrors plan 75 row 1 screener-IDOR pattern; matches `generate_bundle_route`
+    + `get_postmortem` precedent in this module.
+    """
+    application = await svc.get_application(session, application_id)
+    if application is None or application.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Application not found")
     try:
         out = await svc.submit_draft(session, application_id)
     except svc.ValidationError as exc:
@@ -74,6 +82,13 @@ async def discard(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_password_complete),
 ):
+    """DRAFT → CLOSED (withdrawn_by_me) + soft-delete.
+
+    Plan 85 / 0.4.0.21 — IDOR boundary: 404 on cross-user / missing app.
+    """
+    application = await svc.get_application(session, application_id)
+    if application is None or application.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Application not found")
     try:
         await svc.discard_draft(session, application_id)
     except svc.IllegalStateTransition as exc:
@@ -93,6 +108,13 @@ async def put_status(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_password_complete),
 ):
+    """Manual status flip (e.g. APPLIED → RECRUITER_SCREEN).
+
+    Plan 85 / 0.4.0.21 — IDOR boundary: 404 on cross-user / missing app.
+    """
+    application = await svc.get_application(session, application_id)
+    if application is None or application.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Application not found")
     raw = payload.get("status")
     if not raw:
         raise HTTPException(status_code=422, detail="`status` required")
@@ -136,12 +158,21 @@ async def move(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_password_complete),
 ):
+    """Tracking-board column move (drag-drop status change).
+
+    Plan 85 / 0.4.0.21 — IDOR boundary: 404 on cross-user / missing app.
+    Empty / malformed payloads still short-circuit to 204 (pre-IDOR
+    behavior preserved — the IDOR check fires once we have an app_id).
+    """
     if not payload:
         return Response(status_code=204)
     app_id = int(payload.get("application_id", 0))
     target = payload.get("target_status")
     if not (app_id and target):
         return Response(status_code=204)
+    application = await svc.get_application(session, app_id)
+    if application is None or application.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Application not found")
     try:
         new_status = ApplicationStatus(target)
     except ValueError as exc:
