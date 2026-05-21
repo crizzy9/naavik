@@ -16,18 +16,25 @@ from .answer_screener import ScreenerAnswer, answer_screener
 from .auto_tag_bullets import BulletTags, auto_tag_bullets
 from .classify_email import EmailClassificationResult, classify_email
 from .draft_cover_letter import CoverLetterDraft, draft_cover_letter
+from .draft_cover_letter_sota import (
+    CoverLetterSota,
+    detect_pain_letter_format,
+    draft_cover_letter_sota,
+)
 from .draft_outreach import OutreachDraft, draft_outreach
 from .extract_job import PROMPT as EXTRACT_JOB_PROMPT
 from .extract_job import JobExtraction
 from .extract_resume import ExtractedResume, extract_resume
 from .score_job import JobScore, score_job
 from .select_bullets import BulletSelection, select_bullets
+from .tailor_headline import TailoredHeadline, tailor_headline
 from .trim_bullet import TrimmedBullet, trim_bullet
 
 __all__ = [
     "BulletSelection",
     "BulletTags",
     "CoverLetterDraft",
+    "CoverLetterSota",
     "EmailClassificationResult",
     "EXTRACT_JOB_PROMPT",
     "ExtractedResume",
@@ -35,14 +42,18 @@ __all__ = [
     "JobScore",
     "OutreachDraft",
     "ScreenerAnswer",
+    "TailoredHeadline",
     "TrimmedBullet",
     "answer_screener",
     "auto_tag_bullets",
     "classify_email",
+    "detect_pain_letter_format",
     "draft_cover_letter",
+    "draft_cover_letter_sota",
     "draft_outreach",
     "extract_resume",
     "score_job",
     "select_bullets",
+    "tailor_headline",
     "trim_bullet",
 ]

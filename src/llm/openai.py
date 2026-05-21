@@ -76,18 +76,24 @@ class OpenAIProvider(LLMProvider):
         schema: type[T],
         *,
         max_tokens: int = 1024,
+        system: str | None = None,
+        cache_system: bool = False,  # noqa: ARG002 — accepted for interface parity; OpenAI doesn't cache
     ) -> StructuredResult:
         json_schema = {
             "name": schema.__name__,
             "schema": schema.model_json_schema(),
             "strict": True,
         }
+        messages: list[dict] = []
+        if system is not None:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
         try:
             response = await self._client.chat.completions.create(
                 model=self._model,
                 max_tokens=max_tokens,
                 response_format={"type": "json_schema", "json_schema": json_schema},
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
             )
         except Exception as exc:  # noqa: BLE001
             raise LLMProviderError(f"openai structured failed: {exc}") from exc

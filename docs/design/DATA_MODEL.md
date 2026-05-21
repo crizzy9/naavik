@@ -517,6 +517,12 @@ class Application(SQLModel, table=True):
     # {board_application_id, retry_count, last_failure: {kind, message, captured_at},
     #  captcha_screenshot_path, field_mismatch_log}
 
+    # Plan 66 (0.3.1): bundle generation audit trail. Opaque JSONB matching
+    # `submission_artifacts` pattern. OVERWRITES on regenerate (single bundle =
+    # single trace; historical audit lives in GeneratedDocument rows). Canonical
+    # 17-key shape lives in `docs/design/RESUME_GENERATION.md § L` (alembic 0018).
+    generation_trace: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+
     # Audit
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -847,6 +853,14 @@ class Settings(SQLModel, table=True):
     daily_llm_cost_cap_usd: Optional[float] = None
     # When set, hitting the cap auto-flips eager_review_generation to lazy for the remainder of the day
     # (resets at midnight UTC). UI shows a banner on Discover · review when capped.
+
+    # Plan 66 (0.3.1): bundle generation knobs (alembic 0018). Canonical
+    # reference: `docs/design/RESUME_GENERATION.md § N`.
+    ai_writing_voice_samples: str = Field(default="")  # 0-5000 chars; supplements voice corpus
+    cover_letter_format: str = Field(default="auto")  # "auto" | "standard" | "pain_letter"
+    resume_template_preference: str = Field(default="auto")  # "auto" | "ats" | "creative"
+    tier_2_evasion_enabled: bool = Field(default=False)  # opt-in; advanced
+    parse_fidelity_threshold: float = Field(default=0.75)  # OQ-7 tier boundary
 
     # Notifications
     notify_threshold: float = Field(default=0.80)  # score gate for new-job alerts

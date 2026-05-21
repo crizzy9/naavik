@@ -74,12 +74,16 @@ class OllamaProvider(LLMProvider):
         schema: type[T],
         *,
         max_tokens: int = 1024,
+        system: str | None = None,
+        cache_system: bool = False,  # noqa: ARG002 — Ollama doesn't cache
     ) -> StructuredResult:
         # Ollama "format: json" forces JSON output. We rely on the prompt to
         # describe the schema since Ollama doesn't natively bind to a JSON
         # schema. We append the schema to the prompt to bias the model.
+        # `system` is prepended verbatim (no cache support).
+        body = prompt if system is None else f"{system}\n\n---\n\n{prompt}"
         full_prompt = (
-            f"{prompt}\n\n"
+            f"{body}\n\n"
             f"Respond with a JSON object matching this schema exactly:\n"
             f"{json.dumps(schema.model_json_schema(), indent=2)}\n"
             f"Return ONLY the JSON object, no prose."

@@ -18,13 +18,16 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
 from config import settings as app_settings
 from db.session import get_session
-from models import ApplicationStatus, ClosedReason, User
+from models import ApplicationStatus, ClosedReason, Settings, User
 from services import application_service as svc
 from services.auth import require_password_complete
+from services.bundle_generator import generate_bundle
 
 _POSTMORTEM_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
 
@@ -188,6 +191,99 @@ async def get_postmortem(
     trace = json.loads(trace_file.read_text(encoding="utf-8"))
     analysis_md = analysis_file.read_text(encoding="utf-8")
     return {"trace": trace, "analysis_markdown": analysis_md}
+
+
+@router.post("/{application_id}/generate-bundle", name="api_applications_generate_bundle")
+async def generate_bundle_route(
+    application_id: int,
+    payload: Annotated[dict[str, Any] | None, Body()] = None,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(require_password_complete),
+    _csrf: None = Depends(require_csrf),
+):
+    """One-click bundle generation for `application_id` (plan 66 / 0.3.1).
+
+    Returns the bundle metadata + audit trail. The PDFs themselves are
+    served via the existing `GeneratedDocument.path` download endpoint.
+
+    IDOR boundary: 404 on cross-user / missing app. Cost-cap mid-flight
+    surfaces as `degraded: true` + `degraded_reason: "cost_cap_reached"`.
+    Ethics rejection (> 2 bullets fabricated) returns 422.
+    """
+    application = await svc.get_application(session, application_id)
+    if application is None or application.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    settings = (
+        await session.exec(select(Settings).where(Settings.user_id == current_user.id))
+    ).one_or_none()
+    if settings is None:
+        raise HTTPException(status_code=409, detail="Settings missing for user")
+
+    hiring_manager_override = None
+    if payload is not None:
+        raw = payload.get("hiring_manager_override")
+        if isinstance(raw, str) and raw.strip():
+            hiring_manager_override = raw.strip()
+
+    try:
+        bundle = await generate_bundle(
+            session,
+            application,
+            settings=settings,
+            hiring_manager_override=hiring_manager_override,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    if bundle.ethics is not None and bundle.ethics.surface_to_user and not bundle.ethics.passed:
+        await session.commit()
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "ethics_pre_flight_failed",
+                "message": "LLM emitted bullets without profile provenance.",
+                "dropped_bullets": bundle.ethics.dropped_bullets,
+            },
+        )
+
+    await session.commit()
+    response: dict[str, Any] = {
+        "resume_id": bundle.resume.id if bundle.resume else None,
+        "cover_letter_id": bundle.cover_letter.id if bundle.cover_letter else None,
+        "screeners_count": len(bundle.screeners),
+        "degraded": bundle.degraded,
+        "degraded_reason": bundle.degraded_reason,
+        "parse_fidelity_score": (bundle.parse_fidelity.score if bundle.parse_fidelity else None),
+        "parse_fidelity_tier": (bundle.parse_fidelity.tier if bundle.parse_fidelity else None),
+        "keyword_coverage_score": (
+            bundle.keyword_coverage.score if bundle.keyword_coverage else None
+        ),
+        "hiring_manager": (
+            {
+                "name": bundle.hiring_manager.name,
+                "source": bundle.hiring_manager.source,
+                "confidence": bundle.hiring_manager.confidence,
+            }
+            if bundle.hiring_manager
+            else None
+        ),
+        "generation_trace": bundle.generation_trace,
+    }
+    headers = {}
+    if bundle.degraded:
+        headers["HX-Trigger"] = "bundle-degraded"
+    elif bundle.parse_fidelity and bundle.parse_fidelity.tier == "toast":
+        headers["HX-Trigger"] = "parse-fidelity-warning"
+    return (
+        response
+        if not headers
+        else Response(
+            content=json.dumps(response),
+            media_type="application/json",
+            headers=headers,
+        )
+    )
 
 
 @router.get("/stuck", name="api_applications_stuck")

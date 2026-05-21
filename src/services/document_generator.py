@@ -53,11 +53,27 @@ from models import (
     Settings,
     Skill,
 )
-from models.enums import BulletSelectionOverride
+from models.enums import ApplicationBoard, BulletSelectionOverride
 from services import llm_tracker
 from typst import compile as typst_compile
 from typst import overflows
 from typst.compiler import TypstError
+
+# Plan 66 (0.3.1) § T6 — auto-select the ATS-friendly template variant for
+# ATS-known boards; manual + company-direct stays on creative onepage.typ.
+# ApplicationBoard enum only carries the ATS surfaces we have adapters for;
+# additional boards (ICIMS / TALEO / SAP_SUCCESSFACTORS / BAMBOOHR / JAZZHR)
+# from the research memo's ATS allowlist are deferred until those adapters
+# ship per ROADMAP.
+_ATS_BOARDS: frozenset[ApplicationBoard] = frozenset(
+    {
+        ApplicationBoard.WORKDAY,
+        ApplicationBoard.GREENHOUSE,
+        ApplicationBoard.LEVER,
+        ApplicationBoard.ASHBY,
+        ApplicationBoard.LINKEDIN,
+    }
+)
 
 log = logging.getLogger(__name__)
 
@@ -256,6 +272,8 @@ async def _ai_select_bullets(
     user_id: int,
     application_id: int | None,
     max_select: int = 12,
+    system: str | None = None,
+    cache_system: bool = False,
 ) -> list[int]:
     """Return ordered list of selected bullet ids honoring overrides + LLM."""
     inventory = _bullet_inventory(snap)
@@ -288,6 +306,8 @@ async def _ai_select_bullets(
             schema=__import__(
                 "llm.prompts.select_bullets", fromlist=["BulletSelection"]
             ).BulletSelection,
+            system=system,
+            cache_system=cache_system,
         )
         chosen = list(result.value.get("selected_ids", [])) if result else []
     except LLMProviderError as exc:
@@ -323,6 +343,8 @@ async def _trim_one_bullet(
     application_id: int | None,
     bullet: Bullet,
     target_chars: int = 120,
+    system: str | None = None,
+    cache_system: bool = False,
 ) -> str:
     if len(bullet.text) <= target_chars:
         return bullet.text
@@ -343,6 +365,8 @@ async def _trim_one_bullet(
             application_id=application_id,
             prompt=prompt,
             schema=__import__("llm.prompts.trim_bullet", fromlist=["TrimmedBullet"]).TrimmedBullet,
+            system=system,
+            cache_system=cache_system,
         )
         return str(result.value.get("trimmed") or bullet.text)
     except LLMProviderError as exc:
@@ -361,7 +385,14 @@ async def _build_resume_data(
     snap: ProfileSnapshot,
     selected_bullet_ids: list[int],
     trimmed: dict[int, str],
+    tailored_headline: str | None = None,
 ) -> dict[str, Any]:
+    """Render the resume payload consumed by `onepage.typ` / `onepage_ats.typ`.
+
+    `tailored_headline` (plan 66 § T7) — when present, surfaces as the
+    one-line headline under the candidate's name on the ATS template;
+    `onepage.typ` ignores this field.
+    """
     selected = set(selected_bullet_ids)
     experiences_payload: list[dict] = []
     for exp in snap.experiences:
@@ -392,6 +423,7 @@ async def _build_resume_data(
             "github_handle": p.github_handle,
             "summary_short": p.summary_short,
         },
+        "tailored_headline": tailored_headline,
         "experiences": experiences_payload,
         "education": [
             {
@@ -408,18 +440,50 @@ async def _build_resume_data(
     }
 
 
+def _select_template(application: Application, settings: Settings) -> tuple[str, str | None]:
+    """Pick the resume template + PDF standard for `application`.
+
+    Plan 66 (0.3.1) § T6 + T12. Returns ``(template_name, pdf_standard)``.
+
+    Resolution order:
+    1. `Settings.resume_template_preference` ∈ {"ats", "creative"} forces the
+       template explicitly.
+    2. `Settings.resume_template_preference == "auto"` (default) →
+       ATS variant when `Application.board` ∈ ATS-known set; creative otherwise.
+
+    The ATS variant pairs with PDF/A-1b output (`pdf_standard="a-1b"`); the
+    creative variant uses default PDF (None).
+    """
+    pref = getattr(settings, "resume_template_preference", "auto")
+    if pref == "ats":
+        return "onepage_ats", "a-1b"
+    if pref == "creative":
+        return "onepage", None
+    # auto — board-driven
+    board = getattr(application, "board", None)
+    if board is not None and board in _ATS_BOARDS:
+        return "onepage_ats", "a-1b"
+    return "onepage", None
+
+
 async def generate_resume(
     session: AsyncSession,
     application: Application,
     *,
     settings: Settings,
     job: Job | None = None,
+    system: str | None = None,
+    cache_system: bool = False,
 ) -> GeneratedDocument:
     """Generate a tailored 1-page resume for `application`.
 
     Raises `CostCapExceededError` when today's spend exceeded the user's cap.
     On Typst overflow, drops the lowest-priority bullet and re-compiles
     (max 3 retries) before persisting `error="overflow"` and returning.
+
+    `system` + `cache_system` thread the voice-grounded constitution preamble
+    (plan 66 § T2) into every LLM call within the resume pipeline so
+    Anthropic's ephemeral cache fires across stages within the bundle.
     """
     user_id = application.user_id
     if await is_cost_capped(session, user_id, settings):
@@ -445,6 +509,8 @@ async def generate_resume(
         user_id=user_id,
         application_id=application.id,
         max_select=12,
+        system=system,
+        cache_system=cache_system,
     )
     selected_bullets: list[Bullet] = [b for b in _bullet_inventory(snap) if b.id in selected_ids]
     trimmed: dict[int, str] = {}
@@ -456,10 +522,14 @@ async def generate_resume(
             application_id=application.id,
             bullet=b,
             target_chars=120,
+            system=system,
+            cache_system=cache_system,
         )
 
     out_dir = _app_documents_dir(application.id)
     out_pdf = out_dir / "resume.pdf"
+
+    template_name, pdf_standard = _select_template(application, settings)
 
     # Page-count retry loop: drop the lowest-priority bullet on overflow.
     candidate_ids = list(selected_ids)
@@ -471,7 +541,7 @@ async def generate_resume(
             trimmed=trimmed,
         )
         try:
-            result = await typst_compile("onepage", data, out_pdf)
+            result = await typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
         except TypstError as exc:
             application.docs_state = DocsState.FAILED
             session.add(application)
@@ -537,7 +607,19 @@ async def generate_cover_letter(
     settings: Settings,
     job: Job | None = None,
     tone: str = "enthusiastic",
+    system: str | None = None,
+    cache_system: bool = False,
+    hiring_manager: dict | None = None,
+    matched_tags: list[str] | None = None,
 ) -> GeneratedDocument:
+    """Generate a SOTA cover letter (plan 66 § T10).
+
+    Uses `draft_cover_letter_sota` w/ adaptive format dispatch (pain-letter
+    vs standard) via `tracked_call` so `ApiUsage` rows persist for cost
+    tracking. `system` + `cache_system` thread the voice-grounded
+    constitution preamble; `hiring_manager` + `matched_tags` come from the
+    bundle orchestrator's stage-2 extraction + JobScore.
+    """
     user_id = application.user_id
     if await is_cost_capped(session, user_id, settings):
         raise CostCapExceededError("daily_llm_cost_cap_usd reached")
@@ -550,15 +632,33 @@ async def generate_cover_letter(
     if job is None:
         raise ValueError(f"application {application.id} has no job context")
 
+    from llm.prompts.draft_cover_letter_sota import (
+        CoverLetterSota,
+        detect_pain_letter_format,
+    )
+
+    # Adaptive format dispatch — honor Settings.cover_letter_format override.
+    cover_letter_format_setting = getattr(settings, "cover_letter_format", "auto")
+    job_description = job.description or job.description_html or ""
+    if cover_letter_format_setting == "pain_letter":
+        format_chosen = "pain_letter"
+    elif cover_letter_format_setting == "standard":
+        format_chosen = "standard"
+    else:
+        format_chosen = "pain_letter" if detect_pain_letter_format(job_description) else "standard"
+
     provider = get_provider(settings)
+    top_bullets = [b.text for b in _bullet_inventory(snap)[:10]]
     profile_payload = {
         "full_name": snap.profile.full_name,
-        "summary_short": snap.profile.summary_short or snap.profile.summary_full,
+        "summary_short": snap.profile.summary_short or snap.profile.summary_full or "",
+        "summary_full": snap.profile.summary_full or "",
+        "top_bullets": top_bullets,
     }
     job_payload = {
         "company": job.company,
         "role": job.role,
-        "description": job.description or job.description_html or "",
+        "description": job_description,
     }
     try:
         result = await llm_tracker.tracked_call(
@@ -566,14 +666,28 @@ async def generate_cover_letter(
             user_id=user_id,
             provider=provider,
             method="structured",
-            prompt_name="draft_cover_letter",
+            prompt_name="draft_cover_letter_sota",
             application_id=application.id,
-            prompt=_render_cover_letter_prompt(profile_payload, job_payload, tone),
-            schema=__import__(
-                "llm.prompts.draft_cover_letter", fromlist=["CoverLetterDraft"]
-            ).CoverLetterDraft,
+            prompt=_render_cover_letter_sota_prompt(
+                profile_payload, job_payload, matched_tags or [], hiring_manager, format_chosen
+            ),
+            schema=CoverLetterSota,
+            system=system,
+            cache_system=cache_system,
         )
-        letter_dict = result.value
+        sota_value = result.value
+        # CoverLetterSota → cover_letter.typt payload shape (T10 mapping).
+        # `hook` → intro; `match` → body; `close` → close; `why_company` empty
+        # (already folded into match).
+        letter_dict = {
+            "intro": str(sota_value.get("hook", "")),
+            "body": str(sota_value.get("match", "")),
+            "why_company": "",
+            "close": str(sota_value.get("close", "")),
+            "_sota_format_chosen": str(sota_value.get("format_chosen", format_chosen)),
+            "_sota_verbatim_phrases": list(sota_value.get("verbatim_phrases", []) or []),
+            "_sota_hiring_manager_used": dict(sota_value.get("hiring_manager_used", {}) or {}),
+        }
     except LLMProviderError as exc:
         log.warning("cover letter draft failed; using template: %s", exc)
         letter_dict = {
@@ -588,6 +702,10 @@ async def generate_cover_letter(
 
     today_str = datetime.now(UTC).strftime("%B %-d, %Y")
 
+    # Strip the SOTA-only audit fields before passing to Typst (typst template
+    # only consumes {intro, body, why_company, close}).
+    typst_letter = {k: v for k, v in letter_dict.items() if not k.startswith("_sota_")}
+
     typst_data = {
         "profile": {
             "full_name": snap.profile.full_name,
@@ -596,7 +714,7 @@ async def generate_cover_letter(
             "location": snap.profile.location,
         },
         "job": {"company": job.company, "role": job.role},
-        "letter": letter_dict,
+        "letter": typst_letter,
         "today": today_str,
     }
     try:
@@ -616,6 +734,10 @@ async def generate_cover_letter(
         await session.flush()
         return doc
 
+    # Stash SOTA audit fields in `bullet_selection` JSONB (opaque blob pattern).
+    sota_meta = {
+        k.removeprefix("_sota_"): v for k, v in letter_dict.items() if k.startswith("_sota_")
+    }
     doc = GeneratedDocument(
         application_id=application.id,
         kind=GeneratedDocumentKind.COVER_LETTER,
@@ -624,10 +746,64 @@ async def generate_cover_letter(
         page_count=compile_result.page_count,
         compiled_at=compile_result.compiled_at,
         model=settings.llm_model,
+        bullet_selection=sota_meta if sota_meta else None,
     )
     session.add(doc)
     await session.flush()
     return doc
+
+
+def _render_cover_letter_sota_prompt(
+    profile: dict,
+    job: dict,
+    matched_tags: list[str],
+    hiring_manager: dict | None,
+    format_chosen: str,
+) -> str:
+    """Render the SOTA cover-letter user message — mirrors `draft_cover_letter_sota.PROMPT_*`.
+
+    Kept in document_generator so the tracked_call entry point uses the same
+    text the direct `draft_cover_letter_sota` function would produce; that
+    function exists for direct callers (tests) and bypasses tracked_call by
+    design.
+    """
+    from llm.prompts.draft_cover_letter_sota import (
+        _PAIN_POINT_RE,
+        PROMPT_PAIN_LETTER,
+        PROMPT_STANDARD,
+    )
+
+    hm_str = "(no specific hiring manager identified)"
+    if hiring_manager and hiring_manager.get("name"):
+        hm_str = str(hiring_manager["name"])
+        if hiring_manager.get("title"):
+            hm_str += f", {hiring_manager['title']}"
+
+    top_bullets = profile.get("top_bullets") or []
+    profile_str = (
+        f"{profile.get('full_name', '')}\n"
+        f"{profile.get('summary_short') or profile.get('summary_full', '')}\n"
+        f"Top bullets: {'; '.join(top_bullets)[:1500]}"
+    )
+    job_str = (
+        f"{job.get('company', '')} — {job.get('role', '')}\n{(job.get('description') or '')[:1500]}"
+    )
+
+    if format_chosen == "pain_letter":
+        pain_signals = _PAIN_POINT_RE.findall(job.get("description", ""))[:5]
+        return PROMPT_PAIN_LETTER.format(
+            profile=profile_str,
+            job=job_str,
+            hiring_manager=hm_str,
+            matched_tags=", ".join(matched_tags),
+            pain_signals=", ".join(pain_signals),
+        )
+    return PROMPT_STANDARD.format(
+        profile=profile_str,
+        job=job_str,
+        hiring_manager=hm_str,
+        matched_tags=", ".join(matched_tags),
+    )
 
 
 def _render_cover_letter_prompt(profile: dict, job: dict, tone: str) -> str:
@@ -697,6 +873,8 @@ async def answer_screeners(
     settings: Settings,
     job: Job | None = None,
     questions: Iterable[dict[str, Any]] | None = None,
+    system: str | None = None,
+    cache_system: bool = False,
 ) -> list[ApplicationScreenerAnswer]:
     """Populate / refresh ApplicationScreenerAnswer rows for `application`.
 
@@ -821,6 +999,8 @@ async def answer_screeners(
                         schema=__import__(
                             "llm.prompts.answer_screener", fromlist=["ScreenerAnswer"]
                         ).ScreenerAnswer,
+                        system=system,
+                        cache_system=cache_system,
                     )
                     answer_value = str(result.value.get("answer") or "")
                 except LLMProviderError as exc:

@@ -42,8 +42,17 @@ class LLMProvider(ABC):
         schema: type[T],
         *,
         max_tokens: int = 1024,
+        system: str | None = None,
+        cache_system: bool = False,
     ) -> StructuredResult[T]:
-        """Structured output validated against the Pydantic `schema`."""
+        """Structured output validated against the Pydantic `schema`.
+
+        `system` carries the (optional) system-message prefix. When
+        `cache_system=True`, providers that support prompt caching
+        (Anthropic) attach the appropriate `cache_control` marker so the
+        prefix reuses an ephemeral cache across calls. Other providers
+        accept the kwarg silently — caching is a no-op there.
+        """
 
     @abstractmethod
     async def stream(
