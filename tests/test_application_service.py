@@ -256,7 +256,77 @@ async def test_validate_submittable_passes_when_clean():
     a = _make_app()
     session = _FakeSession()
     session.exec_queue = [_exec_count(0)]
-    # No raise = pass.
+    # No raise = pass. Sponsorship-gate Profile/Job lookups fall through to
+    # default empty-queue → one_or_none=None → gate short-circuits.
+    await validate_submittable(session, a)
+
+
+# ── validate_submittable sponsorship-gate (plan 76 § D.1) ────────────
+
+
+def _make_profile(*, sponsorship: str = "needed_now"):
+    from models import VisaSponsorship
+
+    return SimpleNamespace(
+        user_id=1,
+        visa_sponsorship_needed=VisaSponsorship(sponsorship),
+    )
+
+
+@pytest.mark.asyncio
+async def test_validate_submittable_blocks_no_sponsorship_job():
+    """H1B profile (NEEDED_NOW) + US_CITIZEN_ONLY job → ValidationError code=visa_incompatible."""
+    from models import VisaRestriction
+
+    a = _make_app()
+    profile = _make_profile()
+    job = _make_job(visa_restrictions=VisaRestriction.US_CITIZEN_ONLY)
+    session = _FakeSession()
+    session.exec_queue = [_exec_count(0), _exec_one(profile), _exec_one(job)]
+
+    with pytest.raises(ValidationError) as exc:
+        await validate_submittable(session, a)
+    assert exc.value.code == "visa_incompatible"
+
+
+@pytest.mark.asyncio
+async def test_validate_submittable_blocks_green_card_job():
+    """H1B profile + GREEN_CARD_REQUIRED job → ValidationError code=visa_incompatible."""
+    from models import VisaRestriction
+
+    a = _make_app()
+    profile = _make_profile()
+    job = _make_job(visa_restrictions=VisaRestriction.GREEN_CARD_REQUIRED)
+    session = _FakeSession()
+    session.exec_queue = [_exec_count(0), _exec_one(profile), _exec_one(job)]
+
+    with pytest.raises(ValidationError) as exc:
+        await validate_submittable(session, a)
+    assert exc.value.code == "visa_incompatible"
+
+
+@pytest.mark.asyncio
+async def test_validate_submittable_allows_visa_friendly_job():
+    """H1B profile + SPONSORSHIP_AVAILABLE job → passes (no raise)."""
+    from models import VisaRestriction
+
+    a = _make_app()
+    profile = _make_profile()
+    job = _make_job(visa_restrictions=VisaRestriction.SPONSORSHIP_AVAILABLE)
+    session = _FakeSession()
+    session.exec_queue = [_exec_count(0), _exec_one(profile), _exec_one(job)]
+
+    await validate_submittable(session, a)
+
+
+@pytest.mark.asyncio
+async def test_validate_submittable_bypasses_manual_entry():
+    """No job_id → sponsorship-gate skipped regardless of profile (manual entries)."""
+    a = _make_app(job_id=None)
+    session = _FakeSession()
+    # Only the screener-count exec runs; gate early-returns on job_id IS NULL.
+    session.exec_queue = [_exec_count(0)]
+
     await validate_submittable(session, a)
 
 
@@ -275,12 +345,14 @@ async def test_submit_draft_success_flips_state_and_job_queue_state():
     # exec sequence:
     # 1. get_application(id) → app
     # 2. validate: count(unreviewed) = 0
-    # 3. Settings load (for postmortem LLM provider)
-    # 4. _build_bundle: resume → None, cover → None, screeners → []
-    # 5. job lookup (post-success flip)
+    # 3. sponsorship-gate: Profile lookup → None (short-circuits gate; plan 76)
+    # 4. Settings load (for postmortem LLM provider)
+    # 5. _build_bundle: resume → None, cover → None, screeners → []
+    # 6. job lookup (post-success flip)
     session.exec_queue = [
         _exec_one(app_row),
         _exec_count(0),
+        _exec_one(None),  # sponsorship-gate Profile → None
         _exec_one(None),  # Settings load
         _exec_one(None),  # resume lookup
         _exec_one(None),  # cover lookup
@@ -313,6 +385,7 @@ async def test_submit_draft_persistent_failure_keeps_draft_and_writes_last_failu
     session.exec_queue = [
         _exec_one(app_row),  # get_application
         _exec_count(0),  # validate
+        _exec_one(None),  # sponsorship-gate Profile → None (plan 76)
         _exec_one(None),  # Settings load
         _exec_one(None),
         _exec_one(None),
@@ -347,6 +420,7 @@ async def test_submit_draft_rate_limit_failure_classified():
     session.exec_queue = [
         _exec_one(app_row),
         _exec_count(0),
+        _exec_one(None),  # sponsorship-gate Profile → None (plan 76)
         _exec_one(None),  # Settings load
         _exec_one(None),
         _exec_one(None),
