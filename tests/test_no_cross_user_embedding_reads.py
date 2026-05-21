@@ -1,16 +1,20 @@
-"""Regression lint — plan 61 (0.2.7.14 + 0.2.7.16).
+"""Regression lint — plan 61 (0.2.7.14 + 0.2.7.16) + plan 75 (0.3.3.01).
 
-Every read against `JobEmbedding` or `ProfileAnswer` MUST filter by
-`user_id` (decision D8 — per-user only, no cross-tenant). The lint scans
-`src/` for any `select(JobEmbedding)` / `select(ProfileAnswer)` without an
+Every read against `JobEmbedding`, `ProfileAnswer`, or `ProfileEmbedding`
+MUST filter by `user_id` (decision D8 — per-user only, no cross-tenant).
+The lint scans `src/` for any `select(<table>...)` without an
 accompanying `.user_id ==` filter in the same statement.
 
-Why this exists: the embedding row table doesn't carry a tenant prefix on
+Why this exists: the embedding row tables don't carry a tenant prefix on
 the PK like Application does (job_id PK), so a SELECT without `WHERE
 user_id = :uid` would surface another tenant's rows on a multi-user
 deployment. The cosine-distance operator returns the closest matches
 across the WHOLE table when no predicate is bound. Same logic for
 ProfileAnswer — fingerprint collisions across users would leak answers.
+
+Plan 75 / 0.3.3.01: `ProfileEmbedding` (shipped in 0.3.0.03) joins the
+target list — code is clean today (3 reads filter by `user_id`); this
+extends the guardrail.
 
 If you ever need a cross-user read (admin tooling, debug), add an explicit
 `# lint: cross-user-read-ok` pragma on the line — the lint sees that as a
@@ -22,7 +26,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_TARGET_TABLES = ("JobEmbedding", "ProfileAnswer")
+_TARGET_TABLES = ("JobEmbedding", "ProfileAnswer", "ProfileEmbedding")
 _PRAGMA = "lint: cross-user-read-ok"
 
 
