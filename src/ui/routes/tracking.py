@@ -17,7 +17,7 @@ from api.auth import require_csrf
 from config import settings as app_settings
 from db.session import get_session
 from models import User
-from models.enums import ApplicationStatus, ClosedReason
+from models.enums import AppEventKind, ApplicationStatus, ClosedReason
 from services import application_service
 from services.auth import require_authed_session
 from ui import tracking_ctx as tctx
@@ -226,6 +226,84 @@ async def get_postmortem_modal(
             "trace": trace,
             "analysis_md": analysis_md,
         },
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Plan 81 § D.2 (0.4.0.12) — full AppEvent history fragment
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# Per-kind icon + tone for the full-history rendering. Status changes reuse
+# the existing dot-color map; other kinds get neutral / accent colors.
+_TIMELINE_KIND_DECOR: dict[str, dict[str, str]] = {
+    "status_change": {"icon": "arrow-right", "tone": "text-indigo-300"},
+    "docs_generated": {"icon": "file-check", "tone": "text-emerald-300"},
+    "docs_failed": {"icon": "file-x", "tone": "text-rose-300"},
+    "referral_requested": {"icon": "user-plus", "tone": "text-sky-300"},
+    "referral_provided": {"icon": "user-check", "tone": "text-emerald-300"},
+    "email_received": {"icon": "mail", "tone": "text-cyan-300"},
+    "email_sent": {"icon": "send", "tone": "text-indigo-300"},
+    "linkedin_dm_sent": {"icon": "linkedin", "tone": "text-sky-300"},
+    "linkedin_dm_replied": {"icon": "message-square", "tone": "text-emerald-300"},
+    "note_added": {"icon": "sticky-note", "tone": "text-slate-300"},
+    "interview_scheduled": {"icon": "calendar", "tone": "text-amber-300"},
+    "auto_apply_dry_run": {"icon": "play", "tone": "text-slate-400"},
+    "auto_apply_drained": {"icon": "minus-circle", "tone": "text-slate-400"},
+    "auto_apply_visa_blocked": {"icon": "shield-off", "tone": "text-rose-300"},
+    "auto_apply_queued": {"icon": "refresh-cw", "tone": "text-cyan-300"},
+}
+
+
+@router.get(
+    "/_fragments/tracking/timeline/{application_id}",
+    response_class=HTMLResponse,
+    name="tracking_timeline_fragment",
+)
+async def fragment_timeline(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Return the full AppEvent history (limit 100) for a single application.
+
+    Used by the "Show full history" toggle in the detail slide-over. IDOR-
+    gated via `_application_or_404`.
+    """
+    await _application_or_404(session, application_id, user)
+    events = await application_service.list_events_for(session, application_id, limit=100)
+
+    from ui.tracking_ctx import _relative_label  # local import — avoid cycle
+
+    rows = []
+    for e in events:
+        decor = _TIMELINE_KIND_DECOR.get(
+            e.kind.value if hasattr(e.kind, "value") else str(e.kind),
+            {"icon": "circle", "tone": "text-slate-400"},
+        )
+        payload = e.payload or {}
+        label = ""
+        if e.kind == AppEventKind.STATUS_CHANGE:
+            frm = payload.get("from")
+            to = payload.get("to")
+            label = f"{frm} → {to}" if frm else (to or "")
+        else:
+            label = (e.kind.value if hasattr(e.kind, "value") else str(e.kind)).replace("_", " ")
+        rows.append(
+            {
+                "kind": e.kind.value if hasattr(e.kind, "value") else str(e.kind),
+                "label": label,
+                "icon": decor["icon"],
+                "tone": decor["tone"],
+                "trigger": payload.get("trigger"),
+                "occurred_at_label": _relative_label(e.occurred_at),
+            }
+        )
+    return templates.TemplateResponse(
+        request,
+        "components/_application_timeline_full.html",
+        {"application_id": application_id, "events": rows},
     )
 
 

@@ -99,7 +99,17 @@
 
     {% if status_timeline %}
       <section data-testid="detail-status-timeline">
-        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Status timeline</div>
+        <div class="flex items-baseline justify-between mb-2 gap-3">
+          <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Status timeline</div>
+          <button type="button"
+                  data-testid="timeline-show-full"
+                  hx-get="/_fragments/tracking/timeline/{{ a.id }}"
+                  hx-target="closest section"
+                  hx-swap="outerHTML"
+                  class="text-xs text-slate-500 hover:text-slate-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/40 rounded px-1 py-0.5">
+            Show full history
+          </button>
+        </div>
         <ol class="flex flex-col gap-2">
           {% for step in status_timeline %}
             <li class="flex items-start gap-2.5 text-sm">

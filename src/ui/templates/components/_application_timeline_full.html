@@ -1,0 +1,45 @@
+{#
+  _application_timeline_full.html — full AppEvent history for a single
+  application (plan 81 § D.2 / 0.4.0.12).
+
+  Loaded from `GET /_fragments/tracking/timeline/<application_id>` and
+  swaps into the parent `<section data-testid="detail-status-timeline">`
+  block (outerHTML).
+
+  Args:
+    application_id : int
+    events         : list of {kind, label, icon, tone, trigger, occurred_at_label}
+                     Newest first.
+#}
+<section data-testid="detail-status-timeline-full">
+  <div class="flex items-baseline justify-between mb-2 gap-3">
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Full history</div>
+    <button type="button"
+            data-testid="timeline-collapse"
+            hx-get="/_fragments/tracking/application/{{ application_id }}"
+            hx-target="#tracking-slide-over-panel"
+            hx-swap="outerHTML"
+            class="text-xs text-slate-500 hover:text-slate-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/40 rounded px-1 py-0.5">
+      Collapse
+    </button>
+  </div>
+  {% if events %}
+    <ol class="flex flex-col gap-2">
+      {% for e in events %}
+        <li class="flex items-start gap-2.5 text-sm">
+          <i data-lucide="{{ e.icon }}" class="h-3.5 w-3.5 mt-0.5 shrink-0 {{ e.tone }}" stroke-width="1.5"></i>
+          <div class="flex-1 min-w-0">
+            <div class="text-slate-200">{{ e.label }}</div>
+            <div class="text-xs text-slate-500">
+              {{ e.occurred_at_label }}{% if e.trigger %} · {{ e.trigger }}{% endif %}
+              <span class="font-mono text-[10px] text-slate-600 ml-1">{{ e.kind }}</span>
+            </div>
+          </div>
+        </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <p class="text-sm text-slate-500">No events recorded.</p>
+  {% endif %}
+</section>
+<script>window.lucide && window.lucide.createIcons();</script>
