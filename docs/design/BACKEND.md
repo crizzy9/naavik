@@ -380,7 +380,7 @@ Services own all business logic. Routes parse → call service → return respon
 | `profile_service` | `services/profile_service.py` | Profile CRUD, application questions, bullet ops, tag inference (LLM) |
 | `extraction` | `services/extraction.py` | PDF → AI extraction → structured Profile. Owns SSE event emission for Onboarding step 2 |
 | `scraper_service` | `services/scraper_service.py` | Orchestrates scrapers, dedups, scores, persists. Calls `scraper/*` and `scorer` |
-| `scorer` | `services/scorer.py` | AI scoring (`prompts/score_job`), tag matching, visa filter |
+| `scorer` | `services/scorer/` | Layered scorer (plan 65 / 0.3.0): visa filter (deterministic) → tag overlap (weighted) → semantic cosine (pgvector) → LLM-as-judge (cost-cap gated). Writes `Job.score` + `Job.match_breakdown`. Module split: `visa.py` / `tag_layer.py` / `semantic_layer.py` / `llm_judge.py` / `weights.py` / `orchestrator.py` + `__init__.py` re-exports for backward compat. |
 | `document_generator` | `services/document_generator.py` | Resume + cover letter generation; bullet selection + trimming; Typst compilation; ScreenerAnswer drafting |
 | `application_service` | `services/application_service.py` | DRAFT lifecycle, submission pipeline (auto + manual), state transitions, ATS dispatch |
 | `email_monitor` | `services/email_monitor.py` | Sync via Gmail/Outlook integrations; persist new messages |
@@ -464,6 +464,64 @@ scheduler/sync_gmail
     → notifications.notify_priority(app, signal)
 ```
 
+### H.4 Scoring layered architecture (plan 65 / 0.3.0)
+
+`services/scorer/` is a package, not a flat module — six layer files plus
+`__init__.py` re-exports. `scorer.orchestrator.score_job_layered` is the
+single end-to-end driver:
+
+```
+1a. apply_visa_filter      — visa.py        — zeros out jobs requiring
+                                              citizenship/GC when the
+                                              candidate needs sponsorship
+1b. _tag_overlap_score     — tag_layer.py   — weighted Jaccard over Bullet tags
+                                              ∩ Job tags; floor 0.10
+2.  _semantic_score        — semantic_layer — pgvector `<=>` cosine of
+                                              JobEmbedding ↔ ProfileEmbedding
+                                              (sibling 1:1 by user_id)
+3.  cost_cap_exhausted     — llm_judge.py   — per-job pre-flight: would the
+                                              call push today_cost +
+                                              $0.015 over the cap?
+4.  _llm_judge_score       — llm_judge.py   — LLM judges composite (≥0.50)
+                                              jobs only; returns JobScore
+                                              with strengths/gaps/per_dim/
+                                              suggested_bullets
+```
+
+Composite formula: `0.4 × tag + 0.6 × semantic` (semantic carries richer
+signal per research § D.7). Below `_LLM_GATE = 0.50`, layer 4 is skipped
+and the composite ships as the final score. Above the gate, the LLM
+verdict replaces the composite.
+
+**Cost-cap fallback** (OQ-5 silent): when `cost_cap_exhausted` returns
+True, the orchestrator persists `judge_skipped=True,
+judge_skipped_reason="cost_cap_exhausted"` and the layer-2-3 composite
+ships as the score. UI banner on Settings · LLM tab (ships in 0.3.2.04)
+surfaces the signal to the operator.
+
+**Layer 4 graceful-degrade**: when `get_provider` raises (no LLM
+configured per OQ-2) or `tracked_call` throws after retries, the
+orchestrator returns the layer-2-3 composite + reason `no_provider` or
+`llm_failed`. The pipeline never crashes on missing/failed LLM.
+
+**Forward-compat seam**: `score_job_layered(... source_trust_weight:
+float = 1.0)` multiplies the final score; v1 callers hardcode 1.0. Plan
+0.8.0.42 will dispatch per-source weights without touching the scorer.
+
+**Belt-and-suspenders visa filter**: even after layer 4 returns a score,
+`apply_visa_filter` re-runs. The LLM is asked about visa concerns but a
+hallucinated "no concern" doesn't override the deterministic rule.
+
+**Suggested-bullets IDOR defense (T9)**: the LLM may hallucinate
+`Bullet.id` values; `_filter_valid_bullet_ids` rejects any ID that
+doesn't belong to the calling user's profile. Logged at WARN when >50%
+filtered (signals a degraded prompt).
+
+**Per-tag weights**: `Settings.score_per_dim_weights` is a JSONB
+`{tag: float}` mapping. Defaults to `{}` → all tags weight 1.0.
+Operators tune via the editor in 0.3.2.04; values clamped [0, 3];
+unknown keys dropped at the validator.
+
 ---
 
 ## I · Scheduled jobs (cron)
@@ -483,7 +541,11 @@ APScheduler with `PostgresJobStore` (jobs survive restarts). Lifespan-managed: s
 | `scraping.ashby` | every 60min | `scraper_service.scrape("ashby")` |
 | `scraping.indeed` | every 90min | `scraper_service.scrape("indeed")` |
 | `jobs.dedup` | every 60min | `scraper_service.dedup_recent()` |
-| `jobs.score_pending` | every 15min | `scorer.score_unscored_jobs()` |
+| `jobs.score_pending` | every 15min | `scorer.orchestrator.score_unscored_jobs()` — plan 65 / 0.3.0.06 — for users with `Settings.semantic_match_enabled=True`, scores `Job.score == 0.0` rows via the layered orchestrator |
+| `score.recompute_stale` | daily 03:30 UTC | `scorer.orchestrator.rescore_stale_jobs()` — plan 65 / 0.3.0.06 — re-scores jobs where `Profile.updated_at > Job.match_breakdown.scored_at` (Postgres-only via JSONB extractor) |
+| `embeddings.embed_pending_jobs` | daily 02:00 UTC | `embedding_service.embed_job()` per missing/stale `JobEmbedding` (plan 61 / 0.2.7.16) |
+| `embeddings.embed_pending_profiles` | daily 02:30 UTC | `embedding_service.embed_profile()` — plan 65 / 0.3.0.03 — refreshes `ProfileEmbedding` per user with `semantic_match_enabled=True` |
+| `embeddings.embed_orphan_sweep` | daily 03:00 UTC | `embedding_service.delete_orphan_embeddings()` (plan 61) |
 
 **Phase 3 (auto-apply):**
 
@@ -915,25 +977,45 @@ Provider selection: per-user `Settings.llm_provider` + `Settings.llm_model`. API
 Each prompt is a Python module with: a versioned prompt string, a Pydantic schema for the structured response, and a callable that takes domain inputs and returns the response.
 
 ```python
-# llm/prompts/score_job.py
-from pydantic import BaseModel, Field
+# llm/prompts/score_job.py — plan 65 / 0.3.0 expanded schema
+from pydantic import BaseModel, Field, field_validator
+from models.enums import Tag
+
+MAX_GAPS = 5
+MAX_STRENGTHS = 5
+MAX_SUGGESTED_BULLETS = 8
+MAX_BULLET_STRING_LENGTH = 120
+MAX_EXPLANATION_LENGTH = 512
 
 class JobScore(BaseModel):
     score: float = Field(ge=0.0, le=1.0)
-    explanation: str
-    matched_tags: list[str]
-    gaps: list[str]
-    visa_concern: bool
+    explanation: str = Field(default="", max_length=MAX_EXPLANATION_LENGTH)
+    matched_tags: list[str] = Field(default_factory=list, max_length=9)
+    per_dimension: dict[str, float] = Field(default_factory=dict)
+    strengths: list[str] = Field(default_factory=list, max_length=MAX_STRENGTHS)
+    gaps: list[str] = Field(default_factory=list, max_length=MAX_GAPS)
+    suggested_bullets: list[int] = Field(default_factory=list, max_length=MAX_SUGGESTED_BULLETS)
+    visa_concern: bool = False
+    visa_note: str | None = Field(default=None, max_length=256)
 
-PROMPT = """
-You are scoring a job for a candidate. Given the candidate profile and the job
-description, return a structured score 0.0-1.0...
-"""
+    # Validators drop unknown per_dim keys, clamp [0, 1], truncate strings to 120 chars.
 
-async def score_job(provider: LLMProvider, profile: Profile, job: Job) -> JobScore:
-    rendered = PROMPT.format(profile=..., job=...)
+PROMPT = """You are an expert technical recruiter scoring how well a candidate matches a job.
+... (renders profile + bullets + job + Tag vocabulary + layer-1/2 scores)"""
+
+async def score_job(provider, profile, job, candidate_bullets, tag_score, semantic_score):
+    rendered = PROMPT.format(...)
     return await provider.structured(rendered, JobScore)
 ```
+
+The orchestrator wraps each call via `llm_tracker.tracked_call(prompt_name="score_job")` so cost rows persist. Layer-1 + layer-2 scores are passed to the LLM (the judge can calibrate its grade against the deterministic axes).
+
+The expanded shape consumes:
+- `per_dimension` drives Discover's per-tag bar charts (`SCREENS.md § 7`).
+- `strengths` + `gaps` + `visa_note` render in the full `/jobs/{id}/match` modal (per OQ-7).
+- `suggested_bullets` (list of `Bullet.id`) is the document-generator's seed input for resume tailoring (Phase 3 / 0.3.1 consumer).
+- All bullet strings capped at 120 chars; unknown Tag keys dropped at validation; `per_dimension` values clamped to [0, 1].
+
 
 Phase 1 prompts: `extract_resume`, `extract_job`, `score_job`, `select_bullets`, `trim_bullet`, `draft_cover_letter`, `answer_screener`, `classify_email`, `draft_outreach`, `auto_tag_bullets` (auto-generates 9-tag set per bullet during resume parse).
 

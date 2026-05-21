@@ -36,7 +36,7 @@ See § J for the full screener-answer model and lifecycle.
 
 ## B · Entity inventory
 
-20 SQLModel entities + 1 settings singleton. Phase 1 ships 19; plan 27 (`0.2.0.05`) adds `JobScrapeRun` (entity #20). Phase 2+ extends others (e.g. semantic embeddings, notification routing).
+22 SQLModel entities + 1 settings singleton. Phase 1 ships 19; plan 27 (`0.2.0.05`) adds `JobScrapeRun` (entity #20); plan 61 (`0.2.7.16`) adds `JobEmbedding` (entity #21); plan 65 (`0.3.0.03`) adds `ProfileEmbedding` (entity #22).
 
 | # | Entity | Purpose | Phase 1 row count (per SAMPLE_DATA.md) |
 |---|---|---|---|
@@ -60,9 +60,11 @@ See § J for the full screener-answer model and lifecycle.
 | 18 | `ATSCredential` | Per-board login state metadata (DB row only; secret material in `~/.naavik/secrets.enc`) | 0 in Phase 1 fixtures |
 | 19 | `ApiUsage` | Per-LLM-call cost + token + latency log; powers Settings · LLM Provider cost cards | grows with usage; fixtures seed ~30 historical rows |
 | 20 | `JobScrapeRun` | One row per scraper invocation — `(source, status, started_at, finished_at, requests_made, listings_returned, new_jobs, updated_jobs, errors[], duration_ms, raw_meta)`. Plan 27 (`0.2.0.05`). See `docs/design/JOB_MODEL.md` § B.2 + § C for the canonical shape. | 5 fixtures (last 24h per source) |
+| 21 | `JobEmbedding` | Sibling table — one dense `vector(768)` per Job (1:1 keyed by `job_id`). Plan 61 (`0.2.7.16`). Materialized by nightly `embeddings.embed_pending_jobs` cron. | grows with scoring run |
+| 22 | `ProfileEmbedding` | Sibling table — one dense `vector(768)` per user (1:1 keyed by `user_id`). Plan 65 (`0.3.0.03`). On-edit hook in `profile_service` + nightly `embeddings.embed_pending_profiles` cron. | 1 per active user |
 | – | `Settings` (singleton) | Per-user LLM provider, auto-apply config, etc. (see § L for full shape) | 1 |
 
-Phase 2+ adds: `Notification`, `CalendarEvent`, `JobEmbedding` (pgvector), `ProfileAnswer` (screener-answer reuse cache; see § J). `ScrapingSource` is subsumed by `Settings.sources_enabled` + the `JobSource` enum + per-run `JobScrapeRun` rows — no separate entity ships.
+Phase 2+ adds: `Notification`, `CalendarEvent`, `ProfileAnswer` (screener-answer reuse cache; see § J). `ScrapingSource` is subsumed by `Settings.sources_enabled` + the `JobSource` enum + per-run `JobScrapeRun` rows — no separate entity ships.
 
 `ApiUsage` was promoted from Phase 2+ to Phase 1 entity #19 on 2026-05-01 because Settings · LLM Provider's "THIS MONTH" / "AVG / GENERATION" / "RATE LIMIT" cost cards (SCREENS.md § 11) need it from day one. Adding the table later would mean a migration + a broken cost-card interim.
 
@@ -373,9 +375,34 @@ class Job(SQLModel, table=True):
     deleted_at: Optional[datetime] = None
 ```
 
-**Indexes:** `user_id`, `(user_id, queue_state)`, `score desc`, `found_at desc`, GIN on `tags`, `(user_id, url)` partial-unique WHERE `deleted_at IS NULL`, `(user_id, source, external_id)` partial-unique WHERE `deleted_at IS NULL` (plan 27 § D.3 — primary dedup). **Validation:** `0.0 <= score <= 1.0`; `salary_min <= salary_max OR salary_min IS NULL`. **Phase 6+:** `JobEmbedding` (pgvector) sibling table for semantic match.
+**Indexes:** `user_id`, `(user_id, queue_state)`, `score desc`, `found_at desc`, GIN on `tags`, `(user_id, url)` partial-unique WHERE `deleted_at IS NULL`, `(user_id, source, external_id)` partial-unique WHERE `deleted_at IS NULL` (plan 27 § D.3 — primary dedup). **Validation:** `0.0 <= score <= 1.0`; `salary_min <= salary_max OR salary_min IS NULL`. **Phase 6+:** `JobEmbedding` (pgvector) sibling table for semantic match (plan 61 / `0.2.7.16`).
 
-**Service contract.** Job CRUD + dedup-aware upsert + scrape-run lifecycle go through `src/services/job_service.py` (8 functions per plan 27 § D.9): `upsert_job` / `get_job` / `list_jobs` / `archive_job` / `restore_job` / `create_manual_job` / `count_jobs_by_source` / `record_scrape_run`. No raw SQL in route handlers; scrapers (0.2.0.06+) write through `upsert_job` which is idempotent on `(user_id, source, external_id)`.
+**`match_breakdown` canonical shape (plan 65 § T7):** the JSONB column is written by `services/scorer/orchestrator.py:_persist_score` with exactly the 18 keys below. New keys require a plan; existing-key shape changes bump `schema_version`. Surfaces for consumers: Discover card (`per_dimension`, `visa_concern`, `score`), `/jobs/{id}/match` modal (`strengths`, `gaps`, `visa_note`), document generator's bullet selection seed (`suggested_bullets`), debug surfaces (`tag_score`, `semantic_score`, `composite_pre_llm`, `layers_run`, `judge_skipped_reason`, `layer_4_provider`/`_model`, `scored_at`).
+
+```json
+{
+    "score": 0.86,
+    "per_dimension": {"ai-ml": 0.95, "platform": 0.88},
+    "matched_tags": ["ai-ml", "platform"],
+    "strengths": ["10+ years AI/ML"],
+    "gaps": ["Kubernetes"],
+    "suggested_bullets": [3, 7, 12],
+    "visa_concern": false,
+    "visa_note": null,
+    "layers_run": ["tag", "semantic", "llm_judge"],
+    "judge_skipped": false,
+    "judge_skipped_reason": null,
+    "layer_4_provider": "anthropic",
+    "layer_4_model": "claude-sonnet-4-6",
+    "scored_at": "2026-05-21T03:14:15Z",
+    "tag_score": 0.78,
+    "semantic_score": 0.82,
+    "composite_pre_llm": 0.806,
+    "schema_version": 1
+}
+```
+
+**Service contract.** Job CRUD + dedup-aware upsert + scrape-run lifecycle go through `src/services/job_service.py` (8 functions per plan 27 § D.9): `upsert_job` / `get_job` / `list_jobs` / `archive_job` / `restore_job` / `create_manual_job` / `count_jobs_by_source` / `record_scrape_run`. No raw SQL in route handlers; scrapers (0.2.0.06+) write through `upsert_job` which is idempotent on `(user_id, source, external_id)`. Scoring goes through `src/services/scorer/orchestrator.py:score_job_layered` (plan 65 / 0.3.0).
 
 ### `JobScrapeRun`
 
@@ -412,6 +439,43 @@ class JobScrapeRun(SQLModel, table=True):
 ```
 
 **Indexes:** `(source, started_at)`, `(user_id, status, started_at)`, `started_at`. **Validation:** `finished_at IS NULL OR finished_at >= started_at`; `requests_made / listings_returned / new_jobs / updated_jobs >= 0`. **Soft-delete:** NONE — scrape-run rows are operator audit data, pruned by a future cron at scale (Phase 6+).
+
+### `JobEmbedding`
+
+> **Plan 61 (`0.2.7.16`) addition.** Sibling table — one dense vector per Job (1:1 keyed by `job_id`).
+
+```python
+class JobEmbedding(SQLModel, table=True):
+    __tablename__ = "job_embedding"
+    job_id: int = Field(primary_key=True, foreign_key="job.id")
+    user_id: int = Field(foreign_key="user.id", index=True)
+    embedding: list[float] = Field(sa_column=Column(Vector(768), nullable=False))
+    model: str = Field(max_length=128)        # `<provider>/<model>@<dim>`
+    dim: int = Field(default=768)
+    content_hash: str = Field(max_length=64, index=True)
+    created_at: datetime
+    updated_at: datetime
+```
+
+**Indexes:** HNSW `embedding vector_cosine_ops` (Postgres only); `content_hash` for idempotency lookup. **Validation:** `dim == 768`; provider-returned vector length must match — orchestrator drops mismatches. **Materialization:** nightly `embeddings.embed_pending_jobs` cron (02:00 UTC) + optional sync via `Settings.semantic_match_sync_on_upsert`. **Provenance:** `model` carries `<provider>/<model>@<dim>` so a provider swap invalidates the row + nightly refill replays. **Cosine sim**: pgvector `<=>` (distance), converted to similarity via `1 - d/2`.
+
+### `ProfileEmbedding`
+
+> **Plan 65 (`0.3.0.03`) addition.** Mirrors `JobEmbedding` — sibling table, 1:1 keyed by `user_id`.
+
+```python
+class ProfileEmbedding(SQLModel, table=True):
+    __tablename__ = "profile_embedding"
+    user_id: int = Field(primary_key=True, foreign_key="user.id")
+    embedding: list[float] = Field(sa_column=Column(Vector(768), nullable=False))
+    model: str = Field(max_length=128)
+    dim: int = Field(default=768)
+    content_hash: str = Field(max_length=64, index=True)
+    created_at: datetime
+    updated_at: datetime
+```
+
+**Indexes:** HNSW `embedding vector_cosine_ops` (Postgres only); `content_hash`. **Embed text:** `headline + summary_short + summary_full + top-20 Bullet.text` ordered by `Experience.order_index ASC, Bullet.order_index ASC`. **Refresh policy (OQ-6):** on-edit via `services/profile_service.update_field` / `update_application_questions` / `update_bullet` (best-effort, gated by `Settings.semantic_match_enabled`) AND nightly `embeddings.embed_pending_profiles` cron (02:30 UTC). **Idempotency:** SHA-1 of the embed text + the `model` identifier; matches skip the LLM call. **Cosine sim**: same operator as JobEmbedding — orchestrator inlines the SQL via `services/scorer/semantic_layer.py:_semantic_score`.
 
 ### `Application`
 
@@ -1334,6 +1398,8 @@ The full Settings model (per § C) carries these fields. The mapping below shows
 | `scraper_proxy_configured` | `scraper/base.py` (J.4) | Phase 6+; URL in vault |
 | `deployment_mode` | `services/portfolio_sync.py`, Settings UI | `self_hosted` vs `cloud` |
 | `debug` | `/_design/components` route gate (B) | |
+| `score_per_dim_weights` (JSONB) | `services/scorer/weights.py:resolve_weights` | Plan 65 (0.3.0.02). Per-tag operator-tunable weights for layer-1 tag overlap. Defaults to `{}` → all-1.0. JSONB validator drops unknown Tag keys; values clamped [0, 3]. UI editor ships in 0.3.2.04; v1 ships JSONB editable via PUT route only. |
+| `semantic_match_enabled` | `services/embedding_service.embed_job` + `embed_profile`; `scorer.orchestrator.score_unscored_jobs` | Plan 61 / 0.2.7.16 + plan 65 / 0.3.0. Master gate for semantic + LLM scoring; default OFF so a fresh self-host doesn't bill embedding calls until the operator opts in. |
 
 **`encryption_key` is NOT on Settings.** The vault's master key is derived from the `SECRET_KEY` env var (or a passphrase set during `naavik init`). Storing the key in the DB would defeat the encryption boundary.
 

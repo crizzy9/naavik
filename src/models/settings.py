@@ -136,6 +136,17 @@ class Settings(SQLModel, table=True):
     semantic_match_threshold: float = Field(default=0.65)
     semantic_match_sync_on_upsert: bool = Field(default=False)
 
+    # Plan 65 (0.3.0.02): per-tag operator-tunable scoring weights.
+    # JSONB shape `{tag_value: float}`; empty dict → all tags weighted 1.0.
+    # Validator (services/scorer/weights.py:PerDimWeights) drops unknown
+    # keys + clamps values to [0.0, 3.0]. Operator tunes via Settings · LLM
+    # editor (UI ships in 0.3.2.04). Defaults to neutral so every user
+    # ships the same baseline; per-profile bias is opt-in.
+    score_per_dim_weights: dict = Field(
+        default_factory=dict,
+        sa_column=Column(JSONB, nullable=False, server_default="{}"),
+    )
+
     # Plan 62 (0.2.7.07): JWT signing-key rotation cadence + dual-key grace.
     # `jwt_rotation_days` — cron promotes ACTIVE → RETIRING when an ACTIVE
     # key's `created_at` is older than this. Default 90, configurable 30-365.

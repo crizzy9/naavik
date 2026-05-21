@@ -56,6 +56,11 @@ FUNC_REF_ALLOWLIST: frozenset[str] = frozenset(
         # Plan 61 (0.2.7.16): semantic-match nightly batch + orphan sweep.
         "scheduler.jobs:embed_pending_jobs",
         "scheduler.jobs:embed_orphan_sweep",
+        # Plan 65 (0.3.0.03): profile-embedding nightly batch.
+        "scheduler.jobs:embed_pending_profiles",
+        # Plan 65 (0.3.0.06): score-pending + recompute-stale crons.
+        "scheduler.jobs:score_pending",
+        "scheduler.jobs:score_recompute_stale",
         # Plan 62 (0.2.7.07): RETIRING signing-key sweep.
         "scheduler.jobs:expire_retiring_signing_keys",
         "scheduler.jobs:refresh_oauth_tokens",

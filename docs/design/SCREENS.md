@@ -370,7 +370,7 @@ Sticky chip-row below the header; visible by default. Six chips, each maps 1:1 t
 
 **Body:**
 - Meta row (icons + values, mono): `📍 San Francisco · 💵 $240-290k + 0.05% · 🏠 Hybrid · 📍 SF · 2h ago`
-- Tag row: warm-intro chip first when applicable (emerald, "👥 warm intro · {referrer}"), then standard tag chips
+- Tag row: warm-intro chip first when applicable (emerald, "👥 warm intro · {referrer}"), then a conditional `VISA · sponsorship blocked` chip (rose tone) when `match_breakdown.visa_concern = True` (plan 65 / 0.3.0.01 — set by the scorer's deterministic visa filter), then standard tag chips
 - Two-column lower body:
   - LEFT: `WHAT THEY WANT` — 3–5 bullets distilled from JD
   - RIGHT: `MATCH · 0.86` overall + per-dimension bars (e.g., `ai-ml 0.95`, `platform 0.88`, `leadership 0.82`, `visa 0.70`)

@@ -152,7 +152,7 @@ class JobScrapeStatus(StrEnum):
 | `equity_pct` | `float` | YES | — | AI extraction | percent ownership signal |
 | `score` | `float` | NO | yes (DESC) | scorer | `0.0` to `1.0`; CHECK constraint enforces range |
 | `score_explanation` | `str` | YES | — | scorer | LLM rationale |
-| `match_breakdown` | `dict` | NO | — | scorer | JSONB; per-tag sub-scores |
+| `match_breakdown` | `dict` | NO | — | scorer | JSONB; canonical 18-key shape (plan 65 § T7) — `{score, per_dimension, matched_tags, strengths, gaps, suggested_bullets, visa_concern, visa_note, layers_run, judge_skipped, judge_skipped_reason, layer_4_provider, layer_4_model, scored_at, tag_score, semantic_score, composite_pre_llm, schema_version}`. Written by `services/scorer/orchestrator.py:_persist_score`; consumers in BACKEND.md § H.4 + DATA_MODEL.md § C `Job`. |
 | `queue_state` | `JobQueueState` | NO | yes (compound) | UI / cron sets | `UNSWIPED` / `SAVED` / `SKIPPED` / `QUEUED_FOR_AUTO_APPLY` / `APPLIED` |
 | `tags` | `list[Tag]` | NO | GIN | AI extraction | ARRAY(String) |
 | `warm_intro_contact_id` | `int` | YES | — | service | FK → `contact.id`; surfaces warm-intro UI on Discover card |

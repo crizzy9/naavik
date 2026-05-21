@@ -79,15 +79,21 @@ def test_post_job_by_url_uses_jobread_projection(client):
 # ── POST /api/v1/jobs/{id}/rescore (post_rescore) ────────────────────────
 
 
-def test_post_rescore_uses_jobread_projection(client):
-    # Pull any sample-data job_id off the list endpoint first; sample-data
-    # IDs aren't 1-anchored (USER.id=1 but Job IDs start higher).
+def test_post_rescore_requires_real_auth(client):
+    """Plan 65 § D.6 promoted the 501-stub to a real layered-scorer write
+    path. Fake-session callers (auth bypass via require_authed_session ->
+    None) now get 401 — rescore is real-auth only. The JobRead projection
+    contract is exercised in `tests/test_score_rescore_route.py` against
+    a stub'd session that returns a real Job + Profile + Settings.
+    """
     listing = client.get("/api/v1/jobs").json()
     job_id = listing["items"][0]["id"]
-    r = client.post(f"/api/v1/jobs/{job_id}/rescore")
-    assert r.status_code == 200, r.text
-    body = r.json()
-    _assert_no_raw_meta_and_has_id(body)
+    r = client.post(
+        f"/api/v1/jobs/{job_id}/rescore",
+        cookies=_CSRF_COOKIES,
+        headers=_CSRF_HEADERS,
+    )
+    assert r.status_code == 401, r.text
 
 
 # ── GET /api/v1/discover/saved (discover_saved) ──────────────────────────
