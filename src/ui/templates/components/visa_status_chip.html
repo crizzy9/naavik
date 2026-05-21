@@ -1,0 +1,36 @@
+{#
+  visa_status_chip.html — surfaces Job.visa_restrictions on Discover cards.
+  Plan 78 § D.6 (0.4.0.15). Three visual states keyed by the VisaRestriction
+  enum value:
+
+    US_CITIZEN_ONLY / GREEN_CARD_REQUIRED  → rose warning chip ("no sponsorship")
+    SPONSORSHIP_AVAILABLE                  → cyan success chip ("sponsors")
+    NOT_MENTIONED                          → slate unknown chip ("visa unknown")
+
+  Args:
+    restriction : VisaRestriction enum value (string).
+    compact     : bool — when True, drop the leading icon (used in dense rows).
+#}
+{% set compact = compact | default(false) %}
+{% set _tone = "slate" %}
+{% set _icon = "circle-help" %}
+{% set _label = "visa unknown" %}
+{% if restriction in ("us_citizen_only", "green_card_required") %}
+  {% set _tone = "rose" %}
+  {% set _icon = "alert-triangle" %}
+  {% set _label = "no sponsorship" %}
+{% elif restriction == "sponsorship_available" %}
+  {% set _tone = "cyan" %}
+  {% set _icon = "check-circle-2" %}
+  {% set _label = "sponsors" %}
+{% endif %}
+{% set _bg = {
+  "rose":  "bg-rose-500/15 text-rose-200 border-rose-500/30",
+  "cyan":  "bg-cyan-500/15 text-cyan-200 border-cyan-500/30",
+  "slate": "bg-slate-700/40 text-slate-300 border-slate-600/40",
+}[_tone] %}
+<span data-visa-chip="{{ restriction }}"
+      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wide border {{ _bg }}">
+  {% if not compact %}<i data-lucide="{{ _icon }}" class="h-3 w-3" stroke-width="1.5"></i>{% endif %}
+  {{ _label }}
+</span>

@@ -1,6 +1,7 @@
 # Naavik Component Catalog
 
-> **Last updated:** 2026-05-21 (plan 75 / `0.3.3.08` — registers 1 net-new Discover-review-&-apply partial [`apply_preview_card.html`] for the Variant A two-step HTMX preview before bundle generation; consumes `application` shape, emits CSRF-guarded confirm + cancel CTAs to `/_fragments/apply/{confirm,cancel}/<id>`. Net total: 93 partials. Catalog bump filed post-PR-#170 architect review (MED-2).)
+> **Last updated:** 2026-05-21 (plan 78 / `0.4.0.15` — registers 1 net-new Discover-group partial [`visa_status_chip.html`] surfacing `Job.visa_restrictions` as a 3-state chip (sponsors cyan / no-sponsorship rose / unknown slate). Mounts on `swipe_card.html` between meta_items. Net total: 94 partials.)
+> Earlier line: 2026-05-21 (plan 75 / `0.3.3.08` — registers 1 net-new Discover-review-&-apply partial [`apply_preview_card.html`] for the Variant A two-step HTMX preview before bundle generation; consumes `application` shape, emits CSRF-guarded confirm + cancel CTAs to `/_fragments/apply/{confirm,cancel}/<id>`. Net total: 93 partials. Catalog bump filed post-PR-#170 architect review (MED-2).)
 > Earlier line: 2026-05-21 (plan 72 / `0.3.2.01` — registers 1 net-new Discover-group partial [`score_card.html`] as the Variant B linear-bento composite wrapping `score_circle` + `match_breakdown` + strengths/gaps/visa_note overlay. Also extends `tailored_bullet_row.html` API with an optional `rationale` arg for the Variant A inline-ledger bullet-selection preview (additive; backward compatible). Net total: 92 partials. Canonical contract: `docs/design/MOCKUP_HANDOFF-0.3.2.md` § Surface 1 + § Surface 2.)
 > Earlier line: 2026-05-20 (plan 58 / `0.2.7.06` — registers 2 net-new Settings-group partials [`_rate_limit_editor.html` + `_keywords_editor.html`] for the Settings · Sources writable-popover editors. Net total: 91 partials. Canonical contract: `docs/design/SOURCES_UI.md` § H.)
 > Earlier line: 2026-05-20 (plan 49 / `0.2.0.16` — registers 1 net-new Settings-group partial `_source_row.html` for the Settings · Sources sub-tab rewrite. Net total: 89 partials. Canonical contract: `docs/design/SOURCES_UI.md`.)
@@ -14,7 +15,7 @@
 
 ## A · Inventory
 
-The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 92 components** across 12 groups.
+The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 94 components** across 12 groups.
 
 | Group | Count | Components |
 |---|---|---|
@@ -24,13 +25,13 @@ The library lives at `src/ui/templates/components/`. Components grouped by respo
 | Onboarding | 5 | `step_indicator.html`, `dropzone.html`, `extraction_checklist.html`, `extracted_field_row.html`, `progress_bar.html` |
 | Profile / Bullet | 11 | `profile_hero.html`, `contact_chip.html`, `experience_card.html`, `bullet_row.html`, `section_anchor_nav.html`, `application_readiness_card.html`, `application_qs_form.html`, `bullet_edit_row.html`, `tag_picker.html`, `selection_override.html`, `bullet_textarea.html` |
 | Overview | 4 | `kpi_card.html`, `priority_action_row.html`, `email_signal_row.html`, `pipeline_strip.html` |
-| Discover | 12 | `swipe_card.html`, `match_breakdown.html`, `discover_action_bar.html`, `swipe_action_btn.html`, `discover_stats_strip.html`, `up_next_card.html`, `tip_card.html`, `keyboard_hints.html`, `filter_toolbar.html` (plan 36), `_filter_hidden_inputs.html` (plan 36), `job_topbar.html` (plan 36), `score_card.html` (plan 72) |
-| Discover · review & apply | 6 | `apply_topbar.html`, `warm_intro_card.html`, `tailored_bullet_row.html`, `cover_letter_section.html`, `screener_question_card.html`, `apply_action_bar.html` |
+| Discover | 13 | `swipe_card.html`, `match_breakdown.html`, `discover_action_bar.html`, `swipe_action_btn.html`, `discover_stats_strip.html`, `up_next_card.html`, `tip_card.html`, `keyboard_hints.html`, `filter_toolbar.html` (plan 36), `_filter_hidden_inputs.html` (plan 36), `job_topbar.html` (plan 36), `score_card.html` (plan 72), `visa_status_chip.html` (plan 78) |
+| Discover · review & apply | 7 | `apply_topbar.html`, `warm_intro_card.html`, `tailored_bullet_row.html`, `cover_letter_section.html`, `screener_question_card.html`, `apply_action_bar.html`, `apply_preview_card.html` (plan 75) |
 | Tracking | 8 | `view_toggle.html`, `provider_chip.html`, `integration_card.html`, `followup_banner.html`, `stage_column.html`, `tracking_card.html`, `tracking_list_row.html`, `tracking_board.html` |
 | Outreach | 6 | `outreach_app_row.html`, `recommended_move_card.html`, `outreach_message_card.html`, `contact_card.html`, `linkedin_status_chip.html`, `outreach_timeline.html` |
 | Settings | 10 | `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `deployment_status_card.html`, `log_tail.html`, `on_disk_card.html`, `connection_status_card.html`, `_source_row.html` (plan 49), `_rate_limit_editor.html` (plan 58), `_keywords_editor.html` (plan 58) |
 | Skeletons | 5 | `swipe_card_skeleton.html`, `tracking_card_skeleton.html`, `priority_action_row_skeleton.html`, `email_signal_row_skeleton.html`, `bullet_edit_row_skeleton.html` |
-| **Total** | **92** | |
+| **Total** | **94** | |
 
 Cover letter generation lives inside Discover · review & apply (no standalone screen) — its components (`cover_letter_section.html`, `screener_question_card.html`) are listed under that group. The standalone Cover Letter generator's earlier components (`letter_editor.html`, `tone_picker.html`, `output_mode_card.html`, `model_attribution_chip.html`) are NOT in MVP and dropped.
 

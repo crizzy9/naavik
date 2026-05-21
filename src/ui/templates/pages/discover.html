@@ -42,6 +42,15 @@
     {% include "components/filter_toolbar.html" %}
   {% endwith %}
 
+  {# Plan 78 § D.5 (0.4.0.20) — surface auto-apply dry-run mode so the
+     operator can't miss the fact that submissions won't actually fire. #}
+  {% if auto_apply_dry_run %}
+    {% with tone="warning", icon="flask-conical", title="Auto-apply DRY RUN",
+            body="Queued DRAFTs will be marked dry-run rather than submitted. Disable in <a href='/settings/auto-apply' class='underline'>Settings &middot; Auto-apply</a> to resume real submissions." %}
+      {% include "components/info_card.html" %}
+    {% endwith %}
+  {% endif %}
+
   {% with stats=stats %}
     {% include "components/discover_stats_strip.html" %}
   {% endwith %}

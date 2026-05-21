@@ -204,17 +204,71 @@ async def post_llm_test(
 
 @router.put("/api/v1/settings/auto-apply", name="api_settings_auto_apply_put")
 async def put_auto_apply(
-    payload: Annotated[dict[str, Any] | None, Body()] = None,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
-    payload = payload or {}
+    """Plan 78 (0.4.0.13 + 0.4.0.20) — form-encoded support added for the
+    new per-board cap editor + dry-run toggle alongside the existing JSON
+    body path. Form payloads collapse `<board>_cap` fields into
+    `auto_apply_per_board_daily_caps`; absent fields are treated as "skip"
+    so partial PUTs from individual toggles don't clobber unrelated state.
+    """
+    from models import ApplicationBoard
+
+    is_form = _is_form_request(request)
+    if is_form:
+        form = await request.form()
+        payload: dict[str, Any] = {k: str(v) for k, v in form.items()}
+    else:
+        try:
+            raw = await request.json()
+        except Exception:  # noqa: BLE001
+            raw = {}
+        payload = raw if isinstance(raw, dict) else {}
+
     # Plan 59 / 0.2.7.12 § D.3 — HTMX checkbox tri-state idiom: an absent
     # key means "skip" (partial PUTs), a present key (truthy or falsy)
     # means "set bool(value)". Required so unchecking the toggle in the
     # Settings UI persists False rather than silently skipping assignment.
-    immediate_raw = payload.get("auto_apply_immediate_dispatch")
-    immediate = bool(immediate_raw) if "auto_apply_immediate_dispatch" in payload else None
+    immediate = (
+        bool(payload.get("auto_apply_immediate_dispatch"))
+        if "auto_apply_immediate_dispatch" in payload
+        else None
+    )
+    # Plan 78 § D.5 — dry-run toggle with the same tri-state idiom.
+    dry_run = bool(payload.get("auto_apply_dry_run")) if "auto_apply_dry_run" in payload else None
+
+    # Plan 78 § D.3 — assemble per-board caps from either flat form fields
+    # (`<board>_cap`) or a pre-shaped `auto_apply_per_board_daily_caps` dict
+    # (JSON callers). Empty string in form = "no cap" → omit board entry.
+    per_board: dict[str, int] | None = None
+    if is_form:
+        # Form path only assembles the per-board sub-payload when at least
+        # one `<board>_cap` field is present. Otherwise None = skip (preserve
+        # existing value).
+        collected: dict[str, int] = {}
+        any_seen = False
+        for board in ApplicationBoard:
+            field_name = f"{board.value}_cap"
+            if field_name in payload:
+                any_seen = True
+                raw_val = payload[field_name].strip() if payload[field_name] else ""
+                if not raw_val:
+                    continue
+                try:
+                    iv = int(raw_val)
+                except ValueError:
+                    continue
+                if iv > 0:
+                    collected[board.value] = iv
+        if any_seen:
+            per_board = collected
+    elif "auto_apply_per_board_daily_caps" in payload:
+        v = payload["auto_apply_per_board_daily_caps"]
+        per_board = v if isinstance(v, dict) else {}
+
     s = await settings_service.update_auto_apply(
         session,
         user_id=1,
@@ -224,6 +278,8 @@ async def put_auto_apply(
         eager_review_generation=payload.get("eager_review_generation"),
         daily_llm_cost_cap_usd=payload.get("daily_llm_cost_cap_usd"),
         auto_apply_immediate_dispatch=immediate,
+        auto_apply_per_board_daily_caps=per_board,
+        auto_apply_dry_run=dry_run,
     )
     await session.commit()
     return {
@@ -233,7 +289,35 @@ async def put_auto_apply(
         "eager_review_generation": s.eager_review_generation,
         "daily_llm_cost_cap_usd": s.daily_llm_cost_cap_usd,
         "auto_apply_immediate_dispatch": s.auto_apply_immediate_dispatch,
+        "auto_apply_per_board_daily_caps": s.auto_apply_per_board_daily_caps,
+        "auto_apply_dry_run": s.auto_apply_dry_run,
     }
+
+
+@router.post(
+    "/api/v1/settings/auto-apply/drain-queue",
+    name="api_settings_auto_apply_drain",
+)
+async def post_auto_apply_drain(
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Plan 78 § D.4 — global drain: flip every QUEUED_FOR_AUTO_APPLY Job
+    back to SAVED. Returns `{drained: N}`. CSRF + auth gated.
+    """
+    from services import application_service as application_service_mod
+    from ui.routes.settings import _effective_user_id
+
+    # Resolve per authed caller (hacker MED-2 PR #193 fix). Pattern matches
+    # put_sources (line 403) + put_generation (line 487). Avoids destructive
+    # cross-tenant drain in any future allow_multiple_users path.
+    user_id = _effective_user_id(_user)
+    drained = await application_service_mod.drain_auto_apply_queue(
+        session, user_id=user_id, reason="settings_drain"
+    )
+    await session.commit()
+    return {"drained": drained}
 
 
 def _split_keywords(raw: str) -> list[str]:

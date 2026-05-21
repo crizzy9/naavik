@@ -120,6 +120,12 @@ def swipe_card_dict(j: SQLJob, *, warm_intro_label: str | None = None) -> dict[s
         "match_overall": j.score,
         "visa_friendly": j.visa_restrictions == VisaRestriction.SPONSORSHIP_AVAILABLE,
         "visa_concern": mb.get("visa_concern", False),
+        # Plan 78 § D.6 (0.4.0.15) — raw VisaRestriction value for the new
+        # visa_status_chip partial. Three-state UX (sponsors / no sponsorship
+        # / unknown). NOT_MENTIONED + None both render as "unknown."
+        "visa_restriction": (
+            j.visa_restrictions.value if j.visa_restrictions is not None else None
+        ),
         # Plan 72 § Surface 1 — defensive projections so page templates can
         # read strengths/gaps/visa_note without diving into the JSONB blob.
         # score_card.html still reads from match_breakdown directly; these
@@ -242,6 +248,8 @@ async def build_discover_ctx(
     filters: JobFilter | None = None,
 ) -> dict[str, object]:
     """Build the Discover context dict against live DB."""
+    from services import settings_service
+
     effective_filters = filters or JobFilter()
     queue = await _live_unswiped(session, user_id=user_id, filters=effective_filters)
     saved = await job_service.list_jobs_by_queue_state(
@@ -249,6 +257,10 @@ async def build_discover_ctx(
     )
     drafts = await job_service.auto_apply_queue(session, user_id=user_id)
     stuck = await application_service.stuck_drafts(session, user_id=user_id)
+    # Plan 78 § D.5 (0.4.0.20) — surface the dry-run flag so the page can
+    # render a warning banner above the swipe stack.
+    user_settings = await settings_service.get_or_create(session, user_id=user_id)
+    auto_apply_dry_run = bool(getattr(user_settings, "auto_apply_dry_run", False))
 
     current = queue[0] if queue else None
     warm_label = None
@@ -287,6 +299,7 @@ async def build_discover_ctx(
         "unswiped_count": len(queue),
         "filters": effective_filters,
         "filters_active": _active_chip_count(effective_filters),
+        "auto_apply_dry_run": auto_apply_dry_run,
     }
 
 

@@ -186,6 +186,32 @@ async def post_auto_submit(
     return await _next_card_response(request, session, user_id=user_id)
 
 
+@router.post(
+    "/_fragments/discover/{job_id}/pause-auto-apply",
+    response_class=HTMLResponse,
+    name="discover_pause_auto_apply",
+)
+async def post_pause_auto_apply(
+    request: Request,
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Plan 78 § D.4 — per-job pause: flip Job.queue_state QUEUED_FOR_AUTO_APPLY
+    → SAVED. Returns the next swipe card so the Discover stack advances on
+    pause, matching the skip/save UX.
+    """
+    user_id = _effective_user_id(user)
+    job = await application_service.pause_auto_apply_for_job(
+        session, user_id=user_id, job_id=job_id
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    await session.commit()
+    return await _next_card_response(request, session, user_id=user_id)
+
+
 async def _maybe_dispatch_auto_apply_now(session: AsyncSession, *, user_id: int) -> None:
     """Schedule a transient `scheduler.jobs:auto_apply` one-off when the
     user's `Settings.auto_apply_immediate_dispatch` is True.

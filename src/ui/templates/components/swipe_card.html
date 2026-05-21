@@ -54,7 +54,14 @@
       {% if j.salary_range %}{{ meta_item("dollar-sign", j.salary_range) }}{% endif %}
       {% if j.work_mode %}{{ meta_item("laptop", j.work_mode) }}{% endif %}
       {% if j.team_size %}{{ meta_item("users-round", j.team_size) }}{% endif %}
-      {% if j.visa_friendly %}{{ meta_item("user-check", "sponsorship ok") }}{% endif %}
+      {# Plan 78 § D.6 (0.4.0.15) — visa_status_chip replaces the legacy
+         `visa_friendly` meta_item. Renders 3 states keyed on
+         Job.visa_restrictions (sponsors / no sponsorship / unknown). #}
+      {% if j.visa_restriction %}
+        {% with restriction=j.visa_restriction, compact=true %}
+          {% include "components/visa_status_chip.html" %}
+        {% endwith %}
+      {% endif %}
       {% if j.posted_relative %}{{ meta_item("clock", j.posted_relative) }}{% endif %}
       {# Plan 36 § A · D.1 — "More info" affordance to /jobs/{id}.
          Stops propagation so the parent tap-to-expand binding to /discover/{id}

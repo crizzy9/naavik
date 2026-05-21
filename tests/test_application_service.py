@@ -802,3 +802,350 @@ async def test_submit_draft_explicit_notify_fn_overrides_default():
     # Explicit closure ran; the default factory's underlying helper did not.
     explicit_notify.assert_awaited_once_with(app_row)
     default_notify_application_submitted.assert_not_awaited()
+
+
+# ── Plan 78 — Auto-apply hardening (0.4.0.04/13/14/15/20/22) ─────────
+
+
+def _make_auto_apply_settings(**kw):
+    base = {
+        "user_id": 1,
+        "auto_apply_enabled": True,
+        "auto_apply_daily_cap": None,
+        "auto_apply_score_threshold": 0.7,
+        "auto_apply_per_board_daily_caps": {},
+        "auto_apply_dry_run": False,
+    }
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+@pytest.mark.asyncio
+async def test_process_auto_apply_queue_score_threshold_pulls_below_threshold():
+    """Plan 78 § D.1 — Job.score below Settings.auto_apply_score_threshold ⇒
+    cron pulls Job back to SAVED + skips dispatch. submit_draft is NOT called.
+    """
+    from models import JobQueueState
+
+    app_row = _make_app()
+    # Job scored 0.40 but threshold is 0.85 → drift below threshold scenario.
+    job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY, score=0.40)
+    settings_row = _make_auto_apply_settings(auto_apply_score_threshold=0.85)
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_all([(app_row, job_row)]),
+        _exec_one(settings_row),
+    ]
+
+    fake_submit = AsyncMock()
+    with patch("services.application_service.submit_draft", new=fake_submit):
+        result = await process_auto_apply_queue(session)
+
+    assert result.processed == 1
+    assert result.submitted == 0
+    fake_submit.assert_not_awaited()
+    assert job_row.queue_state == JobQueueState.SAVED
+
+
+@pytest.mark.asyncio
+async def test_process_auto_apply_queue_score_threshold_passes_at_or_above():
+    """Score equal to threshold → cron proceeds; submit_draft runs."""
+    from models import ApplicationStatus, JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY, score=0.85)
+    settings_row = _make_auto_apply_settings(auto_apply_score_threshold=0.85)
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_all([(app_row, job_row)]),
+        _exec_one(settings_row),
+    ]
+    fake_submit = AsyncMock()
+    success_app = _make_app(status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
+    fake_submit.return_value = success_app
+
+    with patch("services.application_service.submit_draft", new=fake_submit):
+        result = await process_auto_apply_queue(session)
+
+    assert result.submitted == 1
+    fake_submit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_auto_apply_queue_per_board_cap_respected():
+    """Plan 78 § D.3 — per-board cap binds when daily count meets per-board limit."""
+    from models import JobQueueState
+
+    app_row = _make_app()  # board=GREENHOUSE
+    job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY, score=0.9)
+    settings_row = _make_auto_apply_settings(
+        auto_apply_per_board_daily_caps={"greenhouse": 2},
+    )
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_all([(app_row, job_row)]),
+        _exec_one(settings_row),
+        # validate_submittable: screener count → 0
+        _exec_count(0),
+        # validate_submittable: sponsorship-gate Profile → None
+        _exec_one(None),
+        # per-board today count → already at the cap (2 of 2)
+        _exec_count(2),
+    ]
+    fake_submit = AsyncMock()
+    with patch("services.application_service.submit_draft", new=fake_submit):
+        result = await process_auto_apply_queue(session)
+
+    assert result.skipped_by_cap == 1
+    assert result.submitted == 0
+    fake_submit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_process_auto_apply_queue_per_board_cap_skipped_when_unset():
+    """Empty per-board dict → fall through to global cap (also None here)."""
+    from models import ApplicationStatus, JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY, score=0.9)
+    settings_row = _make_auto_apply_settings(auto_apply_per_board_daily_caps={})
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_all([(app_row, job_row)]),
+        _exec_one(settings_row),
+        # validate_submittable: screener count → 0
+        _exec_count(0),
+        # validate_submittable: sponsorship-gate Profile → None
+        _exec_one(None),
+    ]
+    fake_submit = AsyncMock()
+    fake_submit.return_value = _make_app(
+        status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC)
+    )
+    with patch("services.application_service.submit_draft", new=fake_submit):
+        result = await process_auto_apply_queue(session)
+    assert result.submitted == 1
+
+
+@pytest.mark.asyncio
+async def test_process_auto_apply_queue_dry_run_short_circuits_before_submit():
+    """Plan 78 § D.5 — dry-run flag stamps submission_artifacts.dry_run_at
+    and emits AUTO_APPLY_DRY_RUN event WITHOUT calling submit_draft.
+    """
+    from models import AppEventKind, JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY, score=0.9)
+    settings_row = _make_auto_apply_settings(auto_apply_dry_run=True)
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_all([(app_row, job_row)]),
+        _exec_one(settings_row),
+        # validate_submittable: screener count → 0
+        _exec_count(0),
+        # validate_submittable: sponsorship-gate Profile → None (short-circuits)
+        _exec_one(None),
+    ]
+    fake_submit = AsyncMock()
+    with patch("services.application_service.submit_draft", new=fake_submit):
+        result = await process_auto_apply_queue(session)
+
+    fake_submit.assert_not_awaited()
+    assert result.processed == 1
+    assert result.submitted == 0
+    artifacts = app_row.submission_artifacts or {}
+    assert artifacts.get("dry_run_at") is not None
+    # AppEvent emitted with kind=AUTO_APPLY_DRY_RUN
+    events = [obj for obj in session.added if hasattr(obj, "kind")]
+    assert any(e.kind == AppEventKind.AUTO_APPLY_DRY_RUN for e in events)
+
+
+@pytest.mark.asyncio
+async def test_process_auto_apply_queue_visa_blocked_dequeues_and_emits_event():
+    """Plan 78 fold-in (0.4.0.22) — visa_incompatible ValidationError pulls Job
+    out of queue + emits AUTO_APPLY_VISA_BLOCKED so cron doesn't tight-loop.
+    """
+    from models import AppEventKind, JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY, score=0.9)
+    settings_row = _make_auto_apply_settings()
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_all([(app_row, job_row)]),
+        _exec_one(settings_row),
+    ]
+
+    async def _raise_visa(_session, _application):
+        raise ValidationError("visa blocked", code="visa_incompatible")
+
+    with patch("services.application_service.validate_submittable", new=_raise_visa):
+        result = await process_auto_apply_queue(session)
+
+    assert result.processed == 1
+    assert result.submitted == 0
+    assert job_row.queue_state == JobQueueState.SAVED
+    events = [obj for obj in session.added if hasattr(obj, "kind")]
+    assert any(e.kind == AppEventKind.AUTO_APPLY_VISA_BLOCKED for e in events)
+
+
+@pytest.mark.asyncio
+async def test_process_auto_apply_queue_other_validation_error_does_not_dequeue():
+    """Non-visa ValidationError (e.g. docs_not_ready) leaves Job queued."""
+    from models import JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY, score=0.9)
+    settings_row = _make_auto_apply_settings()
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_all([(app_row, job_row)]),
+        _exec_one(settings_row),
+    ]
+
+    async def _raise_unready(_session, _application):
+        raise ValidationError("docs not ready", code="docs_not_ready")
+
+    with patch("services.application_service.validate_submittable", new=_raise_unready):
+        result = await process_auto_apply_queue(session)
+
+    assert result.submitted == 0
+    # Stays QUEUED — not visa-incompatible, so cron leaves the job alone
+    # so the next tick can pick it up after the unready cond clears.
+    assert job_row.queue_state == JobQueueState.QUEUED_FOR_AUTO_APPLY
+
+
+@pytest.mark.asyncio
+async def test_submit_draft_low_confidence_keeps_draft_and_records_failure():
+    """Plan 78 § D.2 — adapter confidence < threshold ⇒ revert to DRAFT +
+    record `low_confidence` failure kind. APPLIED branch not entered.
+    """
+    from models import ApplicationStatus
+
+    app_row = _make_app()
+    settings_row = _make_settings(auto_apply_adapter_confidence_threshold=0.8)
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_one(app_row),
+        _exec_count(0),
+        _exec_one(None),  # sponsorship-gate Profile → None
+        _exec_one(settings_row),  # Settings load
+        _exec_one(None),  # resume
+        _exec_one(None),  # cover
+        _exec_all([]),  # screeners
+    ]
+    fake_adapter = SimpleNamespace(
+        submit=AsyncMock(
+            return_value=SubmissionResult(
+                ok=True,
+                board_application_id="X-1",
+                confidence=0.5,  # below threshold 0.8
+                raw={"request_url": "https://x"},
+            )
+        )
+    )
+
+    with patch("services.application_service.ats_dispatch", return_value=fake_adapter):
+        out = await submit_draft(session, app_row.id)
+
+    assert out.status == ApplicationStatus.DRAFT
+    artifacts = out.submission_artifacts or {}
+    last = artifacts.get("last_failure") or {}
+    assert last.get("kind") == "low_confidence"
+
+
+@pytest.mark.asyncio
+async def test_submit_draft_full_confidence_proceeds():
+    """HTTP adapters always emit confidence=1.0; passes any threshold."""
+    from models import ApplicationStatus, JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job()
+    settings_row = _make_settings(auto_apply_adapter_confidence_threshold=0.8)
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_one(app_row),
+        _exec_count(0),
+        _exec_one(None),  # sponsorship-gate Profile
+        _exec_one(settings_row),
+        _exec_one(None),
+        _exec_one(None),
+        _exec_all([]),
+        _exec_one(job_row),
+    ]
+    fake_adapter = SimpleNamespace(
+        submit=AsyncMock(
+            return_value=SubmissionResult(ok=True, board_application_id="GH-1", confidence=1.0)
+        )
+    )
+    with patch("services.application_service.ats_dispatch", return_value=fake_adapter):
+        out = await submit_draft(session, app_row.id, notify_fn=AsyncMock())
+
+    assert out.status == ApplicationStatus.APPLIED
+    assert job_row.queue_state == JobQueueState.APPLIED
+
+
+@pytest.mark.asyncio
+async def test_drain_auto_apply_queue_flips_all_queued():
+    """Plan 78 § D.4 — drain helper flips every QUEUED_FOR_AUTO_APPLY Job back
+    to SAVED + emits one AUTO_APPLY_DRAINED event per Application.
+    """
+    from models import AppEventKind, JobQueueState
+
+    app1 = _make_app(aid=1)
+    app2 = _make_app(aid=2)
+    job1 = _make_job(jid=11, queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY)
+    job2 = _make_job(jid=12, queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY)
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([(app1, job1), (app2, job2)])]
+
+    drained = await svc.drain_auto_apply_queue(session, user_id=1, reason="settings_drain")
+
+    assert drained == 2
+    assert job1.queue_state == JobQueueState.SAVED
+    assert job2.queue_state == JobQueueState.SAVED
+    events = [obj for obj in session.added if hasattr(obj, "kind")]
+    drained_events = [e for e in events if e.kind == AppEventKind.AUTO_APPLY_DRAINED]
+    assert len(drained_events) == 2
+
+
+@pytest.mark.asyncio
+async def test_pause_auto_apply_for_job_flips_queued_to_saved():
+    """Plan 78 § D.4 — per-job pause: QUEUED → SAVED."""
+    from models import JobQueueState
+
+    job_row = _make_job(jid=42, queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY)
+    job_row.user_id = 1
+    job_row.deleted_at = None
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(job_row)]
+
+    out = await svc.pause_auto_apply_for_job(session, user_id=1, job_id=42)
+
+    assert out is job_row
+    assert out.queue_state == JobQueueState.SAVED
+
+
+@pytest.mark.asyncio
+async def test_pause_auto_apply_for_job_returns_none_for_unknown_job():
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(None)]
+    out = await svc.pause_auto_apply_for_job(session, user_id=1, job_id=999)
+    assert out is None
+
+
+@pytest.mark.asyncio
+async def test_pause_auto_apply_for_job_no_op_when_not_queued():
+    """If Job is already SAVED (not queued), pause helper is a no-op."""
+    from models import JobQueueState
+
+    job_row = _make_job(jid=42, queue_state=JobQueueState.SAVED)
+    job_row.user_id = 1
+    job_row.deleted_at = None
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(job_row)]
+
+    out = await svc.pause_auto_apply_for_job(session, user_id=1, job_id=42)
+
+    assert out is job_row
+    assert out.queue_state == JobQueueState.SAVED  # unchanged

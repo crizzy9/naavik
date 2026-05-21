@@ -478,6 +478,10 @@ class Settings(_Base):
     auto_apply_enabled: bool = False
     auto_apply_score_threshold: float = 0.85
     auto_apply_daily_cap: int | None = None
+    # Plan 78 § D.3 (0.4.0.13) — per-board operator-tunable daily caps.
+    auto_apply_per_board_daily_caps: dict[str, int] = Field(default_factory=dict)
+    # Plan 78 § D.5 (0.4.0.20) — auto-apply dry-run mode.
+    auto_apply_dry_run: bool = False
 
     eager_review_generation: bool = True
     daily_llm_cost_cap_usd: float | None = None
