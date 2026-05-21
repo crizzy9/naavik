@@ -229,6 +229,17 @@ async def _ctx_for_tab(
         today_cost, cap = await _llm_cost_cap_view(session, settings, user_id=user_id)
         ctx["today_cost_usd"] = today_cost
         ctx["cost_cap_usd"] = cap
+        # Plan 74 / 0.3.2.04 — judge-skipped fallback banner.
+        if session is None:
+            ctx["judge_skipped_count_today"] = 0
+            ctx["judge_skipped_reasons_today"] = {}
+        else:
+            ctx["judge_skipped_count_today"] = await llm_tracker.judge_skipped_count_today(
+                session, user_id=user_id
+            )
+            ctx["judge_skipped_reasons_today"] = await llm_tracker.judge_skipped_reasons_today(
+                session, user_id=user_id
+            )
 
     if tab == "security":
         ctx["security"] = await _build_security_view(session, user_id=user_id)

@@ -38,7 +38,7 @@ from llm.base import (
     LLMProviderError,
     StructuredResult,
 )
-from models import ApiUsage
+from models import ApiUsage, Job
 from models import LLMProvider as LLMProviderEnum
 
 log = logging.getLogger(__name__)
@@ -269,3 +269,104 @@ async def usage_summary(session: AsyncSession, *, user_id: int, days: int = 30) 
         total_tokens=int(tokens),
         gen_count=int(gen_count),
     )
+
+
+# ── Judge-skipped today helpers (plan 74 / 0.3.2.04) ──────────────────
+
+
+def _today_midnight_utc() -> datetime:
+    return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _is_postgres_dialect(session: AsyncSession) -> bool:
+    """True when bound to Postgres — JSONB key-extraction operators only
+    compile there. The scorer.orchestrator stale-rescore cron uses the same
+    probe (`bind.dialect.name == 'postgresql'`)."""
+    bind = getattr(session, "bind", None)
+    dialect = getattr(bind, "dialect", None) if bind is not None else None
+    return getattr(dialect, "name", None) == "postgresql"
+
+
+async def judge_skipped_count_today(session: AsyncSession, *, user_id: int) -> int:
+    """Count Jobs scored today where `match_breakdown.judge_skipped == True`.
+
+    Plan 74 / 0.3.2.04. Drives the Settings · LLM cost-cap fallback banner.
+    Filters on `Job.updated_at >= today_midnight_utc` (real indexed column,
+    bumped by `scorer.orchestrator._persist_score` alongside the JSONB
+    write) so the query stays cheap without a GIN on `match_breakdown`.
+    `deleted_at IS NULL` so archived rows don't inflate the count.
+
+    Postgres uses the JSONB ``->>`` extractor server-side. On sqlite (in-
+    memory parity tests), JSONB compiles to TEXT — we fetch the candidate
+    Job rows and count `judge_skipped=True` in Python.
+    """
+    midnight = _today_midnight_utc()
+    base_filters = [
+        Job.user_id == user_id,
+        Job.deleted_at.is_(None),  # type: ignore[union-attr]
+        Job.updated_at >= midnight,
+    ]
+    if _is_postgres_dialect(session):
+        stmt = select(func.count(Job.id)).where(
+            *base_filters,
+            Job.match_breakdown.op("->>")("judge_skipped") == "true",
+        )
+        result = await session.exec(stmt)
+        row = result.one()
+        value = row[0] if isinstance(row, tuple) else row
+        return int(value or 0)
+    stmt = select(Job.match_breakdown).where(*base_filters)
+    rows = (await session.exec(stmt)).all()
+    count = 0
+    for row in rows:
+        mb = row[0] if isinstance(row, tuple) else row
+        if isinstance(mb, dict) and mb.get("judge_skipped") is True:
+            count += 1
+    return count
+
+
+async def judge_skipped_reasons_today(session: AsyncSession, *, user_id: int) -> dict[str, int]:
+    """Per-reason distribution for today's judge-skipped scores.
+
+    Plan 74 / 0.3.2.04. Returns `{reason_key: count}` — keys typically
+    `cost_cap_exhausted` / `no_provider_configured` / `llm_failed` /
+    `below_llm_gate` / `below_tag_floor` / `visa_zeroed` (per
+    `services/scorer/orchestrator.py`). Empty dict when no skips today.
+    """
+    midnight = _today_midnight_utc()
+    base_filters = [
+        Job.user_id == user_id,
+        Job.deleted_at.is_(None),  # type: ignore[union-attr]
+        Job.updated_at >= midnight,
+    ]
+    if _is_postgres_dialect(session):
+        reason_expr = Job.match_breakdown.op("->>")("judge_skipped_reason")
+        stmt = (
+            select(reason_expr, func.count(Job.id))
+            .where(
+                *base_filters,
+                Job.match_breakdown.op("->>")("judge_skipped") == "true",
+            )
+            .group_by(reason_expr)
+        )
+        rows = (await session.exec(stmt)).all()
+        out: dict[str, int] = {}
+        for row in rows:
+            reason = row[0] if isinstance(row, tuple) else None
+            count = row[1] if isinstance(row, tuple) else 0
+            if reason is None:
+                continue
+            out[str(reason)] = int(count or 0)
+        return out
+    stmt = select(Job.match_breakdown).where(*base_filters)
+    rows = (await session.exec(stmt)).all()
+    out: dict[str, int] = {}
+    for row in rows:
+        mb = row[0] if isinstance(row, tuple) else row
+        if not isinstance(mb, dict) or mb.get("judge_skipped") is not True:
+            continue
+        reason = mb.get("judge_skipped_reason")
+        if reason is None:
+            continue
+        out[str(reason)] = out.get(str(reason), 0) + 1
+    return out

@@ -93,6 +93,7 @@ _SERVICE_DIRECT_TEST_MODULES = frozenset(
         "test_profile_service",
         "test_contact_tracker",
         "test_llm_tracker",
+        "test_llm_tracker_judge_skipped",
         "test_settings_service",
         "test_scorer",
         "test_orchestrator",
@@ -692,9 +693,21 @@ def _patch_services_to_sample_data(request, monkeypatch):
             gen_count=int(raw["gen_count"]),
         )
 
+    # Plan 74 / 0.3.2.04 — judge-skipped fallback banner helpers. The
+    # in-memory sample_data fixtures don't populate `match_breakdown.
+    # judge_skipped`, so the autouse default returns no skips. Tests
+    # that exercise the banner override via per-test monkeypatch.
+    async def _judge_skipped_count_today(_session, *, user_id):
+        return 0
+
+    async def _judge_skipped_reasons_today(_session, *, user_id):
+        return {}
+
     monkeypatch.setattr(llm_tracker, "today_cost_usd", _today_cost_usd)
     monkeypatch.setattr(llm_tracker, "recent_usage", _recent_usage)
     monkeypatch.setattr(llm_tracker, "usage_summary", _usage_summary)
+    monkeypatch.setattr(llm_tracker, "judge_skipped_count_today", _judge_skipped_count_today)
+    monkeypatch.setattr(llm_tracker, "judge_skipped_reasons_today", _judge_skipped_reasons_today)
 
     # ── user_service ────────────────────────────────────────────────────
     async def _get_user(_session, user_id):

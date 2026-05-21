@@ -116,10 +116,13 @@
         {% endwith %}
       </div>
 
-      {# Plan 54 / 0.2.5.03 — daily cost-cap progress widget. #}
+      {# Plan 54 / 0.2.5.03 — daily cost-cap progress widget.
+         Plan 74 / 0.3.2.04 — extended with judge-skipped fallback banner. #}
       <div class="mt-4">
         {% with today_cost_usd=(today_cost_usd | default(0.0)),
-                cost_cap_usd=(cost_cap_usd | default(None)) %}
+                cost_cap_usd=(cost_cap_usd | default(None)),
+                judge_skipped_count_today=(judge_skipped_count_today | default(0)),
+                judge_skipped_reasons_today=(judge_skipped_reasons_today | default({})) %}
           {% include "components/_llm_cost_cap_widget.html" %}
         {% endwith %}
       </div>

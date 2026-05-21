@@ -2146,6 +2146,36 @@ Mobile variant: circular `h-14 w-14 rounded-full` with icon only.
 ```
 **Canonical contract:** `docs/design/SOURCES_UI.md` § H (forward pointer — `0.2.7.06` ships this).
 
+#### `_llm_cost_cap_widget.html`
+
+**Purpose:** Daily LLM-cost progress widget on Settings · LLM Provider tab — three cap states (unset / ok / over) plus a plan-74 / 0.3.2.04 severity-gated fallback banner that surfaces when the LLM judge has been silently skipped today (cost cap exhausted or no provider configured).
+**Used by:** Screen 11 (Settings · LLM Provider). Included by `pages/_settings_llm.html` below the cost-cards grid.
+**API:**
+| Variable | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `today_cost_usd` | float | yes | — | Sum of `ApiUsage.cost_usd` since UTC midnight today (per `llm_tracker.today_cost_usd`). |
+| `cost_cap_usd` | float \| None | yes | — | `Settings.daily_llm_cost_cap_usd`; None when unset. |
+| `judge_skipped_count_today` | int | no | `0` | Plan 74 / 0.3.2.04. Count of Jobs scored today (`Job.updated_at >= today_midnight_utc`) with `match_breakdown.judge_skipped=True`. Drives the fallback banner severity. |
+| `judge_skipped_reasons_today` | dict[str,int] | no | `{}` | Plan 74 / 0.3.2.04. Per-reason distribution — keys are `cost_cap_exhausted` / `no_provider_configured` / `llm_failed` / `below_llm_gate` / `below_tag_floor` / `visa_zeroed`. Drives the banner copy. |
+
+**Visual spec:** outer `bg-slate-900 border border-slate-800 rounded-lg p-4`. Header row: title + state chip (slate `no cap set` / emerald `ok` / rose `cap exceeded`). Body: progress bar (`progress-primary` emerald or `progress-error` rose) + tabular-nums "$X.XX of $Y.YY today" + percentage. When `cost_cap_usd is none`, body becomes a `.env` hint placeholder.
+**Plan 74 banner severity** (gated by `judge_skipped_count_today`):
+- `0` — no banner (status quo).
+- `1-3` (inline / Variant A) — amber line below the progress bar separated by `border-t border-amber-500/20 pt-3`. Carries `pause-circle` icon + "LLM judge paused · {N} jobs scored without LLM tier today" + reason summary.
+- `≥ 4` (prominent / Variant B) — amber-tinted strip ABOVE the cap section (`bg-amber-500/10 border border-amber-500/30 rounded-lg p-4`). Carries icon-tile + title + reason summary + 3-cell stat grid (SPENT / CAP / RESUMES UTC midnight) + primary CTA "Raise cap in .env" (linking to README § Configuration; `hx-boost="false"`) + secondary expandable "why this happened" `<details>`.
+**Lucide icons:** `circle`, `check-circle-2`, `triangle-alert` (cap states); `pause-circle`, `settings-2`, `chevron-right` (paused banner).
+**Variants:** by `cost_cap_usd` × `_over` × `judge_skipped_count_today` (none / inline 1-3 / prominent ≥4).
+**Voice:** dev-tool SRE register — "LLM judge paused" + "cost cap exhausted" / "no provider configured". Banned: "Upgrade to Pro" or any upsell.
+**Example invocation:**
+```jinja
+{% with today_cost_usd=today_cost_usd, cost_cap_usd=cost_cap_usd,
+        judge_skipped_count_today=judge_skipped_count_today,
+        judge_skipped_reasons_today=judge_skipped_reasons_today %}
+  {% include "components/_llm_cost_cap_widget.html" %}
+{% endwith %}
+```
+**Canonical contract:** `docs/design/MOCKUP_HANDOFF-0.3.2.md` § Surface 4 (Variant B + severity-gating locked).
+
 ---
 
 ### H.12 Skeletons
