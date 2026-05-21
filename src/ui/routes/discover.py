@@ -616,7 +616,10 @@ async def put_screener(
     _user: User | None = Depends(require_authed_session),
 ):
     answer = (payload or {}).get("answer", "")
-    a = await application_service.record_screener_answer(session, question_id, answer)
+    owner_user_id = _user.id if _user is not None else None
+    a = await application_service.record_screener_answer(
+        session, question_id, answer, owner_user_id=owner_user_id
+    )
     if a is None:
         raise HTTPException(status_code=404, detail="Answer not found")
     await session.commit()
@@ -645,8 +648,15 @@ async def fragment_screener(
     application_id: int,
     question_id: int,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
-    a = await application_service.get_screener_answer(session, question_id)
+    # Plan 75 / 0.3.3.15 — IDOR boundary. `_user is None` preserves the
+    # fake-session bypass for legacy fixtures; real auth threads
+    # `owner_user_id` into the service which JOINs through Application.
+    owner_user_id = _user.id if _user is not None else None
+    a = await application_service.get_screener_answer(
+        session, question_id, owner_user_id=owner_user_id
+    )
     if a is None:
         raise HTTPException(status_code=404, detail="Answer not found")
     return templates.TemplateResponse(

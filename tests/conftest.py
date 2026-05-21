@@ -104,6 +104,7 @@ _SERVICE_DIRECT_TEST_MODULES = frozenset(
         "test_score_orchestrator",
         "test_dedup",
         "test_scoring_history",
+        "test_screener_idor",
     }
 )
 
@@ -379,7 +380,7 @@ def _patch_services_to_sample_data(request, monkeypatch):
             key=lambda s: s.order_index,
         )
 
-    async def _get_screener_answer(_session, answer_id):
+    async def _get_screener_answer(_session, answer_id, *, owner_user_id=None):
         return next((s for s in sd.SCREENER_ANSWERS if s.id == answer_id), None)
 
     async def _count_unreviewed_required_screeners(_session, application_id):
@@ -444,7 +445,7 @@ def _patch_services_to_sample_data(request, monkeypatch):
             application_id, target_status, trigger=trigger, closed_reason=closed_reason
         )
 
-    async def _record_screener_answer(_session, answer_id, answer):
+    async def _record_screener_answer(_session, answer_id, answer, *, owner_user_id=None):
         return await sd._record_screener_answer(answer_id, answer)
 
     async def _aggregate_submission_failures(_session, *, user_id, since_days=30):

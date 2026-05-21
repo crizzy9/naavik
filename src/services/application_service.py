@@ -1038,10 +1038,31 @@ async def list_screener_answers_for(
 
 
 async def get_screener_answer(
-    session: AsyncSession, answer_id: int
+    session: AsyncSession,
+    answer_id: int,
+    *,
+    owner_user_id: int | None = None,
 ) -> ApplicationScreenerAnswer | None:
-    """Single ApplicationScreenerAnswer by id, used by `/_fragments/apply/screener/`."""
-    stmt = select(ApplicationScreenerAnswer).where(ApplicationScreenerAnswer.id == answer_id)
+    """Single ApplicationScreenerAnswer by id, used by `/_fragments/apply/screener/`.
+
+    Plan 75 / 0.3.3.15. `owner_user_id` enforces the IDOR boundary —
+    when set, JOINs to `Application` and returns None if the answer's
+    parent application belongs to a different user. `None` preserves
+    the fake-session bypass for legacy fixtures.
+    """
+    if owner_user_id is None:
+        stmt = select(ApplicationScreenerAnswer).where(
+            ApplicationScreenerAnswer.id == answer_id
+        )
+        return (await session.exec(stmt)).one_or_none()
+    stmt = (
+        select(ApplicationScreenerAnswer)
+        .join(Application, ApplicationScreenerAnswer.application_id == Application.id)
+        .where(
+            ApplicationScreenerAnswer.id == answer_id,
+            Application.user_id == owner_user_id,
+        )
+    )
     return (await session.exec(stmt)).one_or_none()
 
 
@@ -1164,9 +1185,28 @@ async def record_screener_answer(
     session: AsyncSession,
     answer_id: int,
     body: str,
+    *,
+    owner_user_id: int | None = None,
 ) -> ApplicationScreenerAnswer | None:
-    """Update an ApplicationScreenerAnswer body + stamp reviewed_at."""
-    stmt = select(ApplicationScreenerAnswer).where(ApplicationScreenerAnswer.id == answer_id)
+    """Update an ApplicationScreenerAnswer body + stamp reviewed_at.
+
+    Plan 75 / 0.3.3.15. `owner_user_id` enforces the IDOR boundary on
+    writes — when set, returns None for cross-user attempts so the route
+    surfaces a clean 404. `None` preserves fake-session bypass.
+    """
+    if owner_user_id is None:
+        stmt = select(ApplicationScreenerAnswer).where(
+            ApplicationScreenerAnswer.id == answer_id
+        )
+    else:
+        stmt = (
+            select(ApplicationScreenerAnswer)
+            .join(Application, ApplicationScreenerAnswer.application_id == Application.id)
+            .where(
+                ApplicationScreenerAnswer.id == answer_id,
+                Application.user_id == owner_user_id,
+            )
+        )
     a = (await session.exec(stmt)).one_or_none()
     if a is None:
         return None
