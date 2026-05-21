@@ -279,10 +279,13 @@ async def queue_auto_apply(
 async def validate_submittable(session: AsyncSession, application: Application) -> None:
     """Raise `ValidationError` if the DRAFT can't be submitted yet.
 
-    Rules per plan 10 § C.3:
+    Rules per plan 10 § C.3 + plan 76 § D.1:
     - status must be DRAFT
     - docs_state must be READY
     - all required DRAFTED screener answers must have reviewed_at NOT NULL
+    - sponsorship-gate: profile.NEEDED_NOW × job.{US_CITIZEN_ONLY, GREEN_CARD_REQUIRED}
+      blocks submission (belt-and-suspenders over the scorer's visa filter;
+      protects race / manual-bypass / stale-extraction scenarios).
     """
     if application.status != ApplicationStatus.DRAFT:
         raise ValidationError(f"application {application.id} not in DRAFT", code="not_draft")
@@ -296,6 +299,38 @@ async def validate_submittable(session: AsyncSession, application: Application) 
         raise ValidationError(
             f"{unreviewed} required screener answers awaiting review",
             code="screeners_unreviewed",
+        )
+    await _enforce_sponsorship_gate(session, application)
+
+
+async def _enforce_sponsorship_gate(session: AsyncSession, application: Application) -> None:
+    """Plan 76 § D.1 — block submit when job requires citizenship/GC and profile needs sponsorship.
+
+    Reuses `scorer.visa.needs_visa_zero_out` (one source of truth for the predicate).
+    Only fires when `application.job_id IS NOT NULL` — manual entries with no Job
+    context bypass intentionally.
+    """
+    if application.job_id is None:
+        return
+
+    # Lazy import to avoid services.scorer ↔ services.application_service circular dep risk.
+    from models import Profile
+    from services.scorer.visa import needs_visa_zero_out
+
+    profile = (
+        await session.exec(select(Profile).where(Profile.user_id == application.user_id))
+    ).one_or_none()
+    if profile is None:
+        return
+    job = (await session.exec(select(Job).where(Job.id == application.job_id))).one_or_none()
+    if job is None:
+        return
+    if needs_visa_zero_out(profile, job):
+        raise ValidationError(
+            "Job requires sponsorship Naavik can't provide. "
+            "Submission blocked. Update Profile.visa_sponsorship_needed "
+            "if you have a valid work authorization for this role.",
+            code="visa_incompatible",
         )
 
 
