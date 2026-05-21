@@ -165,6 +165,29 @@ async def fragment_application(
 # ─────────────────────────────────────────────────────────────────────────
 
 
+@router.post(
+    "/api/v1/applications/{application_id}/retry",
+    name="applications_retry",
+)
+async def post_retry_application(
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Plan 79 / 0.4.0.11 — clear `last_failure` + re-queue stuck DRAFT."""
+    try:
+        await application_service.retry_failed(
+            session, application_id, user_id=_effective_user_id(user)
+        )
+    except application_service.IllegalStateTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except application_service.ApplicationServiceError:
+        raise HTTPException(status_code=404, detail="Application not found") from None
+    await session.commit()
+    return Response(status_code=204, headers={"HX-Trigger": "applicationRetried"})
+
+
 @router.post("/api/v1/applications/manual", name="applications_manual")
 async def post_application_manual(
     request: Request,
