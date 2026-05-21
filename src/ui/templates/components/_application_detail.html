@@ -1,9 +1,10 @@
 {# _application_detail.html — application detail slide-over (plan 53 § C.1).
 
    Args:
-     application      : dict — id, company, company_initial, company_color, role, team,
-                        location, salary_range, status, status_label, board, external_url,
-                        notes, applied_at, applied_at_label, board_application_id
+     application      : dict — id, job_id, company, company_initial, company_color, role,
+                        team, location, salary_range, status, status_label, board,
+                        external_url, notes, applied_at, applied_at_label,
+                        board_application_id, score
      status_timeline  : list — {from, to, trigger, occurred_at, occurred_at_label}
      documents        : list — {id, kind, compiled_at, compiled_at_label, pdf_path}
      contacts         : list — {id, name, title, company, initial}
@@ -36,6 +37,13 @@
         {% with status=a.status, label_override=a.status_label %}
           {% include "components/status_badge.html" %}
         {% endwith %}
+        {# Plan 81 § D.3 — compact score chip; only when the application is
+           linked to a Job (manual entries have no score). #}
+        {% if a.score is not none and a.job_id %}
+          {% with score=a.score, size="compact" %}
+            {% include "components/score_circle.html" %}
+          {% endwith %}
+        {% endif %}
         {% if a.salary_range %}
           <span class="font-mono text-xs text-slate-400">{{ a.salary_range }}</span>
         {% endif %}
@@ -128,6 +136,17 @@
       </section>
     {% endif %}
 
+    {# Plan 81 § D.3 — Discover-review jump link for DRAFT applications. #}
+    {% if a.status == "DRAFT" and a.job_id %}
+      <section data-testid="detail-discover-jump">
+        <a href="/discover/{{ a.job_id }}"
+           class="inline-flex items-center gap-1.5 text-sm text-indigo-300 hover:text-indigo-200">
+          <i data-lucide="edit" class="h-4 w-4" stroke-width="1.5"></i>
+          Continue editing on Discover
+        </a>
+      </section>
+    {% endif %}
+
     <section data-testid="detail-documents">
       <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Documents</div>
       {% if documents %}
@@ -167,11 +186,22 @@
 
     <section data-testid="detail-notes">
       <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Notes</div>
+      {# Plan 81 § D.3 — blur autosave. Form-encoded body; CSRF via the
+         body-level `hx-headers` injected by base.html. 2000-char cap
+         enforced server-side. #}
       <textarea
+        data-testid="detail-notes-textarea"
+        name="notes"
         class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 min-h-[100px] resize-y leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
         placeholder="Track context · who said what · followups."
         aria-label="application notes"
-        readonly>{{ a.notes }}</textarea>
+        maxlength="2000"
+        hx-put="/api/v1/applications/{{ a.id }}/notes"
+        hx-trigger="blur changed"
+        hx-swap="none"
+        hx-include="this"
+      >{{ a.notes }}</textarea>
+      <div class="mt-1 text-xs text-slate-500">Saved on blur · max 2000 characters.</div>
     </section>
 
     {% if a.external_url and (a.external_url.startswith('http://') or a.external_url.startswith('https://')) %}

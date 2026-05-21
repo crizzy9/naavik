@@ -263,9 +263,25 @@ async def build_application_detail_ctx(
             if isinstance(pm_path, str) and pm_path:
                 postmortem_ts = pm_path.rsplit("/", 1)[-1]
 
+    # Plan 81 § D.3 — surface the Job's score on the slide-over header.
+    # Best-effort: skip the lookup for manual entries (job_id is null) and
+    # any failure (jobs deleted etc.) falls back to a None chip — template
+    # gates render on `a.score is not none and a.job_id`.
+    score: int | None = None
+    if application.job_id is not None:
+        try:
+            from services import job_service
+
+            job = await job_service.get_job(session, application.job_id)
+            if job is not None and getattr(job, "score", None) is not None:
+                score = int(round(job.score))
+        except Exception:  # noqa: BLE001 — defensive; chip optional
+            score = None
+
     return {
         "application": {
             "id": application.id,
+            "job_id": application.job_id,
             "company": application.company,
             "company_initial": initial,
             "company_color": color,
@@ -281,6 +297,7 @@ async def build_application_detail_ctx(
             "applied_at": application.applied_at,
             "applied_at_label": _relative_label(application.applied_at),
             "board_application_id": board_application_id,
+            "score": score,
         },
         "status_timeline": status_timeline,
         "documents": docs,

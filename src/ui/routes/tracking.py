@@ -308,6 +308,60 @@ async def fragment_timeline(
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# Plan 81 § D.3 (0.4.0.16) — notes blur autosave
+# ─────────────────────────────────────────────────────────────────────────
+
+
+_NOTES_MAX_CHARS = 2000
+
+
+@router.put("/api/v1/applications/{application_id}/notes", name="api_applications_put_notes")
+async def put_application_notes(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Persist `Application.notes` from the detail slide-over textarea.
+
+    Boundary checks:
+    - CSRF-gated via `require_csrf`.
+    - IDOR via `_application_or_404` (404 on cross-user).
+    - Accepts form-encoded (HTMX default) OR JSON; 422 on missing `notes` or
+      overflow (cap 2000 chars per plan § D.3).
+    """
+    application = await _application_or_404(session, application_id, user)
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+        except Exception:  # noqa: BLE001 — invalid JSON treated as missing notes
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+    else:
+        form = await request.form()
+        payload = dict(form.items())
+
+    if "notes" not in payload:
+        raise HTTPException(status_code=422, detail="`notes` required")
+    raw = payload.get("notes")
+    if not isinstance(raw, str):
+        raise HTTPException(status_code=422, detail="`notes` must be a string")
+    text = raw.strip()
+    if len(text) > _NOTES_MAX_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"`notes` exceeds {_NOTES_MAX_CHARS}-char limit",
+        )
+    application.notes = text or None
+    session.add(application)
+    await session.commit()
+    return Response(status_code=204)
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # JSON stubs for application moves + manual entry + status overrides
 # ─────────────────────────────────────────────────────────────────────────
 
