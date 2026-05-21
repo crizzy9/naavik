@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
@@ -11,7 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from api.auth import require_csrf
 from db.session import get_session
 from models import User
-from models.enums import ApplicationStatus
+from models.enums import ApplicationStatus, ClosedReason
 from services import application_service
 from services.auth import require_authed_session
 from ui import tracking_ctx as tctx
@@ -241,6 +244,53 @@ async def get_applications(
     return {"items": [a.model_dump(mode="json") for a in apps], "next_cursor": None}
 
 
+_EXPORT_FIELDNAMES = [
+    "company",
+    "role",
+    "team",
+    "location",
+    "status",
+    "applied_at",
+    "salary_min",
+    "salary_max",
+    "board",
+    "external_url",
+]
+
+
+# Registered BEFORE the parameterized `/applications/{application_id}` so
+# the literal `export.csv` path doesn't get parsed as an int application_id.
+@router.get("/api/v1/applications/export.csv", name="applications_export_csv")
+async def get_applications_export_csv(
+    application_ids: Annotated[list[int] | None, Query()] = None,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Export selected applications as CSV. Auth-gated; cap 50 IDs."""
+    user_id = _effective_user_id(user)
+    ids = application_ids or []
+    try:
+        rows = await application_service.list_for_export(
+            session,
+            user_id=user_id,
+            application_ids=ids,
+        )
+    except application_service.ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_EXPORT_FIELDNAMES)
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="applications.csv"',
+        },
+    )
+
+
 @router.get("/api/v1/applications/{application_id}", name="applications_get")
 async def get_application(
     application_id: int,
@@ -278,3 +328,107 @@ async def get_application_bundle(
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="bundle-{application_id}.zip"'},
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Bulk actions on /tracking list view (plan 80 / 0.4.0.09)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _bulk_toast_header(success: int, failed: int) -> str:
+    return json.dumps({"showToast": {"text": f"Updated {success}, skipped {failed}"}})
+
+
+@router.post(
+    "/_fragments/tracking/bulk/move-stage",
+    response_class=HTMLResponse,
+    name="tracking_bulk_move_stage",
+)
+async def post_bulk_move_stage(
+    request: Request,
+    application_ids: Annotated[list[int], Form()],
+    new_status: Annotated[str, Form()],
+    closed_reason: Annotated[str | None, Form()] = None,
+    show_drafts: Annotated[int, Form()] = 0,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Bulk-move selected applications to ``new_status``.
+
+    Returns the updated tracking list fragment + an ``HX-Trigger`` toast
+    summary. 422 on unknown enum or > 50 IDs.
+    """
+    try:
+        status_enum = ApplicationStatus(new_status)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Unknown status") from None
+    cr_enum: ClosedReason | None
+    if closed_reason:
+        try:
+            cr_enum = ClosedReason(closed_reason)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Unknown closed_reason") from None
+    else:
+        cr_enum = None
+
+    user_id = _effective_user_id(user)
+    try:
+        success, failed = await application_service.bulk_update_status(
+            session,
+            user_id=user_id,
+            application_ids=application_ids,
+            new_status=status_enum,
+            closed_reason=cr_enum,
+        )
+    except application_service.ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    await session.commit()
+
+    ctx = await tctx.build_tracking_ctx(
+        session,
+        user_id=user_id,
+        view="list",
+        show_closed=True,
+        show_drafts=bool(show_drafts),
+    )
+    response = templates.TemplateResponse(request, "pages/_tracking_list.html", ctx)
+    response.headers["HX-Trigger"] = _bulk_toast_header(success, len(failed))
+    return response
+
+
+@router.post(
+    "/_fragments/tracking/bulk/archive",
+    response_class=HTMLResponse,
+    name="tracking_bulk_archive",
+)
+async def post_bulk_archive(
+    request: Request,
+    application_ids: Annotated[list[int], Form()],
+    show_drafts: Annotated[int, Form()] = 0,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Bulk archive — closes selected applications w/ USER_ARCHIVED reason."""
+    user_id = _effective_user_id(user)
+    try:
+        success, failed = await application_service.bulk_archive(
+            session,
+            user_id=user_id,
+            application_ids=application_ids,
+        )
+    except application_service.ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    await session.commit()
+
+    ctx = await tctx.build_tracking_ctx(
+        session,
+        user_id=user_id,
+        view="list",
+        show_closed=True,
+        show_drafts=bool(show_drafts),
+    )
+    response = templates.TemplateResponse(request, "pages/_tracking_list.html", ctx)
+    response.headers["HX-Trigger"] = _bulk_toast_header(success, len(failed))
+    return response
