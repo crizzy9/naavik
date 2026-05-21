@@ -24,17 +24,24 @@ def test_discover_main_is_swap_target(client: TestClient, auth_cookies) -> None:
     assert 'id="discover-main"' in body, "Issue 8D · #discover-main must be the swap target"
 
 
-def test_review_button_targets_discover_main(client: TestClient, auth_cookies) -> None:
-    """Review & apply button hits the inline-expand fragment, not /discover/{id}."""
+def test_review_button_targets_apply_preview_slot(client: TestClient, auth_cookies) -> None:
+    """Plan 77 / 0.4.0.03 — Review & apply button now mounts the apply-preview card.
+
+    Supersedes the plan 09a inline-expand wiring. The inline-expand fragment
+    route (`/_fragments/discover/expanded/{id}`) still exists for direct hits +
+    the workspace "open as full page" affordance, but the Discover action bar
+    no longer routes through it. See `test_apply_preview_by_job_*` in
+    `tests/test_discover_action_bar_review_apply.py` for the new contract.
+    """
     body = client.get("/discover", cookies=auth_cookies).text
     review_idx = body.find('id="discover-review-btn"')
     assert review_idx > 0
     snippet = body[review_idx : review_idx + 600]
-    assert "/_fragments/discover/expanded/" in snippet, (
-        "Review button must hit the inline-expand fragment URL"
+    assert "/_fragments/apply/preview/by-job/" in snippet, (
+        "Review button must hit the apply-preview by-job fragment URL"
     )
-    assert 'hx-target="#discover-main"' in snippet, (
-        "Review button must target #discover-main for in-place expansion"
+    assert 'hx-target="#apply-preview-slot"' in snippet, (
+        "Review button must target #apply-preview-slot for plan 77 wiring"
     )
 
 

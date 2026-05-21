@@ -665,3 +665,140 @@ async def test_stuck_drafts_filters_to_apps_with_last_failure():
     rows = await svc.stuck_drafts(session, user_id=1)
     assert len(rows) == 1
     assert rows[0] is failed
+
+
+# ── Plan 77 / 0.4.0.17 — notification parity on manual submit_draft ──
+
+
+@pytest.mark.asyncio
+async def test_submit_draft_default_notify_fn_fires_when_settings_configured():
+    """No explicit notify_fn + Settings present → default `notify_application_submitted` fires.
+
+    Proves the HTTP submit-draft path now gets the same Discord/Telegram echo
+    that auto-apply cron already had. Manual + auto submissions now parity.
+    """
+    from models import ApplicationStatus, JobQueueState
+
+    app_row = _make_app()
+    job_row = _make_job()
+    settings_row = _make_settings()  # has notifications keys, used by closure
+
+    session = _FakeSession()
+    # exec sequence — same as the happy-path success test, with Settings load
+    # returning a real-ish settings object instead of None.
+    session.exec_queue = [
+        _exec_one(app_row),
+        _exec_count(0),
+        _exec_one(None),  # sponsorship-gate Profile → None
+        _exec_one(settings_row),  # Settings load
+        _exec_one(None),
+        _exec_one(None),
+        _exec_all([]),
+        _exec_one(job_row),
+    ]
+
+    fake_adapter = SimpleNamespace(
+        submit=AsyncMock(return_value=SubmissionResult(ok=True, board_application_id="GH-12345"))
+    )
+    notify_application_submitted = AsyncMock()
+
+    with (
+        patch("services.application_service.ats_dispatch", return_value=fake_adapter),
+        patch(
+            "services.notifications.notify_application_submitted", new=notify_application_submitted
+        ),
+    ):
+        out = await submit_draft(session, app_row.id)
+
+    assert out.status == ApplicationStatus.APPLIED
+    assert job_row.queue_state == JobQueueState.APPLIED
+    notify_application_submitted.assert_awaited_once()
+    kwargs = notify_application_submitted.call_args.kwargs
+    assert kwargs["settings"] is settings_row
+    assert kwargs["application"] is app_row
+
+
+@pytest.mark.asyncio
+async def test_submit_draft_default_notify_fn_skipped_when_no_settings():
+    """No Settings row → default helper returns None → no notification fires.
+
+    Manual submission with a brand-new user who hasn't configured Settings
+    yet should NOT raise; it should silently skip the channel send.
+    """
+    from models import ApplicationStatus
+
+    app_row = _make_app()
+    job_row = _make_job()
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_one(app_row),
+        _exec_count(0),
+        _exec_one(None),  # sponsorship-gate Profile → None
+        _exec_one(None),  # Settings load → None
+        _exec_one(None),
+        _exec_one(None),
+        _exec_all([]),
+        _exec_one(job_row),
+    ]
+
+    fake_adapter = SimpleNamespace(
+        submit=AsyncMock(return_value=SubmissionResult(ok=True, board_application_id="GH-12345"))
+    )
+    notify_application_submitted = AsyncMock()
+
+    with (
+        patch("services.application_service.ats_dispatch", return_value=fake_adapter),
+        patch(
+            "services.notifications.notify_application_submitted", new=notify_application_submitted
+        ),
+    ):
+        out = await submit_draft(session, app_row.id)
+
+    assert out.status == ApplicationStatus.APPLIED
+    notify_application_submitted.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_submit_draft_explicit_notify_fn_overrides_default():
+    """Explicit `notify_fn` (auto-apply cron path) wins over the default closure.
+
+    Regression test for the cron caller in `scheduler/jobs.py:54`. Confirms the
+    new default-helper plumbing did not change behavior for callers that
+    already thread `notify_fn`.
+    """
+    from models import ApplicationStatus
+
+    app_row = _make_app()
+    job_row = _make_job()
+    settings_row = _make_settings()
+    session = _FakeSession()
+    session.exec_queue = [
+        _exec_one(app_row),
+        _exec_count(0),
+        _exec_one(None),  # sponsorship-gate Profile → None
+        _exec_one(settings_row),  # Settings load
+        _exec_one(None),
+        _exec_one(None),
+        _exec_all([]),
+        _exec_one(job_row),
+    ]
+
+    fake_adapter = SimpleNamespace(
+        submit=AsyncMock(return_value=SubmissionResult(ok=True, board_application_id="GH-12345"))
+    )
+    explicit_notify = AsyncMock()
+    default_notify_application_submitted = AsyncMock()
+
+    with (
+        patch("services.application_service.ats_dispatch", return_value=fake_adapter),
+        patch(
+            "services.notifications.notify_application_submitted",
+            new=default_notify_application_submitted,
+        ),
+    ):
+        out = await submit_draft(session, app_row.id, notify_fn=explicit_notify)
+
+    assert out.status == ApplicationStatus.APPLIED
+    # Explicit closure ran; the default factory's underlying helper did not.
+    explicit_notify.assert_awaited_once_with(app_row)
+    default_notify_application_submitted.assert_not_awaited()

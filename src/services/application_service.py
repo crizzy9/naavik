@@ -437,6 +437,22 @@ async def _record_success(
     application.submission_artifacts = artifacts
 
 
+def _default_notify_fn(settings: Settings | None):
+    """Plan 77 / 0.4.0.17 — wired `notify_application_submitted` closure.
+
+    Returns `None` when no Settings row exists (no user to scope channels to)
+    so manual submissions silently skip notification rather than raising.
+    """
+    if settings is None:
+        return None
+    from services.notifications import notify_application_submitted
+
+    async def _notify(application: Application) -> None:
+        await notify_application_submitted(settings=settings, application=application)
+
+    return _notify
+
+
 async def submit_draft(
     session: AsyncSession,
     application_id: int,
@@ -449,6 +465,12 @@ async def submit_draft(
     On persistent failure (CAPTCHA / auth_required / etc.), keeps DRAFT and
     writes `submission_artifacts.last_failure`. Caller (cron or HTTP handler)
     treats the return as a tuple `(application, ok=bool)` via `application.status`.
+
+    Plan 77 / 0.4.0.17 — when `notify_fn is None`, default to a wired
+    `notify_application_submitted` closure built from the user's Settings.
+    Auto-apply cron continues to pass `notify_fn` explicitly (unchanged); HTTP
+    submit-draft now gets Discord/Telegram echo on success without callers
+    threading the helper themselves.
     """
     application = await get_application(session, application_id)
     if application is None:
@@ -544,9 +566,10 @@ async def submit_draft(
     except Exception as exc:  # noqa: BLE001
         log.warning("profile_answer upsert post-submit failed: %s", exc)
 
-    if notify_fn is not None:
+    effective_notify_fn = notify_fn or _default_notify_fn(user_settings)
+    if effective_notify_fn is not None:
         try:
-            await notify_fn(application)
+            await effective_notify_fn(application)
         except Exception as exc:  # noqa: BLE001 — notification failures are non-fatal
             log.warning("notify_application_submitted failed: %s", exc)
 
