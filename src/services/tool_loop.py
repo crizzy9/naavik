@@ -56,6 +56,34 @@ log = logging.getLogger(__name__)
 
 DEFAULT_MAX_ITERS = 3
 
+# Tool inputs carry Claude-controlled text. JD content (scraper-sourced,
+# untrusted) can flow through `tool_use.input["text"]` into a fresh LLM call.
+# Reject inputs containing obvious prompt-injection markers BEFORE
+# interpolating into the prompt — defense-in-depth on top of provider-level
+# alignment. List stays short + targeted to avoid over-aggressive filtering.
+_INJECTION_MARKERS = (
+    "ignore previous",
+    "ignore all previous",
+    "disregard previous",
+    "disregard all",
+    "you are now",
+    "<|im_start|>",
+    "<|im_end|>",
+    "###system",
+    "### system",
+)
+_TOOL_TEXT_MAX_CHARS = 3000
+
+
+def _sanitize_tool_text(text: str) -> tuple[str, bool]:
+    """Cap length + flag injection markers. Returns (cleaned, rejected)."""
+    capped = text[:_TOOL_TEXT_MAX_CHARS]
+    lowered = capped.lower()
+    for marker in _INJECTION_MARKERS:
+        if marker in lowered:
+            return capped, True
+    return capped, False
+
 
 class SkimScore(BaseModel):
     """Lightweight recruiter-skim simulator output."""
@@ -128,7 +156,17 @@ def _build_tool_delegates(
         }
 
     async def detector_test(input_: dict) -> dict:
-        text = str(input_.get("text") or resume_text)
+        raw_text = str(input_.get("text") or resume_text)
+        text, rejected = _sanitize_tool_text(raw_text)
+        if rejected:
+            log.warning("detector_test rejected: suspected prompt injection")
+            return {
+                "final_confidence": 0.0,
+                "target_met": False,
+                "iterations": 0,
+                "originality_score": None,
+                "rejected": "suspected_injection",
+            }
         report = await run_detector_loop(
             text,
             session=session,
@@ -147,13 +185,21 @@ def _build_tool_delegates(
         }
 
     async def recruiter_skim_score(input_: dict) -> dict:
-        text = str(input_.get("text") or resume_text)
+        raw_text = str(input_.get("text") or resume_text)
+        text, rejected = _sanitize_tool_text(raw_text)
+        if rejected:
+            log.warning("recruiter_skim_score rejected: suspected prompt injection")
+            return {
+                "score": 0,
+                "top_signals": [],
+                "missing_signals": ["rejected_suspected_injection"],
+            }
         provider = get_provider(settings)
         prompt = (
             "Simulate a recruiter doing a 6-second skim of this candidate's "
             "resume. Score 0-10 on whether you'd progress them to phone "
             "screen. List top signals captured + missing signals.\n\n"
-            f"Resume text:\n{text[:3000]}"
+            f"Resume text:\n{text}"
         )
         try:
             result = await llm_tracker.tracked_call(

@@ -12,9 +12,9 @@ adding one would require an alembic enum-type migration), `model =
 
 from __future__ import annotations
 
+import json
 import logging
 import time
-from datetime import UTC, datetime
 
 import httpx
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -31,6 +31,9 @@ COST_PER_SCAN_USD = 0.01
 # Hard timeout so the detector_loop doesn't stall waiting on an unresponsive
 # third-party API.
 REQUEST_TIMEOUT_SECONDS = 30.0
+# Documented response shape is well under 1 KiB; cap defends against a
+# compromised endpoint or MitM streaming a giant body to exhaust memory.
+MAX_RESPONSE_BYTES = 64 * 1024
 
 
 class OriginalityProvider:
@@ -64,17 +67,33 @@ class OriginalityProvider:
         }
         payload = {"content": text}
         try:
-            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-                response = await client.post(ENDPOINT, headers=headers, json=payload)
+            async with (
+                httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client,
+                client.stream("POST", ENDPOINT, headers=headers, json=payload) as response,
+            ):
+                status_code = response.status_code
+                body_bytes = bytearray()
+                async for chunk in response.aiter_bytes(chunk_size=8192):
+                    body_bytes.extend(chunk)
+                    if len(body_bytes) > MAX_RESPONSE_BYTES:
+                        log.warning(
+                            "originality.ai response exceeded %d bytes; truncating",
+                            MAX_RESPONSE_BYTES,
+                        )
+                        return None
         except httpx.HTTPError as exc:
             log.warning("originality.ai HTTP error: %s", exc)
             return None
-        if response.status_code != 200:
-            log.warning("originality.ai non-200: %s %s", response.status_code, response.text[:200])
+        if status_code != 200:
+            log.warning(
+                "originality.ai non-200: %s %s",
+                status_code,
+                bytes(body_bytes[:200]).decode("utf-8", errors="ignore"),
+            )
             return None
         try:
-            body = response.json()
-        except ValueError:
+            body = json.loads(bytes(body_bytes).decode("utf-8", errors="ignore") or "{}")
+        except (ValueError, json.JSONDecodeError):
             log.warning("originality.ai non-JSON body")
             return None
         # Response shape per docs: {"score": {"ai": 0.92, "original": 0.08}, ...}
@@ -150,15 +169,11 @@ async def score_text(
     On any failed call the `ApiUsage` row is still persisted with
     `succeeded=False` + `cost_usd=0.0`. On success the row carries
     `cost_usd=COST_PER_SCAN_USD` so the daily cost cap counts the spend.
-
-    `_call_at` arg is captured implicitly via `time.perf_counter` for
-    `occurred_at` consistency with tracked_call (both use UTC).
     """
     provider = OriginalityProvider(api_key)
     if not provider.configured:
         return None
 
-    _ = datetime.now(UTC)  # touch to keep import live
     start = time.perf_counter()
     score = await provider.score_text(text)
     latency_ms = int((time.perf_counter() - start) * 1000)

@@ -139,7 +139,10 @@ async def test_update_generation_rejects_invalid_tier():
 
 @pytest.mark.asyncio
 async def test_update_generation_persists_originality_key():
-    """Originality API key persists; empty string clears the field."""
+    """Originality API key persists; empty string preserves existing (regression
+    guard for the silent-wipe bug — form re-submit always sends `""` because
+    the password input has no `value=`). To clear, callers pass the explicit
+    `originality_api_key_clear=True` sentinel."""
     session = AsyncMock()
     session.flush = AsyncMock()
     session.add = lambda r: None
@@ -155,6 +158,7 @@ async def test_update_generation_persists_originality_key():
         updated_at=None,
     )
 
+    # New non-empty value: set
     with patch(
         "services.settings_service.get_or_create",
         AsyncMock(return_value=fake),
@@ -162,13 +166,75 @@ async def test_update_generation_persists_originality_key():
         s = await update_generation(session, user_id=1, originality_api_key="sk-new")
     assert s.originality_api_key == "sk-new"
 
+    # Empty string + no clear sentinel: PRESERVE existing (regression guard)
     fake.originality_api_key = "sk-new"
     with patch(
         "services.settings_service.get_or_create",
         AsyncMock(return_value=fake),
     ):
         s = await update_generation(session, user_id=1, originality_api_key="")
+    assert s.originality_api_key == "sk-new"
+
+    # Explicit clear sentinel: drop to None
+    with patch(
+        "services.settings_service.get_or_create",
+        AsyncMock(return_value=fake),
+    ):
+        s = await update_generation(
+            session,
+            user_id=1,
+            originality_api_key="",
+            originality_api_key_clear=True,
+        )
     assert s.originality_api_key is None
+
+
+@pytest.mark.asyncio
+async def test_update_generation_preserves_originality_when_field_absent():
+    """Plan 67 round-2 regression: form save without re-entering the API key
+    (the common path, since the password input never echoes existing value)
+    MUST leave the stored key untouched."""
+    session = AsyncMock()
+    session.flush = AsyncMock()
+    session.add = lambda r: None
+    fake = SimpleNamespace(
+        user_id=1,
+        generation_tier="free",
+        originality_api_key="sk-existing",
+        tier_2_evasion_enabled=False,
+        ai_writing_voice_samples="",
+        cover_letter_format="auto",
+        resume_template_preference="auto",
+        parse_fidelity_threshold=0.75,
+        updated_at=None,
+    )
+
+    # Caller toggles tier_2_evasion only; originality_api_key not in payload
+    with patch(
+        "services.settings_service.get_or_create",
+        AsyncMock(return_value=fake),
+    ):
+        s = await update_generation(
+            session,
+            user_id=1,
+            tier_2_evasion_enabled=True,
+        )
+    assert s.originality_api_key == "sk-existing"
+    assert s.tier_2_evasion_enabled is True
+
+    # Caller submits empty originality_api_key (form auto-blank) — preserves
+    with patch(
+        "services.settings_service.get_or_create",
+        AsyncMock(return_value=fake),
+    ):
+        s = await update_generation(
+            session,
+            user_id=1,
+            originality_api_key="",
+            tier_2_evasion_enabled=False,
+        )
+    assert s.originality_api_key == "sk-existing"
+    assert s.tier_2_evasion_enabled is False
 
 
 @pytest.mark.asyncio

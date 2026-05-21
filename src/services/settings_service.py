@@ -276,21 +276,29 @@ async def update_generation(
     *,
     generation_tier: str | None = None,
     originality_api_key: str | None = None,
+    originality_api_key_clear: bool = False,
     tier_2_evasion_enabled: bool | None = None,
     ai_writing_voice_samples: str | None = None,
     cover_letter_format: str | None = None,
     resume_template_preference: str | None = None,
     parse_fidelity_threshold: float | None = None,
 ) -> Settings:
-    """Persist Generation-tab updates. `None` per arg = skip (partial PUT)."""
+    """Persist Generation-tab updates. `None` per arg = skip (partial PUT).
+
+    `originality_api_key`: non-None, non-empty string = set; None = skip
+    (preserves existing). To explicitly clear, pass
+    `originality_api_key_clear=True` — prevents accidental wipe when the
+    Generation form re-submits without re-entering the password input.
+    """
     s = await get_or_create(session, user_id)
     if generation_tier is not None:
         if generation_tier not in VALID_GENERATION_TIERS:
             raise ValueError(f"generation_tier must be one of {sorted(VALID_GENERATION_TIERS)}")
         s.generation_tier = generation_tier
-    if originality_api_key is not None:
-        # Empty string = clear; non-empty = set
-        s.originality_api_key = originality_api_key or None
+    if originality_api_key_clear:
+        s.originality_api_key = None
+    elif originality_api_key is not None and str(originality_api_key).strip():
+        s.originality_api_key = str(originality_api_key).strip()
     if tier_2_evasion_enabled is not None:
         s.tier_2_evasion_enabled = bool(tier_2_evasion_enabled)
     if ai_writing_voice_samples is not None:

@@ -406,16 +406,20 @@ async def put_generation(
 
     user_id = _effective_user_id(_user)
     generation_tier = payload.get("generation_tier")
+    # Form template always submits `originality_api_key` (password input has no
+    # `value=`, so the browser sends empty string on every save). Treat empty
+    # as "leave existing key untouched"; only a non-empty new value overwrites.
+    # JSON callers can still send explicit empty string to clear via the
+    # dedicated `originality_api_key_clear` sentinel.
     originality_api_key_raw = payload.get("originality_api_key")
-    # Form posts always send the field (even empty); JSON posts may omit it.
-    # Empty string = clear (vs None = skip).
-    originality_api_key: str | None
-    if "originality_api_key" in payload:
-        originality_api_key = (
-            str(originality_api_key_raw) if originality_api_key_raw is not None else ""
-        )
-    else:
-        originality_api_key = None
+    originality_api_key: str | None = None
+    if (
+        originality_api_key_raw is not None
+        and isinstance(originality_api_key_raw, str)
+        and originality_api_key_raw.strip()
+    ):
+        originality_api_key = originality_api_key_raw.strip()
+    clear_key = bool(payload.get("originality_api_key_clear"))
     tier_2_evasion_raw = payload.get("tier_2_evasion_enabled")
     tier_2_evasion = bool(tier_2_evasion_raw) if "tier_2_evasion_enabled" in payload else None
 
@@ -425,6 +429,7 @@ async def put_generation(
             user_id=user_id,
             generation_tier=generation_tier if generation_tier else None,
             originality_api_key=originality_api_key,
+            originality_api_key_clear=clear_key,
             tier_2_evasion_enabled=tier_2_evasion,
         )
     except ValueError as exc:

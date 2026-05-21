@@ -603,6 +603,7 @@ async def _generate_bundle_premium(
     """
     # Lazy-import the PREMIUM machinery so FREE callers don't pay the import
     # cost (council pulls Anthropic batch; detector pulls Originality).
+    from services.ats_parser_ensemble import ensemble_score
     from services.council import vote_on_bullet_selection
     from services.critique_council import critique_bundle
     from services.detector_loop import run_detector_loop
@@ -768,6 +769,32 @@ async def _generate_bundle_premium(
             trace["premium_stages_skipped"].append("detector")
     else:
         trace["premium_stages_skipped"].append("detector")
+
+    # PREMIUM stage 2.5 — ATS parser ensemble cross-check (plan 67 § T6).
+    # Local-CPU only (pdfplumber + optional pyresparser + optional Node
+    # subprocess) — no LLM spend, no cost-cap probe needed. Records the
+    # aggregate score + parsers used; sub-threshold surfaces as a warning
+    # in the audit trail (regen deferred to a follow-up user motion).
+    resume_pdf_path: Path | None = None
+    if free_result.resume is not None and free_result.resume.path:
+        resume_pdf_path = Path(free_result.resume.path)
+    if resume_pdf_path is not None and resume_pdf_path.exists():
+        try:
+            ensemble_report = await ensemble_score(
+                resume_pdf_path,
+                threshold=settings.parse_fidelity_threshold,
+            )
+            trace["ensemble_parse_score"] = ensemble_report.aggregate_score
+            trace["ensemble_parsers_used"] = list(ensemble_report.parsers_used)
+            trace["ensemble_below_threshold"] = (
+                ensemble_report.aggregate_score < settings.parse_fidelity_threshold
+            )
+            trace["premium_stages_completed"].append("ensemble")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ensemble stage failed: %s", exc)
+            trace["premium_stages_skipped"].append("ensemble")
+    else:
+        trace["premium_stages_skipped"].append("ensemble")
 
     # PREMIUM stage 3 — critique council
     if await dg.is_cost_capped(session, user_id, settings):
