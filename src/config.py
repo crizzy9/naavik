@@ -96,12 +96,10 @@ class Settings(BaseSettings):
             return [item.strip() for item in v.split(",") if item.strip()]
         return v  # type: ignore[return-value]
 
-    # Plan 10c (10c.3, 2026-05-11): boot-time debug flag used by the seed-time
-    # `dev-credentials` file write + the FastAPI lifespan credential echo.
-    # Read from `NAAVIK_DEBUG` only (no generic `DEBUG` alias per PR #49 hacker
-    # review — `DEBUG=1` is shared by Flask/Django/many frameworks and would
-    # silently disable PC.5's SECRET_KEY validator). Production (`docker compose
-    # up` / NixOS module) leaves it unset → no dev-credentials artifacts.
+    # Boot-time debug flag. Read from `NAAVIK_DEBUG` only (no generic `DEBUG`
+    # alias per PR #49 hacker review — `DEBUG=1` is shared by Flask/Django and
+    # would silently disable PC.5's SECRET_KEY validator). Production
+    # (`docker compose up` / NixOS module) leaves it unset.
     debug: bool = Field(
         default=False,
         validation_alias="NAAVIK_DEBUG",

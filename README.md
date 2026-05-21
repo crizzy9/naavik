@@ -173,47 +173,17 @@ nix develop          # or set up direnv to load automatically
 
 #### First-time setup (live DB)
 
-`nix run .#dev` is the happy path — orchestrator handles Postgres, migrations, seeding, and FastAPI in one terminal. On the **first** run the orchestrator's `seed` step prints a dev credential to stdout:
+`nix run .#dev` is the happy path — orchestrator handles Postgres, migrations, and FastAPI in one terminal. **Naavik does not auto-seed any user** (plan 83, 0.7.0.36, 2026-05-21). First-time setup is signup-driven:
 
-```
-[seed] dev user: shyam.padia930@gmail.com
-[seed] dev password: K7nQ2pXa4VtRm9zL  (set NAAVIK_DEV_PASSWORD env to override on next reseed)
-```
+1. Open <http://localhost:8000>. You land on `/login`.
+2. Click **Create account** (or visit `/login?mode=signup` directly).
+3. Enter your email + a password of **at least 12 characters with a letter and a digit**, then submit.
+4. You land on the onboarding flow — upload your resume, AI extracts your profile, you edit + save.
+5. Once on Overview: set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` / `OLLAMA_BASE_URL`) in `.env` (`chmod 0600 .env`), restart the server. Visit `/settings/llm-provider` to confirm the green env-presence chip + pick your provider as Active.
 
-Plan 10c (2026-05-12): the credential ALSO lands on disk at `~/.naavik/dev-credentials` (mode 0600, owner-readable only) AND is re-echoed by the `[app]` lifespan ~750 ms after `Application startup complete.`, so it's still visible at the bottom of the orchestrator's scrollback if the `[seed]` line interleaved past your eyes. If you missed it either way, read the file back:
+The first user lands as `is_admin=True`. Their default `Settings.allow_multiple_users=False`, which gates subsequent signups — additional `POST /api/v1/auth/signup` returns **403** unless an admin flips the toggle (multi-user proper is Phase 2+). Same brute-force rate limit as `/login` (5 attempts / 15 min / IP).
 
-```bash
-cat ~/.naavik/dev-credentials                      # email + password, two lines
-cat ~/.naavik/dev-credentials && rm ~/.naavik/dev-credentials  # shred-after-read
-```
-
-The file is only created when (a) `NAAVIK_DEV_PASSWORD` is unset (so we generated a fresh value), (b) `NAAVIK_DEBUG` is truthy (the orchestrator sets it; production stacks don't), and (c) the seeded `Settings.deployment_mode` is `SELF_HOSTED` (cloud-tier installs never persist plaintext creds). Production self-hosters with `NAAVIK_DEBUG` unset never see this file.
-
-To pin the credential up-front so future reseeds don't surprise you, export the env var **before** the orchestrator boots:
-
-```bash
-export NAAVIK_DEV_PASSWORD='your-stable-password'
-nix run .#dev
-```
-
-With `NAAVIK_DEV_PASSWORD` set, the `dev-credentials` file is NOT written — operator-supplied creds are the operator's to track.
-
-Then:
-
-1. Visit <http://localhost:8000/login>, sign in with the seeded email + password — JWT cookie is set, you land on Overview.
-2. Set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` / `OLLAMA_BASE_URL`) in your `.env` file (`chmod 0600 .env`), restart the server.
-3. Visit `/settings/llm-provider`, confirm the green env-presence indicator next to your chosen provider, pick it as Active, hit **Save**. Test the connection. Cost cards begin populating once real generations run.
-4. Edit your profile via `/profile/edit`. Per-field autosave persists changes to Postgres immediately — verify with `psql -h 127.0.0.1 -p 5433 -U naavik -d naavik -c "SELECT headline FROM profile WHERE user_id=1"`.
-
-#### Signup (multi-user / fresh-install)
-
-Plan 10b adds a real `POST /api/v1/auth/signup` so a self-hoster on a fresh DB (no seed) can bootstrap an account from the UI:
-
-1. On a fresh DB, hit `/login`, click **Create account**, enter your email + password (≥ 8 characters).
-2. The first user lands as `is_admin=True`. Their default Settings has `allow_multiple_users=False`, which gates subsequent signups.
-3. Once one user exists, additional `POST /api/v1/auth/signup` returns **403** unless an admin flips `Settings.allow_multiple_users=True` (multi-user proper is Phase 2+).
-
-Same brute-force rate limit as `/login` (5 attempts / 15 min / IP).
+If `/login` doesn't load, visit `/setup-help` — public diagnostic page that surfaces the User-table count + recovery recipes.
 
 ### Manual local development setup
 
@@ -299,16 +269,13 @@ export DATABASE_URL="postgresql+asyncpg://naavik:password@localhost:5432/naavik"
 
 `config.py`'s default already points here, so you only need to export when connecting somewhere else. Alternatively, copy `.env.example` → `.env` and edit — `pydantic-settings` picks it up automatically.
 
-**6 · Run migrations + seed**
+**6 · Run migrations**
 
 ```bash
 uv run alembic upgrade head     # creates all tables + pgvector extension
-uv run python -m db.seed         # populates the seeded fixture set (372 rows; idempotent)
 ```
 
-`db.seed` reads `src/db/sample_data.py` and INSERTs with `ON CONFLICT (id) DO NOTHING`, then bumps each table's autoincrement sequence past the seeded max so subsequent inserts don't collide. Safe to re-run.
-
-The seed prints the dev-user credential — capture it on first run (or pin it via `NAAVIK_DEV_PASSWORD`). On re-runs against an existing DB, the credential stays unchanged and the seed prints a hint about how to reset.
+After migrations, visit `/login` and sign up — Naavik does not auto-seed a user (plan 83 / 0.7.0.36). The `src/db/sample_data.py` shadow rows remain as test + design fixtures; they no longer get INSERTed into Postgres.
 
 **7 · Configure secrets via `.env`**
 
@@ -368,7 +335,8 @@ PORTFOLIO_WEBHOOK_URL=...    # Netlify/Vercel rebuild trigger
 # data/documents/portfolio/resume.pdf — cached generic resume served by /api/portfolio/resume.pdf
 # data/postmortems/<app_id>/<utc-ts>/{trace.json,analysis.md} — per-failure ATS postmortem (plan 52 / 0.2.3.02)
 # data/snapshots/snapshot-YYYY-MM-DD.marker — daily DB snapshot markers (Phase 6 will replace)
-# dev-credentials — plaintext dev login (mode 0600, debug + SELF_HOSTED + generated-password only — plan 10c)
+# (plan 83 / 0.7.0.36 deleted the dev-credentials artifact; first-time setup
+#  is now signup-driven — no plaintext credential ever lands on disk.)
 # (~/.naavik/secrets.enc, secrets.enc.lock, secrets.enc.bak.*, logs/vault-audit.log
 #  were deleted in plan 26 / 0.2.0.01; if upgrading from 0.1.x, see § Upgrading from 0.1.x.)
 DATA_DIR=.naavik
@@ -427,9 +395,8 @@ These exist for development and CI; production should leave them unset.
 | Var | Purpose | Default |
 |---|---|---|
 | `NAAVIK_BCRYPT_COST` | bcrypt rounds for password hashing. Set to `4` in tests for ~10× speedup; production uses `12`. Out-of-range values fall back to `12`. | `12` |
-| `NAAVIK_DEV_PASSWORD` | Dev-user password for the seeded `User` row. Set this **before** the first `nix run .#dev` (or `python -m db.seed`) to pin a stable credential; otherwise `db.seed` generates a 16-char alphanumeric value and prints it once. Reseeds against an existing User row never change the hash. | unset → generated |
-| `NAAVIK_LIVE_DB` | Opt-in to the live-DB-gated test suite (`tests/test_seed.py`, the live-DB integration tests in `tests/test_stub_endpoints.py`). Set to `1` together with `DATABASE_URL` to run them. | unset |
-| `NAAVIK_DEBUG` | Boot-time debug flag. Wave 4 introduced this as the legacy gate for `/_design/components` (the canonical path is now the persisted `Settings.debug` flag; the env var stays as a no-DB fallback). **Plan 10c** also wires this to `app_settings.debug`, gating the seed-time `dev-credentials` file write + the FastAPI lifespan credential echo. **Plan 17 (PC.5)** uses the same flag as the bypass for SECRET_KEY boot-time enforcement. The orchestrator (`nix run .#dev`) exports `NAAVIK_DEBUG=1` automatically; production stacks (`docker compose up`, NixOS module) leave it unset. (The generic `DEBUG` alias was dropped per PR #49 hacker review — `DEBUG=1` is shared by Flask/Django and would silently disable the PC.5 validator.) | unset (orchestrator: `1`) |
+| `NAAVIK_LIVE_DB` | Opt-in to the live-DB-gated test suite (live-DB integration tests in `tests/test_stub_endpoints.py`). Set to `1` together with `DATABASE_URL` to run them. | unset |
+| `NAAVIK_DEBUG` | Boot-time debug flag. Wave 4 introduced this as the legacy gate for `/_design/components` (the canonical path is now the persisted `Settings.debug` flag; the env var stays as a no-DB fallback). **Plan 17 (PC.5)** uses the same flag as the bypass for SECRET_KEY boot-time enforcement. The orchestrator (`nix run .#dev`) exports `NAAVIK_DEBUG=1` automatically; production stacks (`docker compose up`, NixOS module) leave it unset. (The generic `DEBUG` alias was dropped per PR #49 hacker review — `DEBUG=1` is shared by Flask/Django and would silently disable the PC.5 validator.) | unset (orchestrator: `1`) |
 | `NAAVIK_TOOL_LOOP_MARKERS` | Plan 75 / 0.3.3.10 — comma-separated extra prompt-injection markers appended to the baseline 9-marker tuple in `src/services/tool_loop.py`. Case-insensitive substring match against tool-input text. Empty / unset → baseline only. Operator extensibility hook for new LLM-provider tells without a code edit. Example: `NAAVIK_TOOL_LOOP_MARKERS="leak system prompt,reveal credentials"`. | unset |
 
 Auth is form-based (email + password) in v1. OIDC support for self-hosted (Authentik / Keycloak / Okta) is on the Phase 2+ roadmap.

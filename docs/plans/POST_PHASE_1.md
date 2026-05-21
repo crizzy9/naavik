@@ -33,7 +33,7 @@ After plan 10 Wave 6 ships, the deliverable line in `ROADMAP.md` § Phase 1 is s
 Concretely, **end-to-end smoke after Phase 1**:
 
 1. `nix run .#dev` boots Postgres + alembic + FastAPI in one terminal.
-2. Visit `http://localhost:8000/login`. Log in as the seeded user (Shyam). (Plan 10c: the credential prints on first boot AND lands at `~/.naavik/dev-credentials` (mode 0600) for later retrieval via `cat`; the `[app]` lifespan also re-echoes it ~750 ms after startup so it's near the bottom of the orchestrator's scrollback.)
+2. Visit `http://localhost:8000/login`. **Plan 83 (0.7.0.36, 2026-05-21)**: no auto-seed — click "Create account" to sign up + onboard with your real resume.
 3. Land on Overview. Real KPIs from seeded `Application` rows. Email signal feed shows seeded `EmailThread` rows. Pipeline strip shows 5 stages.
 4. Visit `/profile/edit`. Edit a bullet via the modal. Autosave indicator cycles `saving → saved`. Tag picker toggles. Drag a bullet to reorder — Sortable.js fires the reorder API; bullet order persists across reload.
 5. Visit `/discover`. The seeded queue is sorted by score. Skip / Save / Auto-apply work via keyboard (←/↑/→). Auto-apply right-swipe creates a DRAFT; the queue advances.
@@ -56,7 +56,6 @@ After plan 10 Wave 6 ships, run these in order before declaring Phase 1 done:
 ```bash
 nix develop
 uv run alembic upgrade head
-uv run python -m src.db.seed
 uv run ruff check .
 uv run ruff format --check .
 uv run pytest tests/ -v
@@ -66,7 +65,7 @@ Every test green. Expected test files (post-Wave-6):
 
 - `tests/test_sample_data.py` — fixture round-trip + counts + realism rules
 - `tests/test_models.py` — SQLModel instantiation + relationships + CHECK constraints (incl. discarded-DRAFT corner case)
-- `tests/test_seed.py` — clean DB seeded; round-trip via SQLModel matches fixtures
+- ~~`tests/test_seed.py`~~ — DELETED in plan 83 (0.7.0.36, 2026-05-21); no auto-seed path remains. Coverage moved to `tests/test_no_db_seed_imports.py` (regression lint) + the signup happy-path coverage in `tests/test_auth_*.py`.
 - `tests/test_auth.py` — bcrypt + JWT + cookie flags + CSRF + brute-force rate limit
 - ~~`tests/test_vault.py`~~ — DELETED in plan 26 (0.2.0.01); vault module + AES-GCM machinery removed. Coverage now lives in `tests/test_env_secrets.py` (env-presence indicators) + `tests/test_no_vault_imports.py` (regression lint).
 - `tests/test_llm_provider.py` — every provider's methods + cost estimate + retry policy

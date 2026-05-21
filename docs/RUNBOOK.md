@@ -47,10 +47,9 @@ Something is broken. Ask in this order:
 ```bash
 nix run .#dev
 # Expect:
-#   [seed] dev user: shyam.padia930@gmail.com
-#   [seed] dev password: <16-char>
+#   [migrate] (alembic upgrade head completes)
 #   [app] INFO:     Application startup complete.
-#   [app] [boot] dev credential available at ~/.naavik/dev-credentials
+#   [app] dev server up at http://localhost:8000 — visit /signup to create your account
 ```
 
 ### 2.2 `greenlet_spawn has not been called` / `libstdc++.so.6: cannot open shared object file`
@@ -189,36 +188,38 @@ grep -r "<run-id>" .claude/agents/ .claude/commands/  # confirm prompts referenc
 
 ### 2.12 First-run authentication / 401 troubleshooting
 
-**Symptom:** operator clones the repo, runs the app, hits `/login`, sees a "This instance already has an account" amber banner (no signup form), doesn't have the seeded password, and every `hx-put`/`hx-post` returns 401.
+**Symptom:** operator clones the repo, runs the app, can't sign in or sign up.
 
-**Root cause:** the plan-10c triple-gate that writes `~/.naavik/dev-credentials` requires `NAAVIK_DEBUG=1` AND `NAAVIK_DEV_PASSWORD` unset AND `Settings.deployment_mode == SELF_HOSTED`. If you launched outside `nix run .#dev` (e.g. plain `uv run fastapi dev src/main.py`) the env var is missing, the seeder skips the credential write, and the operator is locked out of `/login` (no creds) AND `/login?mode=signup` (seeded user + `allow_multiple_users=False`).
+**Decision tree** (post plan 83 / 0.7.0.36):
 
-**Diagnose:** the FastAPI app emits a structured WARN at boot when the trifecta trips. Or visit `/setup-help` — public diagnostic page with a table covering all three signals + copy-pasteable recovery recipes.
+- **No users in the DB** → visit `/signup` (or `/login?mode=signup`). Plan 83 deleted the auto-seed dev user; first-time setup is signup-driven. Enter email + 12+ character password (letter + digit) → land on onboarding.
+- **`/login` doesn't load at all** → check the orchestrator logs. `[migrate]` likely errored. Tail `nix run .#dev` output; if Postgres / alembic failed, fix that first.
+- **`hx-put` / `hx-post` returns 401 mid-session** → the JWT cookie expired (24h default; 30d with keep-signed-in). Re-login at `/login` mints a fresh cookie.
+
+**Diagnose:** visit `/setup-help` — public diagnostic page that surfaces the `user_count` signal + recovery recipes (signup CTA, orchestrator-log troubleshooting, destructive `rm -rf .naavik/db` reset).
 
 **Fix:**
 
 ```bash
-# Recommended — orchestrator exports NAAVIK_DEBUG automatically.
+# Canonical — visit /signup on first boot:
 nix run .#dev
-# After boot:
-cat ~/.naavik/dev-credentials
+# Open http://localhost:8000 → click "Create account" → fill form.
 
-# Manual — set the env var before re-launching.
+# Manual without the orchestrator — set NAAVIK_DEBUG so SECRET_KEY validator
+# accepts a missing .env:
 export NAAVIK_DEBUG=1
 uv run fastapi dev src/main.py
+# Then sign up at /login?mode=signup.
 
-# Destructive — drop the dev DB + dev-credentials file so seed fires fresh.
+# Destructive — drop the dev DB so you can sign up from scratch.
 rm -rf .naavik/db
-rm -f ~/.naavik/dev-credentials
-NAAVIK_DEBUG=1 nix run .#dev
+nix run .#dev
 ```
 
-If you do have an account but `hx-put`/`hx-post` returns 401 mid-session, the JWT cookie expired (24h default; 30d with keep-signed-in). Re-login at `/login` mints a fresh cookie.
-
 **Verify:**
-- `/setup-help` renders all three signal rows as `ok` / `present`.
-- The orchestrator scrollback shows `[boot] dev credential available at ~/.naavik/dev-credentials`.
-- `curl -s 127.0.0.1:8000/setup-help | grep -iE 'locked.*out'` returns nothing (no broken-state info card).
+- `/setup-help` renders the user_count row as `fresh` (when 0 users) or `users present` (when ≥ 1).
+- The orchestrator scrollback shows `dev server up at http://localhost:8000 — visit /signup to create your account` once the app finishes booting.
+- `curl -s 127.0.0.1:8000/login | grep -iE 'create.account'` returns the signup link.
 
 ---
 
@@ -444,7 +445,7 @@ stat -c '%a %U:%G %n' "${DATA_DIR:-.}/.env" .env 2>/dev/null | head -1
 - **Bypass `setsid -w`** in the orchestrator to "make it simpler." You'll bring back the SIGTTIN bug.
 - **Reintroduce the vault.** Plan 26 (0.2.0.01) deleted `src/services/vault.py`. `tests/test_no_vault_imports.py` lints against regressions. New secrets land in `.env` or in a Settings UI surface backed by env reads.
 - **Extend the `naavik` CLI** for a fix. CLI is on the Phase 2 task `0.2.0.02` sunset track. Same disposition — only `serve` remains, and it's queued for removal.
-- **Run `rm -rf ~/.naavik/`** to "reset" without confirming the user. That nukes the dev-credentials file + snapshots + cached PDFs in addition to the DB.
+- **Run `rm -rf ~/.naavik/`** to "reset" without confirming the user. That nukes snapshots + cached PDFs in addition to the DB.
 - **Run `--no-verify`** on a commit to bypass pre-commit hooks. The hook failed for a reason; fix it.
 - **Close a flaky test** without instrumenting it. Capture the flake's signature in `engineer.log` so the next devops invocation can see the pattern.
 

@@ -105,11 +105,10 @@ def _ahead(*, days: int = 0, hours: int = 0, minutes: int = 0) -> datetime:
 USER: User = User(
     id=1,
     email="shyam.padia930@gmail.com",
-    # Plan 10b (item 3, 2026-05-03): password_hash is filled in at seed time
-    # via `db.seed:_resolve_dev_password()` → `services.auth.hash_password()`.
-    # The shadow row keeps an empty string here so the in-memory dataset is
-    # self-consistent (no fake-but-decodable bcrypt that would invite mistakes).
-    # Memory-mode auth never reads this field; DB-mode receives the real hash.
+    # Plan 83 (0.7.0.36): no auto-seed flow. Tests + design references
+    # consume the shadow row directly; production self-hosters create
+    # their user via /signup. `password_hash` is empty since no live
+    # ingestion path reads it.
     password_hash="",
     is_active=True,
     is_admin=True,

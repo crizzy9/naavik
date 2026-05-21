@@ -104,14 +104,11 @@
               # same so `nix run .#dev` sees a writable Postgres path.
               # `zlib` for numpy (transitive via `pgvector`; plan 61 / 0.2.7.16).
               export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:${pkgs.zlib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-              # Plan 10c (10c.3, 2026-05-11): flip `app_settings.debug` on so
-              # the `[seed]` step writes `<data_dir>/dev-credentials` (mode
-              # 0600) and the `[app]` lifespan re-emits the credential ~750ms
-              # after startup. Production self-hosters (docker compose / the
-              # NixOS module) leave this unset → no plaintext-credential
-              # artifacts and no lifespan echo. Same env var that already
-              # gates `/_design/components` via the legacy fallback in
-              # `ui/routes/design.py`.
+              # Plan 17 (PC.5): NAAVIK_DEBUG=1 bypasses the SECRET_KEY 32-byte
+              # boot-time validator so `nix run .#dev` works without a `.env`.
+              # Also flips `app_settings.debug` on, gating `/_design/components`
+              # and the dev first-boot log line. Production stacks (docker
+              # compose / NixOS module) leave it unset.
               export NAAVIK_DEBUG=1
               # Force line-buffered stdout. Without this, when fastapi/alembic
               # stdout is a pipe (not a TTY), Python block-buffers up to 4-8 KB
@@ -205,23 +202,7 @@
               shutdown = setsidShutdown;
             };
 
-            # 3. Seed the canonical dataset (idempotent — ON CONFLICT DO NOTHING).
-            # Plan 10b (item 3, 2026-05-03): seed prints the dev login credential
-            # to stdout on first run. NAAVIK_DEV_PASSWORD env (when set) keeps
-            # the password stable across reseeds; otherwise a fresh 16-char
-            # value is generated and surfaced in the [seed] log line.
-            # `setsid -w` for the same TTY-detach reason as migrate.
-            seed = {
-              command = ''
-                ${devEnv}
-                exec setsid -w uv run --no-sync python -m db.seed < /dev/null
-              '';
-              depends_on."migrate".condition = "process_completed_successfully";
-              availability.restart = "exit_on_failure";
-              shutdown = setsidShutdown;
-            };
-
-            # 4. FastAPI dev server with auto-reload.
+            # 3. FastAPI dev server with auto-reload.
             # No readiness_probe by design: nothing depends on app being healthy
             # (it's the leaf of the chain), so the probe was purely cosmetic.
             # The probe used to fire at t=2s before fastapi finished binding
@@ -243,7 +224,7 @@
                 ${devEnv}
                 exec setsid -w uv run --no-sync fastapi dev src/main.py < /dev/null
               '';
-              depends_on."seed".condition = "process_completed_successfully";
+              depends_on."migrate".condition = "process_completed_successfully";
               shutdown = setsidShutdown;
             };
           };
