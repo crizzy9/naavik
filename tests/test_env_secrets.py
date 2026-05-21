@@ -203,6 +203,49 @@ def test_scraper_source_configured_unsupported_sources_return_false(env_settings
     assert env_secrets.scraper_source_configured(JobSource.MANUAL, settings) is False
 
 
+# ── Plan 70 (0.3.3.13): resolve_active_llm_provider precedence ───────────
+
+
+def test_resolve_active_llm_provider_anthropic_first(env_settings, monkeypatch):
+    """Anthropic key set → returns 'anthropic' regardless of others."""
+    from services import env_secrets
+
+    monkeypatch.setattr(env_settings, "anthropic_api_key", "sk-ant-x")
+    monkeypatch.setattr(env_settings, "openai_api_key", "sk-openai-x")
+    monkeypatch.setattr(env_settings, "ollama_base_url", "http://localhost:11434")
+    assert env_secrets.resolve_active_llm_provider() == "anthropic"
+
+
+def test_resolve_active_llm_provider_openai_when_anthropic_absent(env_settings, monkeypatch):
+    """No Anthropic key but OpenAI set → returns 'openai'."""
+    from services import env_secrets
+
+    monkeypatch.setattr(env_settings, "anthropic_api_key", None)
+    monkeypatch.setattr(env_settings, "openai_api_key", "sk-openai-x")
+    monkeypatch.setattr(env_settings, "ollama_base_url", "http://localhost:11434")
+    assert env_secrets.resolve_active_llm_provider() == "openai"
+
+
+def test_resolve_active_llm_provider_ollama_when_cloud_absent(env_settings, monkeypatch):
+    """No cloud keys but Ollama base URL → returns 'ollama'."""
+    from services import env_secrets
+
+    monkeypatch.setattr(env_settings, "anthropic_api_key", None)
+    monkeypatch.setattr(env_settings, "openai_api_key", None)
+    monkeypatch.setattr(env_settings, "ollama_base_url", "http://localhost:11434")
+    assert env_secrets.resolve_active_llm_provider() == "ollama"
+
+
+def test_resolve_active_llm_provider_none_when_unconfigured(env_settings, monkeypatch):
+    """No provider configured (incl. Ollama URL unset) → returns None."""
+    from services import env_secrets
+
+    monkeypatch.setattr(env_settings, "anthropic_api_key", None)
+    monkeypatch.setattr(env_settings, "openai_api_key", None)
+    monkeypatch.setattr(env_settings, "ollama_base_url", None)
+    assert env_secrets.resolve_active_llm_provider() is None
+
+
 def test_helpers_never_return_secret_values(env_settings, monkeypatch):
     """Defensive: every indicator helper returns bool, never the actual value."""
     from services import env_secrets

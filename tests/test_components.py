@@ -338,6 +338,25 @@ _CASES: list[tuple[str, dict]] = [
             "overall": 0.86,
         },
     ),
+    (
+        "score_card.html",
+        {
+            "score": 86,
+            "match_breakdown": {
+                "per_dimension": {"ai-ml": 0.95, "platform": 0.88, "leadership": 0.82},
+                "strengths": ["Strong ML platform background", "Personalization signal"],
+                "gaps": ["No explicit foundation-model experience"],
+                "visa_concern": False,
+                "visa_note": None,
+                "layers_run": ["layer-1", "layer-2", "layer-3"],
+                "layer_4_provider": "anthropic",
+                "layer_4_model": "claude-opus-4-7",
+                "judge_skipped": False,
+                "scored_at": "2026-05-20T03:30:00Z",
+            },
+            "expanded": True,
+        },
+    ),
     ("discover_action_bar.html", {"job_id": 42}),
     (
         "swipe_action_btn.html",
@@ -574,7 +593,7 @@ _CASES: list[tuple[str, dict]] = [
     ("bullet_edit_row_skeleton.html", {}),
 ]
 
-assert len(_CASES) == 85, f"Expected 85 components, got {len(_CASES)}"
+assert len(_CASES) == 86, f"Expected 86 components, got {len(_CASES)}"
 
 
 @pytest.mark.parametrize(

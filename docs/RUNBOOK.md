@@ -1,6 +1,6 @@
 # Naavik · DevOps Runbook
 
-> **Last updated:** 2026-05-16
+> **Last updated:** 2026-05-21 (added § 2.12 First-run authentication / 401 troubleshooting per plan 71 / 0.3.3.14)
 > **Audience:** devops agent + human operators debugging Naavik in dev or production.
 > **Companion docs:** `docs/AGENT_OPS.md` (agent system), `docs/plans/POST_PHASE_1.md` (post-Phase-1 testing playbook + monitoring), `README.md` § Troubleshooting (user-facing), `AGENTS.md` § Workflow (how this runbook gets updated).
 
@@ -186,6 +186,39 @@ grep -r "<run-id>" .claude/agents/ .claude/commands/  # confirm prompts referenc
 ```
 
 **Fix:** manager must pick the run-id at `/build` start and pass it verbatim to every Task call's prompt. If sub-agents wrote elsewhere, look for sibling `traces/<other-id>/` dirs created in the same minute.
+
+### 2.12 First-run authentication / 401 troubleshooting
+
+**Symptom:** operator clones the repo, runs the app, hits `/login`, sees a "This instance already has an account" amber banner (no signup form), doesn't have the seeded password, and every `hx-put`/`hx-post` returns 401.
+
+**Root cause:** the plan-10c triple-gate that writes `~/.naavik/dev-credentials` requires `NAAVIK_DEBUG=1` AND `NAAVIK_DEV_PASSWORD` unset AND `Settings.deployment_mode == SELF_HOSTED`. If you launched outside `nix run .#dev` (e.g. plain `uv run fastapi dev src/main.py`) the env var is missing, the seeder skips the credential write, and the operator is locked out of `/login` (no creds) AND `/login?mode=signup` (seeded user + `allow_multiple_users=False`).
+
+**Diagnose:** the FastAPI app emits a structured WARN at boot when the trifecta trips. Or visit `/setup-help` — public diagnostic page with a table covering all three signals + copy-pasteable recovery recipes.
+
+**Fix:**
+
+```bash
+# Recommended — orchestrator exports NAAVIK_DEBUG automatically.
+nix run .#dev
+# After boot:
+cat ~/.naavik/dev-credentials
+
+# Manual — set the env var before re-launching.
+export NAAVIK_DEBUG=1
+uv run fastapi dev src/main.py
+
+# Destructive — drop the dev DB + dev-credentials file so seed fires fresh.
+rm -rf .naavik/db
+rm -f ~/.naavik/dev-credentials
+NAAVIK_DEBUG=1 nix run .#dev
+```
+
+If you do have an account but `hx-put`/`hx-post` returns 401 mid-session, the JWT cookie expired (24h default; 30d with keep-signed-in). Re-login at `/login` mints a fresh cookie.
+
+**Verify:**
+- `/setup-help` renders all three signal rows as `ok` / `present`.
+- The orchestrator scrollback shows `[boot] dev credential available at ~/.naavik/dev-credentials`.
+- `curl -s 127.0.0.1:8000/setup-help | grep -iE 'locked.*out'` returns nothing (no broken-state info card).
 
 ---
 

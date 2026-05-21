@@ -1,21 +1,111 @@
 {#
-  _llm_cost_cap_widget.html — Settings · LLM Provider daily cost-cap progress.
+  _llm_cost_cap_widget.html — Settings · LLM Provider daily cost-cap progress
+  + fallback indicator banner.
 
-  Plan 54 / 0.2.5.03. Three states:
+  Plan 54 / 0.2.5.03 — three cap states:
     1. cost_cap_usd is None  → render "no cap set" placeholder w/ .env hint.
     2. today_cost_usd < cap  → render emerald progress bar w/ pct + "$X.XX of $Y.YY today".
     3. today_cost_usd ≥ cap  → render rose progress bar w/ triangle-alert + "Cap exceeded — Wave 6 throttles" note.
 
+  Plan 74 / 0.3.2.04 — severity-gated judge-skipped fallback banner:
+    - count == 0  → no banner (status quo).
+    - count 1-3   → Variant A: amber inline line below the progress bar.
+    - count ≥ 4   → Variant B: prominent amber strip at TOP of widget with
+                    SPENT / CAP / RESUMES stat grid + recovery CTAs.
+
   Args:
-    today_cost_usd : float       — sum of ApiUsage.cost_usd since UTC midnight today
-    cost_cap_usd   : float | None — Settings.daily_llm_cost_cap_usd (None if unset)
+    today_cost_usd               : float       — sum of ApiUsage.cost_usd since UTC midnight today
+    cost_cap_usd                 : float | None — Settings.daily_llm_cost_cap_usd (None if unset)
+    judge_skipped_count_today    : int          — default 0; total Jobs scored today w/ judge_skipped=True
+    judge_skipped_reasons_today  : dict[str,int]— default {}; per-reason distribution
 #}
+{% set judge_skipped_count_today = judge_skipped_count_today | default(0) %}
+{% set judge_skipped_reasons_today = judge_skipped_reasons_today | default({}) %}
 {% set _pct = (100.0 * today_cost_usd / cost_cap_usd) if cost_cap_usd and cost_cap_usd > 0 else 0.0 %}
 {% set _over = cost_cap_usd is not none and cost_cap_usd > 0 and today_cost_usd >= cost_cap_usd %}
+{% set _paused = judge_skipped_count_today > 0 %}
+{% set _paused_severity = "prominent" if judge_skipped_count_today >= 4 else ("inline" if _paused else "none") %}
+{% set _cost_cap_reason_count = judge_skipped_reasons_today.get("cost_cap_exhausted", 0) %}
+{% set _no_provider_reason_count = judge_skipped_reasons_today.get("no_provider_configured", 0) %}
+{% set _other_reason_count = judge_skipped_count_today - _cost_cap_reason_count - _no_provider_reason_count %}
 <section
   data-llm-cost-cap-widget
+  data-judge-paused="{{ _paused_severity }}"
+  data-judge-skipped-count="{{ judge_skipped_count_today }}"
   class="bg-slate-900 border border-slate-800 rounded-lg p-4"
   aria-labelledby="llm-cost-cap-title">
+
+  {% if _paused_severity == "prominent" %}
+    {# Variant B — prominent banner at top of widget. #}
+    <aside data-judge-paused-banner="prominent"
+           role="status"
+           class="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+      <div class="flex items-start gap-3">
+        <div class="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-md bg-amber-500/15 ring-1 ring-amber-500/30">
+          <i data-lucide="pause-circle" class="h-5 w-5 text-amber-300" stroke-width="1.5"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-baseline gap-2">
+            <h4 class="text-sm font-medium text-amber-200">LLM judge paused</h4>
+            <span class="text-[11px] font-mono uppercase tracking-wide text-amber-300/70">
+              {{ judge_skipped_count_today }} jobs scored without LLM tier today
+            </span>
+          </div>
+          <p class="mt-1 text-xs text-amber-100/80 leading-relaxed">
+            {% if _cost_cap_reason_count > 0 and _no_provider_reason_count > 0 %}
+              Daily cost cap exhausted ({{ _cost_cap_reason_count }}) + no provider configured ({{ _no_provider_reason_count }}).
+            {% elif _cost_cap_reason_count > 0 %}
+              Daily cost cap exhausted. Scores still emit from layers 1-3 (tag + semantic).
+            {% elif _no_provider_reason_count > 0 %}
+              No LLM provider configured. Scores still emit from layers 1-3 (tag + semantic).
+            {% else %}
+              Layers 1-3 (tag + semantic) emitted scores; layer-4 LLM judge unavailable.
+            {% endif %}
+          </p>
+          <div class="mt-3 grid grid-cols-3 gap-3 text-xs">
+            <div class="rounded-md bg-amber-500/5 ring-1 ring-amber-500/20 px-3 py-2">
+              <div class="text-[10px] uppercase tracking-wide text-amber-300/70 font-mono">SPENT</div>
+              <div class="mt-0.5 text-sm font-mono text-amber-100 tabular-nums">
+                ${{ '%.2f' | format(today_cost_usd) }}
+              </div>
+            </div>
+            <div class="rounded-md bg-amber-500/5 ring-1 ring-amber-500/20 px-3 py-2">
+              <div class="text-[10px] uppercase tracking-wide text-amber-300/70 font-mono">CAP</div>
+              <div class="mt-0.5 text-sm font-mono text-amber-100 tabular-nums">
+                {% if cost_cap_usd %}${{ '%.2f' | format(cost_cap_usd) }}{% else %}—{% endif %}
+              </div>
+            </div>
+            <div class="rounded-md bg-amber-500/5 ring-1 ring-amber-500/20 px-3 py-2">
+              <div class="text-[10px] uppercase tracking-wide text-amber-300/70 font-mono">RESUMES</div>
+              <div class="mt-0.5 text-sm font-mono text-amber-100 tabular-nums">00:00 UTC</div>
+            </div>
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-3">
+            <a href="https://github.com/crizzy9/naavik#configuration"
+               target="_blank" rel="noopener"
+               hx-boost="false"
+               data-judge-paused-cta="raise-cap"
+               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 text-xs font-medium ring-1 ring-amber-500/30 transition">
+              <i data-lucide="settings-2" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+              Raise cap in .env
+            </a>
+            <details class="text-[11px] text-amber-200/70">
+              <summary class="cursor-pointer inline-flex items-center gap-1 hover:text-amber-100 transition">
+                why this happened
+                <i data-lucide="chevron-right" class="h-3 w-3" stroke-width="1.5"></i>
+              </summary>
+              <p class="mt-2 max-w-prose leading-relaxed">
+                Scoring substrate runs tag + semantic layers first, then queries an LLM judge for finer rationale.
+                When the daily cap is exhausted or no provider is configured, the judge is skipped silently and the
+                composite score returns from layers 1-3. Cap resets at UTC midnight; the judge resumes automatically.
+              </p>
+            </details>
+          </div>
+        </div>
+      </div>
+    </aside>
+  {% endif %}
+
   <header class="flex items-center justify-between gap-3 mb-3">
     <div>
       <h3 id="llm-cost-cap-title" class="text-sm font-medium text-slate-50">Daily cost cap</h3>
@@ -72,5 +162,31 @@
         Cap exceeded — Wave 6 will throttle new LLM calls when enforcement ships.
       </p>
     {% endif %}
+  {% endif %}
+
+  {% if _paused_severity == "inline" %}
+    {# Variant A — inline amber line below progress, count 1-3. #}
+    <div data-judge-paused-banner="inline"
+         role="status"
+         class="mt-3 pt-3 border-t border-amber-500/20 flex items-start gap-2 text-[11px] text-amber-200 leading-relaxed">
+      <i data-lucide="pause-circle" class="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-300" stroke-width="1.5"></i>
+      <div class="flex-1 min-w-0">
+        <span class="font-medium">LLM judge paused</span>
+        <span class="text-amber-300/70">·</span>
+        <span class="font-mono tabular-nums">{{ judge_skipped_count_today }}</span>
+        {{ "job" if judge_skipped_count_today == 1 else "jobs" }} scored without LLM tier today
+        <span class="block mt-0.5 text-amber-200/70">
+          {% if _cost_cap_reason_count > 0 and _no_provider_reason_count > 0 %}
+            cost cap + no provider configured
+          {% elif _cost_cap_reason_count > 0 %}
+            cost cap exhausted
+          {% elif _no_provider_reason_count > 0 %}
+            no provider configured
+          {% else %}
+            layer-4 LLM judge unavailable
+          {% endif %}
+        </span>
+      </div>
+    </div>
   {% endif %}
 </section>

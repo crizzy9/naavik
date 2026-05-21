@@ -103,6 +103,8 @@ class Profile(_Base):
     gender_identity: Gender | None = None
 
     cover_letter_base: dict[str, Any] | None = None
+    # Plan 73 (0.3.2.03): per-role-family 30-day score trends blob.
+    score_history: dict[str, Any] = Field(default_factory=dict)
 
     created_at: datetime
     updated_at: datetime

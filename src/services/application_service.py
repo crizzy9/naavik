@@ -1037,6 +1037,14 @@ async def list_screener_answers_for(
     return list(rows)
 
 
+async def get_screener_answer(
+    session: AsyncSession, answer_id: int
+) -> ApplicationScreenerAnswer | None:
+    """Single ApplicationScreenerAnswer by id, used by `/_fragments/apply/screener/`."""
+    stmt = select(ApplicationScreenerAnswer).where(ApplicationScreenerAnswer.id == answer_id)
+    return (await session.exec(stmt)).one_or_none()
+
+
 async def count_unreviewed_required_screeners(session: AsyncSession, application_id: int) -> int:
     """Count of required screener answers that are still unreviewed."""
     stmt = select(func.count(ApplicationScreenerAnswer.id)).where(

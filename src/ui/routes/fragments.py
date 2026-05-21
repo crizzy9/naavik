@@ -10,10 +10,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from db import sample_data as sd
+from db.session import get_session
+from services import profile_service
 from ui import profile_ctx as pctx
 from ui.templates_setup import templates
 
@@ -51,11 +53,15 @@ async def confirm_modal(
     response_class=HTMLResponse,
     name="modal_bullet_editor",
 )
-async def bullet_editor_modal(request: Request, bullet_id: int):
-    bullet = await sd.get_bullet(bullet_id)
+async def bullet_editor_modal(
+    request: Request,
+    bullet_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    bullet = await profile_service.get_bullet(session, bullet_id)
     if bullet is None:
         raise HTTPException(status_code=404, detail="Bullet not found")
-    exp = await sd.get_experience(bullet.experience_id)
+    exp = await profile_service.get_experience(session, bullet.experience_id)
     role_label = f"{exp.company} · {exp.title}" if exp else "Bullet"
     return templates.TemplateResponse(
         request,
@@ -72,8 +78,12 @@ async def bullet_editor_modal(request: Request, bullet_id: int):
     response_class=HTMLResponse,
     name="profile_bullet_row",
 )
-async def profile_bullet_row(request: Request, bullet_id: int):
-    bullet = await sd.get_bullet(bullet_id)
+async def profile_bullet_row(
+    request: Request,
+    bullet_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    bullet = await profile_service.get_bullet(session, bullet_id)
     if bullet is None:
         raise HTTPException(status_code=404, detail="Bullet not found")
     return templates.TemplateResponse(

@@ -68,38 +68,15 @@ def test_no_sample_data_imports_in_routes_or_ctx():
             if m:
                 offenders.append((py_file.relative_to(repo_root), m.group(0)))
 
-    # Phase 1 transitional reality: many existing route + ctx files still
-    # import sample_data. Plan 60 commit 1 + 2 set the service-layer
-    # foundation; follow-up plan 0.2.7.17a moves the rewires. Until those
-    # land, mark the existing offenders as known-acceptable; the test
-    # PRINCIPLE is enforced for NEW files only.
-    #
-    # When a future plan moves a route file off sample_data, remove its
-    # entry from this list. When the list is empty, this fixture-only
-    # guarantee fully holds.
-    _KNOWN_LEGACY_OFFENDERS = {
-        "src/ui/routes/discover.py",
-        "src/ui/routes/email.py",
-        "src/ui/routes/fragments.py",
-        "src/ui/routes/outreach.py",
-        "src/ui/routes/overview.py",
-        "src/ui/routes/profile.py",
-        "src/ui/routes/settings.py",
-        "src/ui/routes/tracking.py",
-        "src/ui/discover_ctx.py",
-        "src/ui/discover_review_ctx.py",
-        "src/ui/outreach_ctx.py",
-        "src/ui/profile_ctx.py",
-        "src/ui/tracking_ctx.py",
-    }
-    new_offenders = [
-        (p, hit) for p, hit in offenders if p.as_posix() not in _KNOWN_LEGACY_OFFENDERS
-    ]
-
-    assert not new_offenders, (
-        "New sample_data import detected in routes/ctx (plan 60 / 0.2.7.17 "
+    # Plan 69 (`0.3.3.12`, 2026-05-21) migrated the last 13 route + ctx
+    # offenders off `db.sample_data` onto the service layer. The
+    # `_KNOWN_LEGACY_OFFENDERS` allowlist is now empty + the lint
+    # enforces zero `sample_data` imports anywhere in `src/ui/routes/`,
+    # `src/ui/*_ctx.py`, or `src/api/`.
+    assert not offenders, (
+        "sample_data import detected in routes/ctx (plan 69 / 0.3.3.12 "
         "scoped this module to seed.py + tests). Migrate the new code to "
-        "the service layer:\n" + "\n".join(f"  {p}: {hit!r}" for p, hit in new_offenders)
+        "the service layer:\n" + "\n".join(f"  {p}: {hit!r}" for p, hit in offenders)
     )
 
 

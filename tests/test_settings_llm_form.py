@@ -135,10 +135,11 @@ def test_llm_tab_renders_form_wrap(client: TestClient, auth_cookies):
     body = r.text
     assert 'hx-put="/api/v1/settings/llm"' in body
     assert 'hx-swap="outerHTML"' in body
-    # Provider radios carry the model-options swap target
-    assert "/_fragments/settings/llm/model-options?provider=anthropic" in body
-    assert "/_fragments/settings/llm/model-options?provider=openai" in body
-    assert "/_fragments/settings/llm/model-options?provider=ollama" in body
+    # Plan 70 (0.3.3.13): "Active provider" radio surface deleted; the
+    # `/_fragments/settings/llm/model-options?provider=...` fragment is
+    # no longer wired via radio change. Endpoint remains usable; the LLM
+    # tab itself just doesn't trigger it on render.
+    assert 'name="llm_provider"' not in body
     # Model dropdown swap target survives.
     assert 'id="llm-model-container"' in body
     # Old api-key container is GONE.

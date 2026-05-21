@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from db import sample_data as sd
-from db.sample_data_models import Application
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from models import Application
 from models.enums import AppEventKind, ApplicationStatus, RecruiterState, ReferralState
+from services import application_service, contact_tracker
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",
@@ -38,10 +40,14 @@ def _salary_range(a: Application) -> str | None:
     return None
 
 
+def _aware(when: datetime) -> datetime:
+    return when if when.tzinfo is not None else when.replace(tzinfo=UTC)
+
+
 def _relative_label(when: datetime | None) -> str:
     if when is None:
         return "—"
-    delta = sd.TODAY - when
+    delta = datetime.now(UTC) - _aware(when)
     days = delta.days
     if days < 1:
         return "today"
@@ -73,7 +79,7 @@ def application_to_card(a: Application) -> dict[str, object]:
         "company_color": color,
         "role": a.role,
         "team": a.team,
-        "score": int(a.salary_max and 80) if False else 80,  # placeholder; jobs carry score
+        "score": 80,  # placeholder; jobs carry score
         "salary_range": _salary_range(a),
         "status": a.status.value,
         "status_label": a.status.value.replace("_", " ").lower(),
@@ -118,19 +124,24 @@ def _columns_for_board(apps: list[Application], *, show_closed: bool) -> list[di
 
 
 async def build_tracking_ctx(
-    *, view: str = "board", show_closed: bool = False, show_drafts: bool = False
+    session: AsyncSession,
+    *,
+    user_id: int,
+    view: str = "board",
+    show_closed: bool = False,
+    show_drafts: bool = False,
 ) -> dict[str, object]:
-    visible_apps = await sd.applications_visible_in_tracking()
+    visible_apps = await application_service.list_visible_in_tracking(session, user_id)
     if show_drafts:
-        visible_apps = visible_apps + await sd.draft_applications()
-    all_apps = visible_apps + await sd.closed_applications() if show_closed else visible_apps
-    closed = await sd.closed_applications()
+        visible_apps = visible_apps + await application_service.list_drafts(session, user_id)
+    closed = await application_service.list_closed(session, user_id)
+    all_apps = visible_apps + closed if show_closed else visible_apps
     columns = _columns_for_board(all_apps, show_closed=show_closed)
 
-    followup = await sd.applications_in_followup_state()
-    items = []
+    followup = await application_service.list_in_followup(session, user_id)
+    items: list[dict[str, object]] = []
     for a in followup[:4]:
-        contacts = await sd.contacts_for_application(a.id)
+        contacts = await contact_tracker.list_contacts_for_application(session, a.id)
         c = contacts[0] if contacts else None
         items.append(
             {
@@ -194,10 +205,12 @@ async def build_tracking_ctx(
     }
 
 
-async def build_application_detail_ctx(application: Application) -> dict[str, object]:
+async def build_application_detail_ctx(
+    session: AsyncSession, application: Application
+) -> dict[str, object]:
     """Project Application + related rows into the detail slide-over (plan 53 § C.3)."""
     initial, color = _initial_color(application.company)
-    events = await sd.app_events_for_application(application.id)
+    events = await application_service.list_events_for(session, application.id)
     status_timeline = [
         {
             "from": e.payload.get("from"),
@@ -211,7 +224,7 @@ async def build_application_detail_ctx(application: Application) -> dict[str, ob
     ]
     status_timeline.reverse()
 
-    documents = await sd.documents_for_application(application.id)
+    documents = await application_service.list_documents_for(session, application.id)
     docs = [
         {
             "id": d.id,
@@ -223,7 +236,7 @@ async def build_application_detail_ctx(application: Application) -> dict[str, ob
         for d in documents
     ]
 
-    contacts = await sd.contacts_for_application(application.id)
+    contacts = await contact_tracker.list_contacts_for_application(session, application.id)
     contact_rows = [
         {
             "id": c.id,

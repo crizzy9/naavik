@@ -265,6 +265,31 @@ async def score_recompute_stale() -> None:
     log.info("score_recompute_stale scored=%d", n)
 
 
+async def score_aggregate_daily() -> None:
+    """`score.aggregate_daily` — daily 03:30 UTC (plan 73 / 0.3.2.03).
+
+    For every Profile row, recompute the per-role-family 30-day score
+    trend blob from `Job.match_breakdown.scored_at` and write it to
+    `Profile.score_history`. Pure DB aggregation — no LLM calls.
+    """
+    from services import scoring_history
+
+    async with async_session() as session:
+        # Pull every live profile; score-history is per-user.
+        from models import Profile
+
+        rows = (
+            await session.exec(select(Profile.user_id).where(Profile.deleted_at.is_(None)))
+        ).all()
+        updated = 0
+        for user_id in rows:
+            blob = await scoring_history.update_profile_score_history(session, int(user_id))
+            if blob is not None:
+                updated += 1
+        await session.commit()
+    log.info("score_aggregate_daily users=%d updated=%d", len(rows), updated)
+
+
 async def embed_pending_profiles() -> None:
     """`embeddings.embed_pending_profiles` — nightly 02:30 UTC (plan 65 / 0.3.0.03).
 
@@ -427,6 +452,19 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         max_instances=1,
         coalesce=True,
     )
+    # Plan 73 (0.3.2.03): daily per-role-family score trend rollup.
+    # Shares the 03:30 UTC slot with recompute-stale; both read-mostly,
+    # ordered by add_job sequence (recompute-stale ran by then has its
+    # writes flushed). No contention.
+    scheduler.add_job(
+        score_aggregate_daily,
+        CronTrigger(hour=3, minute=30, timezone="UTC"),
+        id="score.aggregate_daily",
+        name="score.aggregate_daily",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
 
     # Phase 2 plan 35 (0.2.0.10): six per-source scraping crons.
     from . import scraping
@@ -452,6 +490,7 @@ __all__ = [
     "refresh_oauth_tokens",
     "register_all",
     "registered_job_ids",
+    "score_aggregate_daily",
     "score_pending",
     "score_recompute_stale",
 ]

@@ -77,6 +77,14 @@ class Profile(SQLModel, table=True):
 
     cover_letter_base: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
 
+    # Plan 73 (0.3.2.03): per-role-family 30-day score trends.
+    # Written by APScheduler cron `score.aggregate_daily`; consumed by Profile
+    # hero sparkline strip. Shape documented in docs/design/DATA_MODEL.md.
+    score_history: dict = Field(
+        default_factory=dict,
+        sa_column=Column(JSONB, nullable=False, server_default="{}"),
+    )
+
     created_at: datetime = Field(
         default_factory=utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),

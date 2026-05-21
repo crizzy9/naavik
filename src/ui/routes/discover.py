@@ -12,11 +12,16 @@ from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
-from db import sample_data as sd
 from db.session import get_session
 from models import JobRead, User
 from models.enums import (
     JobQueueState,
+)
+from services import (
+    application_service,
+    contact_tracker,
+    job_service,
+    settings_service,
 )
 from services.auth import require_authed_session
 from ui import discover_ctx as dctx
@@ -28,17 +33,13 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _effective_user_id(user: User | None) -> int | None:
+def _effective_user_id(user: User | None) -> int:
     """Resolve the per-request user_id for live-DB scoping.
 
-    Returns `user.id` for real JWT sessions; `None` for the fake-session
-    transitional stub. When `None`, `build_discover_ctx` skips the live
-    `job_service.list_jobs` call and falls through to `db.sample_data` —
-    the path the fake-session has used since plan 09. Real-auth callers
-    that wire through `Depends(require_password_complete)` always get
-    the live-DB path.
+    Real JWT sessions return `user.id`; the fake-session transitional stub
+    maps to the seeded owner (id=1) per `db/sample_data.py:USER.id == 1`.
     """
-    return user.id if user is not None else None
+    return user.id if user is not None else 1
 
 
 def _parse_filters_or_422(request: Request) -> dctx.JobFilter:
@@ -71,21 +72,35 @@ async def get_discover(
     return templates.TemplateResponse(request, "pages/discover.html", ctx)
 
 
-@router.get("/discover/{job_id}", response_class=HTMLResponse, name="discover_review")
-async def get_review(request: Request, job_id: int):
-    job = await sd.get_job(job_id)
-    if job is None:
+async def _job_or_404(session: AsyncSession, job_id: int, user_id: int):
+    job = await job_service.get_job(session, job_id)
+    if job is None or job.user_id != user_id or job.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
-    settings = await sd.get_settings()
+
+@router.get("/discover/{job_id}", response_class=HTMLResponse, name="discover_review")
+async def get_review(
+    request: Request,
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    user_id = _effective_user_id(user)
+    job = await _job_or_404(session, job_id, user_id)
+    settings = await settings_service.get_or_create(session, user_id=user_id)
     eager = settings.eager_review_generation
 
-    # Find or create the DRAFT (eager). Lazy path skips creation until user clicks.
-    app = await sd.application_for_job(1, job_id)
+    app = await application_service.get_application_for_job(session, user_id=user_id, job_id=job_id)
     if app is None and eager:
-        app = await sd._create_draft(1, job_id)
+        app = await application_service.get_or_create_draft(
+            session, user_id=user_id, job_id=job_id, settings=settings
+        )
+        await session.commit()
 
-    ctx = await drctx.build_review_ctx(job=job, application=app, eager=eager)
+    ctx = await drctx.build_review_ctx(
+        session, user_id=user_id, job=job, application=app, eager=eager
+    )
     ctx["active_sidebar"] = "jobs"
     ctx["active_template_path"] = "/discover/:id"
     return templates.TemplateResponse(request, "pages/discover_review.html", ctx)
@@ -101,24 +116,40 @@ async def post_skip(
     request: Request,
     job_id: int,
     fail: Annotated[str | None, Query()] = None,
-    _user: User | None = Depends(require_authed_session),
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
     if fail:
         raise HTTPException(status_code=502, detail="Couldn't skip")
-    await sd._set_job_queue_state(job_id, JobQueueState.SKIPPED)
-    return await _next_card_response(request)
+    user_id = _effective_user_id(user)
+    try:
+        await job_service.set_queue_state(
+            session, job_id, user_id=user_id, state=JobQueueState.SKIPPED
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    await session.commit()
+    return await _next_card_response(request, session, user_id=user_id)
 
 
 @router.post("/api/v1/discover/{job_id}/save", response_class=HTMLResponse, name="discover_save")
 async def post_save(
     request: Request,
     job_id: int,
-    _user: User | None = Depends(require_authed_session),
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    await sd._set_job_queue_state(job_id, JobQueueState.SAVED)
-    return await _next_card_response(request)
+    user_id = _effective_user_id(user)
+    try:
+        await job_service.set_queue_state(
+            session, job_id, user_id=user_id, state=JobQueueState.SAVED
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    await session.commit()
+    return await _next_card_response(request, session, user_id=user_id)
 
 
 @router.post(
@@ -135,18 +166,23 @@ async def post_auto_submit(
 ):
     """Right-swipe — flip Job → QUEUED_FOR_AUTO_APPLY + create DRAFT.
 
-    Plan 59 / 0.2.7.12: when `Settings.auto_apply_immediate_dispatch=True`,
-    additionally schedule a one-off `scheduler.jobs:auto_apply` via
-    APScheduler `DateTrigger(now)`. Mirrors `src/api/scheduler.py:135-145`
-    (plan 47 / 0.2.0.10a `/jobs/{id}/run` pattern). Best-effort — any
-    failure logs at WARN and falls through to the 5-min cron tick.
+    Plan 59 / 0.2.7.12: schedule a one-off `scheduler.jobs:auto_apply` via
+    APScheduler when `Settings.auto_apply_immediate_dispatch=True`.
     """
-    await sd._set_job_queue_state(job_id, JobQueueState.QUEUED_FOR_AUTO_APPLY)
-    await sd._create_draft(1, job_id)
     user_id = _effective_user_id(user)
-    if user_id is not None:
-        await _maybe_dispatch_auto_apply_now(session, user_id=user_id)
-    return await _next_card_response(request)
+    try:
+        await job_service.set_queue_state(
+            session, job_id, user_id=user_id, state=JobQueueState.QUEUED_FOR_AUTO_APPLY
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    settings = await settings_service.get_or_create(session, user_id=user_id)
+    await application_service.get_or_create_draft(
+        session, user_id=user_id, job_id=job_id, settings=settings
+    )
+    await session.commit()
+    await _maybe_dispatch_auto_apply_now(session, user_id=user_id)
+    return await _next_card_response(request, session, user_id=user_id)
 
 
 async def _maybe_dispatch_auto_apply_now(session: AsyncSession, *, user_id: int) -> None:
@@ -165,9 +201,8 @@ async def _maybe_dispatch_auto_apply_now(session: AsyncSession, *, user_id: int)
 
         from scheduler import get_scheduler
         from scheduler.jobs import auto_apply as auto_apply_func
-        from services import settings_service
 
-        s = await settings_service.get_or_create(session, user_id)
+        s = await settings_service.get_or_create(session, user_id=user_id)
         if not s.auto_apply_immediate_dispatch:
             return
         scheduler = get_scheduler()
@@ -195,8 +230,16 @@ async def _maybe_dispatch_auto_apply_now(session: AsyncSession, *, user_id: int)
         log.warning("immediate auto_apply dispatch failed: %s", exc)
 
 
-async def _next_card_response(request: Request) -> HTMLResponse:
-    queue = await sd.discover_queue()
+async def _next_card_response(
+    request: Request, session: AsyncSession, *, user_id: int
+) -> HTMLResponse:
+    queue = await job_service.list_jobs(
+        session,
+        user_id=user_id,
+        filters=dctx.JobFilter(queue_state=JobQueueState.UNSWIPED),
+        page=0,
+        page_size=10,
+    )
     if not queue:
         return templates.TemplateResponse(
             request,
@@ -209,7 +252,7 @@ async def _next_card_response(request: Request) -> HTMLResponse:
     next_job = queue[0]
     warm_label = None
     if next_job.warm_intro_contact_id:
-        c = await sd.get_contact(next_job.warm_intro_contact_id)
+        c = await contact_tracker.get_contact(session, next_job.warm_intro_contact_id)
         warm_label = c.name.split()[0] if c else None
     return templates.TemplateResponse(
         request,
@@ -223,8 +266,12 @@ async def _next_card_response(request: Request) -> HTMLResponse:
     response_class=HTMLResponse,
     name="discover_next_card_fragment",
 )
-async def fragment_next_card(request: Request):
-    return await _next_card_response(request)
+async def fragment_next_card(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    return await _next_card_response(request, session, user_id=_effective_user_id(user))
 
 
 @router.get(
@@ -232,27 +279,26 @@ async def fragment_next_card(request: Request):
     response_class=HTMLResponse,
     name="discover_expanded_fragment",
 )
-async def fragment_expanded(request: Request, job_id: int):
-    """Plan 09a · Issue 8D — return the review workspace as an inline fragment.
-
-    HTMX swaps this into ``#discover-main`` so the active swipe card "expands"
-    in-place into the full review workspace without leaving the Discover page.
-    The "Back to queue" button inside the fragment hits ``/_fragments/discover/queue``
-    to swap back.
-
-    Direct nav to ``/discover/{id}`` continues to render the full page (the
-    link-shareable URL); both surfaces compose the same workspace partial
-    (`pages/_discover_review_workspace.html`).
-    """
-    job = await sd.get_job(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    settings = await sd.get_settings()
+async def fragment_expanded(
+    request: Request,
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Plan 09a · Issue 8D — return the review workspace as an inline fragment."""
+    user_id = _effective_user_id(user)
+    job = await _job_or_404(session, job_id, user_id)
+    settings = await settings_service.get_or_create(session, user_id=user_id)
     eager = settings.eager_review_generation
-    app = await sd.application_for_job(1, job_id)
+    app = await application_service.get_application_for_job(session, user_id=user_id, job_id=job_id)
     if app is None and eager:
-        app = await sd._create_draft(1, job_id)
-    ctx = await drctx.build_review_ctx(job=job, application=app, eager=eager)
+        app = await application_service.get_or_create_draft(
+            session, user_id=user_id, job_id=job_id, settings=settings
+        )
+        await session.commit()
+    ctx = await drctx.build_review_ctx(
+        session, user_id=user_id, job=job, application=app, eager=eager
+    )
     return templates.TemplateResponse(request, "pages/_discover_review_inline.html", ctx)
 
 
@@ -266,14 +312,7 @@ async def fragment_queue(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
-    """Plan 09a / 36 — swipe queue grid as an HTMX-swappable fragment.
-
-    Two callers:
-      • "Back to queue" button inside the expanded review fragment.
-      • Filter toolbar (plan 36 § A) — hx-get with the active filter
-        querystring; we re-build the ctx with the parsed JobFilter so the
-        chip row + the queue render in sync.
-    """
+    """Plan 09a / 36 — swipe queue grid as an HTMX-swappable fragment."""
     filters = _parse_filters_or_422(request)
     ctx = await dctx.build_discover_ctx(
         session,
@@ -288,10 +327,14 @@ async def fragment_queue(
     response_class=HTMLResponse,
     name="discover_match_breakdown_fragment",
 )
-async def fragment_match_breakdown(request: Request, job_id: int):
-    job = await sd.get_job(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+async def fragment_match_breakdown(
+    request: Request,
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    user_id = _effective_user_id(user)
+    job = await _job_or_404(session, job_id, user_id)
     return templates.TemplateResponse(
         request,
         "components/match_breakdown.html",
@@ -303,16 +346,19 @@ async def fragment_match_breakdown(request: Request, job_id: int):
 async def get_jobs(
     queue_state: Annotated[str | None, Query()] = None,
     score_min: Annotated[float | None, Query()] = None,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
 ):
-    items = await sd.get_jobs()
+    user_id = _effective_user_id(user)
+    filters = dctx.JobFilter()
     if queue_state:
         try:
-            qs = JobQueueState(queue_state)
+            filters = filters.model_copy(update={"queue_state": JobQueueState(queue_state)})
         except ValueError:
             raise HTTPException(status_code=422, detail="Unknown queue_state") from None
-        items = [j for j in items if j.queue_state == qs]
     if score_min is not None:
-        items = [j for j in items if j.score >= score_min]
+        filters = filters.model_copy(update={"score_min": score_min})
+    items = await job_service.list_jobs(session, user_id=user_id, filters=filters)
     return {
         "items": [JobRead.model_validate(j).model_dump(mode="json") for j in items],
         "next_cursor": None,
@@ -322,22 +368,29 @@ async def get_jobs(
 @router.post("/api/v1/jobs/by-url", name="jobs_by_url")
 async def post_job_by_url(
     payload: Annotated[dict[str, Any], Body()],
-    _user: User | None = Depends(require_authed_session),
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
     """Stub `+ Add by URL` — append a synthetic Job + return it.
 
-    Plan 56 / 0.2.7.19 — CSRF-gated (mirrors `post_skip` / `post_save` /
-    `post_auto_submit`). The `+ Add by URL` modal in Discover wires this
-    via HTMX form post; `X-CSRF-Token` rides on every HTMX request via
-    the `base.html` Jinja context-processor (plan 45 / 0.2.0.11d).
+    Plan 56 / 0.2.7.19 — CSRF-gated. The `+ Add by URL` modal in Discover
+    wires this via HTMX form post; `X-CSRF-Token` rides on every HTMX
+    request via the `base.html` Jinja context-processor.
     """
     url = payload.get("url", "").strip()
     if not url:
         raise HTTPException(status_code=422, detail="URL required")
     company = "Stable Inc"
     role = "Senior Software Engineer"
-    job = await sd._append_scraped_job(url=url, company=company, role=role)
+    job = await job_service.create_scraped_job_stub(
+        session,
+        user_id=_effective_user_id(user),
+        url=url,
+        company=company,
+        role=role,
+    )
+    await session.commit()
     return JobRead.model_validate(job).model_dump(mode="json")
 
 
@@ -350,15 +403,12 @@ async def post_rescore(
 ):
     """Manual re-score of a single Job — plan 65 § D.6 (T10 trigger 3).
 
-    Reads Settings + Profile, runs `score_job_layered`, persists the new
-    `Job.score` + `Job.match_breakdown`. CSRF-gated; IDOR via the
-    `Job.user_id == effective_user_id` check.
+    CSRF-gated; IDOR via the `Job.user_id == effective_user_id` check.
     """
-    effective_uid = _effective_user_id(user)
-    if effective_uid is None:
-        # Fake-session callers (tests, design surface) read the sample data.
-        # The rescore route is real-auth only.
+    if user is None:
+        # Real-auth only.
         raise HTTPException(status_code=401, detail="Authentication required")
+    effective_uid = user.id
 
     from sqlmodel import select as _select
 
@@ -368,10 +418,7 @@ async def post_rescore(
     job = (
         await session.exec(_select(Job).where(Job.id == job_id, Job.deleted_at.is_(None)))
     ).one_or_none()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    if job.user_id != effective_uid:
-        # IDOR — cross-user access returns 404 (don't leak existence).
+    if job is None or job.user_id != effective_uid:
         raise HTTPException(status_code=404, detail="Job not found")
 
     profile = (
@@ -401,13 +448,25 @@ async def post_rescore(
 
 
 @router.get("/api/v1/discover/saved", name="discover_saved")
-async def get_saved():
-    return [JobRead.model_validate(j).model_dump(mode="json") for j in await sd.saved_jobs()]
+async def get_saved(
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    items = await job_service.list_jobs_by_queue_state(
+        session, user_id=_effective_user_id(user), state=JobQueueState.SAVED
+    )
+    return [JobRead.model_validate(j).model_dump(mode="json") for j in items]
 
 
 @router.get("/api/v1/discover/skipped", name="discover_skipped")
-async def get_skipped():
-    return [JobRead.model_validate(j).model_dump(mode="json") for j in await sd.skipped_jobs()]
+async def get_skipped(
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    items = await job_service.list_jobs_by_queue_state(
+        session, user_id=_effective_user_id(user), state=JobQueueState.SKIPPED
+    )
+    return [JobRead.model_validate(j).model_dump(mode="json") for j in items]
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -434,11 +493,16 @@ async def add_by_url_modal(request: Request):
     response_class=HTMLResponse,
     name="apply_tailored_bullets_fragment",
 )
-async def fragment_tailored_bullets(request: Request, job_id: int):
-    job = await sd.get_job(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    bullets = await drctx.tailored_bullet_groups()
+async def fragment_tailored_bullets(
+    request: Request,
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    user_id = _effective_user_id(user)
+    job = await _job_or_404(session, job_id, user_id)
+    del job  # presence-checked; bullets are profile-scoped, not job-scoped
+    bullets = await drctx.tailored_bullet_groups(session, user_id=user_id)
     return templates.TemplateResponse(
         request,
         "pages/_apply_tailored_bullets.html",
@@ -548,12 +612,14 @@ async def put_screener(
     application_id: int,
     question_id: int,
     payload: Annotated[dict[str, Any], Body()] = None,
+    session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
 ):
     answer = (payload or {}).get("answer", "")
-    a = await sd._record_screener_answer(question_id, answer)
+    a = await application_service.record_screener_answer(session, question_id, answer)
     if a is None:
         raise HTTPException(status_code=404, detail="Answer not found")
+    await session.commit()
     return templates.TemplateResponse(
         request,
         "components/screener_question_card.html",
@@ -574,8 +640,13 @@ async def put_screener(
     response_class=HTMLResponse,
     name="apply_screener_get",
 )
-async def fragment_screener(request: Request, application_id: int, question_id: int):
-    a = next((s for s in sd.SCREENER_ANSWERS if s.id == question_id), None)
+async def fragment_screener(
+    request: Request,
+    application_id: int,
+    question_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    a = await application_service.get_screener_answer(session, question_id)
     if a is None:
         raise HTTPException(status_code=404, detail="Answer not found")
     return templates.TemplateResponse(

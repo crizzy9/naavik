@@ -15,10 +15,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from db import sample_data as sd
 from db.session import get_session
 from models import JobScrapeRunRead, JobSource, User
-from services import application_service, env_secrets, job_service, llm_tracker, settings_service
+from services import (
+    application_service,
+    env_secrets,
+    job_service,
+    llm_tracker,
+    profile_service,
+    settings_service,
+)
 from services.auth import require_authed_session, require_password_complete
 from ui.templates_setup import templates
 
@@ -172,13 +178,14 @@ async def _ctx_for_tab(
     request: Request,
     tab: str,
     *,
-    session: AsyncSession | None = None,
+    session: AsyncSession,
     user_id: int = 1,
 ) -> dict[str, object]:
     if tab not in _VALID_TABS:
         raise HTTPException(status_code=404, detail="Unknown settings tab")
-    settings = await sd.get_settings()
-    cost_summary = await sd.llm_usage_summary(days=30)
+    settings = await settings_service.get_or_create(session, user_id=user_id)
+    cost_summary = await llm_tracker.usage_summary(session, user_id=user_id, days=30)
+    profile = await profile_service.get_profile(session, user_id)
     provider_id = settings.llm_provider.value if settings else "anthropic"
     deployment_info = await _deployment_render_info(settings)
 
@@ -186,7 +193,7 @@ async def _ctx_for_tab(
         "current_tab": tab,
         "tab_template": _TAB_TEMPLATES[tab],
         "settings": settings,
-        "profile": await sd.get_profile(),
+        "profile": profile,
         "providers": _PROVIDERS_DISPLAY,
         "cost_summary": cost_summary,
         # Plan 10b (item 6): LLM tab fragment context — the form template
@@ -197,6 +204,10 @@ async def _ctx_for_tab(
         "selected_model": settings.llm_model or _llm_default_model_for(provider_id),
         "env_indicators": env_secrets.env_indicators_for_llm_tab(),
         "notify_env_indicators": env_secrets.env_indicators_for_notifications_tab(),
+        # Plan 70 (0.3.3.13): single env-resolved active-provider label.
+        # Replaces the deleted "Active provider" radio surface — no UI
+        # mutation; precedence ANTHROPIC > OPENAI > OLLAMA.
+        "active_provider": env_secrets.resolve_active_llm_provider(),
         "save_status": None,
         "deployment": deployment_info,
         "log_lines": _LOG_LINES_SEED,
@@ -218,6 +229,17 @@ async def _ctx_for_tab(
         today_cost, cap = await _llm_cost_cap_view(session, settings, user_id=user_id)
         ctx["today_cost_usd"] = today_cost
         ctx["cost_cap_usd"] = cap
+        # Plan 74 / 0.3.2.04 — judge-skipped fallback banner.
+        if session is None:
+            ctx["judge_skipped_count_today"] = 0
+            ctx["judge_skipped_reasons_today"] = {}
+        else:
+            ctx["judge_skipped_count_today"] = await llm_tracker.judge_skipped_count_today(
+                session, user_id=user_id
+            )
+            ctx["judge_skipped_reasons_today"] = await llm_tracker.judge_skipped_reasons_today(
+                session, user_id=user_id
+            )
 
     if tab == "security":
         ctx["security"] = await _build_security_view(session, user_id=user_id)
@@ -623,8 +645,14 @@ async def _deployment_render_info(settings) -> dict[str, object]:
 
 
 @router.get("/settings", response_class=HTMLResponse, name="settings")
-async def get_settings(request: Request):
-    ctx = await _ctx_for_tab(request, "llm-provider")
+async def get_settings(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    ctx = await _ctx_for_tab(
+        request, "llm-provider", session=session, user_id=_effective_user_id(user)
+    )
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 
@@ -738,10 +766,15 @@ async def get_settings_security(
 
 
 @router.get("/settings/{tab}", response_class=HTMLResponse, name="settings_tab")
-async def get_settings_tab(request: Request, tab: str):
+async def get_settings_tab(
+    request: Request,
+    tab: str,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
     if tab not in _VALID_TABS:
         raise HTTPException(status_code=404, detail="Unknown settings tab")
-    ctx = await _ctx_for_tab(request, tab)
+    ctx = await _ctx_for_tab(request, tab, session=session, user_id=_effective_user_id(user))
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 
@@ -786,8 +819,22 @@ async def post_llm_test(request: Request, fail: Annotated[str | None, Query()] =
 
 
 @router.get("/api/v1/settings/llm/usage", name="settings_llm_usage")
-async def get_llm_usage(period: Annotated[str, Query()] = "month"):
-    return await sd.llm_usage_summary(days=30 if period == "month" else 7)
+async def get_llm_usage(
+    period: Annotated[str, Query()] = "month",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    summary = await llm_tracker.usage_summary(
+        session,
+        user_id=_effective_user_id(user),
+        days=30 if period == "month" else 7,
+    )
+    return {
+        "month_cost_usd": summary.month_cost_usd,
+        "avg_per_generation_usd": summary.avg_per_generation_usd,
+        "total_tokens": summary.total_tokens,
+        "gen_count": summary.gen_count,
+    }
 
 
 @router.put("/api/v1/settings/auto-apply", name="settings_auto_apply_put")
@@ -830,8 +877,11 @@ async def post_notifications_test(
 
 
 @router.get("/api/v1/settings/deployment", name="settings_deployment_get")
-async def get_deployment():
-    settings = await sd.get_settings()
+async def get_deployment(
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    settings = await settings_service.get_or_create(session, user_id=_effective_user_id(user))
     return {
         "mode": settings.deployment_mode.value,
         "version": "0.4.2",
@@ -843,9 +893,10 @@ async def get_deployment():
 
 @router.post("/api/v1/settings/deployment/restart", name="settings_deployment_restart")
 async def post_deployment_restart(
-    _user: User | None = Depends(require_authed_session),
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
 ):
-    settings = await sd.get_settings()
+    settings = await settings_service.get_or_create(session, user_id=_effective_user_id(user))
     if settings.deployment_mode.value == "cloud":
         raise HTTPException(status_code=405, detail="Restart not allowed on cloud")
     return Response(status_code=202)
@@ -879,8 +930,13 @@ async def get_deployment_logs():
 
 
 @router.get("/api/v1/settings/account", name="settings_account_get")
-async def get_account():
-    p = await sd.get_profile()
+async def get_account(
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    p = await profile_service.get_profile(session, _effective_user_id(user))
+    if p is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
     return {"full_name": p.full_name, "email": p.email}
 
 
@@ -955,11 +1011,13 @@ _VALID_PROVIDER_IDS = {"anthropic", "openai", "ollama"}
 async def get_settings_llm_model_options(
     request: Request,
     provider: Annotated[str, Query(min_length=1, max_length=32)],
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
 ):
     """Render the model `<select>` for `provider`. Used by HTMX on radio change."""
     if provider not in _VALID_PROVIDER_IDS:
         raise HTTPException(status_code=400, detail="unknown provider")
-    settings = await sd.get_settings()
+    settings = await settings_service.get_or_create(session, user_id=_effective_user_id(user))
     selected = (
         settings.llm_model
         if (settings and provider == settings.llm_provider.value)

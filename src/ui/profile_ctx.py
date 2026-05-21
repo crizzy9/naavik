@@ -1,5 +1,5 @@
-"""Shape SAMPLE_DATA Profile/Experience/Bullet rows into the dicts the
-profile components expect.
+"""Project Profile/Experience/Bullet rows into the dicts the profile
+components expect.
 
 Lives in `ui/` (not `db/`) because the shape is presentation-bound; the DB
 models stay free of these projections.
@@ -7,10 +7,9 @@ models stay free of these projections.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from db import sample_data as sd
-from db.sample_data_models import (
+from models import (
     Bullet,
     Certification,
     Education,
@@ -33,13 +32,18 @@ def _company_initial_color(company: str) -> tuple[str, str]:
     return initial, _INITIAL_COLORS.get(initial, "bg-slate-700")
 
 
+def _tag_values(tags) -> list[str]:
+    """Normalize `tags` across shadow `list[Tag]` enum + real `list[str]`."""
+    return [t.value if hasattr(t, "value") else str(t) for t in (tags or [])]
+
+
 def _format_dates(start: datetime, end: datetime | None) -> tuple[str, str]:
     """Return ("Jan 2017 — Present", "5y 2mo")."""
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     s = f"{months[start.month - 1]} {start.year}"
     if end is None:
         e = "Present"
-        end_for_dur = sd.TODAY
+        end_for_dur = datetime.now(UTC)
     else:
         e = f"{months[end.month - 1]} {end.year}"
         end_for_dur = end
@@ -107,6 +111,122 @@ def hero_dict(profile: Profile) -> dict[str, object]:
     }
 
 
+# Plan 73 (0.3.2.03) — sparkline strip data projection.
+#
+# Family labels rendered in the hero strip. Source-of-truth is the
+# `Profile.score_history.families[*].family` string written by the cron.
+_FAMILY_LABEL = {
+    "ai-ml": "ML",
+    "genai": "GenAI",
+    "frontend": "Frontend",
+    "backend": "Backend",
+    "data-eng": "Data eng",
+    "devops": "DevOps",
+    "platform": "Platform",
+    "leadership": "Leadership",
+    "product": "Product",
+    "other": "Other",
+}
+
+
+def _sparkline_color(score_current: float) -> str:
+    """Score-threshold color band per DESIGN.md (emerald/indigo/amber/rose)."""
+    if score_current >= 0.80:
+        return "emerald"
+    if score_current >= 0.60:
+        return "indigo"
+    if score_current >= 0.40:
+        return "amber"
+    return "rose"
+
+
+def _sparkline_polyline_points(daily_means: list[float | None]) -> str:
+    """Compute SVG polyline `points` attr for `daily_means`.
+
+    Domain: viewBox 0..100 (width) × 0..24 (height). x = index / (N-1) * 100;
+    y = (1 - score) * 24 (so 1.0 sits at the top, 0.0 at the bottom). Missing
+    days carry forward the last known value; a leading run of None is
+    rendered as a flat baseline at the first known value.
+    """
+    if not daily_means:
+        return ""
+    n = len(daily_means)
+    non_null = [m for m in daily_means if m is not None]
+    if not non_null:
+        return ""
+    fallback = non_null[0]
+    last_known = fallback
+    points: list[str] = []
+    for i, m in enumerate(daily_means):
+        if m is None:
+            y_val = last_known
+        else:
+            y_val = m
+            last_known = m
+        x = (i / (n - 1) * 100) if n > 1 else 50
+        y = (1 - max(0.0, min(1.0, y_val))) * 24
+        points.append(f"{x:.1f},{y:.1f}")
+    return " ".join(points)
+
+
+def score_trend_strip(
+    score_history: dict | None,
+    *,
+    top_k: int = 3,
+) -> dict[str, object]:
+    """Project `Profile.score_history` into a template-friendly dict.
+
+    Returns:
+        {
+            "has_data": bool,
+            "rows": [
+                {
+                    "family": "ai-ml",
+                    "label": "ML",
+                    "scored_count_30d": 23,
+                    "score_current": 0.84,
+                    "score_delta_30d": 0.12,
+                    "color": "emerald",
+                    "polyline_points": "0.0,12.2 3.4,11.9 ...",
+                    "delta_sign": "up",  # "up" | "down" | "flat"
+                    "delta_abs": 0.12,
+                },
+                ...
+            ]
+        }
+    """
+    if not score_history or not score_history.get("families"):
+        return {"has_data": False, "rows": []}
+
+    families = sorted(
+        score_history["families"],
+        key=lambda f: f.get("scored_count_30d", 0),
+        reverse=True,
+    )[:top_k]
+
+    rows: list[dict[str, object]] = []
+    for f in families:
+        family = f.get("family", "other")
+        current = float(f.get("score_current", 0.0) or 0.0)
+        delta = float(f.get("score_delta_30d", 0.0) or 0.0)
+        daily_means = f.get("daily_means") or []
+        delta_sign = "up" if delta > 0.005 else ("down" if delta < -0.005 else "flat")
+        rows.append(
+            {
+                "family": family,
+                "label": _FAMILY_LABEL.get(family, family),
+                "scored_count_30d": int(f.get("scored_count_30d", 0)),
+                "score_current": current,
+                "score_delta_30d": delta,
+                "delta_abs": abs(delta),
+                "delta_sign": delta_sign,
+                "color": _sparkline_color(current),
+                "polyline_points": _sparkline_polyline_points(daily_means),
+            }
+        )
+    return {"has_data": bool(rows), "rows": rows}
+
+
 def experience_dict(exp: Experience) -> dict[str, object]:
     initial, color = _company_initial_color(exp.company)
     dates, duration = _format_dates(exp.start_date, exp.end_date)
@@ -126,7 +246,7 @@ def bullet_dict(b: Bullet) -> dict[str, object]:
     return {
         "id": b.id,
         "text": b.text,
-        "tags": [t.value for t in b.tags],
+        "tags": _tag_values(b.tags),
         "selection_override": b.selection_override.value if b.selection_override else None,
     }
 
@@ -260,7 +380,7 @@ def project_dicts(projects: list[Project]) -> list[dict[str, object]]:
         {
             "title": p.title,
             "text": p.text,
-            "tags": [t.value for t in p.tags],
+            "tags": _tag_values(p.tags),
             "link": p.link,
         }
         for p in projects

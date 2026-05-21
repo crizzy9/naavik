@@ -2,11 +2,17 @@
   profile_hero.html — hero card at top of Profile / Profile editor.
 
   Args:
-    profile  : dict — Profile record
-    editable : bool (default false) — show "Edit profile" + "Update resume" buttons
+    profile     : dict — Profile record
+    editable    : bool (default false) — show "Edit profile" + "Update resume" buttons
+    score_trend : dict | null (default null) — plan 73 (0.3.2.03); when set
+                  with `has_data=true`, renders the per-role-family sparkline
+                  strip below the identity block. Pass `{has_data: false}`
+                  for the empty-state placeholder; omit entirely to suppress
+                  the strip (e.g. Profile editor preview).
 #}
 {% set editable = editable | default(false) %}
 {% set p = profile %}
+{% set _trend = score_trend | default(none) %}
 <section class="flex flex-col md:flex-row items-start gap-5 p-6 bg-slate-900 border border-slate-800 rounded-xl">
   {% with kind="user", text=p.initials | default("SP"), size="xl", shape="square" %}
     {% include "components/avatar.html" %}
@@ -57,6 +63,51 @@
             {% include "components/contact_chip.html" %}
           {% endwith %}
         {% endfor %}
+      </div>
+    {% endif %}
+
+    {# Plan 73 (0.3.2.03) — Variant A sparkline strip (integrated into hero). #}
+    {% if _trend is not none %}
+      <div id="score-trend-strip" data-testid="score-trend-strip" class="mt-5 pt-4 border-t border-slate-800">
+        <div class="flex items-center justify-between mb-3 gap-2">
+          <h2 class="text-[10px] uppercase tracking-wide text-slate-500 font-mono">Score trend · 30d</h2>
+          {% if _trend.has_data %}
+            <a href="/profile/edit#experience" class="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium">Tune profile →</a>
+          {% endif %}
+        </div>
+
+        {% if _trend.has_data %}
+          <div class="flex flex-col gap-2.5">
+            {% for row in _trend.rows %}
+              <div class="grid items-center gap-3 grid-cols-[64px_1fr_auto] md:grid-cols-[88px_1fr_auto_64px]" data-testid="score-trend-row" data-family="{{ row.family }}">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="text-[11px] uppercase tracking-wide font-mono text-slate-300 truncate">{{ row.label }}</span>
+                  <span class="text-[10px] text-slate-500 font-mono">· {{ row.scored_count_30d }}</span>
+                </div>
+                <svg viewBox="0 0 100 24" preserveAspectRatio="none" class="w-full h-6 text-{{ row.color }}-400" aria-label="{{ row.label }} score trend, current {{ '%.2f' | format(row.score_current) }}">
+                  <polyline points="{{ row.polyline_points }}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline>
+                </svg>
+                <span class="text-sm font-mono text-slate-100 tabular-nums">{{ '%.2f' | format(row.score_current) }}</span>
+                <span class="hidden md:inline-flex items-center justify-end gap-1 text-[11px] font-mono tabular-nums {% if row.delta_sign == 'up' %}text-emerald-400{% elif row.delta_sign == 'down' %}text-rose-400{% else %}text-slate-500{% endif %}">
+                  {% if row.delta_sign == 'up' %}
+                    <i data-lucide="trending-up" class="h-3 w-3" stroke-width="1.5"></i>+{{ '%.2f' | format(row.delta_abs) }}
+                  {% elif row.delta_sign == 'down' %}
+                    <i data-lucide="trending-down" class="h-3 w-3" stroke-width="1.5"></i>-{{ '%.2f' | format(row.delta_abs) }}
+                  {% else %}
+                    <i data-lucide="minus" class="h-3 w-3" stroke-width="1.5"></i>0.00
+                  {% endif %}
+                </span>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div data-testid="score-trend-empty" class="flex items-start gap-2.5 px-3 py-2.5 rounded-md bg-slate-950/40 border border-slate-800/60">
+            <i data-lucide="trending-up" class="h-4 w-4 text-slate-500 shrink-0 mt-0.5" stroke-width="1.5"></i>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              No scored jobs yet. Visit <a href="/discover" class="text-cyan-400 hover:text-cyan-300 font-medium">/discover</a> to start seeing per-role-family trend data.
+            </p>
+          </div>
+        {% endif %}
       </div>
     {% endif %}
   </div>

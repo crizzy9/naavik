@@ -96,15 +96,33 @@ def test_tracking_fragment_list_show_drafts_passthru(client: TestClient) -> None
 
 
 def test_build_tracking_ctx_show_drafts_merges_drafts() -> None:
-    """`build_tracking_ctx(show_drafts=True)` merges draft_applications into visible."""
+    """`build_tracking_ctx(show_drafts=True)` merges draft_applications into visible.
+
+    Plan 69 (`0.3.3.12`) tightened `build_tracking_ctx` to require a session.
+    The autouse conftest fixture patches the service-layer fns to read from
+    `sd.*` shadow rows, so a noop session keeps behavior parity.
+    """
     import asyncio
 
     from db import sample_data as sd
     from ui.tracking_ctx import build_tracking_ctx
 
+    class _NoopSession:
+        async def exec(self, *_a, **_kw):
+            class _R:
+                def all(self_):  # noqa: N805
+                    return []
+
+                def one_or_none(self_):  # noqa: N805
+                    return None
+
+            return _R()
+
+    session = _NoopSession()
+
     async def _run():
-        base = await build_tracking_ctx(show_drafts=False)
-        with_drafts = await build_tracking_ctx(show_drafts=True)
+        base = await build_tracking_ctx(session, user_id=1, show_drafts=False)
+        with_drafts = await build_tracking_ctx(session, user_id=1, show_drafts=True)
         drafts = await sd.draft_applications()
         return base, with_drafts, drafts
 
@@ -123,5 +141,16 @@ def test_build_tracking_ctx_show_drafts_default_false() -> None:
 
     from ui.tracking_ctx import build_tracking_ctx
 
-    ctx = asyncio.run(build_tracking_ctx())
+    class _NoopSession:
+        async def exec(self, *_a, **_kw):
+            class _R:
+                def all(self_):  # noqa: N805
+                    return []
+
+                def one_or_none(self_):  # noqa: N805
+                    return None
+
+            return _R()
+
+    ctx = asyncio.run(build_tracking_ctx(_NoopSession(), user_id=1))
     assert ctx["show_drafts"] is False

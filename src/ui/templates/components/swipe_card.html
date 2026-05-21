@@ -83,25 +83,26 @@
       {% for t in j.tags or [] %}{{ tag_chip(t) }}{% endfor %}
     </div>
 
-    {# Two-column lower body. #}
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
-      <div>
-        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">WHAT THEY WANT</div>
-        <ul class="flex flex-col gap-1.5 text-sm text-slate-200 leading-relaxed">
-          {% for b in j.jd_bullets or [] %}
-            <li class="flex gap-2">
-              <span class="text-slate-500 shrink-0" aria-hidden="true">•</span>
-              <span>{{ b }}</span>
-            </li>
-          {% endfor %}
-        </ul>
-      </div>
-      <div>
-        {% with breakdown=j.match_breakdown or {}, overall=j.match_overall %}
-          {% include "components/match_breakdown.html" %}
-        {% endwith %}
-      </div>
+    {# Plan 72 § Surface 1 — score_card (Variant B linear bento) replaces the
+       two-column lower body's right-column-only match_breakdown. The card now
+       runs full-width below the JD bullets, surfacing strengths / gaps /
+       provenance alongside the per-dim bars. #}
+    <div class="pt-2">
+      <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">WHAT THEY WANT</div>
+      <ul class="flex flex-col gap-1.5 text-sm text-slate-200 leading-relaxed">
+        {% for b in j.jd_bullets or [] %}
+          <li class="flex gap-2">
+            <span class="text-slate-500 shrink-0" aria-hidden="true">•</span>
+            <span>{{ b }}</span>
+          </li>
+        {% endfor %}
+      </ul>
     </div>
+    {% if not j.unscored %}
+      {% with score=j.score, match_breakdown=j.match_breakdown or {}, expanded=false %}
+        {% include "components/score_card.html" %}
+      {% endwith %}
+    {% endif %}
   </div>
 
   {# Stamp overlay — directional swipe feedback.

@@ -61,6 +61,8 @@ FUNC_REF_ALLOWLIST: frozenset[str] = frozenset(
         # Plan 65 (0.3.0.06): score-pending + recompute-stale crons.
         "scheduler.jobs:score_pending",
         "scheduler.jobs:score_recompute_stale",
+        # Plan 73 (0.3.2.03): per-role-family score trend rollup.
+        "scheduler.jobs:score_aggregate_daily",
         # Plan 62 (0.2.7.07): RETIRING signing-key sweep.
         "scheduler.jobs:expire_retiring_signing_keys",
         "scheduler.jobs:refresh_oauth_tokens",

@@ -17,7 +17,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
@@ -69,8 +68,7 @@ async def _job_or_404(session: AsyncSession, job_id: int, user_id: int):
 async def _last_scrape_run(session: AsyncSession, scrape_run_id: int | None) -> JobScrapeRun | None:
     if scrape_run_id is None:
         return None
-    stmt = select(JobScrapeRun).where(JobScrapeRun.id == scrape_run_id)
-    return (await session.exec(stmt)).one_or_none()
+    return await job_service.get_scrape_run(session, scrape_run_id)
 
 
 @router.get("/jobs/{job_id}", response_class=HTMLResponse, name="job_detail")

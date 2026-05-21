@@ -31,6 +31,7 @@ from ui.routes import (
     outreach,
     overview,
     profile,
+    setup_help,
     tracking,
 )
 from ui.routes import settings as ui_settings
@@ -39,6 +40,40 @@ log = logging.getLogger(__name__)
 
 
 _DEV_CREDENTIALS_ECHO_DELAY_SEC = 0.75
+
+
+async def _emit_first_run_warning_if_broken() -> None:
+    """Plan 71 (0.3.3.14): boot-time WARN when first-run auth is broken.
+
+    Fires when the plan-10c trifecta indicates the operator is locked
+    out: `NAAVIK_DEBUG` unset AND a User row exists AND no
+    `<data_dir>/dev-credentials` file. The matching `/setup-help` route
+    surfaces the same diagnostic + recovery recipes; the WARN log line
+    is the earliest possible touch-point so the operator sees it in
+    the orchestrator's interleaved scrollback.
+
+    Best-effort. Any probe error is swallowed; the log line is
+    informational and never blocks startup.
+    """
+    try:
+        from db.session import async_session
+        from services.first_run import probe_first_run_state
+
+        async with async_session() as session:
+            state = await probe_first_run_state(session)
+        if not state.broken:
+            return
+        log.warning(
+            "first-run auth gap detected: NAAVIK_DEBUG=%s, user_count=%d, "
+            "dev_credentials_present=%s (path=%s). Visit /setup-help for recovery. "
+            "Canonical fix: `nix run .#dev` (auto-exports NAAVIK_DEBUG=1).",
+            "set" if state.debug_enabled else "unset",
+            state.user_count,
+            state.dev_credentials_present,
+            state.dev_credentials_path,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.debug("first-run state probe skipped at boot: %s", exc)
 
 
 async def _echo_dev_credentials_after_start() -> None:
@@ -87,6 +122,12 @@ async def lifespan(app: FastAPI):
     """
     if app_settings.debug:
         asyncio.create_task(_echo_dev_credentials_after_start())
+    else:
+        # Plan 71 (0.3.3.14): when NAAVIK_DEBUG is off, watch for the
+        # plan-10c first-run trifecta + emit a WARN if the operator's
+        # locked out. Fire-and-forget; the canonical recovery surface
+        # is /setup-help.
+        asyncio.create_task(_emit_first_run_warning_if_broken())
 
     try:
         from scheduler import shutdown as shutdown_scheduler
@@ -137,6 +178,7 @@ app.include_router(fragments.router)
 app.include_router(integrations.router)
 app.include_router(email.router)
 app.include_router(design.router)
+app.include_router(setup_help.router)
 
 
 @app.get("/api/health")

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from config import Settings as AppSettings
 from config import settings as app_settings
 from models.enums import ApplicationBoard, JobSource, LLMProvider
 
@@ -78,6 +79,29 @@ def env_indicators_for_llm_tab() -> dict[str, bool]:
         "openai": llm_provider_configured(LLMProvider.OPENAI),
         "ollama": llm_provider_configured(LLMProvider.OLLAMA),
     }
+
+
+def resolve_active_llm_provider(settings: AppSettings | None = None) -> str | None:
+    """Pick the active LLM provider by env-presence precedence.
+
+    Plan 70 (0.3.3.13): Settings · LLM tab dual-selector cleanup. The
+    explicit "Active provider" radio surface is deleted; the active
+    provider is implicit-by-env. Precedence: ANTHROPIC > OPENAI > OLLAMA.
+    Returns `None` only when no provider key is set (Ollama defaults to
+    `http://localhost:11434` so the trailing branch always fires in dev).
+
+    `settings` is the pydantic-settings `config.Settings` (env reads), NOT
+    the per-user `models.Settings`. Default to the module-level singleton
+    so tests can monkeypatch the same `app_settings` they patch elsewhere.
+    """
+    s = settings if settings is not None else app_settings
+    if s.anthropic_api_key:
+        return "anthropic"
+    if s.openai_api_key:
+        return "openai"
+    if s.ollama_base_url:
+        return "ollama"
+    return None
 
 
 def env_indicators_for_notifications_tab() -> dict[str, bool]:

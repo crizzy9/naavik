@@ -67,6 +67,18 @@ async def get_profile(session: AsyncSession, user_id: int) -> Profile | None:
     return (await session.exec(stmt)).one_or_none()
 
 
+async def get_score_history(session: AsyncSession, user_id: int) -> dict:
+    """Plan 73 (0.3.2.03) — read `Profile.score_history` blob for sparkline.
+
+    Empty dict when no Profile row OR the column is still default. Cron
+    `score.aggregate_daily` keeps this fresh; ctx-builder consumes it.
+    """
+    profile = await get_profile(session, user_id)
+    if profile is None:
+        return {}
+    return dict(profile.score_history or {})
+
+
 async def get_experience(session: AsyncSession, experience_id: int) -> Experience | None:
     stmt = select(Experience).where(
         Experience.id == experience_id,

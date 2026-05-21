@@ -1,0 +1,115 @@
+{% from "components/_macros.html" import chip %}
+{#
+  score_card.html — Variant B (Linear bento, 3-zone) score composite.
+
+  Wraps score_circle + match_breakdown + strengths/gaps/visa_note overlay into
+  one container so Discover swipe card, Discover review LEFT column, and Job
+  detail surface read the same shape. Plan 72 / 0.3.2.01.
+
+  Args:
+    score            : int 0-100 (required)
+    match_breakdown  : dict (18-key shape per DATA_MODEL.md § Job.match_breakdown)
+    expanded         : bool, default False — show provenance footer
+    size             : "compact" | "default" | "hero", default "default"
+#}
+{% set expanded = expanded | default(false) %}
+{% set size = size | default("default") %}
+{% set _mb = match_breakdown or {} %}
+{% set _per_dim = _mb.get("per_dimension") or {} %}
+{% set _strengths = _mb.get("strengths") or [] %}
+{% set _gaps = _mb.get("gaps") or [] %}
+{% set _visa_concern = _mb.get("visa_concern", false) %}
+{% set _visa_note = _mb.get("visa_note") %}
+{% set _layers_run = _mb.get("layers_run") or [] %}
+{% set _layer_4_provider = _mb.get("layer_4_provider") %}
+{% set _layer_4_model = _mb.get("layer_4_model") %}
+{% set _judge_skipped = _mb.get("judge_skipped", false) %}
+{% set _scored_at = _mb.get("scored_at") %}
+<div class="score-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-5">
+  {# LEFT zone — score circle + label #}
+  <div class="md:col-span-3 flex flex-col items-center md:items-start justify-center gap-2">
+    <span class="text-[10px] uppercase tracking-wide text-slate-500 font-mono">MATCH</span>
+    {% with score=score, size=size %}
+      {% include "components/score_circle.html" %}
+    {% endwith %}
+    {% if _judge_skipped %}
+      {{ chip("layer-3 only", tone="amber") }}
+    {% elif _layer_4_provider %}
+      <span class="inline-flex items-center gap-1 text-[10px] font-mono text-cyan-300">
+        <span class="h-1.5 w-1.5 rounded-full bg-cyan-400" aria-hidden="true"></span>
+        llm-judged
+      </span>
+    {% endif %}
+  </div>
+
+  {# MIDDLE zone — per-dim bars #}
+  <div class="md:col-span-4 flex flex-col gap-2">
+    <span class="text-[10px] uppercase tracking-wide text-slate-500 font-mono">PER-DIMENSION</span>
+    {% if _per_dim %}
+      {% with breakdown=_per_dim %}
+        {% include "components/match_breakdown.html" %}
+      {% endwith %}
+    {% else %}
+      <span class="text-xs text-slate-500 italic">no per-dimension data</span>
+    {% endif %}
+  </div>
+
+  {# RIGHT zone — strengths + gaps stacked tinted panels #}
+  <div class="md:col-span-5 flex flex-col gap-2">
+    <div class="rounded-md bg-emerald-500/5 ring-1 ring-emerald-500/20 px-3 py-2">
+      <div class="text-[10px] uppercase tracking-wide text-emerald-300 font-mono mb-1.5">STRENGTHS</div>
+      {% if _strengths %}
+        <ul class="flex flex-col gap-1 text-xs text-slate-200 leading-relaxed">
+          {% for s in _strengths %}
+            <li class="flex gap-1.5">
+              <span class="text-emerald-400 shrink-0" aria-hidden="true">+</span>
+              <span>{{ s }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <span class="text-xs text-slate-500 italic">no strengths surfaced</span>
+      {% endif %}
+    </div>
+
+    <div class="rounded-md bg-amber-500/5 ring-1 ring-amber-500/20 px-3 py-2">
+      <div class="text-[10px] uppercase tracking-wide text-amber-300 font-mono mb-1.5">WHAT'S MISSING</div>
+      {% if _gaps %}
+        <ul class="flex flex-col gap-1 text-xs text-slate-200 leading-relaxed">
+          {% for g in _gaps %}
+            <li class="flex gap-1.5">
+              <span class="text-amber-400 shrink-0" aria-hidden="true">−</span>
+              <span>{{ g }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <span class="text-xs text-slate-500 italic">no gaps identified</span>
+      {% endif %}
+    </div>
+
+    {% if _visa_concern and _visa_note %}
+      <div class="rounded-md bg-rose-500/5 ring-1 ring-rose-500/20 px-3 py-2">
+        <div class="text-[10px] uppercase tracking-wide text-rose-300 font-mono mb-1">VISA</div>
+        <p class="text-xs text-slate-200 leading-relaxed">{{ _visa_note }}</p>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if expanded %}
+    <div class="md:col-span-12 pt-2 border-t border-slate-800/60">
+      <div class="flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-500">
+        <span class="uppercase tracking-wide">PROVENANCE</span>
+        {% if _layers_run %}
+          {% for layer in _layers_run %}{{ chip(layer, tone="slate") }}{% endfor %}
+        {% endif %}
+        {% if _layer_4_provider %}
+          {{ chip(_layer_4_provider ~ (" · " ~ _layer_4_model if _layer_4_model else ""), tone="cyan") }}
+        {% endif %}
+        {% if _scored_at %}
+          <span class="ml-auto">scored {{ _scored_at }}</span>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>

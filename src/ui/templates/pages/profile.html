@@ -6,7 +6,7 @@
   <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-6 lg:gap-8">
     {# Main column #}
     <div class="flex flex-col gap-6 min-w-0">
-      {% with profile=hero, editable=true %}
+      {% with profile=hero, editable=true, score_trend=score_trend %}
         {% include "components/profile_hero.html" %}
       {% endwith %}
 
