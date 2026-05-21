@@ -380,6 +380,71 @@ def _format_date(d: datetime | None) -> str | None:
     return d.strftime("%b %Y")
 
 
+async def regen_bullet_for_variance(
+    *,
+    session: AsyncSession,
+    settings: Settings,
+    user_id: int,
+    application_id: int | None,
+    original_text: str,
+    target: str,
+    target_words: int | None,
+    system: str | None = None,
+    cache_system: bool = False,
+) -> str:
+    """Re-prompt one bullet with explicit sentence-length variance instruction.
+
+    Plan 75 / 0.3.3.05 — burstiness regen path. Caller (`bundle_generator`)
+    invokes when std-dev of trimmed bullet word counts falls below the
+    threshold; this helper asks the LLM to rewrite the worst-offender
+    bullet with a different sentence structure / word-count target so the
+    overall batch reads as more human-varied.
+
+    `target` is "short" or "long" (from BurstinessReport); `target_words`
+    is the suggested approximate word count.
+
+    Returns the regenerated bullet on success; the `original_text`
+    unchanged on LLM failure (caller decides whether to substitute).
+    """
+    target_phrase = (
+        f"approximately {target_words} words" if target_words else "noticeably different length"
+    )
+    direction = (
+        "Use a shorter, punchier sentence with a different opening verb."
+        if target == "short"
+        else "Expand with one additional concrete result or qualifier; keep all numbers."
+    )
+    prompt = (
+        "Rewrite this resume bullet with a DIFFERENT sentence structure than the "
+        f"original. Target {target_phrase}. {direction} Preserve every number, "
+        "every concrete result, and the original verb's intent.\n\n"
+        f"Original:\n{original_text}\n\n"
+        "Return TrimmedBullet with trimmed + dropped_phrases."
+    )
+    try:
+        provider = get_provider(settings)
+        result = await llm_tracker.tracked_call(
+            session=session,
+            user_id=user_id,
+            provider=provider,
+            method="structured",
+            prompt_name="regen_bullet_variance",
+            application_id=application_id,
+            prompt=prompt,
+            schema=__import__("llm.prompts.trim_bullet", fromlist=["TrimmedBullet"]).TrimmedBullet,
+            system=system,
+            cache_system=cache_system,
+        )
+        return str(result.value.get("trimmed") or original_text)
+    except LLMProviderError as exc:
+        # `get_provider` raises `LLMProviderError(kind="provider_error")` when
+        # no provider is configured — same failure surface as a runtime LLM
+        # call. Tests that don't pre-configure a provider (the bulk of the
+        # bundle_generator suite) tolerate the regen no-op via this path.
+        log.warning("regen_bullet_for_variance failed: %s", exc)
+        return original_text
+
+
 async def _build_resume_data(
     *,
     snap: ProfileSnapshot,

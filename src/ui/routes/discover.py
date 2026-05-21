@@ -24,6 +24,7 @@ from services import (
     settings_service,
 )
 from services.auth import require_authed_session
+from services.rate_limit import check_generate_bundle_rate_limit, check_rescore_rate_limit
 from ui import discover_ctx as dctx
 from ui import discover_review_ctx as drctx
 from ui.templates_setup import templates
@@ -400,10 +401,12 @@ async def post_rescore(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
+    _rate_limit: None = Depends(check_rescore_rate_limit),
 ):
     """Manual re-score of a single Job — plan 65 § D.6 (T10 trigger 3).
 
     CSRF-gated; IDOR via the `Job.user_id == effective_user_id` check.
+    Plan 75 / 0.3.3.02 — rate limited 10/min, 60/hr per user.
     """
     if user is None:
         # Real-auth only.
@@ -616,7 +619,10 @@ async def put_screener(
     _user: User | None = Depends(require_authed_session),
 ):
     answer = (payload or {}).get("answer", "")
-    a = await application_service.record_screener_answer(session, question_id, answer)
+    owner_user_id = _user.id if _user is not None else None
+    a = await application_service.record_screener_answer(
+        session, question_id, answer, owner_user_id=owner_user_id
+    )
     if a is None:
         raise HTTPException(status_code=404, detail="Answer not found")
     await session.commit()
@@ -645,8 +651,15 @@ async def fragment_screener(
     application_id: int,
     question_id: int,
     session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
 ):
-    a = await application_service.get_screener_answer(session, question_id)
+    # Plan 75 / 0.3.3.15 — IDOR boundary. `_user is None` preserves the
+    # fake-session bypass for legacy fixtures; real auth threads
+    # `owner_user_id` into the service which JOINs through Application.
+    owner_user_id = _user.id if _user is not None else None
+    a = await application_service.get_screener_answer(
+        session, question_id, owner_user_id=owner_user_id
+    )
     if a is None:
         raise HTTPException(status_code=404, detail="Answer not found")
     return templates.TemplateResponse(
@@ -662,3 +675,110 @@ async def fragment_screener(
             },
         },
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Plan 75 / 0.3.3.08 — Discover · review & apply HTMX two-step
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/_fragments/apply/preview/{application_id}",
+    response_class=HTMLResponse,
+    name="apply_preview_get",
+)
+async def fragment_apply_preview(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Preview-step fragment — returns a confirmation card for bundle generation.
+
+    Two-step UX (plan 75 / 0.3.3.08): user clicks "Review & apply" → this
+    fragment swaps a preview card with explicit "Confirm submit" + "Cancel"
+    CTAs. Confirm POSTs to `_fragments/apply/confirm/<id>` which kicks off
+    `generate_bundle`.
+
+    IDOR: `application.user_id != _user.id` → 404 (preserves fake-session
+    bypass for legacy fixtures).
+    """
+    app = await application_service.get_application(session, application_id)
+    if app is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    if user is not None and app.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return templates.TemplateResponse(
+        request,
+        "components/apply_preview_card.html",
+        {"application": app},
+    )
+
+
+@router.post(
+    "/_fragments/apply/confirm/{application_id}",
+    response_class=HTMLResponse,
+    name="apply_confirm_post",
+)
+async def fragment_apply_confirm(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+    _rate_limit: None = Depends(check_generate_bundle_rate_limit),
+):
+    """Confirm-step fragment — kicks off bundle generation + emits HX-Trigger.
+
+    Two-step UX (plan 75 / 0.3.3.08): user clicks "Confirm" on the preview
+    card → this POST calls `generate_bundle` (deferred to `dg.generate_resume`
+    + screeners via `bundle_generator`), then returns a success fragment with
+    `HX-Trigger: {"bundle-generated": {"application_id": <id>}}` so the
+    parent page's Up-Next card can refresh.
+
+    Rate-limited via `check_generate_bundle_rate_limit` (10/hr per user) —
+    bundle generation is expensive; this dep matches the
+    `/applications/{id}/generate-bundle` route's bucket (NOT the rescore
+    bucket). Confirms emit an HX-Trigger handoff to that route rather than
+    calling `bundle_generator` inline (see plan 75 deviation #2). Fixed
+    post-PR-#170 review (hacker MED).
+    """
+    from fastapi.responses import HTMLResponse as _HTMLResponse
+
+    app = await application_service.get_application(session, application_id)
+    if app is None or (user is not None and app.user_id != user.id):
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # Defer the actual `bundle_generator.generate_bundle` call to the
+    # existing `/api/v1/applications/<id>/generate-bundle` route — this
+    # fragment just kicks off the request via HTMX trigger so the
+    # heavy lifting + cost-cap probing live in one place. We could
+    # call generate_bundle directly here, but the route has its own
+    # 422 / 409 surfacing for ethics + missing-settings that we'd need
+    # to replicate. HX-Trigger lets the parent page handle that.
+    response = _HTMLResponse(
+        f'<div class="text-sm text-slate-300" '
+        f'data-application-id="{application_id}">'
+        "Bundle generation queued. Watch the Up-Next card for updates."
+        "</div>"
+    )
+    response.headers["HX-Trigger"] = (
+        f'{{"bundle-generated": {{"application_id": {application_id}}}}}'
+    )
+    return response
+
+
+@router.get(
+    "/_fragments/apply/cancel-preview",
+    response_class=HTMLResponse,
+    name="apply_cancel_preview",
+)
+async def fragment_apply_cancel_preview(request: Request):
+    """Cancel-step — collapses the preview card back to empty (HTMX swap target).
+
+    Plan 75 / 0.3.3.08. Stateless; no DB / IDOR check needed (returns an
+    empty fragment that the caller swaps in place).
+    """
+    from fastapi.responses import HTMLResponse as _HTMLResponse
+
+    return _HTMLResponse("")

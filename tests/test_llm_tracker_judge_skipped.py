@@ -354,3 +354,37 @@ async def test_reasons_idor_per_user(session: AsyncSession) -> None:
     reasons_2 = await llm_tracker.judge_skipped_reasons_today(session, user_id=2)
     assert reasons_1 == {"cost_cap_exhausted": 1}
     assert reasons_2 == {"no_provider_configured": 1}
+
+
+# ── Plan 75 / 0.3.3.17 — JSONB predicate lowercase hardening ─────────────
+
+
+def test_judge_skipped_count_postgres_predicate_uses_lower():
+    """Compile-time assertion: the Postgres branch wraps `->>` in `lower(...)`.
+
+    Defense-in-depth — current writers always emit "true", but if a future
+    JSONB write sneaks in "True" / "TRUE", the predicate stays correct.
+    """
+    from sqlalchemy import func
+    from sqlalchemy import select as sa_select
+    from sqlalchemy.dialects import postgresql
+
+    from models import Job
+    from services.llm_tracker import _today_midnight_utc
+
+    midnight = _today_midnight_utc()
+    stmt = sa_select(func.count(Job.id)).where(
+        Job.user_id == 1,
+        Job.deleted_at.is_(None),
+        Job.updated_at >= midnight,
+        func.lower(Job.match_breakdown.op("->>")("judge_skipped")) == "true",
+    )
+    compiled = str(
+        stmt.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "lower(" in compiled.lower(), (
+        f"Postgres branch must wrap the JSONB extract in lower(); emitted SQL: {compiled}"
+    )

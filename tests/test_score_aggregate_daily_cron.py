@@ -17,18 +17,21 @@ from apscheduler.triggers.cron import CronTrigger  # noqa: E402
 from scheduler import jobs  # noqa: E402
 
 
-def test_score_aggregate_daily_registered_with_0330_utc() -> None:
+def test_score_aggregate_daily_registered_with_0335_utc() -> None:
+    """Plan 75 / 0.3.3.19: cron shifted 03:30 -> 03:35 UTC to avoid the
+    theoretical concurrency window with `score.recompute_stale` (still
+    at 03:30); APScheduler doesn't guarantee ordering within a single
+    cron slot.
+    """
     scheduler = AsyncIOScheduler()
     jobs.register_all(scheduler)
     job = scheduler.get_job("score.aggregate_daily")
     assert job is not None, "score.aggregate_daily cron not registered"
     trigger = job.trigger
     assert isinstance(trigger, CronTrigger)
-    # CronTrigger stores fields as a list of BaseField; str() encodes the
-    # cron expression component.
     field_by_name = {f.name: str(f) for f in trigger.fields}
     assert field_by_name["hour"] == "3"
-    assert field_by_name["minute"] == "30"
+    assert field_by_name["minute"] == "35"
     assert str(trigger.timezone) == "UTC"
 
 

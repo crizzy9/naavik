@@ -553,40 +553,45 @@ async def require_authed_session(
     # single source of truth and avoid a top-of-file circular import.
     from ui.auth_stub import FAKE_SESSION_VALUE
 
-    if not naavik_session:
+    # Plan 75 / 0.3.3.22 — HTMX UI clients see a broken inline fragment on
+    # bare 401; emit `HX-Redirect: /auth/login` so the browser navigates
+    # to the login page. API paths (`/api/v1/*`) stay bare 401 — consumers
+    # shouldn't auto-follow a redirect to an HTML page. Mirrors the
+    # `must_change_password` HX-Redirect block at lines 583-603.
+    is_htmx = request.headers.get("hx-request", "").lower() == "true"
+    is_api = request.url.path.startswith("/api/v1/")
+    redirect_headers = {"HX-Redirect": "/auth/login"} if (is_htmx and not is_api) else None
+
+    def _raise_401(detail: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+            detail=detail,
+            headers=redirect_headers,
         )
+
+    if not naavik_session:
+        _raise_401("Not authenticated")
 
     if naavik_session == FAKE_SESSION_VALUE:
         return None
 
     result = await verify_jwt_async(session, naavik_session)
     if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session expired",
-        )
+        _raise_401("Session expired")
     user_id, jti, _ = result
     if await is_jwt_revoked(session, jti=jti):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session revoked",
-        )
+        _raise_401("Session revoked")
     user = await get_user_by_id(session, user_id)
     if user is None or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Account disabled",
-        )
+        _raise_401("Account disabled")
     if user.must_change_password:
         # Path-based split per dispatch brief. `HX-Redirect` is set on
         # both branches so HTMX clients (which always set `HX-Request` and
         # may target either path) navigate the browser regardless. The
         # 403 vs 307 distinction matters for non-HTMX consumers (curl,
         # SDKs) that should not auto-follow a redirect to an HTML page.
-        is_api = request.url.path.startswith("/api/v1/")
+        # `is_api` already resolved at the top of this dep for the 401
+        # branch (plan 75 / 0.3.3.22).
         if is_api:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

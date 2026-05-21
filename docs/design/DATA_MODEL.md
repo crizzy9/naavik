@@ -146,6 +146,11 @@ class Profile(SQLModel, table=True):
     # Cover letter base — placeholder paragraph dict
     cover_letter_base: Optional[dict] = Field(default=None, sa_column=Column(JSON))
 
+    # Plan 73 (0.3.2.03) — per-role-family score-trend rollup for sparkline.
+    # 30-day rolling window populated by score.aggregate_daily cron at 03:35 UTC
+    # (plan 75 / 0.3.3.19 shifted the slot 5 min from recompute_stale).
+    score_history: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     deleted_at: Optional[datetime] = None
@@ -159,6 +164,31 @@ class Profile(SQLModel, table=True):
 ```
 
 **Indexes:** `user_id` (unique), `email`. **Validation:** `salary_expectation_usd >= 0`; `notice_period_days >= 0`. **Computed (service-layer):** `application_readiness` = count of non-null EEO/visa fields.
+
+**`score_history` JSONB shape** (plan 73 / 0.3.2.03 — graduated 2026-05-21 via plan 75 / 0.3.3.20):
+
+```json
+{
+  "last_aggregated_at": "2026-05-21T03:35:00+00:00",
+  "families": [
+    {
+      "family": "backend",
+      "scored_count_30d": 47,
+      "score_current": 0.78,
+      "score_delta_30d": 0.05,
+      "daily_means": [0.73, 0.74, null, 0.76, ..., 0.78]
+    }
+  ]
+}
+```
+
+- `family` ∈ the 9-tag vocabulary (`ai-ml`, `backend`, `frontend`, `devops`, `data-eng`, `genai`, `leadership`, `platform`, `product`) + `other`. Classified by heuristic substring match in `src/services/scoring_history.classify_role_family` (Q73.3 lock — no LLM cost per snapshot; future 0.8.0.NN may upgrade to LLM judge).
+- `daily_means[i]` = mean `Job.score` for that family on day `(today - 29 + i)`. `null` for days with no jobs in that family.
+- `scored_count_30d` = count of scored jobs in the family across the 30-day window.
+- `score_current` = most recent non-null daily mean.
+- `score_delta_30d` = current − first non-null in window. Positive = trending up.
+- Profile sparkline (SCREENS.md § 4) reads the 14-day tail per family — only the last 14 entries of `daily_means` render in the inline SVG.
+- Cron sole writer: `score.aggregate_daily` (APScheduler, 03:35 UTC daily; plan 75 / 0.3.3.19 shifted from 03:30). Idempotent — `update_profile_score_history` is last-write-wins.
 
 ### `Experience`
 

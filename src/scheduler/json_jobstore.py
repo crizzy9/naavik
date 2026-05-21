@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from apscheduler.job import Job
@@ -154,8 +154,13 @@ def _decode_datetime(s: str | None) -> datetime | None:
         return None
     dt = datetime.fromisoformat(s)
     if dt.tzinfo is None:
-        # Defensive: tzinfo always written in encode; treat naive as UTC.
-        dt = dt.replace(tzinfo=UTC)
+        # Plan 75 / 0.3.3.03 — reject naive timestamps. `_encode_datetime`
+        # always writes `dt.isoformat()` on a tz-aware datetime; a naive
+        # value here means tampered/legacy job_state and a misfire-timing
+        # risk. Fail loud rather than silently rebase to UTC.
+        raise ValueError(
+            f"naive datetime {s!r} in job_state — tzinfo required; see plan 75 / 0.3.3.03 hardening"
+        )
     return dt
 
 

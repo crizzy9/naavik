@@ -428,3 +428,27 @@ def test_roundtrip_date_trigger():
     assert looked_up is not None
     assert isinstance(looked_up.trigger, DateTrigger)
     assert looked_up.trigger.run_date == run_date
+
+
+# ── 10. _decode_datetime naive-rejection (plan 75 / 0.3.3.03) ───────────
+
+
+def test_decode_datetime_rejects_naive():
+    """Plan 75 / 0.3.3.03 — naive timestamps in job_state are tampered/legacy
+    and produce misfire-timing risk. Reject loudly instead of silently
+    rebasing to UTC.
+    """
+    from scheduler.json_jobstore import _decode_datetime
+
+    with pytest.raises(ValueError, match="naive datetime"):
+        _decode_datetime("2026-05-21T10:00:00")
+
+
+def test_decode_datetime_accepts_tzaware():
+    """Tz-aware ISO 8601 round-trips through `_decode_datetime`."""
+    from scheduler.json_jobstore import _decode_datetime
+
+    out = _decode_datetime("2026-05-21T10:00:00+00:00")
+    assert out is not None
+    assert out.tzinfo is not None
+    assert out.utcoffset().total_seconds() == 0

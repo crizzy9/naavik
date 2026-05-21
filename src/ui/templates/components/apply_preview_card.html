@@ -1,0 +1,47 @@
+{#
+  apply_preview_card.html — plan 75 / 0.3.3.08 two-step preview card.
+
+  Rendered by `GET /_fragments/apply/preview/<application_id>`. Shows a
+  confirmation prompt before kicking off the (expensive) bundle generation
+  via `POST /_fragments/apply/confirm/<application_id>`.
+
+  Args:
+    application : Application — id + role/company resolved from job_id
+#}
+{% set a = application %}
+<div class="flex flex-col gap-3 px-4 py-3 rounded-lg border border-indigo-500/40 bg-indigo-500/5"
+     data-apply-preview="{{ a.id }}">
+  <div class="flex items-start justify-between gap-3">
+    <div class="min-w-0">
+      <div class="text-sm font-medium text-slate-100">
+        Generate tailored bundle?
+      </div>
+      <div class="text-xs text-slate-400 font-mono truncate">
+        Application #{{ a.id }} · {{ a.role | default("untitled") }}
+      </div>
+    </div>
+    <i data-lucide="sparkles" class="h-4 w-4 text-indigo-300 shrink-0" stroke-width="1.5"></i>
+  </div>
+  <div class="text-xs text-slate-400">
+    Generates resume + cover letter + screener drafts.
+    Cost-cap probed before each LLM call.
+  </div>
+  <div class="flex items-center justify-end gap-2 flex-wrap">
+    <button type="button"
+            class="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs text-slate-300 hover:text-slate-100 hover:bg-slate-800 transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+            hx-get="/_fragments/apply/cancel-preview"
+            hx-target="closest [data-apply-preview]"
+            hx-swap="outerHTML">
+      <i data-lucide="x" class="h-3 w-3" stroke-width="1.5"></i>
+      Cancel
+    </button>
+    <button type="button"
+            class="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium text-white bg-indigo-500 hover:bg-indigo-400 transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+            hx-post="/_fragments/apply/confirm/{{ a.id }}"
+            hx-target="closest [data-apply-preview]"
+            hx-swap="outerHTML">
+      <i data-lucide="check" class="h-3 w-3" stroke-width="1.5"></i>
+      Confirm submit
+    </button>
+  </div>
+</div>

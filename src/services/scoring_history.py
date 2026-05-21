@@ -163,18 +163,34 @@ def _midnight_utc(d: datetime) -> datetime:
 
 
 def _parse_scored_at(raw: Any) -> datetime | None:
-    """Tolerant parse of `match_breakdown.scored_at` (string OR datetime)."""
+    """Tolerant parse of `match_breakdown.scored_at` (string OR datetime).
+
+    Plan 75 / 0.3.3.18 — stricter than the original: exotic non-ISO 8601
+    strings (epoch ints, "yesterday", etc.) return None rather than
+    producing best-guess UTC values that would mislead the sparkline.
+    """
     if raw is None:
         return None
     if isinstance(raw, datetime):
         return raw if raw.tzinfo else raw.replace(tzinfo=UTC)
-    if isinstance(raw, str):
-        try:
-            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-        return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
-    return None
+    if not isinstance(raw, str):
+        return None
+    raw = raw.strip()
+    if not raw:
+        return None
+    # Reject obviously non-ISO inputs early. Valid ISO 8601 starts with a
+    # digit followed by either a `T` separator, a space separator (RFC 3339
+    # variant), or is a bare 10-char YYYY-MM-DD date.
+    if not raw[0].isdigit():
+        return None
+    head = raw[:11]
+    if not ("T" in head or " " in head or len(raw) == 10):
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 def _coerce_score(raw: Any) -> float | None:
