@@ -1,5 +1,5 @@
 ---
-Status: APPROVED
+Status: EXECUTED
 Type: execution
 Authored: 2026-05-21
 Last updated: 2026-05-21
@@ -8,6 +8,7 @@ Depends on: docs/plans/archive/75-... (0.3.3.08a UI wiring derives from this)
             docs/plans/archive/80-... (0.4.0.23 derives from plan 80 CSV export)
 GitHub: #196 (0.4.0.23) + #202-adjacent (0.4.0.21 needs filing)
 Owner: manager (direct authoring per § Batching cap-of-10; locked defaults)
+Shipped: 2026-05-21
 ---
 
 # 85 · Housekeeping batch — 0.3.x + 0.4.x small follow-ups (cap 3)
@@ -110,3 +111,8 @@ Total: ~45 LOC + ~9 tests. No manual QA target — all changes verifiable via py
 ## New / removed operational surface
 
 None. All 4 items are internal hardening with no new env / CLI / on-disk / port / schedule.
+
+## Deviations from plan
+
+- **test_count_overshoot** — what: test_count_overshoot. why: defense-in-depth+positive-path+e2e. impact: none surface=none — § A net -1 vs plan (refactored existing test in-place); § B +2 vs plan (missing-app + positive owner); § C +1 vs plan (e2e on list_for_export call site). surface: port.
+- **run-id-trace-dir-shared** — what: run-id-trace-dir-shared. why: run-id directory already populated by prior plan-85 author session. impact: none surface=none — appended engineer log to existing traces/2026-05-21T15-33-09_fccfbeb5/. surface: none.
