@@ -53,11 +53,27 @@ from models import (
     Settings,
     Skill,
 )
-from models.enums import BulletSelectionOverride
+from models.enums import ApplicationBoard, BulletSelectionOverride
 from services import llm_tracker
 from typst import compile as typst_compile
 from typst import overflows
 from typst.compiler import TypstError
+
+# Plan 66 (0.3.1) § T6 — auto-select the ATS-friendly template variant for
+# ATS-known boards; manual + company-direct stays on creative onepage.typ.
+# ApplicationBoard enum only carries the ATS surfaces we have adapters for;
+# additional boards (ICIMS / TALEO / SAP_SUCCESSFACTORS / BAMBOOHR / JAZZHR)
+# from the research memo's ATS allowlist are deferred until those adapters
+# ship per ROADMAP.
+_ATS_BOARDS: frozenset[ApplicationBoard] = frozenset(
+    {
+        ApplicationBoard.WORKDAY,
+        ApplicationBoard.GREENHOUSE,
+        ApplicationBoard.LEVER,
+        ApplicationBoard.ASHBY,
+        ApplicationBoard.LINKEDIN,
+    }
+)
 
 log = logging.getLogger(__name__)
 
@@ -361,7 +377,14 @@ async def _build_resume_data(
     snap: ProfileSnapshot,
     selected_bullet_ids: list[int],
     trimmed: dict[int, str],
+    tailored_headline: str | None = None,
 ) -> dict[str, Any]:
+    """Render the resume payload consumed by `onepage.typ` / `onepage_ats.typ`.
+
+    `tailored_headline` (plan 66 § T7) — when present, surfaces as the
+    one-line headline under the candidate's name on the ATS template;
+    `onepage.typ` ignores this field.
+    """
     selected = set(selected_bullet_ids)
     experiences_payload: list[dict] = []
     for exp in snap.experiences:
@@ -392,6 +415,7 @@ async def _build_resume_data(
             "github_handle": p.github_handle,
             "summary_short": p.summary_short,
         },
+        "tailored_headline": tailored_headline,
         "experiences": experiences_payload,
         "education": [
             {
@@ -406,6 +430,32 @@ async def _build_resume_data(
         "skills": [{"category": s.category, "items": list(s.items)} for s in snap.skills],
         "projects": [{"title": pr.title, "text": pr.text, "link": pr.link} for pr in snap.projects],
     }
+
+
+def _select_template(application: Application, settings: Settings) -> tuple[str, str | None]:
+    """Pick the resume template + PDF standard for `application`.
+
+    Plan 66 (0.3.1) § T6 + T12. Returns ``(template_name, pdf_standard)``.
+
+    Resolution order:
+    1. `Settings.resume_template_preference` ∈ {"ats", "creative"} forces the
+       template explicitly.
+    2. `Settings.resume_template_preference == "auto"` (default) →
+       ATS variant when `Application.board` ∈ ATS-known set; creative otherwise.
+
+    The ATS variant pairs with PDF/A-1b output (`pdf_standard="a-1b"`); the
+    creative variant uses default PDF (None).
+    """
+    pref = getattr(settings, "resume_template_preference", "auto")
+    if pref == "ats":
+        return "onepage_ats", "a-1b"
+    if pref == "creative":
+        return "onepage", None
+    # auto — board-driven
+    board = getattr(application, "board", None)
+    if board is not None and board in _ATS_BOARDS:
+        return "onepage_ats", "a-1b"
+    return "onepage", None
 
 
 async def generate_resume(
@@ -461,6 +511,8 @@ async def generate_resume(
     out_dir = _app_documents_dir(application.id)
     out_pdf = out_dir / "resume.pdf"
 
+    template_name, pdf_standard = _select_template(application, settings)
+
     # Page-count retry loop: drop the lowest-priority bullet on overflow.
     candidate_ids = list(selected_ids)
     final_result = None
@@ -471,7 +523,7 @@ async def generate_resume(
             trimmed=trimmed,
         )
         try:
-            result = await typst_compile("onepage", data, out_pdf)
+            result = await typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
         except TypstError as exc:
             application.docs_state = DocsState.FAILED
             session.add(application)

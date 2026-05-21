@@ -70,23 +70,43 @@ class AnthropicProvider(LLMProvider):
         schema: type[T],
         *,
         max_tokens: int = 1024,
+        system: str | None = None,
+        cache_system: bool = False,
     ) -> StructuredResult:
         """Tool-use structured output: define a single tool whose input_schema
-        matches the Pydantic schema; force the model to call it."""
+        matches the Pydantic schema; force the model to call it.
+
+        Plan 66 (0.3.1) — `system` carries the cacheable constitution + voice
+        corpus prefix; `cache_system=True` attaches `cache_control` so the
+        prefix reuses a 5-minute ephemeral cache across the bundle's stages.
+        OpenAI + Ollama providers ignore `cache_system` (no caching).
+        """
         tool_name = schema.__name__.lower()
         tool_def = {
             "name": tool_name,
             "description": (schema.__doc__ or "Structured output").strip(),
             "input_schema": schema.model_json_schema(),
         }
+        create_kwargs: dict = {
+            "model": self._model,
+            "max_tokens": max_tokens,
+            "tools": [tool_def],
+            "tool_choice": {"type": "tool", "name": tool_name},
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if system is not None:
+            if cache_system:
+                create_kwargs["system"] = [
+                    {
+                        "type": "text",
+                        "text": system,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+            else:
+                create_kwargs["system"] = system
         try:
-            response = await self._client.messages.create(
-                model=self._model,
-                max_tokens=max_tokens,
-                tools=[tool_def],
-                tool_choice={"type": "tool", "name": tool_name},
-                messages=[{"role": "user", "content": prompt}],
-            )
+            response = await self._client.messages.create(**create_kwargs)
         except Exception as exc:  # noqa: BLE001
             raise LLMProviderError(f"anthropic structured failed: {exc}") from exc
 

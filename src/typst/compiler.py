@@ -67,6 +67,7 @@ async def compile(  # noqa: A001 — `compile` is the natural verb
     output_path: Path,
     *,
     timeout: float = 30.0,
+    pdf_standard: str | None = None,
 ) -> CompileResult:
     """Compile a packaged Typst template against `data` JSON.
 
@@ -75,6 +76,11 @@ async def compile(  # noqa: A001 — `compile` is the natural verb
     to materialize it. Two passes — compile then query — recover the page
     count from the `<naavik-meta>` metadata element baked into every
     template.
+
+    `pdf_standard` (plan 66, 0.3.1, T6) — when set (e.g. ``"a-1b"`` for
+    PDF/A-1b conformance), passed through as ``--pdf-standard <value>``.
+    Requires typst 0.13+. Falls through to default PDF (untrusted) when
+    None.
     """
     src = template_path(template_name)
     output_path = Path(output_path)
@@ -90,6 +96,10 @@ async def compile(  # noqa: A001 — `compile` is the natural verb
         str(src.parent),
         "--input",
         f"data={data_json}",
+    ]
+    if pdf_standard:
+        compile_args += ["--pdf-standard", pdf_standard]
+    compile_args += [
         str(src.resolve()),
         str(output_path.resolve()),
     ]

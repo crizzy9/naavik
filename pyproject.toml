@@ -60,6 +60,11 @@ dependencies = [
     # transitively which needs `libz.so.1` at dlopen — devshell + flake
     # export the right LD_LIBRARY_PATH so `nix run .#dev` boots.
     "pgvector>=0.4.0,<0.5",
+    # PDF text extraction for ATS parse-fidelity validator
+    # (plan 66, 0.3.1, T9). Pure Python (depends on pdfminer.six). Used by
+    # `services/ats_parser_fidelity.py` to round-trip the generated resume
+    # PDF and score recovery of 8 canonical fields.
+    "pdfplumber>=0.11.0,<0.12",
 ]
 
 [project.optional-dependencies]

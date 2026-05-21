@@ -136,6 +136,18 @@ class Settings(SQLModel, table=True):
     semantic_match_threshold: float = Field(default=0.65)
     semantic_match_sync_on_upsert: bool = Field(default=False)
 
+    # Plan 66 (0.3.1): tailored-bundle generation knobs. `ai_writing_voice_samples`
+    # supplements the auto-extracted voice corpus (Bullet.text + Profile.summary_*
+    # + ProfileAnswer.answer). `cover_letter_format` overrides adaptive dispatch.
+    # `tier_2_evasion_enabled` opts into experimental humanization (default off).
+    # `resume_template_preference` overrides board-driven template selection.
+    # `parse_fidelity_threshold` tunes the OQ-7 smart-default tiers.
+    ai_writing_voice_samples: str = Field(default="")
+    cover_letter_format: str = Field(default="auto", max_length=20)
+    tier_2_evasion_enabled: bool = Field(default=False)
+    resume_template_preference: str = Field(default="auto", max_length=20)
+    parse_fidelity_threshold: float = Field(default=0.75)
+
     # Plan 65 (0.3.0.02): per-tag operator-tunable scoring weights.
     # JSONB shape `{tag_value: float}`; empty dict → all tags weighted 1.0.
     # Validator (services/scorer/weights.py:PerDimWeights) drops unknown

@@ -103,6 +103,14 @@ class Application(SQLModel, table=True):
         sa_column=Column(JSONB, nullable=True),
     )
 
+    # Plan 66 (0.3.1) — audit trail for bundle generation (resume + cover
+    # letter + screeners). Opaque-blob; canonical shape lives in
+    # `services/bundle_generator.GenerationTrace`. OVERWRITES on regenerate.
+    generation_trace: dict | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
+
     notes: str | None = None
 
     created_at: datetime = Field(

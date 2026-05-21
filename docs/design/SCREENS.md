@@ -454,6 +454,16 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
 - Left: "Ready to apply · resume + cover letter + {N} screeners · est. cost ${cost}" (mono)
 - Right: **Download bundle** (ghost) · **Open ATS · {boardname}** (secondary, opens external) · **Submit application** (primary, sparkle)
 
+**Two-step submit (plan 66 / 0.3.1):** the "Submit application" button on the sticky bar
+calls `POST /api/v1/applications/{id}/generate-bundle` first (voice-grounded resume +
+adaptive cover letter + screener answers + parse-fidelity + ethics pre-flight) THEN
+`POST /api/v1/applications/{id}/submit`. The bundle response carries `degraded`,
+`parse_fidelity_tier`, `keyword_coverage_score`, and the audit-trail
+`generation_trace`. HTMX triggers `bundle-degraded` (amber banner) when cost-cap
+fired mid-flight; `parse-fidelity-warning` (info toast) when score lands in the
+[0.75, 0.90) tier. Ethics rejection (`> 2` bullets fabricated) returns 422 + a
+red-flag list. Full pipeline reference: `docs/design/RESUME_GENERATION.md`.
+
 - **Mobile:** stacks vertically. Sticky `Submit application` at the bottom.
 - **Interactions:**
   - Bullet toggle → HTMX swap on counter and selected-bullets list

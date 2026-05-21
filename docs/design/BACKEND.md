@@ -796,6 +796,8 @@ user clicks Discard draft (DELETE /api/v1/applications/{id}/discard):
 
 ### K.4 Document generation pipeline
 
+> **Canonical reference (plan 66 / 0.3.1):** `docs/design/RESUME_GENERATION.md` documents the full FREE-tier pipeline — voice grounding, constitution preamble, AI-tell blocklist, burstiness validator, ATS-friendly template variant (`onepage_ats.typ`), recruiter-priority headline, keyword coverage, parse-fidelity validator, adaptive cover letter, hiring-manager extractor, ethics pre-flight, and the `Application.generation_trace` audit-trail shape. The summary below is K.4 as it shipped in 0.0.x-0.2.x; 0.3.1 wraps each of these substeps with the voice-grounded substrate. PREMIUM (0.3.4) Stage 9 extends the same doc.
+
 `document_generator.generate_resume(application)`:
 
 1. **Bullet selection** (`prompts.select_bullets`): `profile.bullets[]` + `application.job` → list of selected bullet IDs (8-12 typical), respecting `Bullet.selection_override`. Always-include pinned; never-include skipped.
