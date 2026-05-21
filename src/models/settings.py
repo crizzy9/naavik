@@ -45,6 +45,12 @@ class Settings(SQLModel, table=True):
     # `DateTrigger(now)` instead of waiting for the 5-min cron tick.
     # Default False preserves the cron-only behavior.
     auto_apply_immediate_dispatch: bool = Field(default=False)
+    # Plan 63 (0.2.7.10) § D.5 — dual-gate with `auto_apply_score_threshold`.
+    # Adapter emits `SubmissionResult.confidence` (HTTP adapters always 1.0;
+    # Generic emits LLM-form-fill confidence); below this threshold → revert
+    # to DRAFT + surface in manual-review queue. Per-adapter PRs source the
+    # `confidence` field; this knob is the operator-tunable threshold.
+    auto_apply_adapter_confidence_threshold: float = Field(default=0.7)
 
     # Cost-aware DRAFT generation
     eager_review_generation: bool = Field(default=True)

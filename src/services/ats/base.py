@@ -36,14 +36,34 @@ class ATSError(Exception):
 
 @dataclass(slots=True)
 class SubmissionResult:
-    """Per-board submission outcome."""
+    """Per-board submission outcome.
+
+    `raw` carries provider response for audit + postmortem. Recognized keys
+    (plan 63 / 0.2.7.10 § C.5; HTTP adapters populate a subset):
+
+    - `request_url: str | None`    — URL the adapter POSTed to
+    - `request_body: dict | None`  — request payload (redacted in postmortem)
+    - `response_status: int | None`
+    - `response_body: str | None`  — raw response body (replaces legacy `text`)
+    - `text: str | None`           — legacy alias for `response_body`
+    - `screenshot_b64: str | None` — base64 PNG for Playwright adapters; the
+      postmortem layer writes it to
+      `<data_dir>/data/postmortems/<app>/<ts>/screenshot.png`
+    - `exception_type: str | None` — Playwright-runtime-exception class name
+
+    `confidence` (plan 63 § D.5) — HTTP adapters always emit 1.0; Generic
+    adapter emits the LLM-form-fill confidence. Below
+    `Settings.ats_generic_llm_confidence_threshold` (default 0.7) → caller
+    treats as `FAILURE_FIELD_MISMATCH` regardless of `ok`.
+    """
 
     ok: bool
     board_application_id: str | None = None
     error: str | None = None  # one of FAILURE_* when ok=False
     error_message: str | None = None
     retry_after: int | None = None  # seconds before next attempt (rate_limit)
-    raw: dict | None = None  # provider response for audit
+    raw: dict | None = None
+    confidence: float | None = None
 
 
 @dataclass(slots=True)

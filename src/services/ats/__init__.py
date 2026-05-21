@@ -1,8 +1,10 @@
 """ATS adapter dispatcher.
 
-Per BACKEND.md § K.5 + plan 10 § C.4. Wave 6 ships Greenhouse / Lever / Ashby.
-Workday / LinkedIn / Indeed / Generic are Phase 1.x sub-prompt — calls return
-`SubmissionResult(ok=False, error="auth_required")` until those adapters land.
+Per BACKEND.md § K.5 + plan 10 § C.4 + plan 63 / 0.2.7.10 § C.7. Wave 6
+shipped Greenhouse / Lever / Ashby (HTTP-API adapters). Plan 63 added skeleton
+modules for Workday / LinkedIn / Indeed / Generic (COMPANY_DIRECT) — they
+return `FAILURE_AUTH_REQUIRED` envelopes with board-named log lines until
+each per-adapter PR lands (Workday → 0.4.0.NN; the other three → 0.8.0.NN).
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from .base import (
 
 
 def dispatch(board: ApplicationBoard) -> ATSAdapter:
-    """Return the adapter for `board`. Falls back to manual stub for unknown."""
+    """Return the adapter for `board`. Falls back to manual stub for MANUAL."""
     if board == ApplicationBoard.GREENHOUSE:
         from .greenhouse import GreenhouseAdapter
 
@@ -37,8 +39,23 @@ def dispatch(board: ApplicationBoard) -> ATSAdapter:
         from .ashby import AshbyAdapter
 
         return AshbyAdapter()
-    # Workday / LinkedIn / Indeed / Generic / Manual / company_direct →
-    # not yet implemented in Wave 6; auth_required stub.
+    if board == ApplicationBoard.WORKDAY:
+        from .workday import WorkdayAdapter
+
+        return WorkdayAdapter()
+    if board == ApplicationBoard.LINKEDIN:
+        from .linkedin_apply import LinkedInAdapter
+
+        return LinkedInAdapter()
+    if board == ApplicationBoard.INDEED:
+        from .indeed import IndeedAdapter
+
+        return IndeedAdapter()
+    if board == ApplicationBoard.COMPANY_DIRECT:
+        from .generic import GenericAdapter
+
+        return GenericAdapter()
+    # ApplicationBoard.MANUAL → no auto-submission ever.
     return _ManualFallbackAdapter(board)
 
 

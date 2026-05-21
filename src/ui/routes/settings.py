@@ -210,6 +210,8 @@ async def _ctx_for_tab(
 
     if tab == "submissions":
         ctx["submission_failures"] = await _submission_failures_view(session, user_id=user_id)
+        # Plan 63 / 0.2.7.10 § C.6 — ATS adapter credential presence indicators.
+        ctx["ats_credential_indicators"] = env_secrets.ats_credential_indicators()
 
     if tab == "llm-provider":
         today_cost, cap = await _llm_cost_cap_view(session, settings, user_id=user_id)

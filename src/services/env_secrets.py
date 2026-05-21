@@ -15,10 +15,32 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from config import settings as app_settings
-from models.enums import JobSource, LLMProvider
+from models.enums import ApplicationBoard, JobSource, LLMProvider
 
 if TYPE_CHECKING:
     from models import Settings
+
+
+# Plan 63 / 0.2.7.10 § D.3 — env-slot mapping per ATS board. Adapter
+# implementations land in 0.4.0.NN (Workday) + 0.8.0.NN (LinkedIn/Indeed/Generic);
+# the env slots are reserved + presence-rendered in Settings · Submissions today.
+# COMPANY_DIRECT (Generic) is operator-tunable via `ats_generic_llm_confidence_threshold`
+# (default 0.7); not a credential, so it's not in this presence map.
+_ATS_BOARD_ENV_SLOT: dict[ApplicationBoard, str] = {
+    ApplicationBoard.WORKDAY: "WORKDAY_LOGIN_TOKEN",
+    ApplicationBoard.LINKEDIN: "LINKEDIN_SESSION_COOKIE",
+    ApplicationBoard.INDEED: "INDEED_SESSION_COOKIE",
+}
+
+# Phase-chip text rendered alongside each presence indicator in the
+# Settings · Submissions panel. Flips to "Available" when the per-adapter PR
+# merges; the value here is the source-of-truth for the chip.
+_ATS_BOARD_PHASE: dict[ApplicationBoard, str] = {
+    ApplicationBoard.WORKDAY: "Phase 4+",
+    ApplicationBoard.LINKEDIN: "Phase 5+",
+    ApplicationBoard.INDEED: "Phase 5+",
+    ApplicationBoard.COMPANY_DIRECT: "Phase 5+",
+}
 
 
 def llm_provider_configured(provider: LLMProvider) -> bool:
@@ -91,6 +113,74 @@ def scraper_source_configured(source: JobSource, settings: Settings) -> bool:
     if source is JobSource.INDEED:
         return bool(settings.indeed_keywords)
     return False
+
+
+def workday_credential_env_present() -> bool:
+    """True iff `WORKDAY_LOGIN_TOKEN` is set in env."""
+    return bool(app_settings.workday_login_token)
+
+
+def linkedin_session_cookie_env_present() -> bool:
+    """True iff `LINKEDIN_SESSION_COOKIE` is set in env."""
+    return bool(app_settings.linkedin_session_cookie)
+
+
+def indeed_credential_env_present() -> bool:
+    """True iff `INDEED_SESSION_COOKIE` is set in env."""
+    return bool(app_settings.indeed_session_cookie)
+
+
+def ats_credential_env_present(board: ApplicationBoard) -> bool:
+    """Dispatch helper — env-presence per ATS board (credentials only).
+
+    Per plan 63 § C.6. Returns False for COMPANY_DIRECT (the Generic adapter
+    is operator-tuned via threshold, not a credential) and for unknown /
+    unhandled board (typo guard, mirrors `scraper_source_configured` shape).
+    """
+    if board is ApplicationBoard.WORKDAY:
+        return workday_credential_env_present()
+    if board is ApplicationBoard.LINKEDIN:
+        return linkedin_session_cookie_env_present()
+    if board is ApplicationBoard.INDEED:
+        return indeed_credential_env_present()
+    return False
+
+
+def ats_credential_indicators() -> list[dict[str, object]]:
+    """Settings · Submissions panel context bundle.
+
+    Per plan 63 § C.6. Three credential rows (Workday / LinkedIn / Indeed)
+    + one tunable row (Generic threshold). Each credential entry:
+    `{board, env_var, configured, phase, kind: "credential"}`. The tunable
+    entry: `{board, env_var, value, phase, kind: "tunable"}`. The UI partial
+    renders a read-only table; secret entry stays in `.env` per the
+    post-vault pattern. Per-adapter PR (0.4.0.NN / 0.8.0.NN) flips each
+    board's `phase` chip to "Available" when the adapter ships.
+    """
+    rows: list[dict[str, object]] = [
+        {
+            "board": board,
+            "env_var": _ATS_BOARD_ENV_SLOT[board],
+            "configured": ats_credential_env_present(board),
+            "phase": _ATS_BOARD_PHASE[board],
+            "kind": "credential",
+        }
+        for board in (
+            ApplicationBoard.WORKDAY,
+            ApplicationBoard.LINKEDIN,
+            ApplicationBoard.INDEED,
+        )
+    ]
+    rows.append(
+        {
+            "board": ApplicationBoard.COMPANY_DIRECT,
+            "env_var": "ATS_GENERIC_LLM_CONFIDENCE_THRESHOLD",
+            "value": app_settings.ats_generic_llm_confidence_threshold,
+            "phase": _ATS_BOARD_PHASE[ApplicationBoard.COMPANY_DIRECT],
+            "kind": "tunable",
+        }
+    )
+    return rows
 
 
 def is_configured(scope: str) -> bool:
