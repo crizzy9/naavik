@@ -54,6 +54,30 @@ class Settings(BaseSettings):
     indeed_session_cookie: str | None = None
     ats_generic_llm_confidence_threshold: float = 0.7
 
+    # LinkedIn proxy — plan 64 / 0.2.7.11. Env-only per § D.3 (multi-tenant
+    # DB-stored deferred to 0.8.0.NN). Accepts `http://user:pass@host:port`,
+    # `https://...`, `socks5://...`. URL validated FAIL LOUD at boot per § D.6
+    # (proxy outage MUST stop the cron, never silently degrade to direct).
+    # `linkedin_proxy_provider_hint` is an opaque telemetry label persisted in
+    # `JobScrapeRun.raw_meta.proxy.provider_hint` for cost analysis only.
+    linkedin_proxy_url: str | None = None
+    linkedin_proxy_provider_hint: str | None = None
+
+    @field_validator("linkedin_proxy_url", mode="after")
+    @classmethod
+    def _validate_linkedin_proxy_url(cls, v: str | None) -> str | None:
+        """Plan 64 § D.6 FAIL LOUD — invalid URL refuses boot.
+
+        Lazy import of `ProxyURLConfig` to avoid a circular: `scraper.proxy`
+        imports `config.settings` at call-time.
+        """
+        if v is None or v == "":
+            return None
+        from scraper.proxy import ProxyURLConfig
+
+        ProxyURLConfig(url=v)
+        return v
+
     @field_validator(
         "workday_companies",
         "greenhouse_companies",

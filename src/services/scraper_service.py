@@ -136,6 +136,31 @@ async def run_scraper(
         existing_meta = dict(run.raw_meta or {})
         existing_meta["rate_limit"] = rl_meta
         existing_meta["adapter_used"] = adapter_used
+        # Plan 64 § D.9 — proxy telemetry sub-key. `used: False` when client
+        # doesn't have a proxy or doesn't expose the attribute (test fixtures
+        # using a SimpleNamespace stub). `host` is the redacted host:port
+        # (NEVER userinfo) so creds never reach JSONB. `bytes_estimated` is
+        # an upper bound (response HTML length, not socket bytes).
+        proxy_obj = getattr(client, "proxy_config", None) if client is not None else None
+        if proxy_obj is not None:
+            from scraper.proxy import safe_proxy_host
+
+            proxy_meta: dict[str, object] = {
+                "used": True,
+                "host": safe_proxy_host(proxy_obj.url),
+                "provider_hint": proxy_obj.provider_hint,
+                "request_count": int(getattr(client, "proxy_request_count", 0)),
+                "bytes_estimated": int(getattr(client, "proxy_bytes_estimated", 0)),
+            }
+        else:
+            proxy_meta = {
+                "used": False,
+                "host": None,
+                "provider_hint": None,
+                "request_count": 0,
+                "bytes_estimated": 0,
+            }
+        existing_meta["proxy"] = proxy_meta
         run.raw_meta = existing_meta
         session.add(run)
         await session.flush()

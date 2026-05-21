@@ -125,6 +125,32 @@ def linkedin_session_cookie_env_present() -> bool:
     return bool(app_settings.linkedin_session_cookie)
 
 
+def linkedin_proxy_configured() -> bool:
+    """True iff `LINKEDIN_PROXY_URL` is set in env (plan 64 / 0.2.7.11).
+
+    Surface only — never returns the URL value. UI renders a "configured"
+    chip + the redacted host (`gate.smartproxy.com:7000`); userinfo never
+    reaches the template context. See `safe_proxy_host` in `scraper.proxy`.
+    """
+    return bool(app_settings.linkedin_proxy_url)
+
+
+def linkedin_proxy_host_redacted() -> str | None:
+    """Return the proxy `<host>:<port>` (no userinfo), or `None` when unset.
+
+    Plan 64 § G.1: the host is not a secret (operators see it on every
+    provider dashboard); userinfo IS the secret. `safe_proxy_host` strips
+    userinfo + scheme. Used by the Sources UI to render "Proxy via
+    gate.smartproxy.com:7000" without leaking creds.
+    """
+    url = app_settings.linkedin_proxy_url
+    if not url:
+        return None
+    from scraper.proxy import safe_proxy_host
+
+    return safe_proxy_host(url)
+
+
 def indeed_credential_env_present() -> bool:
     """True iff `INDEED_SESSION_COOKIE` is set in env."""
     return bool(app_settings.indeed_session_cookie)

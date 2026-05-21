@@ -34,7 +34,9 @@ from llm import get_provider as llm_get_provider
 from llm.base import LLMProviderError
 from models import JobScrapeStatus, JobSource, Settings
 from scraper.crawl4ai_client import Crawl4AIClient
+from scraper.proxy import resolve_proxy_config, safe_proxy_host
 from scraper.rate_limit import resolve_rate_limit
+from scraper.redaction import safe_exc
 from scraper.sites import scrapers as scraper_registry
 from scraper.types import ScrapeQuery
 from services.notifications import notify_admin_error
@@ -57,6 +59,11 @@ _DEFAULT_CRON_SCHEDULES: dict[str, str] = {
 _INDEED_INTERVAL_MINUTES = 90
 
 _CONSECUTIVE_FAIL_THRESHOLD = 3
+
+# Plan 64 § D.6 — emit the LinkedIn-without-proxy warning ONCE per process to
+# avoid drowning per-firing logs. The flag flips True on first observation;
+# subsequent firings stay silent.
+_LINKEDIN_PROXY_WARNED: bool = False
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -155,11 +162,32 @@ async def _scrape_one_user(session, *, settings: Settings, source: JobSource) ->
     # fallback when no operator override exists or when the override fails
     # validation.
     rl_config = resolve_rate_limit(settings, source)
+    # Plan 64 § D — proxy resolution. LinkedIn-only this plan; non-LinkedIn
+    # sources always get None back. Boot-time validation in `config.py`
+    # already caught a malformed env-var; resolver returning None for
+    # LinkedIn means env-var unset (warn once, continue per § D.6 "fail loud
+    # iff configured BUT broken" — unset is a different failure mode).
+    proxy_config = resolve_proxy_config(source)
+    global _LINKEDIN_PROXY_WARNED
+    if source is JobSource.LINKEDIN and proxy_config is None and not _LINKEDIN_PROXY_WARNED:
+        log.warning(
+            "LINKEDIN_PROXY_URL not set; LinkedIn scrapes will use direct "
+            "connection — proxy strongly recommended for production deployments"
+        )
+        _LINKEDIN_PROXY_WARNED = True
     client = Crawl4AIClient(
         rate_limit_per_minute=rl_config.rpm,
         random_delay_seconds=(rl_config.delay_lo, rl_config.delay_hi),
         use_undetected_adapter=scraper_cls.use_undetected_adapter,
+        proxy_config=proxy_config,
     )
+    if proxy_config is not None:
+        log.info(
+            "scraping.%s for user=%s routing through proxy=%s",
+            source.value,
+            settings.user_id,
+            safe_proxy_host(proxy_config.url),
+        )
     scraper = scraper_cls(
         client=client,
         session=session,
@@ -176,23 +204,36 @@ async def _scrape_one_user(session, *, settings: Settings, source: JobSource) ->
             triggered_by="cron",
         )
     except Exception as exc:  # noqa: BLE001 — per-user isolation
-        log.exception(
+        # Plan 64 PR #165 delta-fix HIGH-1 + HIGH-2: `log.exception` would
+        # attach the full traceback (which embeds `repr(exc)` for every
+        # chained level); upstream libraries like httpx / Playwright /
+        # crawl4ai routinely embed the credentialed proxy URL in their
+        # exception messages. Switch to `log.error` + `safe_exc` so the
+        # chain is URL-stripped before reaching the log handler. Trade-off:
+        # we lose the stack trace; we gain guaranteed credential redaction.
+        # Telemetry surfaces (JobScrapeRun.errors, raw_meta) carry the
+        # safe form too; full traceback is recoverable via debugger if a
+        # repro is needed.
+        redacted = safe_exc(exc)
+        log.error(
             "scraping.%s failed for user=%s: %s",
             source.value,
             settings.user_id,
-            exc,
+            redacted,
         )
         counters[source.value] = previous_failures + 1
         settings.consecutive_scrape_failures = counters
         session.add(settings)
         # Tier-1 admin signal for top-level catastrophes (CancelledError,
         # DB connect failures) — these never produced a JobScrapeRun row,
-        # so the operator has no other path to learn this happened.
+        # so the operator has no other path to learn this happened. The
+        # `redacted` form goes into the Discord webhook body too; raw
+        # `str(exc)` would leak creds via the chain.
         await notify_admin_error(
             settings=settings,
             message=(
                 f"scraping.{source.value} cron raised at top level "
-                f"for user={settings.user_id}: {exc}"
+                f"for user={settings.user_id}: {redacted}"
             ),
         )
         return

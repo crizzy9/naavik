@@ -425,6 +425,16 @@ async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> 
                 "keywords": list(getattr(settings_obj, keywords_attr, None) or []),
                 "location": getattr(settings_obj, location_attr, None) or "",
             }
+        # Plan 64 / 0.2.7.11 — LinkedIn proxy presence indicator. The host is
+        # rendered (not the userinfo) so operators can verify which provider
+        # they configured without exposing credentials. None for non-LinkedIn
+        # sources; the multi-source generalization lands in 0.8.0.NN.
+        proxy_view: dict[str, object] | None = None
+        if source is JobSource.LINKEDIN:
+            proxy_view = {
+                "configured": env_secrets.linkedin_proxy_configured(),
+                "host": env_secrets.linkedin_proxy_host_redacted(),
+            }
         rows.append(
             {
                 "source": source_value,
@@ -440,6 +450,7 @@ async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> 
                     "delay_hi": rate_limit.delay_hi,
                 },
                 "configure": configure_block,
+                "proxy": proxy_view,
             }
         )
     return rows

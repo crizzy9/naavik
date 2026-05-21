@@ -88,6 +88,28 @@
         {{ '%.2f' | format(v.rate_limit.rpm) }} rpm
         · {{ '%.1f' | format(v.rate_limit.delay_lo) }}–{{ '%.1f' | format(v.rate_limit.delay_hi) }}s
       </div>
+
+      {# Plan 64 / 0.2.7.11 — LinkedIn proxy presence indicator. Host is
+         redacted (userinfo stripped). Renders only for LinkedIn — non-source
+         keys are None per _build_sources_view. #}
+      {% if v.proxy is not none %}
+        <div class="mt-1 text-[11px] font-mono" data-source-proxy>
+          {% if v.proxy.configured %}
+            <span data-source-proxy-state="configured"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30">
+              <i data-lucide="shield-check" class="h-3 w-3" stroke-width="1.5"></i>
+              proxy: {{ v.proxy.host }}
+            </span>
+          {% else %}
+            <span data-source-proxy-state="absent"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-200 ring-1 ring-amber-500/30"
+                  title="LINKEDIN_PROXY_URL not set — direct connection elevates account-ban risk">
+              <i data-lucide="shield-off" class="h-3 w-3" stroke-width="1.5"></i>
+              no proxy
+            </span>
+          {% endif %}
+        </div>
+      {% endif %}
     </div>
   </div>
 

@@ -34,6 +34,7 @@ import logging
 import random
 import time
 from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from crawl4ai import (
     AsyncWebCrawler,
@@ -48,6 +49,9 @@ from pydantic import HttpUrl, TypeAdapter, ValidationError
 from scraper.redaction import safe_exc, safe_msg, safe_url
 from scraper.url_guard import is_safe_destination
 from scraper.user_agents import pick_user_agent
+
+if TYPE_CHECKING:
+    from scraper.proxy import ProxyURLConfig
 
 log = logging.getLogger(__name__)
 
@@ -98,6 +102,7 @@ class Crawl4AIClient:
         random_delay_seconds: tuple[float, float] = (1.0, 3.0),
         user_agent: str | None = None,
         use_undetected_adapter: bool = False,
+        proxy_config: ProxyURLConfig | None = None,
     ) -> None:
         self._ua: str = user_agent or pick_user_agent()
         self._browser_config = BrowserConfig(
@@ -105,9 +110,15 @@ class Crawl4AIClient:
             headless=headless,
             user_agent=self._ua,
         )
+        # Plan 64 § D-research: `proxy_config` lives on `CrawlerRunConfig` (per
+        # Crawl4AI 0.8.6 docs; `BrowserConfig.proxy` is deprecated). Stored on
+        # `self._run_config` upfront so every `arun` / `arun_many` call gets
+        # the proxy via `clone()` overrides — single source of truth.
+        self._proxy_config = proxy_config
         self._run_config = CrawlerRunConfig(
             cache_mode=CacheMode.BYPASS,
             page_timeout=page_timeout_ms,
+            proxy_config=proxy_config.to_crawl4ai() if proxy_config is not None else None,
         )
         self._rate_limit_per_minute = rate_limit_per_minute
         self._random_delay_seconds = random_delay_seconds
@@ -136,6 +147,18 @@ class Crawl4AIClient:
         # the stream completes; written into JobScrapeRun.raw_meta.
         self.rate_limit_hits: int = 0
         self.backoff_total_s: float = 0.0
+        # Plan 64 § D.9 — proxy cost telemetry. Best-effort upper bound on
+        # bytes-over-wire (Crawl4AI exposes `result.html` length, not the
+        # raw socket bytes). `proxy_request_count` is the exact number of
+        # successful HTTP fetches routed through this client when proxy is
+        # active; readers gate on `proxy_config is not None`.
+        self.proxy_bytes_estimated: int = 0
+        self.proxy_request_count: int = 0
+
+    @property
+    def proxy_config(self) -> ProxyURLConfig | None:
+        """The `ProxyURLConfig` this instance was constructed with (or None)."""
+        return self._proxy_config
 
     @property
     def user_agent(self) -> str:
@@ -205,6 +228,13 @@ class Crawl4AIClient:
                 safe_msg(error_msg),
             )
             return None
+        # Plan 64 § D.9 — proxy cost telemetry. Track bytes + count only when
+        # the request actually traversed the proxy; non-proxy clients keep
+        # the counters at zero (cleaner JobScrapeRun.raw_meta on the absent
+        # path).
+        if self._proxy_config is not None:
+            self.proxy_request_count += 1
+            self.proxy_bytes_estimated += len(result.html or "")
         return result.html
 
     async def stream_many(
@@ -255,6 +285,10 @@ class Crawl4AIClient:
                 dispatcher=dispatcher,
             ):
                 if result.success:
+                    # Plan 64 § D.9 — proxy cost telemetry; see fetch_html.
+                    if self._proxy_config is not None:
+                        self.proxy_request_count += 1
+                        self.proxy_bytes_estimated += len(result.html or "")
                     yield (result.url, result.html)
                 else:
                     status_code = getattr(result, "status_code", None)
