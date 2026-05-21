@@ -271,6 +271,18 @@ These are funnel KPIs, not raw counts. (No "Jobs Found / Applied / Interviews / 
 - **States:** First-load empty (no profile) → redirect to `/onboarding`. Some sections empty → "+ Add education / certifications / projects" inline affordances.
 - **Components:** `profile_hero.html`, `contact_chip.html`, `experience_card.html`, `bullet_row.html`, `tag_chip.html`, `section_anchor_nav.html`, `application_readiness_card.html`
 
+#### Score history sparkline (plan 73 / 0.3.2.03 — graduated 2026-05-21 via plan 75 / 0.3.3.21)
+
+Inline-SVG 14-day score trend strip rendered in the Profile hero (Variant A · hero strip, locked at PLAN_GATE Q73.5).
+
+- **Data source:** `Profile.score_history` JSONB (canonical shape in DATA_MODEL.md § `Profile`). Read via `services.profile_service.get_score_history(session, user_id)`.
+- **Render:** 14-day score trend per role family, rendered as inline SVG `<polyline>` — no JS, no Chart.js. Stroke uses indigo-500 (matches DESIGN.md token); fill is `rgba(99, 102, 241, 0.1)` for the underline area.
+- **Role-family selector:** dropdown above the sparkline; default = the user's most-active family (highest `scored_count_30d` in `score_history.families`). 9-tag vocabulary (see § Tag vocabulary).
+- **Empty state:** when `score_history` is `null`, empty `families` array, OR every `daily_means[i]` is null, render the empty-state placeholder: "Score 0 jobs to see your trend" + a CTA chip linking to `/discover`.
+- **HTMX refresh:** Profile page is server-rendered on each visit so sparkline reflects the latest cron run (03:35 UTC daily). No HX-Trigger refresh on this surface today — the cron writeback runs ahead of typical user-load patterns. Future: `HX-Trigger: score-history-updated` emitted by the cron writeback could swap the strip in-place.
+- **Mobile:** sparkline scales to container width; role-family selector collapses into a single-line label + arrow tap target.
+- **Components:** rendered inline in `profile_hero.html` (no new partial — Q73.4 lock prohibits a new `/scores` route).
+
 ---
 
 ### 5. Profile editor
