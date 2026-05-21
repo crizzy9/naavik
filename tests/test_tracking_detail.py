@@ -97,21 +97,29 @@ def test_tracking_detail_fragment_nonexistent_returns_404(client: TestClient) ->
     assert r.status_code == 404
 
 
-def test_tracking_detail_unauth_returns_401(known_application_id: int) -> None:
-    """No session cookie → 401 from require_authed_session."""
+def test_tracking_detail_unauth_redirects_to_login(known_application_id: int) -> None:
+    """Plan 0.7.0.39: browser top-nav to a gated UI route (no cookie, no
+    HX-Request header) → 307 + Location: /login.
+    """
     from main import app
 
     c = TestClient(app, raise_server_exceptions=True)
-    r = c.get(f"/tracking/{known_application_id}")
-    assert r.status_code == 401
+    r = c.get(f"/tracking/{known_application_id}", follow_redirects=False)
+    assert r.status_code == 307
+    assert r.headers.get("location") == "/login"
 
 
-def test_tracking_detail_fragment_unauth_returns_401(known_application_id: int) -> None:
+def test_tracking_detail_fragment_unauth_redirects_to_login(known_application_id: int) -> None:
+    """Same matrix for the HTMX fragment route (still a UI path)."""
     from main import app
 
     c = TestClient(app, raise_server_exceptions=True)
-    r = c.get(f"/_fragments/tracking/application/{known_application_id}")
-    assert r.status_code == 401
+    r = c.get(
+        f"/_fragments/tracking/application/{known_application_id}",
+        follow_redirects=False,
+    )
+    assert r.status_code == 307
+    assert r.headers.get("location") == "/login"
 
 
 def test_tracking_detail_idor_cross_user_returns_404(

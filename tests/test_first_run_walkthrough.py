@@ -80,3 +80,20 @@ def test_setup_help_link_path_matches_route(client: TestClient):
     # The route is registered.
     route_paths = {r.path for r in app.routes if hasattr(r, "path")}
     assert "/setup-help" in route_paths
+
+
+def test_login_form_has_hx_target_error_for_4xx_swap(client: TestClient):
+    """Plan 0.7.0.39: HTMX 2.x ignores 4xx/5xx responses by default; the
+    signup/login form must declare `hx-target-error` (via the
+    `response-targets` extension already loaded in base.html) so 422
+    password-complexity errors swap into the login-card region instead of
+    silently dropping. Pin both signup and signin modes.
+    """
+    for mode in ("signup", "signin"):
+        r = client.get(f"/login?mode={mode}")
+        assert r.status_code == 200
+        body = r.text
+        assert 'hx-target-error="#login-card"' in body, (
+            f"login form ({mode} mode) missing hx-target-error; HTMX would "
+            f"silently drop 4xx responses from the signup/login endpoint"
+        )

@@ -553,37 +553,48 @@ async def require_authed_session(
     # single source of truth and avoid a top-of-file circular import.
     from ui.auth_stub import FAKE_SESSION_VALUE
 
-    # Plan 75 / 0.3.3.22 — HTMX UI clients see a broken inline fragment on
-    # bare 401; emit `HX-Redirect: /auth/login` so the browser navigates
-    # to the login page. API paths (`/api/v1/*`) stay bare 401 — consumers
-    # shouldn't auto-follow a redirect to an HTML page. Mirrors the
-    # `must_change_password` HX-Redirect block at lines 583-603.
+    # Plan 75 / 0.3.3.22 (refined plan 0.7.0.39, 2026-05-21) — three surfaces:
+    #   API (`/api/v1/*`)             → bare 401 (SDK consumers want 401)
+    #   HTMX UI (HX-Request)          → 401 + `HX-Redirect: /login`
+    #   Browser top-nav (neither)     → 307 + `Location: /login`
+    # The 307 path is what makes `http://localhost:8000/` from a cookieless
+    # browser land on `/login` instead of a JSON error page.
     is_htmx = request.headers.get("hx-request", "").lower() == "true"
     is_api = request.url.path.startswith("/api/v1/")
-    redirect_headers = {"HX-Redirect": "/auth/login"} if (is_htmx and not is_api) else None
 
-    def _raise_401(detail: str) -> None:
+    def _raise_unauthenticated(detail: str) -> None:
+        if is_api:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=detail,
+            )
+        if is_htmx:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=detail,
+                headers={"HX-Redirect": "/login"},
+            )
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
             detail=detail,
-            headers=redirect_headers,
+            headers={"Location": "/login"},
         )
 
     if not naavik_session:
-        _raise_401("Not authenticated")
+        _raise_unauthenticated("Not authenticated")
 
     if naavik_session == FAKE_SESSION_VALUE:
         return None
 
     result = await verify_jwt_async(session, naavik_session)
     if result is None:
-        _raise_401("Session expired")
+        _raise_unauthenticated("Session expired")
     user_id, jti, _ = result
     if await is_jwt_revoked(session, jti=jti):
-        _raise_401("Session revoked")
+        _raise_unauthenticated("Session revoked")
     user = await get_user_by_id(session, user_id)
     if user is None or not user.is_active:
-        _raise_401("Account disabled")
+        _raise_unauthenticated("Account disabled")
     if user.must_change_password:
         # Path-based split per dispatch brief. `HX-Redirect` is set on
         # both branches so HTMX clients (which always set `HX-Request` and

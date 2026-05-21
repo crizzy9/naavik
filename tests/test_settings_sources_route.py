@@ -153,11 +153,14 @@ def _patch_route_helpers(monkeypatch):
     app.dependency_overrides.pop(get_session, None)
 
 
-def test_get_unauth_returns_401(client: TestClient):
-    """`/settings/sources` without session cookie → 401."""
+def test_get_unauth_redirects_to_login(client: TestClient):
+    """Plan 0.7.0.39: `/settings/sources` without session cookie → 307 +
+    Location: /login (was 401 before; browser top-nav fix).
+    """
     bare = TestClient(client.app, raise_server_exceptions=True)
-    r = bare.get("/settings/sources")
-    assert r.status_code == 401
+    r = bare.get("/settings/sources", follow_redirects=False)
+    assert r.status_code == 307
+    assert r.headers.get("location") == "/login"
 
 
 def test_get_authed_no_runs_renders_never_run(client: TestClient, auth_cookies):
@@ -395,10 +398,13 @@ def test_build_sources_view_workday_kind_is_db_workday(monkeypatch, _patch_route
 
 
 def test_get_settings_llm_provider_requires_auth(client: TestClient):
-    """`/settings/llm-provider` without naavik_session cookie → 401."""
+    """Plan 0.7.0.39: `/settings/llm-provider` without naavik_session cookie
+    → 307 + Location: /login (browser top-nav redirect).
+    """
     bare = TestClient(client.app, raise_server_exceptions=True)
-    r = bare.get("/settings/llm-provider")
-    assert r.status_code == 401
+    r = bare.get("/settings/llm-provider", follow_redirects=False)
+    assert r.status_code == 307
+    assert r.headers.get("location") == "/login"
 
 
 def test_get_settings_llm_provider_authed_renders_panel(
