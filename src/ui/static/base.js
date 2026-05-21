@@ -263,4 +263,112 @@
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
     });
   }
+
+  // ---------------------------------------------------------------- //
+  // HX-Trigger { showToast: { text, tone? } } → naavikShowToast.     //
+  // Routes can emit toasts by setting                                //
+  //   response.headers["HX-Trigger"] = json.dumps({                  //
+  //     "showToast": {"text": "...", "tone": "info"}                 //
+  //   })                                                             //
+  // ---------------------------------------------------------------- //
+  document.body.addEventListener('showToast', function (e) {
+    var detail = e.detail || {};
+    var text = typeof detail === 'string' ? detail : (detail.text || detail.value || '');
+    if (!text) return;
+    var tone = detail.tone || 'info';
+    showToast(tone, text);
+  });
+
+  // ---------------------------------------------------------------- //
+  // 8. Tracking list — bulk-action selection helpers (plan 80).      //
+  // Per-row checkboxes mark a paired hidden `application_ids` input  //
+  // active so hx-include picks it up on toolbar submit. Bar          //
+  // visibility tracks the live count.                                //
+  // ---------------------------------------------------------------- //
+  function _trackingPairHiddenInput(checkbox) {
+    var appId = checkbox.getAttribute('data-application-id');
+    if (!appId) return null;
+    return document.querySelector('input[type=hidden][data-application-id-input="' + appId + '"]');
+  }
+  function trackingBulkSelectionChange() {
+    var checks = document.querySelectorAll('[data-tracking-row-select]');
+    var checked = 0;
+    checks.forEach(function (c) {
+      var hidden = _trackingPairHiddenInput(c);
+      if (hidden) hidden.disabled = !c.checked;
+      if (c.checked) checked += 1;
+    });
+    var bar = document.getElementById('tracking-bulk-action-bar');
+    if (bar) {
+      var active = checked > 0;
+      bar.setAttribute('data-bulk-active', active ? 'true' : 'false');
+      bar.hidden = !active;
+      bar.setAttribute('data-bulk-count-current', String(checked));
+      var label = bar.querySelector('[data-bulk-count]');
+      if (label) label.textContent = checked + ' selected';
+    }
+    var sel = document.querySelector('[data-bulk-move-select]');
+    var moveBtn = document.querySelector('[data-bulk-move-btn]');
+    if (moveBtn) moveBtn.disabled = checked === 0 || !sel || !sel.value;
+    // Sync header "select-all" checkbox indeterminate state.
+    var all = document.querySelector('[data-tracking-row-select-all]');
+    if (all) {
+      var total = checks.length;
+      all.checked = total > 0 && checked === total;
+      all.indeterminate = checked > 0 && checked < total;
+    }
+  }
+  function trackingBulkSelectAllToggle(headerCheckbox) {
+    var checked = !!headerCheckbox.checked;
+    document.querySelectorAll('[data-tracking-row-select]').forEach(function (c) {
+      c.checked = checked;
+    });
+    trackingBulkSelectionChange();
+  }
+  function trackingBulkClearSelection() {
+    document.querySelectorAll('[data-tracking-row-select]:checked').forEach(function (c) {
+      c.checked = false;
+    });
+    var all = document.querySelector('[data-tracking-row-select-all]');
+    if (all) { all.checked = false; all.indeterminate = false; }
+    trackingBulkSelectionChange();
+  }
+  function trackingBulkSubmitMove(event) {
+    var sel = document.querySelector('[data-bulk-move-select]');
+    if (!sel || !sel.value) {
+      showToast('warning', 'Pick a stage to move to first.');
+      return;
+    }
+    var form = document.getElementById('tracking-bulk-move-form');
+    if (form && window.htmx) {
+      window.htmx.trigger(form, 'submit');
+    }
+  }
+  function trackingBulkExportCsv() {
+    var checks = document.querySelectorAll('[data-tracking-row-select]:checked');
+    var ids = Array.from(checks).map(function (c) { return c.value; }).filter(Boolean);
+    if (!ids.length) {
+      showToast('warning', 'Select rows to export first.');
+      return;
+    }
+    var qs = ids.map(function (id) { return 'application_ids=' + encodeURIComponent(id); }).join('&');
+    window.location.href = '/api/v1/applications/export.csv?' + qs;
+  }
+  // Re-sync after every HTMX swap so a fresh list fragment keeps state right.
+  document.body.addEventListener('htmx:afterSwap', trackingBulkSelectionChange);
+  document.body.addEventListener('change', function (e) {
+    if (e.target && e.target.matches && e.target.matches('[data-bulk-move-select]')) {
+      trackingBulkSelectionChange();
+    }
+  });
+  if (document.readyState !== 'loading') {
+    trackingBulkSelectionChange();
+  } else {
+    document.addEventListener('DOMContentLoaded', trackingBulkSelectionChange);
+  }
+  window.trackingBulkSelectionChange = trackingBulkSelectionChange;
+  window.trackingBulkSelectAllToggle = trackingBulkSelectAllToggle;
+  window.trackingBulkClearSelection = trackingBulkClearSelection;
+  window.trackingBulkSubmitMove = trackingBulkSubmitMove;
+  window.trackingBulkExportCsv = trackingBulkExportCsv;
 })();

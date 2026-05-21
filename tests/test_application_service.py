@@ -829,9 +829,7 @@ async def test_bulk_archive_sets_user_archived_reason():
     a = _make_app(aid=42, status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
     session = _FakeSession()
     session.exec_queue = [_exec_one(a), _exec_one(a)]
-    success, failed = await svc.bulk_archive(
-        session, user_id=1, application_ids=[42]
-    )
+    success, failed = await svc.bulk_archive(session, user_id=1, application_ids=[42])
     assert success == 1
     assert failed == []
     assert a.status == ApplicationStatus.CLOSED
@@ -885,7 +883,9 @@ async def test_bulk_export_csv_idor_filters():
     session = _FakeSession()
     session.exec_queue = [_exec_all([mine])]
     rows = await svc.list_for_export(
-        session, user_id=1, application_ids=[10, 99]  # 99 is another user's
+        session,
+        user_id=1,
+        application_ids=[10, 99],  # 99 is another user's
     )
     assert len(rows) == 1
     assert rows[0]["company"] == "Stripe"
