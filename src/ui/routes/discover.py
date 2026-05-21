@@ -24,7 +24,7 @@ from services import (
     settings_service,
 )
 from services.auth import require_authed_session
-from services.rate_limit import check_rescore_rate_limit
+from services.rate_limit import check_generate_bundle_rate_limit, check_rescore_rate_limit
 from ui import discover_ctx as dctx
 from ui import discover_review_ctx as drctx
 from ui.templates_setup import templates
@@ -726,7 +726,7 @@ async def fragment_apply_confirm(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
-    _rate_limit: None = Depends(check_rescore_rate_limit),
+    _rate_limit: None = Depends(check_generate_bundle_rate_limit),
 ):
     """Confirm-step fragment — kicks off bundle generation + emits HX-Trigger.
 
@@ -736,8 +736,12 @@ async def fragment_apply_confirm(
     `HX-Trigger: {"bundle-generated": {"application_id": <id>}}` so the
     parent page's Up-Next card can refresh.
 
-    Rate-limited via `check_rescore_rate_limit` (10/min, 60/hr) — bundle
-    generation is expensive; this dep matches the rescore route's surface.
+    Rate-limited via `check_generate_bundle_rate_limit` (10/hr per user) —
+    bundle generation is expensive; this dep matches the
+    `/applications/{id}/generate-bundle` route's bucket (NOT the rescore
+    bucket). Confirms emit an HX-Trigger handoff to that route rather than
+    calling `bundle_generator` inline (see plan 75 deviation #2). Fixed
+    post-PR-#170 review (hacker MED).
     """
     from fastapi.responses import HTMLResponse as _HTMLResponse
 

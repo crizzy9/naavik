@@ -266,7 +266,7 @@ async def score_recompute_stale() -> None:
 
 
 async def score_aggregate_daily() -> None:
-    """`score.aggregate_daily` — daily 03:30 UTC (plan 73 / 0.3.2.03).
+    """`score.aggregate_daily` — daily 03:35 UTC (plan 73 / 0.3.2.03; slot shifted from 03:30 in plan 75 / 0.3.3.19 to avoid collision with `score.recompute_stale`).
 
     For every Profile row, recompute the per-role-family 30-day score
     trend blob from `Job.match_breakdown.scored_at` and write it to
