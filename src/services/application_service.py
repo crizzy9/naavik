@@ -1051,9 +1051,7 @@ async def get_screener_answer(
     the fake-session bypass for legacy fixtures.
     """
     if owner_user_id is None:
-        stmt = select(ApplicationScreenerAnswer).where(
-            ApplicationScreenerAnswer.id == answer_id
-        )
+        stmt = select(ApplicationScreenerAnswer).where(ApplicationScreenerAnswer.id == answer_id)
         return (await session.exec(stmt)).one_or_none()
     stmt = (
         select(ApplicationScreenerAnswer)
@@ -1195,9 +1193,7 @@ async def record_screener_answer(
     surfaces a clean 404. `None` preserves fake-session bypass.
     """
     if owner_user_id is None:
-        stmt = select(ApplicationScreenerAnswer).where(
-            ApplicationScreenerAnswer.id == answer_id
-        )
+        stmt = select(ApplicationScreenerAnswer).where(ApplicationScreenerAnswer.id == answer_id)
     else:
         stmt = (
             select(ApplicationScreenerAnswer)

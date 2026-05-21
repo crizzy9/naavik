@@ -365,7 +365,8 @@ def test_judge_skipped_count_postgres_predicate_uses_lower():
     Defense-in-depth — current writers always emit "true", but if a future
     JSONB write sneaks in "True" / "TRUE", the predicate stays correct.
     """
-    from sqlalchemy import func, select as sa_select
+    from sqlalchemy import func
+    from sqlalchemy import select as sa_select
     from sqlalchemy.dialects import postgresql
 
     from models import Job
@@ -385,6 +386,5 @@ def test_judge_skipped_count_postgres_predicate_uses_lower():
         )
     )
     assert "lower(" in compiled.lower(), (
-        "Postgres branch must wrap the JSONB extract in lower(); "
-        f"emitted SQL: {compiled}"
+        f"Postgres branch must wrap the JSONB extract in lower(); emitted SQL: {compiled}"
     )

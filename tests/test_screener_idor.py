@@ -127,9 +127,7 @@ async def test_get_screener_answer_blocks_cross_user(session: AsyncSession):
     app1 = await _seed_application(session, user_id=1)
     sa1 = await _seed_screener(session, app1.id)
 
-    leaked = await application_service.get_screener_answer(
-        session, sa1.id, owner_user_id=2
-    )
+    leaked = await application_service.get_screener_answer(session, sa1.id, owner_user_id=2)
     assert leaked is None
 
 
@@ -140,9 +138,7 @@ async def test_get_screener_answer_owner_passes(session: AsyncSession):
     app1 = await _seed_application(session, user_id=1)
     sa1 = await _seed_screener(session, app1.id, answer="my answer")
 
-    hit = await application_service.get_screener_answer(
-        session, sa1.id, owner_user_id=1
-    )
+    hit = await application_service.get_screener_answer(session, sa1.id, owner_user_id=1)
     assert hit is not None
     assert hit.answer == "my answer"
 
@@ -173,9 +169,7 @@ async def test_record_screener_answer_blocks_cross_user_writes(session: AsyncSes
     )
     assert blocked is None
     # Verify the row stayed unmodified.
-    fresh = await application_service.get_screener_answer(
-        session, sa1.id, owner_user_id=1
-    )
+    fresh = await application_service.get_screener_answer(session, sa1.id, owner_user_id=1)
     assert fresh is not None
     assert fresh.answer == "original"
 
