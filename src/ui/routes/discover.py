@@ -24,6 +24,7 @@ from services import (
     settings_service,
 )
 from services.auth import require_authed_session
+from services.rate_limit import check_rescore_rate_limit
 from ui import discover_ctx as dctx
 from ui import discover_review_ctx as drctx
 from ui.templates_setup import templates
@@ -400,10 +401,12 @@ async def post_rescore(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
+    _rate_limit: None = Depends(check_rescore_rate_limit),
 ):
     """Manual re-score of a single Job — plan 65 § D.6 (T10 trigger 3).
 
     CSRF-gated; IDOR via the `Job.user_id == effective_user_id` check.
+    Plan 75 / 0.3.3.02 — rate limited 10/min, 60/hr per user.
     """
     if user is None:
         # Real-auth only.

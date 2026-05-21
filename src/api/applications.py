@@ -28,6 +28,7 @@ from models import ApplicationStatus, ClosedReason, Settings, User
 from services import application_service as svc
 from services.auth import require_password_complete
 from services.bundle_generator import generate_bundle
+from services.rate_limit import check_generate_bundle_rate_limit
 
 _POSTMORTEM_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
 
@@ -200,6 +201,7 @@ async def generate_bundle_route(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_password_complete),
     _csrf: None = Depends(require_csrf),
+    _rate_limit: None = Depends(check_generate_bundle_rate_limit),
 ):
     """One-click bundle generation for `application_id` (plan 66 / 0.3.1).
 
@@ -209,6 +211,7 @@ async def generate_bundle_route(
     IDOR boundary: 404 on cross-user / missing app. Cost-cap mid-flight
     surfaces as `degraded: true` + `degraded_reason: "cost_cap_reached"`.
     Ethics rejection (> 2 bullets fabricated) returns 422.
+    Plan 75 / 0.3.3.06 — rate limited 10/hr per user.
     """
     application = await svc.get_application(session, application_id)
     if application is None or application.user_id != current_user.id:

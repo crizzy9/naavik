@@ -105,6 +105,7 @@ _SERVICE_DIRECT_TEST_MODULES = frozenset(
         "test_dedup",
         "test_scoring_history",
         "test_screener_idor",
+        "test_rate_limit",
     }
 )
 
