@@ -5,6 +5,8 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
@@ -12,6 +14,7 @@ from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
+from config import settings as app_settings
 from db.session import get_session
 from models import User
 from models.enums import ApplicationStatus, ClosedReason
@@ -19,6 +22,10 @@ from services import application_service
 from services.auth import require_authed_session
 from ui import tracking_ctx as tctx
 from ui.templates_setup import templates
+
+# Mirrors `api.applications._POSTMORTEM_TS_RE` (plan 52). Strict UTC-stamp
+# regex blocks path-traversal payloads at the routing layer.
+_POSTMORTEM_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
 
 router = APIRouter()
 
@@ -161,6 +168,65 @@ async def fragment_application(
     application = await _application_or_404(session, application_id, user)
     ctx = await tctx.build_application_detail_ctx(session, application)
     return templates.TemplateResponse(request, "components/_application_detail.html", ctx)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Plan 81 § D.1 (0.4.0.10) — postmortem modal overlay
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/_modal/postmortem/{application_id}/{ts}",
+    response_class=HTMLResponse,
+    name="tracking_postmortem_modal",
+)
+async def get_postmortem_modal(
+    request: Request,
+    application_id: int,
+    ts: str,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Render the postmortem-modal partial for `application_id` + `ts`.
+
+    Path-traversal gauntlet matches `api.applications.get_postmortem` (plan 52):
+    1. Strict UTC-timestamp regex on `ts` (`_POSTMORTEM_TS_RE`).
+    2. `Path.resolve().relative_to(data_root)` containment check.
+    3. IDOR via `_application_or_404` (404 on cross-user / missing).
+    """
+    # IDOR + existence check first — never leak postmortem existence to
+    # non-owners by varying the 404/400 code based on app presence.
+    await _application_or_404(session, application_id, user)
+    if not _POSTMORTEM_TS_RE.match(ts):
+        raise HTTPException(status_code=404, detail="postmortem not found")
+    data_root = Path(app_settings.data_dir).expanduser().resolve() / "data" / "postmortems"
+    base = (data_root / str(application_id) / ts).resolve()
+    try:
+        base.relative_to(data_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="postmortem not found") from exc
+
+    trace_file = base / "trace.json"
+    analysis_file = base / "analysis.md"
+    if not trace_file.exists() or not analysis_file.exists():
+        raise HTTPException(status_code=404, detail="postmortem not found")
+
+    try:
+        trace = json.loads(trace_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        trace = {}
+    analysis_md = analysis_file.read_text(encoding="utf-8")
+
+    return templates.TemplateResponse(
+        request,
+        "components/postmortem_modal.html",
+        {
+            "application_id": application_id,
+            "ts": ts,
+            "trace": trace,
+            "analysis_md": analysis_md,
+        },
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────

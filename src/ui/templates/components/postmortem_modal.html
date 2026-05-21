@@ -1,0 +1,57 @@
+{#
+  postmortem_modal.html — full-screen overlay rendering a single ATS postmortem.
+
+  Per docs/plans/81-0.4.0.07-0.4.0.10-0.4.0.12-0.4.0.16-detail-postmortem-timeline-analytics.md
+  § D.1. Loaded by HTMX from `GET /_modal/postmortem/<application_id>/<ts>`
+  and swapped beforeend into <body>. Click the backdrop or × to dismiss.
+
+  Args:
+    application_id : int
+    ts             : str — UTC timestamp matching `_POSTMORTEM_TS_RE`
+    trace          : dict — parsed trace.json
+    analysis_md    : str  — analysis.md (rendered via <pre> to avoid markdown
+                     dependency; CSS keeps newlines visible. See plan 81
+                     § Deviations.)
+#}
+<div id="postmortem-modal"
+     data-testid="postmortem-modal"
+     class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
+  <div class="fixed inset-0 -z-10 bg-black/60"
+       aria-hidden="true"
+       hx-on:click="document.getElementById('postmortem-modal').remove()"></div>
+
+  <div class="relative w-full max-w-3xl bg-slate-950 border border-slate-800 rounded-lg shadow-2xl shadow-black/45 flex flex-col max-h-[90vh] overflow-hidden">
+    <header class="px-6 pt-5 pb-3 flex items-start justify-between gap-3 border-b border-slate-800 shrink-0">
+      <div class="min-w-0">
+        <h2 id="postmortem-modal-title" class="text-base font-medium text-slate-50 truncate">
+          Postmortem · application {{ application_id }}
+        </h2>
+        <div class="text-xs text-slate-400 mt-0.5 font-mono truncate">{{ ts }}</div>
+      </div>
+      <button type="button"
+              class="text-slate-400 hover:text-slate-100 shrink-0 -mt-1 -mr-1 p-1.5 rounded hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              aria-label="Close"
+              hx-on:click="document.getElementById('postmortem-modal').remove()">
+        <i data-lucide="x" class="h-4 w-4" stroke-width="1.5"></i>
+      </button>
+    </header>
+
+    <div class="px-6 py-5 overflow-auto flex-1 flex flex-col gap-5">
+      <section>
+        <h3 class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Analysis</h3>
+        {# analysis.md ships from `services/ats_postmortem._render_markdown` —
+           rendered here as preformatted text. LLM output is untrusted; using
+           <pre> with Jinja autoescape avoids HTML injection. #}
+        <pre class="whitespace-pre-wrap break-words text-sm text-slate-100 leading-relaxed font-sans bg-slate-900 border border-slate-800 rounded-lg p-4">{{ analysis_md }}</pre>
+      </section>
+
+      <details>
+        <summary class="text-xs uppercase tracking-wide text-slate-400 font-medium cursor-pointer hover:text-slate-200">
+          Raw trace
+        </summary>
+        <pre class="mt-2 text-xs font-mono text-slate-300 bg-slate-900 border border-slate-800 p-3 rounded overflow-auto max-h-96">{{ trace | tojson(indent=2) }}</pre>
+      </details>
+    </div>
+  </div>
+</div>
+<script>window.lucide && window.lucide.createIcons();</script>

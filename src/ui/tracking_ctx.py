@@ -250,9 +250,18 @@ async def build_application_detail_ctx(
 
     last_failure = None
     board_application_id = None
+    postmortem_ts: str | None = None
     if application.submission_artifacts:
         last_failure = application.submission_artifacts.get("last_failure")
         board_application_id = application.submission_artifacts.get("board_application_id")
+        if isinstance(last_failure, dict):
+            # Plan 81 § D.1 — `last_failure.postmortem_path` is shaped
+            # `postmortems/<application_id>/<ts>`. We expose the trailing
+            # `<ts>` segment so the modal route can be built in the template
+            # without the template having to slice the path.
+            pm_path = last_failure.get("postmortem_path")
+            if isinstance(pm_path, str) and pm_path:
+                postmortem_ts = pm_path.rsplit("/", 1)[-1]
 
     return {
         "application": {
@@ -277,4 +286,5 @@ async def build_application_detail_ctx(
         "documents": docs,
         "contacts": contact_rows,
         "last_failure": last_failure,
+        "postmortem_ts": postmortem_ts,
     }

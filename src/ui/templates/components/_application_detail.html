@@ -7,7 +7,8 @@
      status_timeline  : list — {from, to, trigger, occurred_at, occurred_at_label}
      documents        : list — {id, kind, compiled_at, compiled_at_label, pdf_path}
      contacts         : list — {id, name, title, company, initial}
-     last_failure     : optional dict — {kind, message, captured_at}
+     last_failure     : optional dict — {kind, message, captured_at, postmortem_path}
+     postmortem_ts    : optional str  — last_failure timestamp segment, for the modal route
 #}
 {% set a = application %}
 <aside
@@ -58,13 +59,16 @@
         <div>{{ last_failure.message }}</div>
         <div class="mt-1 text-xs text-rose-300/70 font-mono">kind: {{ last_failure.kind }}</div>
         <div class="mt-2 flex items-center gap-2 flex-wrap">
-          {% if last_failure.postmortem_path %}
-            <a href="/api/v1/applications/{{ a.id }}/postmortem/{{ last_failure.postmortem_path.rsplit('/', 1)[-1] }}"
-               target="_blank" rel="noopener"
-               class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-slate-200 bg-slate-800 hover:bg-slate-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+          {% if postmortem_ts %}
+            <button type="button"
+                    data-testid="view-postmortem"
+                    hx-get="/_modal/postmortem/{{ a.id }}/{{ postmortem_ts }}"
+                    hx-target="body"
+                    hx-swap="beforeend"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-slate-200 bg-slate-800 hover:bg-slate-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
               <i data-lucide="file-search" class="h-3 w-3" stroke-width="1.5"></i>
               View postmortem
-            </a>
+            </button>
           {% endif %}
           <button type="button"
                   data-testid="retry-failed-application"
