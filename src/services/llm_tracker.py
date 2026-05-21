@@ -307,9 +307,13 @@ async def judge_skipped_count_today(session: AsyncSession, *, user_id: int) -> i
         Job.updated_at >= midnight,
     ]
     if _is_postgres_dialect(session):
+        # Plan 75 / 0.3.3.17 — `->>` returns text; lowercase the extract
+        # keeps the predicate resilient to non-canonical JSONB writes
+        # ("True", "TRUE", etc.) without relying on `lower(true) = "true"`
+        # by accident. Defense-in-depth; current writers always emit "true".
         stmt = select(func.count(Job.id)).where(
             *base_filters,
-            Job.match_breakdown.op("->>")("judge_skipped") == "true",
+            func.lower(Job.match_breakdown.op("->>")("judge_skipped")) == "true",
         )
         result = await session.exec(stmt)
         row = result.one()
