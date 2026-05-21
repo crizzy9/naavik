@@ -632,6 +632,27 @@ red-flag list. Full pipeline reference: `docs/design/RESUME_GENERATION.md`.
 - "Bring your own API key" reminder (info)
 - The terminal log tail is **self-hosted only** — replaced with the cloud-dashboard link.
 
+#### Tab: Generation (plan 67 / 0.3.4)
+
+- **Route:** `/settings/generation`
+- **Template:** `pages/_settings_generation.html` + `components/_audit_trail_viewer.html`
+- **Purpose:** opt into the PREMIUM-tier Claude-mythos bundle generation pipeline + view per-bundle audit trail.
+
+Four sections (top to bottom):
+
+1. **Generation tier toggle** — two radio cards (FREE vs PREMIUM) showing per-app cost range. Selected card carries the indigo border. PUT `/api/v1/settings/generation` persists; HTMX swap re-renders the partial with `save_status="saved"` chip.
+2. **PREMIUM per-app cost projection** — 5-column grid (Detector / Council / Critique / Tool loop / Originality) + total row in indigo. Sourced from `services.settings_service.compute_premium_cost_projection`. When `>= 10` PREMIUM bundles exist, shows history-based mean; otherwise falls back to the ROADMAP estimate ($0.61 total). Hint line under the projection clarifies which mode is active.
+3. **TIER-2 evasion opt-in** — single checkbox bound to `Settings.tier_2_evasion_enabled`. Off by default; amber-text warning notes ATS detection risk.
+4. **Originality.ai API key** — password input (does NOT round-trip the existing value; placeholder shows "configured" when set). Empty submit = clear. Per-user opt-in for the real-detector spot-check at convergence.
+
+Below the form:
+
+5. **Generation audit-trail viewer** — last 20 Applications with non-null `generation_trace`, rendered as expandable `<details>` cards. Card header shows tier chip (FREE = slate, PREMIUM = indigo) + company / role + total cost + degraded chip (when `degraded_mode=True`). Card body shows stages run/skipped count, parse-fidelity score, keyword-coverage score, ethics pre-flight verdict. PREMIUM bundles additionally render: council Borda rankings, detector iterations + Originality score, critique persona votes + consensus concerns, tool-loop tool calls per iteration. Renders entirely from `Application.generation_trace` JSONB; no extra DB queries beyond the indexed lookup.
+
+**Per-app override surface:** the Discover · review action bar surfaces a "Try PREMIUM for this job" button when `Job.score >= 0.85`. The button POSTs to the bundle endpoint with `tier=premium` kwarg overriding the user's default. (Discover surface wire-up lands as a follow-up; the bundle endpoint already accepts the kwarg.)
+
+**Components:** existing `settings_tabs.html` extended with `"generation"` tab id. New partials: `pages/_settings_generation.html`, `components/_audit_trail_viewer.html`. Reuses Tailwind/DaisyUI cards + existing accent palette (indigo PREMIUM, amber warnings, emerald success).
+
 #### Other tabs (specs deferred — design pending or implied)
 - **Account** — name, email, password change, sign out, "Delete my account" (destructive)
 - **Notifications** — Discord webhook URL, Telegram bot token, "Send test", per-event toggles (new high-score job, application sent, interview scheduled, offer received, rejection)
@@ -639,7 +660,7 @@ red-flag list. Full pipeline reference: `docs/design/RESUME_GENERATION.md`.
 - **Sources** — operator-facing surface for per-scraper configured-state + last-run state. Six rows (LinkedIn / Workday / Greenhouse / Lever / Ashby / Indeed); each row renders enable toggle + env-vs-DB configured indicator + last-`JobScrapeRun` status chip + relative timestamp + schedule cron + resolved rate-limit + `<details>` configure popover. **Full contract:** `docs/design/SOURCES_UI.md`. Writable editors for rate-limit JSONB + LinkedIn/Indeed keywords + Workday companies deferred to `0.2.7.06`.
 - **Submissions** — recent application submissions feed (auto-apply + manual). Shipped via plan 54 / `0.2.5.03`.
 
-- **Components:** `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `log_tail.html`, `on_disk_card.html`, `deployment_status_card.html`
+- **Components:** `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `log_tail.html`, `on_disk_card.html`, `deployment_status_card.html`, `_settings_generation.html` (plan 67), `_audit_trail_viewer.html` (plan 67)
 
 ---
 

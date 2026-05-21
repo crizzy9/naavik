@@ -369,6 +369,87 @@ async def put_sources(
     }
 
 
+@router.put("/api/v1/settings/generation", name="api_settings_generation_put")
+async def put_generation(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Update Settings · Generation tab fields — plan 67 (0.3.4) § C.6.
+
+    Two content types:
+      * `application/x-www-form-urlencoded` (HTMX form) -> re-renders the
+        Generation tab partial.
+      * `application/json` -> returns JSON post-update payload.
+
+    Fields:
+      - generation_tier ("free" | "premium")
+      - originality_api_key (string; empty = clear)
+      - tier_2_evasion_enabled (bool; absent key = skip)
+
+    IDOR scoped via `_effective_user_id`; CSRF enforced by `require_csrf`.
+    """
+    from ui.routes.settings import _effective_user_id
+
+    is_form = _is_form_request(request)
+    if is_form:
+        form = await request.form()
+        payload = {k: str(v) for k, v in form.items()}
+    else:
+        try:
+            payload = await request.json()
+        except Exception:  # noqa: BLE001
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+
+    user_id = _effective_user_id(_user)
+    generation_tier = payload.get("generation_tier")
+    originality_api_key_raw = payload.get("originality_api_key")
+    # Form posts always send the field (even empty); JSON posts may omit it.
+    # Empty string = clear (vs None = skip).
+    originality_api_key: str | None
+    if "originality_api_key" in payload:
+        originality_api_key = (
+            str(originality_api_key_raw) if originality_api_key_raw is not None else ""
+        )
+    else:
+        originality_api_key = None
+    tier_2_evasion_raw = payload.get("tier_2_evasion_enabled")
+    tier_2_evasion = bool(tier_2_evasion_raw) if "tier_2_evasion_enabled" in payload else None
+
+    try:
+        s = await settings_service.update_generation(
+            session,
+            user_id=user_id,
+            generation_tier=generation_tier if generation_tier else None,
+            originality_api_key=originality_api_key,
+            tier_2_evasion_enabled=tier_2_evasion,
+        )
+    except ValueError as exc:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+    await session.commit()
+
+    if is_form:
+        from ui.routes.settings import _ctx_for_tab
+        from ui.templates_setup import templates as ui_templates
+
+        ctx = await _ctx_for_tab(request, "generation", session=session, user_id=user_id)
+        ctx["save_status"] = "saved"
+        return ui_templates.TemplateResponse(
+            request,
+            "pages/_settings_generation.html",
+            ctx,
+        )
+
+    return {
+        "generation_tier": s.generation_tier,
+        "originality_api_key_configured": bool(s.originality_api_key),
+        "tier_2_evasion_enabled": s.tier_2_evasion_enabled,
+    }
+
+
 @router.put("/api/v1/settings/notifications", name="api_settings_notifications_put")
 async def put_notifications(
     payload: Annotated[dict[str, Any] | None, Body()] = None,

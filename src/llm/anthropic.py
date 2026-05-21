@@ -6,8 +6,10 @@ $3/M input + $15/M output tokens (2026-04 rate sheet).
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from typing import TypeVar
 
 from anthropic import AsyncAnthropic
@@ -21,6 +23,36 @@ from .base import (
 )
 
 T = TypeVar("T", bound=BaseModel)
+
+
+@dataclass(slots=True)
+class BatchRequest:
+    """One request inside an Anthropic batch submit.
+
+    `custom_id` lets the caller match results back to inputs even when
+    the batch API reorders responses.
+    """
+
+    custom_id: str
+    prompt: str
+    schema: type[BaseModel]
+    max_tokens: int = 1024
+    system: str | None = None
+    cache_system: bool = False
+
+
+@dataclass(slots=True)
+class BatchResponse:
+    """One result row from `AnthropicProvider.batch`."""
+
+    custom_id: str
+    value: dict = field(default_factory=dict)
+    text: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    succeeded: bool = True
+    error: str | None = None
+
 
 # USD per million tokens; updated when Anthropic's pricing changes.
 _PRICING = {
@@ -147,4 +179,125 @@ class AnthropicProvider(LLMProvider):
         rates = _PRICING.get(self._model, _PRICING["_default"])
         return (input_tokens / 1_000_000) * rates["input"] + (output_tokens / 1_000_000) * rates[
             "output"
+        ]
+
+    async def batch(
+        self,
+        requests: list[BatchRequest],
+        *,
+        poll_interval_seconds: float = 5.0,
+        timeout_seconds: float = 300.0,
+    ) -> list[BatchResponse]:
+        """Submit `requests` via Anthropic's Message Batches API + poll.
+
+        Plan 67 (0.3.4) § C.2 / T3 / E.2. 50% cost discount vs synchronous
+        per-request calls. Polls every `poll_interval_seconds` until the
+        batch reaches a terminal state (`ended`) or `timeout_seconds` passes.
+
+        Returns BatchResponse rows in the same order as the input requests
+        (matched via `custom_id`). On polling timeout / batch failure,
+        raises `LLMProviderError` so the council code can fall back to
+        synchronous `asyncio.gather`.
+        """
+        if not requests:
+            return []
+
+        batch_requests = []
+        for req in requests:
+            tool_name = req.schema.__name__.lower()
+            params: dict = {
+                "model": self._model,
+                "max_tokens": req.max_tokens,
+                "tools": [
+                    {
+                        "name": tool_name,
+                        "description": (req.schema.__doc__ or "Structured output").strip(),
+                        "input_schema": req.schema.model_json_schema(),
+                    }
+                ],
+                "tool_choice": {"type": "tool", "name": tool_name},
+                "messages": [{"role": "user", "content": req.prompt}],
+            }
+            if req.system is not None:
+                if req.cache_system:
+                    params["system"] = [
+                        {
+                            "type": "text",
+                            "text": req.system,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ]
+                else:
+                    params["system"] = req.system
+            batch_requests.append({"custom_id": req.custom_id, "params": params})
+
+        try:
+            created = await self._client.messages.batches.create(requests=batch_requests)
+        except Exception as exc:  # noqa: BLE001
+            raise LLMProviderError(f"anthropic batch submit failed: {exc}") from exc
+
+        batch_id = getattr(created, "id", None)
+        if batch_id is None:
+            raise LLMProviderError("anthropic batch submit returned no id")
+
+        elapsed = 0.0
+        while elapsed < timeout_seconds:
+            try:
+                status = await self._client.messages.batches.retrieve(batch_id)
+            except Exception as exc:  # noqa: BLE001
+                raise LLMProviderError(f"anthropic batch poll failed: {exc}") from exc
+            processing = getattr(status, "processing_status", None)
+            if processing == "ended":
+                break
+            await asyncio.sleep(poll_interval_seconds)
+            elapsed += poll_interval_seconds
+        else:
+            raise LLMProviderError(
+                f"anthropic batch {batch_id} did not converge within {timeout_seconds}s"
+            )
+
+        # Pull results
+        try:
+            stream = await self._client.messages.batches.results(batch_id)
+        except Exception as exc:  # noqa: BLE001
+            raise LLMProviderError(f"anthropic batch results fetch failed: {exc}") from exc
+
+        results_by_id: dict[str, BatchResponse] = {}
+        async for row in stream:
+            cid = getattr(row, "custom_id", "") or ""
+            result = getattr(row, "result", None)
+            result_type = getattr(result, "type", "")
+            if result_type != "succeeded" or result is None:
+                results_by_id[cid] = BatchResponse(
+                    custom_id=cid,
+                    succeeded=False,
+                    error=str(getattr(result, "error", None) or "batch_request_failed"),
+                )
+                continue
+            message = getattr(result, "message", None)
+            content = getattr(message, "content", []) or []
+            tool_input: dict = {}
+            text_chunks: list[str] = []
+            for block in content:
+                if getattr(block, "type", None) == "tool_use":
+                    tool_input = getattr(block, "input", {}) or {}
+                elif hasattr(block, "text"):
+                    text_chunks.append(block.text)
+            usage = getattr(message, "usage", None)
+            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+            results_by_id[cid] = BatchResponse(
+                custom_id=cid,
+                value=tool_input,
+                text=json.dumps(tool_input) if tool_input else "".join(text_chunks),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                succeeded=True,
+            )
+
+        return [
+            results_by_id.get(
+                req.custom_id, BatchResponse(custom_id=req.custom_id, succeeded=False)
+            )
+            for req in requests
         ]

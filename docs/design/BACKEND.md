@@ -796,7 +796,7 @@ user clicks Discard draft (DELETE /api/v1/applications/{id}/discard):
 
 ### K.4 Document generation pipeline
 
-> **Canonical reference (plan 66 / 0.3.1):** `docs/design/RESUME_GENERATION.md` documents the full FREE-tier pipeline — voice grounding, constitution preamble, AI-tell blocklist, burstiness validator, ATS-friendly template variant (`onepage_ats.typ`), recruiter-priority headline, keyword coverage, parse-fidelity validator, adaptive cover letter, hiring-manager extractor, ethics pre-flight, and the `Application.generation_trace` audit-trail shape. The summary below is K.4 as it shipped in 0.0.x-0.2.x; 0.3.1 wraps each of these substeps with the voice-grounded substrate. PREMIUM (0.3.4) Stage 9 extends the same doc.
+> **Canonical reference (plan 66 / 0.3.1 + plan 67 / 0.3.4):** `docs/design/RESUME_GENERATION.md` documents the full FREE-tier pipeline (Stages 1-8) + the PREMIUM-tier Claude-mythos layer (Stage 9). FREE: voice grounding, constitution preamble, AI-tell blocklist, burstiness validator, ATS-friendly template variant (`onepage_ats.typ`), recruiter-priority headline, keyword coverage, parse-fidelity validator, adaptive cover letter, hiring-manager extractor, ethics pre-flight, and the `Application.generation_trace` audit-trail shape. PREMIUM: 3-agent voting council for bullet selection (Borda count, batch API), adversarial Claude-as-detector loop + Originality.ai spot-check, multi-persona critique council, tool-loop orchestrator (5 validators), ATS parser ensemble. PREMIUM dispatch via `bundle_generator.generate_bundle(..., tier="premium")` OR `Settings.generation_tier="premium"`. Cost-cap mid-flight falls back to FREE composite gracefully.
 
 `document_generator.generate_resume(application)`:
 

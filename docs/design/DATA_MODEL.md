@@ -1414,6 +1414,8 @@ The full Settings model (per § C) carries these fields. The mapping below shows
 | `debug` | `/_design/components` route gate (B) | |
 | `score_per_dim_weights` (JSONB) | `services/scorer/weights.py:resolve_weights` | Plan 65 (0.3.0.02). Per-tag operator-tunable weights for layer-1 tag overlap. Defaults to `{}` → all-1.0. JSONB validator drops unknown Tag keys; values clamped [0, 3]. UI editor ships in 0.3.2.04; v1 ships JSONB editable via PUT route only. |
 | `semantic_match_enabled` | `services/embedding_service.embed_job` + `embed_profile`; `scorer.orchestrator.score_unscored_jobs` | Plan 61 / 0.2.7.16 + plan 65 / 0.3.0. Master gate for semantic + LLM scoring; default OFF so a fresh self-host doesn't bill embedding calls until the operator opts in. |
+| `generation_tier` | `services/bundle_generator.generate_bundle` (K.4) | Plan 67 / 0.3.4. `"free"` (default) or `"premium"`. Routes the bundle through `_generate_bundle_premium` when `"premium"`. Per-app override via explicit `tier=` kwarg from the Discover · review surface. |
+| `originality_api_key` | `services/detector_loop.run_detector_loop` (Q.2) -> `llm/providers/originality.score_text` | Plan 67 / 0.3.4. Per-user opt-in for Originality.ai ground-truth detector spot-check at convergence. NULL = Claude-as-detector only (no third-party check). Lives in DB per the post-vault Settings-UI surface pattern (operator-facing secrets stay in Settings; deployment-config secrets stay in env). |
 
 **`encryption_key` is NOT on Settings.** The vault's master key is derived from the `SECRET_KEY` env var (or a passphrase set during `naavik init`). Storing the key in the DB would defeat the encryption boundary.
 

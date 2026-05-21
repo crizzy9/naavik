@@ -73,6 +73,13 @@ dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.25.0",
 ]
+# Plan 67 (0.3.4) § C.5 — PREMIUM-tier parser ensemble. Optional because
+# `services/ats_parser_ensemble.py` gracefully degrades to pdfplumber when
+# these aren't installed. Install via `uv sync --extra premium-parsers`.
+premium-parsers = [
+    "pyresparser>=1.0.6",
+    "pyresume>=0.1.0",
+]
 
 [project.scripts]
 # Plan 50 (0.2.1.05, 2026-05-20): `src/cli/` deleted. The `naavik`
@@ -91,7 +98,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["api", "db", "llm", "models", "scheduler", "scraper", "scraper.sites", "services", "typst", "ui"]
+packages = ["api", "db", "llm", "llm.providers", "models", "scheduler", "scraper", "scraper.sites", "services", "typst", "ui"]
 py-modules = ["config", "main", "app"]
 
 [tool.ruff]

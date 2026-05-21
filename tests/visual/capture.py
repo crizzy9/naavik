@@ -41,6 +41,7 @@ SCREENS: list[tuple[str, str]] = [
     ("tracking-list", "/tracking?view=list"),
     ("outreach", "/outreach?application=2"),
     ("settings-llm", "/settings/llm-provider"),
+    ("settings-generation", "/settings/generation"),
     ("settings-deployment", "/settings/deployment"),
     ("settings-account", "/settings/account"),
     ("settings-notifications", "/settings/notifications"),

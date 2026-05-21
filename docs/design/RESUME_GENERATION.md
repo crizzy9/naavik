@@ -1,7 +1,7 @@
 # Resume Generation Pipeline (FREE tier)
 
 > **Plan:** `docs/plans/archive/66-0.3.1-free-tier-generation.md` (graduates from § B + § C + the synthesized research memo at `docs/design/research/0.3.1-resume-generation-sota.md`).
-> **Status:** Canonical for the FREE-tier pipeline (Stages 1-8). PREMIUM-tier Stage 9 (mythos layer) will extend this doc in `0.3.4` — see § Stage 9.
+> **Status:** Canonical for both FREE-tier (Stages 1-8) and PREMIUM-tier (Stage 9 — § Q below). PREMIUM extends FREE; it does not replace.
 > **Last updated:** 2026-05-21 (initial graduation from plan 66).
 
 The pipeline that turns a `JobScore`-graded job + a candidate profile into an ATS-passable resume + cover letter + screener answers — all in one atomic call from the Discover · review & apply screen.
@@ -354,20 +354,157 @@ Worst case (no cache hit, fresh each call): ~$0.90. Best case (cold stage 1 only
 
 ## Q · Stage 9 — PREMIUM (Claude-mythos layer)
 
-**Status:** OUT OF SCOPE for plan 66 / 0.3.1. Scheduled for `0.3.4` (PREMIUM tier). When that plan ships, it extends this doc with:
+**Status:** EXECUTED 2026-05-21 via plan 67 / 0.3.4. Opt-in via `Settings.generation_tier="premium"`; per-app override via the Discover · review action bar's "Try PREMIUM for this job" button (gated on `Job.score >= 0.85`).
 
-- `Stage 9.1 — Originality.ai polish loop` (3rd-party detection check + iterate).
-- `Stage 9.2 — TIER-2 evasion features` (gated on `Settings.tier_2_evasion_enabled`).
-- `Stage 9.3 — Claude-mythos voice doubling` (additional grounding via `manager-promote-lesson` knowledge entries).
+PREMIUM stacks five Claude-mythos sub-stages on top of the FREE composite. Each runs after the FREE pipeline materializes the bundle; PREMIUM signals are recorded to `Application.generation_trace` for the audit-trail viewer but do NOT regenerate the PDF mid-flight (regeneration is a deliberate user motion, not a council side-effect).
 
-The FREE tier (Stages 1-8) is independently shippable and complete. PREMIUM extends; it does not replace.
+### Q.1 · 3-agent voting council for bullet selection
 
-## R · Cross-references
+**File:** `src/services/council.py`. **Prompts:** `src/llm/prompts/council_personas.py`.
+
+Three heterogeneous personas vote on the candidate bullet set:
+
+| Persona | Bias | What it picks |
+|---|---|---|
+| `pragmatic_recruiter` | 6-second skim + ATS keyword coverage | Bullets that read fast + match JD keywords verbatim |
+| `hiring_manager` | Senior-level scope + tech-stack signal | Bullets that signal ownership + specific stack |
+| `cultural_fit` | Collaboration + impact + growth | Bullets that signal range + voice |
+
+Submitted via Anthropic batch API (`messages.batches.create`) for 50% cost discount per OQ-2. Each persona returns a full ordering (`CouncilVote.ranked_bullet_ids`). Borda count aggregates: rank-0 awards `N` points, rank-`N-1` awards 1 point. Ties break to **lower bullet_id** (deterministic per T3).
+
+Polling timeout (5min) or 503 → sync fallback via `asyncio.gather` (1× cost; loses the 50% discount but preserves the council shape).
+
+### Q.2 · Adversarial Claude-as-detector loop
+
+**File:** `src/services/detector_loop.py`. **Prompts:** `src/llm/prompts/detect_ai_likelihood.py` + `src/llm/prompts/refine_to_human.py`.
+
+Inner loop iterates Claude-as-detector + phrase-targeted refine:
+
+1. Score `text` for AI-likelihood (Pydantic `DetectorVerdict`: `ai_confidence` 0-1 + `flagged_phrases`).
+2. If `ai_confidence <= 0.25` → exit (`target_met=True`).
+3. Else: rewrite **only the flagged phrases** via `RefinedText` schema (preserves voice grounding from constitution preamble).
+4. Loop. Cap N=3 iterations per OQ-3.
+
+**Hybrid Originality.ai spot-check** per OQ-4. At convergence (when at least one refine pass executed) AND `Settings.originality_api_key` is set, calls Originality.ai once for ground-truth verification. Score persists to `Application.generation_trace.originality_score`. No API key → score remains `None` (graceful degrade).
+
+**Why phrase-targeted refine vs full regenerate:** the constitution preamble + voice grounding work BECAUSE the LLM saw the candidate's actual writing. Full regenerate would discard that context iteratively (option matrix § E.4 (B) rejected). Phrase-targeted refine preserves voice while removing AI-tells.
+
+### Q.3 · Multi-persona recruiter critique council
+
+**File:** `src/services/critique_council.py`. **Prompts:** `src/llm/prompts/critique_personas.py`.
+
+Three persona reviewers (distinct from Q.1's selection personas) read the **rendered** resume + cover letter:
+
+| Persona | Lens |
+|---|---|
+| `faang_l5_l6_hm` | FAANG L5/L6 hiring manager — skim + technical depth |
+| `startup_founder` | Series A/B founder — ownership + scrappiness + recent ship velocity |
+| `fortune_500_hr` | Fortune-500 HR-screener — Workday parse + keyword density + visa visibility |
+
+Each returns `CritiqueVote(persona, strengths, concerns, recommendation in {ship, revise, reject}, specific_changes)`. Batched via Anthropic batch API; same 50% discount + sync fallback as Q.1.
+
+**Consensus detection** via `difflib.SequenceMatcher.ratio() >= 0.6`: similar concerns across personas cluster into one consensus item (longest phrase wins as representative). Single-persona concerns surface as "disagreement items" (informational only).
+
+**Regeneration trigger** per T4: majority `revise` (≥ 2/3 personas) sets `critique_should_regenerate=True` in the audit trail. **Hard cap at 0 regen mid-flight** — caller surfaces concerns to the user, who decides whether to regenerate. (T4 plan-spec'd "1 regeneration pass" → simplified to 0 to keep the orchestrator deterministic; the user remains in control of regeneration. **DEVIATION recorded.**)
+
+### Q.4 · Tool-loop orchestrator
+
+**File:** `src/services/tool_loop.py`. **Prompts:** `src/llm/prompts/orchestrate_refinement.py`.
+
+Claude orchestrates 5 validators in a tool-use loop (N=3 iters max per OQ-3):
+
+| Tool | Delegates to | Returns |
+|---|---|---|
+| `ats_parse_test` | `services.ats_parser_fidelity.validate_parse_fidelity` | score + tier + missing fields |
+| `detector_test` | `services.detector_loop.run_detector_loop` (Q.2) | final_confidence + iterations + originality |
+| `recruiter_skim_score` | NEW inline Claude call (Pydantic `SkimScore`) | 0-10 score + signals |
+| `keyword_coverage_check` | `services.keyword_coverage.compute_coverage` | score + found + missing |
+| `defensibility_check` | inline (bullet ids ∩ profile ids) | all_grounded + ungrounded_count |
+
+Claude reads tool results, decides "ship" or "ship_with_caveats", or runs more tools. Iteration cap N=3. Budget-aware: probes `is_cost_capped` between iterations; exits with `final_decision="exhausted"` + `degraded_reason="cost_cap_reached"` when approaching cap.
+
+**NO `interleaved-thinking-2025-05-14` beta header** per T5: Sonnet 4.6 / Opus 4.7 auto-enable adaptive thinking. Conditional header insertion is reserved for ≤ 4.5 models (engineer touch-point in `AnthropicProvider` when Settings.llm_model resolves to claude-sonnet-4-5-*).
+
+**Non-Anthropic providers** (OpenAI / Ollama) short-circuit with `degraded_reason="non_anthropic_provider"` — tool-use orchestration isn't ported yet.
+
+### Q.5 · ATS parser ensemble
+
+**File:** `src/services/ats_parser_ensemble.py`. **Subprocess shim:** `scripts/openresume_parser.js`.
+
+Cross-checks the FREE-tier pdfplumber score with two optional parsers:
+
+- `pyresparser` — Python lib; install via `uv sync --extra premium-parsers`.
+- OpenResume — Node subprocess via `scripts/openresume_parser.js` (requires `node` on PATH + optionally `pdfjs-dist`).
+
+Aggregate score = mean of available parsers (pdfplumber always runs; ensemble degrades to single-parser when optionals absent). T6 locks the Node subprocess approach (option matrix § E.3) — full Python port rejected as maintenance commitment.
+
+### Q.6 · Cost-cap fallback path
+
+Per T9 / OQ-10: cost-cap firing mid-flight during PREMIUM stages → graceful skip remaining stages → fall back to FREE composite. Audit trail records `degraded_mode=True`, `degraded_reason="cost_cap_reached_premium"`, plus the exact list of `premium_stages_completed` vs `premium_stages_skipped`. The bundle still ships; the user sees a degraded-mode warning banner.
+
+## R · PREMIUM cost projection
+
+`services.settings_service.compute_premium_cost_projection(session, user_id)` drives the Settings · Generation tab cost-projection widget. Two modes:
+
+| Mode | When | Source |
+|---|---|---|
+| History-based | >=10 PREMIUM bundles in user's history | Mean per-stage cost from `ApiUsage` filtered by `application_id IN premium_bundles` |
+| ROADMAP fallback | <10 history | Hardcoded per-stage estimates: detector $0.10, council $0.10, critique $0.10, tool_loop $0.30, originality $0.01, total $0.61 |
+
+`CostProjection` dataclass shape (see `services/settings_service.py:CostProjection`):
+
+```python
+@dataclass(frozen=True, slots=True)
+class CostProjection:
+    detector_usd: float
+    council_usd: float
+    critique_usd: float
+    tool_loop_usd: float
+    originality_usd: float
+    total_usd: float
+    from_history: bool
+    sample_size: int = 0
+```
+
+Per-stage `prompt_name` -> projection-key mapping lives in `services.settings_service._PREMIUM_STAGE_PROMPTS` — extend there when adding new PREMIUM stages.
+
+## S · PREMIUM audit-trail schema extensions
+
+`Application.generation_trace` is the canonical opaque-blob JSONB column. The FREE shape (17 keys) is the baseline; PREMIUM adds the following keys:
+
+| Key | Type | Source |
+|---|---|---|
+| `tier` | `"premium"` (replaces `"free"`) | bundle dispatcher |
+| `council_votes` | `dict[persona, list[bullet_id]]` | Q.1 |
+| `council_borda_scores` | `dict[str(bullet_id), int]` | Q.1 |
+| `council_selected_ids` | `list[bullet_id]` | Q.1 |
+| `detector_iterations` | `list[{iter_n, confidence, refinements, flagged_phrases}]` | Q.2 |
+| `detector_final_confidence` | `float` | Q.2 |
+| `detector_target_met` | `bool` | Q.2 |
+| `originality_score` | `float \| null` | Q.2 (Originality.ai spot-check) |
+| `critique_persona_feedback` | `list[CritiqueVote]` | Q.3 |
+| `critique_consensus_concerns` | `list[str]` | Q.3 |
+| `critique_recommendation_tally` | `{ship: int, revise: int, reject: int}` | Q.3 |
+| `critique_majority_recommendation` | `"ship" \| "revise" \| "reject"` | Q.3 |
+| `critique_should_regenerate` | `bool` | Q.3 |
+| `critique_regeneration_triggered` | `bool` (always False mid-flight) | Q.3 |
+| `tool_loop_iterations` | `list[{iter_n, tool_calls, decision, cost_usd}]` | Q.4 |
+| `tool_loop_final_decision` | `"ship" \| "ship_with_caveats" \| "exhausted"` | Q.4 |
+| `premium_stages_completed` | `list[str]` (council/detector/critique/tool_loop) | bundle dispatcher |
+| `premium_stages_skipped` | `list[str]` (skipped due to cost cap or stage failure) | bundle dispatcher |
+| `degraded_reason` (`"cost_cap_reached_premium"`) | `str` | bundle dispatcher (T9) |
+
+**No alembic migration needed** for these — JSONB opaque blob. The Pydantic `GenerationTrace` schema in `services/bundle_generator.py` may grow `Optional[...]` fields covering the additions; until then, the audit-trail viewer reads dict keys directly (graceful when absent).
+
+## T · Cross-references
 
 - `docs/design/BACKEND.md § K.4` — pipeline catalog (forward-pointer here).
 - `docs/design/DATA_MODEL.md § Application` — `generation_trace` column.
-- `docs/design/DATA_MODEL.md § Settings` — 5 new Settings fields.
+- `docs/design/DATA_MODEL.md § Settings` — Settings fields incl. `generation_tier` + `originality_api_key`.
 - `docs/design/SCREENS.md § 8` — Discover · review & apply (action bar wires to this endpoint).
+- `docs/design/SCREENS.md § Settings · Generation` — UI spec for the Generation tab (plan 67 § C.6).
 - `docs/design/JOB_MODEL.md` — `JobScore` (consumed for `matched_tags` + score gate).
 - `docs/design/research/0.3.1-resume-generation-sota.md` — full research synthesis (option matrices, source citations).
 - `AGENTS.md § Resume/CV Data Model` — 9-tag vocab + selection override semantics.
+- `docs/plans/archive/66-0.3.1-free-tier-generation.md` — FREE-tier substrate.
+- `docs/plans/67-0.3.4-premium-mythos.md` — PREMIUM-tier plan (this doc graduated content).
