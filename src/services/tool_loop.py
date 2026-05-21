@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -61,7 +62,7 @@ DEFAULT_MAX_ITERS = 3
 # Reject inputs containing obvious prompt-injection markers BEFORE
 # interpolating into the prompt — defense-in-depth on top of provider-level
 # alignment. List stays short + targeted to avoid over-aggressive filtering.
-_INJECTION_MARKERS = (
+_INJECTION_MARKERS_BASE = (
     "ignore previous",
     "ignore all previous",
     "disregard previous",
@@ -73,13 +74,60 @@ _INJECTION_MARKERS = (
     "### system",
 )
 _TOOL_TEXT_MAX_CHARS = 3000
+_LOG_TRUNC_MAX_BYTES = 200
+
+
+def _injection_markers_from_env() -> tuple[str, ...]:
+    """Plan 75 / 0.3.3.10 — env-var override appends extra markers.
+
+    `NAAVIK_TOOL_LOOP_MARKERS` = comma-separated phrases (case-insensitive
+    match). Empty / unset → no extras. Values are lowercased + stripped;
+    empties dropped. Operator extensibility hook for future LLM-provider
+    tells without code edit.
+    """
+    raw = os.environ.get("NAAVIK_TOOL_LOOP_MARKERS", "").strip()
+    if not raw:
+        return ()
+    parts = tuple(p.strip().lower() for p in raw.split(",") if p.strip())
+    return parts
+
+
+def _get_injection_markers() -> tuple[str, ...]:
+    """Combined marker tuple: baseline + env-var extras.
+
+    Recomputed on every call so test monkeypatches (`monkeypatch.setenv`)
+    take effect without import-time caching. Cost is negligible — tool-loop
+    runs per-application, not per-request.
+    """
+    return _INJECTION_MARKERS_BASE + _injection_markers_from_env()
+
+
+# Back-compat alias: previously _INJECTION_MARKERS was a tuple constant; some
+# tests / external consumers reference the name directly. Keep the symbol
+# pointing at the BASE list so behavior matches pre-plan-75 when no env var
+# is set; the runtime path uses `_get_injection_markers()`.
+_INJECTION_MARKERS = _INJECTION_MARKERS_BASE
+
+
+def _truncate_for_log(s: str, max_bytes: int = _LOG_TRUNC_MAX_BYTES) -> str:
+    """Plan 75 / 0.3.3.10 — single source for 200-byte log truncation.
+
+    Mirrors `originality.py:91` which uses `bytes(body[:200]).decode(...)`.
+    Centralizes the rule so future log-truncation sites use the same shape.
+    """
+    if not s:
+        return s
+    encoded = s.encode("utf-8", errors="ignore")
+    if len(encoded) <= max_bytes:
+        return s
+    return encoded[:max_bytes].decode("utf-8", errors="ignore")
 
 
 def _sanitize_tool_text(text: str) -> tuple[str, bool]:
     """Cap length + flag injection markers. Returns (cleaned, rejected)."""
     capped = text[:_TOOL_TEXT_MAX_CHARS]
     lowered = capped.lower()
-    for marker in _INJECTION_MARKERS:
+    for marker in _get_injection_markers():
         if marker in lowered:
             return capped, True
     return capped, False
