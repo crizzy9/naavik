@@ -1,0 +1,43 @@
+{#
+  analytics_company_table.html — top-N companies with per-company KPIs.
+  Plan 81 § D.4.
+
+  Args:
+    by_company  : list of services.application_analytics.CompanyKpi
+    window_days : int (90 default)
+#}
+<section data-testid="analytics-company-table"
+         class="bg-slate-900 border border-slate-800 rounded-lg p-5">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <h2 class="text-base font-medium text-slate-50">By company</h2>
+      <p class="text-xs text-slate-400 mt-0.5">top 10 · last {{ window_days }} days</p>
+    </div>
+  </div>
+  {% if by_company %}
+    <table class="w-full text-sm">
+      <thead class="text-xs uppercase tracking-wide text-slate-400 border-b border-slate-800">
+        <tr>
+          <th class="text-left font-medium pb-2">Company</th>
+          <th class="text-right font-medium pb-2 w-20">Applied</th>
+          <th class="text-right font-medium pb-2 w-24">Response</th>
+          <th class="text-right font-medium pb-2 w-24">Onsite</th>
+          <th class="text-right font-medium pb-2 w-20">Offer</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800">
+        {% for c in by_company %}
+          <tr>
+            <td class="py-2 text-slate-200 truncate">{{ c.company }}</td>
+            <td class="py-2 text-right font-mono tabular-nums text-slate-300">{{ c.applied }}</td>
+            <td class="py-2 text-right font-mono tabular-nums text-cyan-300">{{ "%.0f" | format(c.response_rate * 100) }}%</td>
+            <td class="py-2 text-right font-mono tabular-nums text-amber-300">{{ "%.0f" | format(c.onsite_rate * 100) }}%</td>
+            <td class="py-2 text-right font-mono tabular-nums text-emerald-300">{{ "%.0f" | format(c.offer_rate * 100) }}%</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-sm text-slate-500">No applications in this window yet — submit a few drafts to populate the table.</p>
+  {% endif %}
+</section>

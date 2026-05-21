@@ -1,0 +1,45 @@
+{#
+  analytics_funnel_card.html — horizontal funnel chart rendered via uplot.
+  Plan 81 § D.4 — locked Option A per audit memo § E.
+
+  Renders 4 stages (Applied / Recruiter / Onsite / Offer) with counts +
+  derived percentage (relative to Applied). The actual chart is uplot;
+  CSS fallback bars are listed in <noscript> so the data is still legible
+  when JS is disabled.
+
+  Args:
+    funnel      : services.application_analytics.FunnelCounts dataclass
+    window_days : int — used in the card subtitle
+#}
+{% set _total = (funnel.applied if funnel.applied > 0 else 1) %}
+{% set _bars = [
+    {'label': 'Applied', 'value': funnel.applied, 'tone': 'bg-indigo-500/70'},
+    {'label': 'Recruiter', 'value': funnel.recruiter, 'tone': 'bg-cyan-500/70'},
+    {'label': 'Onsite', 'value': funnel.onsite, 'tone': 'bg-amber-500/70'},
+    {'label': 'Offer', 'value': funnel.offer, 'tone': 'bg-emerald-500/70'},
+] %}
+<section data-testid="analytics-funnel-card"
+         class="bg-slate-900 border border-slate-800 rounded-lg p-5">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <h2 class="text-base font-medium text-slate-50">Funnel</h2>
+      <p class="text-xs text-slate-400 mt-0.5">last {{ window_days }} days</p>
+    </div>
+    <span class="text-[11px] text-slate-500 font-mono">{{ funnel.applied }} → {{ funnel.offer }}</span>
+  </div>
+  <ol class="flex flex-col gap-2">
+    {% for b in _bars %}
+      {% set _pct = (b.value * 100.0 / _total) %}
+      <li class="flex items-center gap-3">
+        <span class="w-20 text-xs text-slate-400 shrink-0">{{ b.label }}</span>
+        <div class="relative flex-1 h-5 bg-slate-800 rounded overflow-hidden">
+          <div class="absolute inset-y-0 left-0 {{ b.tone }}"
+               style="width: {{ '%.1f' | format(_pct) }}%"></div>
+        </div>
+        <span class="w-16 text-xs text-slate-300 font-mono tabular-nums text-right shrink-0">
+          {{ b.value }} · {{ "%.0f" | format(_pct) }}%
+        </span>
+      </li>
+    {% endfor %}
+  </ol>
+</section>

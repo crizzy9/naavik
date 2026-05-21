@@ -5,6 +5,8 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
@@ -12,13 +14,18 @@ from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
+from config import settings as app_settings
 from db.session import get_session
 from models import User
-from models.enums import ApplicationStatus, ClosedReason
-from services import application_service
+from models.enums import AppEventKind, ApplicationStatus, ClosedReason
+from services import application_analytics, application_service
 from services.auth import require_authed_session
 from ui import tracking_ctx as tctx
 from ui.templates_setup import templates
+
+# Mirrors `api.applications._POSTMORTEM_TS_RE` (plan 52). Strict UTC-stamp
+# regex blocks path-traversal payloads at the routing layer.
+_POSTMORTEM_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
 
 router = APIRouter()
 
@@ -128,6 +135,49 @@ async def _application_or_404(session: AsyncSession, application_id: int, user: 
     return a
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Application analytics dashboard (plan 81 § D.4 / 0.4.0.07)
+#
+# IMPORTANT: literal `/tracking/analytics` MUST be registered BEFORE the
+# dynamic `/tracking/{application_id}` route — FastAPI scans routes in
+# insertion order. Test: `test_tracking_analytics_route_order_precedence`.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/tracking/analytics", response_class=HTMLResponse, name="tracking_analytics")
+async def get_tracking_analytics(
+    request: Request,
+    window_days: Annotated[int, Query()] = 90,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Application KPI dashboard (plan 81 § D.4).
+
+    Pure aggregation over AppEvent + Application — no LLM, no scraper.
+    Funnel + 4 KPIs (Applied · Response · Onsite · Offer rates) +
+    top-N companies, all scoped to the requester's `user_id`.
+
+    `window_days` is clamped to [1, 365]; default 90 per DATA_MODEL.md § F.
+    """
+    if window_days < 1 or window_days > 365:
+        window_days = 90
+    user_id = _effective_user_id(user)
+    kpis = await application_analytics.compute_kpis(
+        session, user_id=user_id, window_days=window_days
+    )
+    by_company = await application_analytics.kpis_by_company(
+        session, user_id=user_id, window_days=window_days
+    )
+    ctx = {
+        "active_sidebar": "tracking",
+        "active_template_path": "/tracking",
+        "kpis": kpis,
+        "by_company": by_company,
+        "window_days": window_days,
+    }
+    return templates.TemplateResponse(request, "pages/tracking_analytics.html", ctx)
+
+
 @router.get("/tracking/{application_id}", response_class=HTMLResponse, name="tracking_detail")
 async def get_tracking_detail(
     request: Request,
@@ -161,6 +211,197 @@ async def fragment_application(
     application = await _application_or_404(session, application_id, user)
     ctx = await tctx.build_application_detail_ctx(session, application)
     return templates.TemplateResponse(request, "components/_application_detail.html", ctx)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Plan 81 § D.1 (0.4.0.10) — postmortem modal overlay
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/_modal/postmortem/{application_id}/{ts}",
+    response_class=HTMLResponse,
+    name="tracking_postmortem_modal",
+)
+async def get_postmortem_modal(
+    request: Request,
+    application_id: int,
+    ts: str,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Render the postmortem-modal partial for `application_id` + `ts`.
+
+    Path-traversal gauntlet matches `api.applications.get_postmortem` (plan 52):
+    1. Strict UTC-timestamp regex on `ts` (`_POSTMORTEM_TS_RE`).
+    2. `Path.resolve().relative_to(data_root)` containment check.
+    3. IDOR via `_application_or_404` (404 on cross-user / missing).
+    """
+    # IDOR + existence check first — never leak postmortem existence to
+    # non-owners by varying the 404/400 code based on app presence.
+    await _application_or_404(session, application_id, user)
+    if not _POSTMORTEM_TS_RE.match(ts):
+        raise HTTPException(status_code=404, detail="postmortem not found")
+    data_root = Path(app_settings.data_dir).expanduser().resolve() / "data" / "postmortems"
+    base = (data_root / str(application_id) / ts).resolve()
+    try:
+        base.relative_to(data_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="postmortem not found") from exc
+
+    trace_file = base / "trace.json"
+    analysis_file = base / "analysis.md"
+    if not trace_file.exists() or not analysis_file.exists():
+        raise HTTPException(status_code=404, detail="postmortem not found")
+
+    try:
+        trace = json.loads(trace_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        trace = {}
+    analysis_md = analysis_file.read_text(encoding="utf-8")
+
+    return templates.TemplateResponse(
+        request,
+        "components/postmortem_modal.html",
+        {
+            "application_id": application_id,
+            "ts": ts,
+            "trace": trace,
+            "analysis_md": analysis_md,
+        },
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Plan 81 § D.2 (0.4.0.12) — full AppEvent history fragment
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# Per-kind icon + tone for the full-history rendering. Status changes reuse
+# the existing dot-color map; other kinds get neutral / accent colors.
+_TIMELINE_KIND_DECOR: dict[str, dict[str, str]] = {
+    "status_change": {"icon": "arrow-right", "tone": "text-indigo-300"},
+    "docs_generated": {"icon": "file-check", "tone": "text-emerald-300"},
+    "docs_failed": {"icon": "file-x", "tone": "text-rose-300"},
+    "referral_requested": {"icon": "user-plus", "tone": "text-sky-300"},
+    "referral_provided": {"icon": "user-check", "tone": "text-emerald-300"},
+    "email_received": {"icon": "mail", "tone": "text-cyan-300"},
+    "email_sent": {"icon": "send", "tone": "text-indigo-300"},
+    "linkedin_dm_sent": {"icon": "linkedin", "tone": "text-sky-300"},
+    "linkedin_dm_replied": {"icon": "message-square", "tone": "text-emerald-300"},
+    "note_added": {"icon": "sticky-note", "tone": "text-slate-300"},
+    "interview_scheduled": {"icon": "calendar", "tone": "text-amber-300"},
+    "auto_apply_dry_run": {"icon": "play", "tone": "text-slate-400"},
+    "auto_apply_drained": {"icon": "minus-circle", "tone": "text-slate-400"},
+    "auto_apply_visa_blocked": {"icon": "shield-off", "tone": "text-rose-300"},
+    "auto_apply_queued": {"icon": "refresh-cw", "tone": "text-cyan-300"},
+}
+
+
+@router.get(
+    "/_fragments/tracking/timeline/{application_id}",
+    response_class=HTMLResponse,
+    name="tracking_timeline_fragment",
+)
+async def fragment_timeline(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Return the full AppEvent history (limit 100) for a single application.
+
+    Used by the "Show full history" toggle in the detail slide-over. IDOR-
+    gated via `_application_or_404`.
+    """
+    await _application_or_404(session, application_id, user)
+    events = await application_service.list_events_for(session, application_id, limit=100)
+
+    from ui.tracking_ctx import _relative_label  # local import — avoid cycle
+
+    rows = []
+    for e in events:
+        decor = _TIMELINE_KIND_DECOR.get(
+            e.kind.value if hasattr(e.kind, "value") else str(e.kind),
+            {"icon": "circle", "tone": "text-slate-400"},
+        )
+        payload = e.payload or {}
+        label = ""
+        if e.kind == AppEventKind.STATUS_CHANGE:
+            frm = payload.get("from")
+            to = payload.get("to")
+            label = f"{frm} → {to}" if frm else (to or "")
+        else:
+            label = (e.kind.value if hasattr(e.kind, "value") else str(e.kind)).replace("_", " ")
+        rows.append(
+            {
+                "kind": e.kind.value if hasattr(e.kind, "value") else str(e.kind),
+                "label": label,
+                "icon": decor["icon"],
+                "tone": decor["tone"],
+                "trigger": payload.get("trigger"),
+                "occurred_at_label": _relative_label(e.occurred_at),
+            }
+        )
+    return templates.TemplateResponse(
+        request,
+        "components/_application_timeline_full.html",
+        {"application_id": application_id, "events": rows},
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Plan 81 § D.3 (0.4.0.16) — notes blur autosave
+# ─────────────────────────────────────────────────────────────────────────
+
+
+_NOTES_MAX_CHARS = 2000
+
+
+@router.put("/api/v1/applications/{application_id}/notes", name="api_applications_put_notes")
+async def put_application_notes(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Persist `Application.notes` from the detail slide-over textarea.
+
+    Boundary checks:
+    - CSRF-gated via `require_csrf`.
+    - IDOR via `_application_or_404` (404 on cross-user).
+    - Accepts form-encoded (HTMX default) OR JSON; 422 on missing `notes` or
+      overflow (cap 2000 chars per plan § D.3).
+    """
+    application = await _application_or_404(session, application_id, user)
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+        except Exception:  # noqa: BLE001 — invalid JSON treated as missing notes
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+    else:
+        form = await request.form()
+        payload = dict(form.items())
+
+    if "notes" not in payload:
+        raise HTTPException(status_code=422, detail="`notes` required")
+    raw = payload.get("notes")
+    if not isinstance(raw, str):
+        raise HTTPException(status_code=422, detail="`notes` must be a string")
+    text = raw.strip()
+    if len(text) > _NOTES_MAX_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"`notes` exceeds {_NOTES_MAX_CHARS}-char limit",
+        )
+    application.notes = text or None
+    session.add(application)
+    await session.commit()
+    return Response(status_code=204)
 
 
 # ─────────────────────────────────────────────────────────────────────────
