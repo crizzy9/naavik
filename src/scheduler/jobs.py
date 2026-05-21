@@ -452,13 +452,13 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         max_instances=1,
         coalesce=True,
     )
-    # Plan 73 (0.3.2.03): daily per-role-family score trend rollup.
-    # Shares the 03:30 UTC slot with recompute-stale; both read-mostly,
-    # ordered by add_job sequence (recompute-stale ran by then has its
-    # writes flushed). No contention.
+    # Plan 73 (0.3.2.03) + plan 75 (0.3.3.19): daily per-role-family score
+    # trend rollup. 5-minute offset from recompute-stale (03:30 UTC) avoids
+    # the theoretical concurrency window; APScheduler doesn't guarantee
+    # ordering within a single cron slot.
     scheduler.add_job(
         score_aggregate_daily,
-        CronTrigger(hour=3, minute=30, timezone="UTC"),
+        CronTrigger(hour=3, minute=35, timezone="UTC"),
         id="score.aggregate_daily",
         name="score.aggregate_daily",
         replace_existing=True,
