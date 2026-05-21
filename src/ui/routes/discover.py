@@ -683,6 +683,38 @@ async def fragment_screener(
 
 
 @router.get(
+    "/_fragments/apply/preview/by-job/{job_id}",
+    response_class=HTMLResponse,
+    name="apply_preview_by_job_get",
+)
+async def fragment_apply_preview_by_job(
+    request: Request,
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Plan 77 · 0.4.0.03 — apply-preview entry from Discover action bar.
+
+    Resolves (or creates) the DRAFT Application for `job_id` then renders the
+    same `apply_preview_card.html` partial the application-id route uses.
+    Lets the Discover swipe action bar mount the preview without first
+    fetching an application id.
+    """
+    user_id = _effective_user_id(user)
+    job = await _job_or_404(session, job_id, user_id)
+    settings = await settings_service.get_or_create(session, user_id=user_id)
+    app = await application_service.get_or_create_draft(
+        session, user_id=user_id, job_id=job.id, settings=settings
+    )
+    await session.commit()
+    return templates.TemplateResponse(
+        request,
+        "components/apply_preview_card.html",
+        {"application": app},
+    )
+
+
+@router.get(
     "/_fragments/apply/preview/{application_id}",
     response_class=HTMLResponse,
     name="apply_preview_get",
