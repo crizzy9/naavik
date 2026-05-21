@@ -169,6 +169,95 @@ def test_tracking_detail_renders_status_timeline(
     assert "Notes" in body
 
 
+# ── Plan 79 / 0.4.0.11 — retry-failed-application route + UI wiring ──
+
+
+def _find_stuck_application_id() -> int:
+    """Find a sample-data DRAFT id with `submission_artifacts.last_failure` populated."""
+    import asyncio
+
+    from db import sample_data as sd
+
+    async def _find():
+        stuck = await sd.stuck_drafts()
+        return stuck[0].id if stuck else None
+
+    return asyncio.run(_find())
+
+
+def test_application_detail_renders_retry_button_for_stuck_draft(
+    client: TestClient,
+) -> None:
+    """Slide-over `last_failure` section renders the Retry button + hx attrs."""
+    stuck_id = _find_stuck_application_id()
+    assert stuck_id is not None, "sample data missing a stuck DRAFT fixture"
+    r = client.get(f"/_fragments/tracking/application/{stuck_id}")
+    assert r.status_code == 200
+    body = r.text
+    assert 'data-testid="retry-failed-application"' in body
+    assert f'hx-post="/api/v1/applications/{stuck_id}/retry"' in body
+    assert 'hx-confirm="Re-queue this draft for auto-apply?"' in body
+    assert "X-CSRF-Token" in body
+    # Lucide refresh-cw icon, stroke-width 1.5 — design contract per AGENTS.md.
+    assert 'data-lucide="refresh-cw"' in body
+    assert 'stroke-width="1.5"' in body
+
+
+def test_retry_route_csrf_missing_rejects(client: TestClient) -> None:
+    """POST without X-CSRF-Token header → 403. Non-mutating; runs before 204 test."""
+    stuck_id = _find_stuck_application_id()
+    assert stuck_id is not None
+    r = client.post(f"/api/v1/applications/{stuck_id}/retry")
+    assert r.status_code == 403
+
+
+def test_retry_route_cross_user_returns_404(client: TestClient) -> None:
+    """Application owned by another user → 404 (IDOR mitigation). Non-mutating."""
+    import asyncio
+
+    from db import sample_data as sd
+
+    stuck_id = _find_stuck_application_id()
+    assert stuck_id is not None
+
+    async def _set_foreign():
+        app = await sd.get_application(stuck_id)
+        original = app.user_id
+        app.user_id = 9999
+        return original
+
+    async def _restore(original):
+        app = await sd.get_application(stuck_id)
+        app.user_id = original
+
+    original = asyncio.run(_set_foreign())
+    try:
+        r = client.post(
+            f"/api/v1/applications/{stuck_id}/retry",
+            headers={"X-CSRF-Token": _CSRF_TOKEN},
+        )
+        assert r.status_code == 404, "cross-user must 404 not 403"
+    finally:
+        asyncio.run(_restore(original))
+
+
+def test_retry_route_returns_204_with_hx_trigger(client: TestClient) -> None:
+    """Successful retry → 204 + HX-Trigger: applicationRetried.
+
+    Runs LAST among retry route tests because the happy-path mutates
+    sample data — it strips `last_failure`, so subsequent _find_stuck_*
+    calls in the same module would return None.
+    """
+    stuck_id = _find_stuck_application_id()
+    assert stuck_id is not None
+    r = client.post(
+        f"/api/v1/applications/{stuck_id}/retry",
+        headers={"X-CSRF-Token": _CSRF_TOKEN},
+    )
+    assert r.status_code == 204
+    assert r.headers.get("HX-Trigger") == "applicationRetried"
+
+
 def test_application_detail_template_blocks_javascript_external_url(
     client: TestClient, known_application_id: int
 ) -> None:
