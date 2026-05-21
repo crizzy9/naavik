@@ -187,7 +187,14 @@ def _patch_services_to_sample_data(request, monkeypatch):
     async def _list_all_bullets(_session, _user_id):
         return sorted(sd.BULLETS, key=lambda b: b.order_index)
 
+    async def _get_score_history(_session, _user_id):
+        # Plan 73 (0.3.2.03): expose the seeded sparkline fixture to legacy
+        # tests that exercise the Profile page; tests that monkeypatch this
+        # per-test (e.g. the empty-state assertion) take precedence.
+        return dict(getattr(sd.PROFILE, "score_history", {}) or {})
+
     monkeypatch.setattr(profile_service, "get_profile", _get_profile)
+    monkeypatch.setattr(profile_service, "get_score_history", _get_score_history)
     monkeypatch.setattr(profile_service, "list_experiences", _list_experiences)
     monkeypatch.setattr(profile_service, "get_bullets_for_experience", _get_bullets_for_experience)
     monkeypatch.setattr(profile_service, "get_bullet", _get_bullet)

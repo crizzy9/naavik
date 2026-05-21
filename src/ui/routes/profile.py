@@ -43,9 +43,14 @@ async def _build_profile_ctx(session: AsyncSession, user_id: int) -> dict[str, o
                 "bullets": [pctx.bullet_dict(b) for b in bullets],
             }
         )
+    # Plan 73 (0.3.2.03): sparkline strip in the Profile hero.
+    # `profile.score_history` is the JSONB column (default {}); `score_trend`
+    # is the top-3 families projection consumed by `profile_hero.html`.
+    score_history = await profile_service.get_score_history(session, user_id)
     return {
         "profile": profile,
         "hero": pctx.hero_dict(profile),
+        "score_trend": pctx.score_trend_strip(score_history),
         "experiences": exp_view,
         "skills": pctx.skill_dicts(await profile_service.list_skills(session, user_id)),
         "educations": pctx.education_dicts(await profile_service.list_educations(session, user_id)),
