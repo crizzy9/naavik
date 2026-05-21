@@ -27,6 +27,7 @@ router = APIRouter()
 
 _TAB_TEMPLATES: dict[str, str] = {
     "llm-provider": "pages/_settings_llm.html",
+    "generation": "pages/_settings_generation.html",
     "deployment": "pages/_settings_deployment.html",
     "account": "pages/_settings_account.html",
     "notifications": "pages/_settings_notifications.html",
@@ -221,7 +222,35 @@ async def _ctx_for_tab(
     if tab == "security":
         ctx["security"] = await _build_security_view(session, user_id=user_id)
 
+    if tab == "generation":
+        ctx["cost_projection"] = await _build_generation_cost_projection(session, user_id=user_id)
+        ctx["recent_generation_traces"] = await _build_recent_generation_traces(
+            session, user_id=user_id
+        )
+
     return ctx
+
+
+# ── Settings · Generation context (plan 67 / 0.3.4 § C.6) ────────────────
+
+
+async def _build_generation_cost_projection(session: AsyncSession | None, *, user_id: int):
+    """Return CostProjection for the Generation tab. Falls back to ROADMAP
+    estimates when session-less or query fails."""
+    if session is None:
+        from services.settings_service import _PREMIUM_PROJECTION_FALLBACK
+
+        return _PREMIUM_PROJECTION_FALLBACK
+    return await settings_service.compute_premium_cost_projection(session, user_id=user_id)
+
+
+async def _build_recent_generation_traces(
+    session: AsyncSession | None, *, user_id: int
+) -> list[dict]:
+    """Return the last 20 Applications with non-null generation_trace."""
+    if session is None:
+        return []
+    return await settings_service.list_recent_generation_traces(session, user_id=user_id, limit=20)
 
 
 # ── Plan 54 / 0.2.5 dashboard views ────────────────────────────────────
@@ -663,6 +692,27 @@ async def get_settings_llm_provider(
     )
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(request, "pages/_settings_llm.html", ctx)
+    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+
+
+@router.get("/settings/generation", response_class=HTMLResponse, name="settings_generation")
+async def get_settings_generation(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+):
+    """Settings · Generation sub-tab — plan 67 (0.3.4) § C.6.
+
+    Carries tier toggle (FREE / PREMIUM), per-app cost projection,
+    TIER-2 evasion opt-in, Originality.ai API key, audit-trail viewer.
+    Gated by `require_authed_session`; `Depends(get_session)` so the
+    cost-projection query + audit-trail query can hit the DB.
+    """
+    ctx = await _ctx_for_tab(
+        request, "generation", session=session, user_id=_effective_user_id(_user)
+    )
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(request, "pages/_settings_generation.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 

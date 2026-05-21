@@ -148,6 +148,15 @@ class Settings(SQLModel, table=True):
     resume_template_preference: str = Field(default="auto", max_length=20)
     parse_fidelity_threshold: float = Field(default=0.75)
 
+    # Plan 67 (0.3.4): PREMIUM-tier Claude-mythos generation. `generation_tier`
+    # routes `bundle_generator.generate_bundle` through the PREMIUM path
+    # (council + detector loop + critique + tool-loop). `originality_api_key`
+    # is per-user opt-in for the real-detector spot-check at convergence
+    # (Settings DB column per AGENTS.md § Key Conventions § CLI — vault-sunset
+    # compliant; env-var would force a redeploy on rotation).
+    generation_tier: str = Field(default="free", max_length=20)
+    originality_api_key: str | None = Field(default=None, max_length=200)
+
     # Plan 65 (0.3.0.02): per-tag operator-tunable scoring weights.
     # JSONB shape `{tag_value: float}`; empty dict → all tags weighted 1.0.
     # Validator (services/scorer/weights.py:PerDimWeights) drops unknown
