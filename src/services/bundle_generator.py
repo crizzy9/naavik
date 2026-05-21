@@ -35,10 +35,13 @@ from models import (
     Settings,
 )
 from services import document_generator as dg
+from services.ai_tell_blocklist import effective_blocklist, strip_violations
 from services.ats_parser_fidelity import (
     ParseScoreReport,
     validate_parse_fidelity,
 )
+from services.burstiness_check import check_and_score
+from services.constitution import render_preamble
 from services.ethics_preflight import EthicsReport, preflight_check
 from services.hiring_manager_extractor import HiringManagerHit, extract_hiring_manager
 from services.keyword_coverage import CoverageReport, compute_coverage
@@ -236,6 +239,31 @@ async def generate_bundle(
     corpus = await assemble_corpus(session, user_id)
     trace = await _initial_trace(settings=settings, corpus=corpus)
     trace["stages_run"].append("corpus")
+    user_blocklist = effective_blocklist(corpus.full_text)
+
+    # Constitution preamble (plan 66 § T3) — built lazily on first LLM call
+    # so test mocks that skip profile setup still hit the cap-guard path.
+    # `_preamble` is None until `_build_preamble` resolves the Profile + the
+    # render call; subsequent stages reuse the same string for Anthropic
+    # ephemeral cache.
+    preamble: str | None = None
+    cache_preamble: bool = False
+    preamble_built: bool = False
+
+    async def _build_preamble() -> None:
+        nonlocal preamble, cache_preamble, preamble_built
+        if preamble_built:
+            return
+        preamble_built = True
+        profile_for_preamble, _ = await _load_profile_experiences(session, user_id)
+        if profile_for_preamble is not None and corpus.full_text:
+            preamble = render_preamble(
+                corpus,
+                profile_for_preamble.full_name,
+                blocklist=user_blocklist,
+            )
+            cache_preamble = True
+        trace["constitution_present"] = cache_preamble
 
     # Stage 2 — hiring manager (regex first; LLM fallback only when JD ≥200)
     if await dg.is_cost_capped(session, user_id, settings):
@@ -250,6 +278,7 @@ async def generate_bundle(
         await _persist_trace(session, application, trace)
         return result
 
+    await _build_preamble()
     hiring_manager = await extract_hiring_manager(
         session=session,
         user_id=user_id,
@@ -257,6 +286,8 @@ async def generate_bundle(
         job_description=job.description or job.description_html or "",
         application_id=application.id,
         manual_override=hiring_manager_override,
+        system=preamble,
+        cache_system=cache_preamble,
     )
     result.hiring_manager = hiring_manager
     if hiring_manager is not None:
@@ -279,7 +310,14 @@ async def generate_bundle(
         return result
 
     try:
-        resume = await dg.generate_resume(session, application, settings=settings, job=job)
+        resume = await dg.generate_resume(
+            session,
+            application,
+            settings=settings,
+            job=job,
+            system=preamble,
+            cache_system=cache_preamble,
+        )
         result.resume = resume
         trace["stages_run"].append("resume")
         if resume.bullet_selection:
@@ -322,6 +360,8 @@ async def generate_bundle(
             job_score=job_score_val,
             matched_tags=matched_tags,
             application_id=application.id,
+            system=preamble,
+            cache_system=cache_preamble,
         )
         if headline is not None:
             trace["headline_used"] = headline.headline_one_line
@@ -340,7 +380,24 @@ async def generate_bundle(
         return result
 
     try:
-        cover = await dg.generate_cover_letter(session, application, settings=settings, job=job)
+        hm_payload: dict | None = None
+        if hiring_manager is not None:
+            hm_payload = {
+                "name": hiring_manager.name,
+                "title": hiring_manager.title,
+                "source": hiring_manager.source,
+                "confidence": hiring_manager.confidence,
+            }
+        cover = await dg.generate_cover_letter(
+            session,
+            application,
+            settings=settings,
+            job=job,
+            system=preamble,
+            cache_system=cache_preamble,
+            hiring_manager=hm_payload,
+            matched_tags=matched_tags,
+        )
         result.cover_letter = cover
         trace["stages_run"].append("cover_letter")
     except dg.CostCapExceededError:
@@ -363,7 +420,14 @@ async def generate_bundle(
         return result
 
     try:
-        screeners = await dg.answer_screeners(session, application, settings=settings, job=job)
+        screeners = await dg.answer_screeners(
+            session,
+            application,
+            settings=settings,
+            job=job,
+            system=preamble,
+            cache_system=cache_preamble,
+        )
         result.screeners = list(screeners)
         trace["stages_run"].append("screeners")
     except dg.CostCapExceededError:
@@ -371,6 +435,43 @@ async def generate_bundle(
         result.degraded_reason = "cost_cap_reached"
         trace["degraded_mode"] = True
         trace["stages_skipped"].append("screeners")
+
+    # Post-LLM AI-tell strip + burstiness gate (plan 66 § T4 + § T5). The
+    # constitution preamble told the LLM not to use blocklisted vocab; this
+    # is the second layer that records what slipped through. Both checks
+    # run best-effort against in-memory text only — PDF re-render of the
+    # scrubbed text is deferred to 0.3.3 follow-up (requires regen path).
+    ai_tell_violations: list[str] = []
+    if result.resume is not None and result.resume.bullet_selection:
+        trimmed = result.resume.bullet_selection.get("trimmed_lines") or {}
+        if isinstance(trimmed, dict):
+            for value in trimmed.values():
+                _, found = strip_violations(str(value), user_blocklist)
+                ai_tell_violations.extend(found)
+    if result.cover_letter is not None and result.cover_letter.bullet_selection:
+        sota = result.cover_letter.bullet_selection
+        for key in ("hook", "match", "close", "intro", "body"):
+            value = sota.get(key)
+            if isinstance(value, str) and value:
+                _, found = strip_violations(value, user_blocklist)
+                ai_tell_violations.extend(found)
+    # Dedupe while preserving order for audit trail readability.
+    seen_v: set[str] = set()
+    deduped: list[str] = []
+    for v in ai_tell_violations:
+        if v not in seen_v:
+            seen_v.add(v)
+            deduped.append(v)
+    trace["ai_tell_violations"] = deduped
+
+    # Burstiness — std-dev over trimmed bullet word counts; record only.
+    # One-shot regen of worst offender deferred to 0.3.3 (requires a
+    # bullet-id-targeted regen surface in document_generator).
+    if result.resume is not None and result.resume.bullet_selection:
+        trimmed = result.resume.bullet_selection.get("trimmed_lines") or {}
+        if isinstance(trimmed, dict) and len(trimmed) >= 2:
+            report = check_and_score([str(v) for v in trimmed.values()])
+            trace["burstiness_std"] = report.std_dev
 
     # Stage 7 — parse fidelity (cheap; always run)
     if result.resume is not None and result.resume.path:

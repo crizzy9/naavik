@@ -106,6 +106,8 @@ async def _try_llm_fallback(
     provider: LLMProvider,
     description: str,
     application_id: int | None = None,
+    system: str | None = None,
+    cache_system: bool = False,
 ) -> HiringManagerHit | None:
     """Single structured LLM call. Returns None on failure or no-hit."""
     try:
@@ -118,6 +120,8 @@ async def _try_llm_fallback(
             application_id=application_id,
             prompt=_LLM_PROMPT.format(description=description[:3000]),
             schema=_HiringManagerSchema,
+            system=system,
+            cache_system=cache_system,
         )
         data = result.value if hasattr(result, "value") else result
         if not isinstance(data, dict):
@@ -144,12 +148,18 @@ async def extract_hiring_manager(
     job_description: str,
     application_id: int | None = None,
     manual_override: str | None = None,
+    system: str | None = None,
+    cache_system: bool = False,
 ) -> HiringManagerHit | None:
     """Extract hiring manager from JD with regex-first + LLM-fallback.
 
     `manual_override` short-circuits both — returns
     `{name, source: "manual", confidence: 1.0}` directly. Pass None /
     "" / whitespace-only to skip the override.
+
+    `system` + `cache_system` thread the bundle's voice-grounded constitution
+    into the LLM fallback (plan 66 § T2) — same cache prefix as the rest of
+    the bundle's calls.
     """
     if manual_override and manual_override.strip():
         return HiringManagerHit(
@@ -174,4 +184,6 @@ async def extract_hiring_manager(
         provider=provider,
         description=desc,
         application_id=application_id,
+        system=system,
+        cache_system=cache_system,
     )

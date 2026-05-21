@@ -142,7 +142,7 @@ class Settings(SQLModel, table=True):
     # `tier_2_evasion_enabled` opts into experimental humanization (default off).
     # `resume_template_preference` overrides board-driven template selection.
     # `parse_fidelity_threshold` tunes the OQ-7 smart-default tiers.
-    ai_writing_voice_samples: str = Field(default="")
+    ai_writing_voice_samples: str = Field(default="", max_length=5000)
     cover_letter_format: str = Field(default="auto", max_length=20)
     tier_2_evasion_enabled: bool = Field(default=False)
     resume_template_preference: str = Field(default="auto", max_length=20)

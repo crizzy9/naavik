@@ -21,6 +21,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Response
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
 from config import settings as app_settings
 from db.session import get_session
 from models import ApplicationStatus, ClosedReason, Settings, User
@@ -198,6 +199,7 @@ async def generate_bundle_route(
     payload: Annotated[dict[str, Any] | None, Body()] = None,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_password_complete),
+    _csrf: None = Depends(require_csrf),
 ):
     """One-click bundle generation for `application_id` (plan 66 / 0.3.1).
 
