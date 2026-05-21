@@ -187,6 +187,42 @@ async def test_rotate_jwt_key_authed_succeeds_and_persists(_session) -> None:
     assert actives[0].id != pre_active.id
 
 
+# ── Concurrent rotation race → HTTP 409 ──────────────────────────────────
+
+
+async def test_rotate_jwt_key_returns_409_on_integrity_error(_session, monkeypatch) -> None:
+    """Concurrent-rotation race triggers IntegrityError → endpoint returns 409.
+
+    We monkeypatch `rotate_tenant_key` to raise IntegrityError directly
+    rather than reproducing the alembic 0015 partial unique index in
+    the in-memory test schema (which is intentionally minimal — see the
+    _session fixture's hand-built Settings table).
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    app = _build_app(_session)
+    client = TestClient(app)
+
+    token = await issue_jwt_async(_session, user_id=1, tenant_id=1)
+    csrf = issue_csrf_token()
+
+    import services.jwt_rotation_service as svc
+
+    async def _boom(*_args, **_kwargs):
+        raise IntegrityError("conflict", params=None, orig=Exception("uq violation"))
+
+    monkeypatch.setattr(svc, "rotate_tenant_key", _boom)
+
+    r = client.post(
+        "/api/v1/settings/security/rotate-jwt-key",
+        cookies={"naavik_session": token, "naavik_csrf": csrf},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert r.status_code == 409
+    body = r.json()
+    assert "rotation" in body["detail"].lower()
+
+
 # ── Allowlist parity ──────────────────────────────────────────────────────
 
 

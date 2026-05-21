@@ -97,6 +97,12 @@ async def rotate_tenant_key(
     Caller commits. Order matters: we flip the old row's status BEFORE
     inserting the new row so the per-tenant invariant `<=1 ACTIVE` survives
     even if the new insert's flush fires constraint checks.
+
+    Concurrent-rotation safety: alembic 0015 lays a partial unique index
+    `ix_tenant_signing_key_one_active_per_tenant` over `(tenant_id) WHERE
+    status='ACTIVE'`. If two operators click "Rotate now" close enough to
+    race, the second flush raises `IntegrityError` and the caller rolls
+    back (api/settings.py:post_rotate_jwt_key returns HTTP 409).
     """
     now = datetime.now(UTC)
     stmt = select(TenantSigningKey).where(
@@ -123,6 +129,12 @@ async def rotate_tenant_key(
     )
     session.add(fresh)
     await session.flush()
+    # Defense-in-depth lockout guard — confirm at least one ACTIVE row
+    # survived this transaction. If the demote+insert pair somehow leaves
+    # zero ACTIVE rows (constraint check, race, manual DB tampering), the
+    # tenant would be locked out of new JWT issuance. ensure_active_key
+    # bootstraps a row when zero ACTIVE exists; otherwise no-op.
+    await ensure_active_key(session, tenant_id=tenant_id, algorithm=algorithm)
     log.info(
         "jwt_rotation rotate tenant=%d algorithm=%s actor=%s new_kid=%s",
         tenant_id,

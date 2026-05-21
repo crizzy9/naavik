@@ -419,6 +419,11 @@ async def get_deployment(session: AsyncSession = Depends(get_session)):
 
 # ── JWT signing-key rotation (plan 62 / 0.2.7.07) ────────────────────────
 
+# Single-tenant Naavik deployments pin tenant_id=1. Cloud multi-tenancy
+# (`0.8.0.NN`) will introduce a per-request tenant resolver that derives the
+# tenant from the authenticated user (or org membership).
+_SELF_HOST_TENANT_ID = 1
+
 
 @router.post(
     "/api/v1/settings/security/rotate-jwt-key",
@@ -437,10 +442,12 @@ async def post_rotate_jwt_key(
     and persists. Returns the re-rendered Settings · Security card HTML for
     HTMX swap. CSRF + IDOR enforced via deps.
 
-    Self-host single-tenant: `tenant_id = user_id` per the 1:1 mapping
-    documented in plan 62 § C.9. Cloud multi-tenancy (`0.8.0.NN`) replaces
-    this with per-request tenant resolution.
+    Single-tenant: rotation targets `_SELF_HOST_TENANT_ID` (= 1). Cloud
+    multi-tenancy follow-up `0.8.0.NN` swaps this for per-request tenant
+    resolution.
     """
+    from sqlalchemy.exc import IntegrityError
+
     from services.jwt_rotation_service import rotate_tenant_key
     from ui.routes.settings import _build_security_view, _effective_user_id
     from ui.templates_setup import templates
@@ -448,8 +455,18 @@ async def post_rotate_jwt_key(
     user_id = _effective_user_id(_user)
     actor = f"ui:{_user.email}" if _user is not None else "ui:dev"
 
-    await rotate_tenant_key(session, tenant_id=user_id, actor=actor)
-    await session.commit()
+    try:
+        await rotate_tenant_key(session, tenant_id=_SELF_HOST_TENANT_ID, actor=actor)
+        await session.commit()
+    except IntegrityError:
+        # Partial unique index `ix_tenant_signing_key_one_active_per_tenant`
+        # fired — concurrent rotation win/lose race. Rollback + tell caller
+        # to retry; the other rotation already produced a fresh ACTIVE.
+        await session.rollback()
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "another rotation is in progress; refresh to see the new key"},
+        )
 
     ctx = {"security": await _build_security_view(session, user_id=user_id)}
     return templates.TemplateResponse(request, "pages/_settings_security.html", ctx)

@@ -228,3 +228,103 @@ async def test_ensure_active_key_bootstraps_on_empty(_session) -> None:
     await _session.commit()
     assert fresh.status == TenantSigningKeyStatus.ACTIVE
     assert fresh.algorithm == SigningAlgorithm.RS256
+
+
+# ── Defense-in-depth: ensure_active_key guard wired into rotate ───────────
+
+
+async def test_rotate_tenant_key_leaves_active_row_present(_session) -> None:
+    """rotate_tenant_key always finishes with one ACTIVE row (ensure_active_key guard)."""
+    await rotate_tenant_key(_session, tenant_id=1)
+    await _session.commit()
+    actives = (
+        await _session.exec(
+            select(TenantSigningKey).where(
+                TenantSigningKey.tenant_id == 1,
+                TenantSigningKey.status == TenantSigningKeyStatus.ACTIVE,
+            )
+        )
+    ).all()
+    assert len(actives) == 1
+
+
+# ── Concurrent-rotation race — partial unique index makes 2 ACTIVE rows impossible
+
+
+async def test_two_active_rows_per_tenant_impossible() -> None:
+    """Partial unique index `WHERE status='ACTIVE'` enforces 1-ACTIVE-per-tenant.
+
+    Uses a separate engine because we run the migration 0015 against sqlite
+    to land the partial unique index, then try to insert a second ACTIVE
+    row directly (bypassing rotate_tenant_key's demote+insert logic).
+    """
+    import importlib.util
+    from pathlib import Path
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy.exc import IntegrityError as SAIntegrityError
+
+    repo_root = Path(__file__).resolve().parent.parent
+
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(
+            lambda sync_conn: SQLModel.metadata.create_all(
+                sync_conn,
+                tables=[Tenant.__table__, TenantSigningKey.__table__],
+            )
+        )
+
+    # Land alembic 0015's partial unique index on the in-memory sqlite DB.
+    def _apply_0015(sync_conn):
+        path = repo_root / "migrations" / "versions" / "0015_tenant_signing_key_active_uniq.py"
+        spec = importlib.util.spec_from_file_location("_alembic_0015", path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        ctx = MigrationContext.configure(sync_conn)
+        with Operations.context(ctx):
+            module.upgrade()
+
+    async with engine.begin() as conn:
+        await conn.run_sync(_apply_0015)
+
+    sm = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with sm() as session:
+        session.add(Tenant(id=1, name="self-hosted"))
+        await session.commit()
+
+        # First ACTIVE row OK.
+        first = TenantSigningKey(
+            tenant_id=1,
+            kid="kid-one",
+            algorithm=SigningAlgorithm.RS256,
+            status=TenantSigningKeyStatus.ACTIVE,
+            public_key_pem="public",
+            private_key_pem="private",
+            created_at=datetime.now(UTC),
+        )
+        session.add(first)
+        await session.commit()
+
+        # Second ACTIVE row for same tenant → IntegrityError.
+        second = TenantSigningKey(
+            tenant_id=1,
+            kid="kid-two",
+            algorithm=SigningAlgorithm.RS256,
+            status=TenantSigningKeyStatus.ACTIVE,
+            public_key_pem="public-2",
+            private_key_pem="private-2",
+            created_at=datetime.now(UTC),
+        )
+        session.add(second)
+        with pytest.raises((SAIntegrityError, sa.exc.IntegrityError)):
+            await session.commit()
+
+    await engine.dispose()
