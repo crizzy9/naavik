@@ -201,6 +201,12 @@ async def update_field(
     session.add(profile)
     await _emit_profile_updated(session, user_id, [field])
     await session.flush()
+    # Plan 65 § D.3 (OQ-6): best-effort on-edit profile embedding refresh.
+    # Gated by Settings.semantic_match_enabled inside the helper; errors
+    # swallowed (nightly cron is the safety net).
+    from services.embedding_service import maybe_refresh_profile_embedding
+
+    await maybe_refresh_profile_embedding(session, user_id=user_id)
     return profile
 
 
@@ -236,6 +242,10 @@ async def update_application_questions(
         session.add(profile)
         await _emit_profile_updated(session, user_id, touched)
         await session.flush()
+        # Plan 65 § D.3 (OQ-6): best-effort on-edit profile embedding.
+        from services.embedding_service import maybe_refresh_profile_embedding
+
+        await maybe_refresh_profile_embedding(session, user_id=user_id)
     return profile
 
 
@@ -286,6 +296,19 @@ async def update_bullet(
     b.updated_at = now
     session.add(b)
     await session.flush()
+    # Plan 65 § D.3 (OQ-6): bullet-level edits also re-embed the profile.
+    # Resolve owning user_id via experience → profile chain.
+    exp = (
+        await session.exec(select(Experience).where(Experience.id == b.experience_id))
+    ).one_or_none()
+    if exp is not None:
+        prof = (
+            await session.exec(select(Profile).where(Profile.id == exp.profile_id))
+        ).one_or_none()
+        if prof is not None:
+            from services.embedding_service import maybe_refresh_profile_embedding
+
+            await maybe_refresh_profile_embedding(session, user_id=prof.user_id)
     return b
 
 

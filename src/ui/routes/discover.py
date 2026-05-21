@@ -344,11 +344,59 @@ async def post_job_by_url(
 @router.post("/api/v1/jobs/{job_id}/rescore", name="jobs_rescore")
 async def post_rescore(
     job_id: int,
-    _user: User | None = Depends(require_authed_session),
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
-    job = await sd.get_job(job_id)
+    """Manual re-score of a single Job — plan 65 § D.6 (T10 trigger 3).
+
+    Reads Settings + Profile, runs `score_job_layered`, persists the new
+    `Job.score` + `Job.match_breakdown`. CSRF-gated; IDOR via the
+    `Job.user_id == effective_user_id` check.
+    """
+    effective_uid = _effective_user_id(user)
+    if effective_uid is None:
+        # Fake-session callers (tests, design surface) read the sample data.
+        # The rescore route is real-auth only.
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    from sqlmodel import select as _select
+
+    from models import Job, Profile, Settings
+    from services.scorer.orchestrator import score_job_layered
+
+    job = (
+        await session.exec(_select(Job).where(Job.id == job_id, Job.deleted_at.is_(None)))
+    ).one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    if job.user_id != effective_uid:
+        # IDOR — cross-user access returns 404 (don't leak existence).
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    profile = (
+        await session.exec(_select(Profile).where(Profile.user_id == effective_uid))
+    ).one_or_none()
+    if profile is None:
+        raise HTTPException(status_code=409, detail="No profile configured")
+    settings = (
+        await session.exec(_select(Settings).where(Settings.user_id == effective_uid))
+    ).one_or_none()
+    if settings is None:
+        raise HTTPException(status_code=409, detail="No settings configured")
+
+    try:
+        await score_job_layered(
+            session,
+            user_id=effective_uid,
+            job=job,
+            profile=profile,
+            settings=settings,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("rescore failed for job %s: %s", job_id, exc)
+        raise HTTPException(status_code=500, detail="Rescore failed; see logs") from exc
+    await session.commit()
     return JobRead.model_validate(job).model_dump(mode="json")
 
 

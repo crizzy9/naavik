@@ -74,6 +74,12 @@
       {% if j.warm_intro_label %}
         {{ chip("👥 warm intro · " ~ j.warm_intro_label, tone="emerald") }}
       {% endif %}
+      {# Plan 65 § D.1 — visa concern chip rendered when the orchestrator's
+         deterministic visa filter flips `match_breakdown.visa_concern=True`.
+         Tone `rose` matches Stamp's SKIP red so the visual signal carries. #}
+      {% if j.visa_concern %}
+        {{ chip("VISA · sponsorship blocked", tone="rose") }}
+      {% endif %}
       {% for t in j.tags or [] %}{{ tag_chip(t) }}{% endfor %}
     </div>
 

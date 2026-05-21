@@ -66,6 +66,7 @@ from .job_embedding import EMBEDDING_DIM, JobEmbedding
 from .job_scrape_run import JobScrapeRun, JobScrapeRunRead
 from .profile import Bullet, Certification, Education, Experience, Profile, Project, Skill
 from .profile_answer import ProfileAnswer
+from .profile_embedding import ProfileEmbedding
 from .revoked_jwt import RevokedJwt
 from .settings import Settings
 from .tenant import Tenant
@@ -86,6 +87,7 @@ __all__ = [
     "JobEmbedding",
     "JobScrapeRun",
     "ProfileAnswer",
+    "ProfileEmbedding",
     "Application",
     "ApplicationScreenerAnswer",
     "GeneratedDocument",

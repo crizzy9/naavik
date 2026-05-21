@@ -235,6 +235,77 @@ async def embed_orphan_sweep() -> None:
     log.info("embed_orphan_sweep deleted=%d", deleted)
 
 
+async def score_pending() -> None:
+    """`jobs.score_pending` — every 15min (plan 65 / 0.3.0.06; BACKEND.md § I.1).
+
+    Scores jobs with `Job.score == 0.0` for any user with
+    `Settings.semantic_match_enabled = True`. Idempotent: a job that's
+    already scored has `Job.score != 0.0` so the next run skips it.
+    """
+    from services.scorer.orchestrator import score_unscored_jobs
+
+    async with async_session() as session:
+        n = await score_unscored_jobs(session)
+        await session.commit()
+    log.info("score_pending scored=%d", n)
+
+
+async def score_recompute_stale() -> None:
+    """`score.recompute_stale` — nightly 03:30 UTC (plan 65 / 0.3.0.06).
+
+    Re-scores jobs where `Profile.updated_at > Job.match_breakdown.scored_at`.
+    Postgres-only via the JSONB extractor; sqlite returns 0 (test stubs
+    exercise the routing via mocks).
+    """
+    from services.scorer.orchestrator import rescore_stale_jobs
+
+    async with async_session() as session:
+        n = await rescore_stale_jobs(session)
+        await session.commit()
+    log.info("score_recompute_stale scored=%d", n)
+
+
+async def embed_pending_profiles() -> None:
+    """`embeddings.embed_pending_profiles` — nightly 02:30 UTC (plan 65 / 0.3.0.03).
+
+    For each user with `Settings.semantic_match_enabled = True`, ensure their
+    ProfileEmbedding is current. Idempotent via `_profile_content_hash` —
+    no-op when text + model match. Best-effort: errors are logged + moved on.
+    """
+    from models import Profile, Settings
+    from services import embedding_service
+
+    async with async_session() as session:
+        users_stmt = select(Settings).where(Settings.semantic_match_enabled.is_(True))
+        users = (await session.exec(users_stmt)).all()
+
+        total_processed = 0
+        total_embedded = 0
+        for settings_row in users:
+            profile = (
+                await session.exec(select(Profile).where(Profile.user_id == settings_row.user_id))
+            ).one_or_none()
+            if profile is None:
+                continue
+            total_processed += 1
+            if not await embedding_service.needs_profile_embedding(
+                session, profile=profile, settings=settings_row
+            ):
+                continue
+            row = await embedding_service.embed_profile(
+                session, profile=profile, settings=settings_row
+            )
+            if row is not None:
+                total_embedded += 1
+            await session.commit()
+    log.info(
+        "embed_pending_profiles processed=%d embedded=%d users=%d",
+        total_processed,
+        total_embedded,
+        len(users),
+    )
+
+
 # ── Registration ──────────────────────────────────────────────────────
 
 
@@ -327,6 +398,35 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         max_instances=1,
         coalesce=True,
     )
+    # Plan 65 (0.3.0.03): nightly Profile embedding refresh.
+    scheduler.add_job(
+        embed_pending_profiles,
+        CronTrigger(hour=2, minute=30, timezone="UTC"),
+        id="embeddings.embed_pending_profiles",
+        name="embeddings.embed_pending_profiles",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    # Plan 65 (0.3.0.06): score pending + recompute-stale crons.
+    scheduler.add_job(
+        score_pending,
+        IntervalTrigger(minutes=15),
+        id="jobs.score_pending",
+        name="jobs.score_pending",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        score_recompute_stale,
+        CronTrigger(hour=3, minute=30, timezone="UTC"),
+        id="score.recompute_stale",
+        name="score.recompute_stale",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
 
     # Phase 2 plan 35 (0.2.0.10): six per-source scraping crons.
     from . import scraping
@@ -347,8 +447,11 @@ __all__ = [
     "daily_db_snapshot",
     "embed_orphan_sweep",
     "embed_pending_jobs",
+    "embed_pending_profiles",
     "expire_retiring_signing_keys",
     "refresh_oauth_tokens",
     "register_all",
     "registered_job_ids",
+    "score_pending",
+    "score_recompute_stale",
 ]

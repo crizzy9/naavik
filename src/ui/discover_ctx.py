@@ -125,6 +125,11 @@ def swipe_card_dict(
         "match_breakdown": j.match_breakdown,
         "match_overall": j.score,
         "visa_friendly": j.visa_restrictions == VisaRestriction.SPONSORSHIP_AVAILABLE,
+        # Plan 65 § D.1 — surface the visa_concern chip on the Discover card.
+        # The orchestrator writes `match_breakdown.visa_concern = True` when
+        # the deterministic visa filter zeroes the job out. Falls back to None
+        # so the template can `{% if visa_concern %}`.
+        "visa_concern": (j.match_breakdown or {}).get("visa_concern", False),
     }
 
 

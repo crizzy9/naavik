@@ -1,7 +1,9 @@
-"""Scorer — Wave 6 ships the deterministic visa filter.
+"""Layer 1 — deterministic visa filter.
 
-Per BACKEND.md § H.1 + plan 10 § C.1 + plan 27 § D.5. Full tag-matching +
-gap analysis is Phase 3 (plan 12).
+Per plan 65 § D.1 (module split per T11). Moved verbatim from the
+single-file `src/services/scorer.py`. Imports continue to resolve via
+`__init__.py` re-export for backward-compat with existing callers
+(`application_service`, `discover_ctx`, `scraper_service`, tests).
 
 The visa filter is deterministic + LLM-free: any job that requires US
 citizenship or a Green Card is forced to score 0.0 when the candidate's
@@ -11,7 +13,7 @@ auto-submit visa-incompatible jobs at non-zero LLM scores — embarrassing
 failure mode.
 
 Plan 27 (0.2.0.05) promoted `Job.visa_restrictions` from `str | None` to
-typed `VisaRestriction` enum. The blocking set is now enum-typed too.
+typed `VisaRestriction` enum. The blocking set is enum-typed.
 """
 
 from __future__ import annotations
@@ -44,9 +46,8 @@ def needs_visa_zero_out(profile: Profile, job: Job) -> bool:
     restriction = getattr(job, "visa_restrictions", None)
     if restriction is None:
         return False
-    # Accept either VisaRestriction enum or its string value (defensive at
-    # this boundary because Job dicts from in-memory shadows + LLM output
-    # both flow through here).
+    # Defensive str → enum coercion: Job dicts from in-memory shadows + LLM
+    # output both reach this code path.
     if isinstance(restriction, str):
         try:
             restriction = VisaRestriction(restriction.strip().lower())
@@ -72,4 +73,5 @@ def apply_visa_filter(score: JobScore, profile: Profile, job: Job) -> JobScore:
         matched_tags=list(score.matched_tags),
         gaps=list(score.gaps),
         visa_concern=True,
+        visa_note=str(getattr(job, "visa_restrictions", None)) if job is not None else None,
     )

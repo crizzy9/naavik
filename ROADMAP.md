@@ -2,7 +2,7 @@
 
 > **Single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. Tracking-only (per `AGENTS.md` § Single-doc-tracking).
 >
-> **Last updated:** 2026-05-21. (**0.3.x SPLIT LANDED.** Research memo `docs/design/research/0.3.0-intelligent-scoring-research.md` published; user locked 7 OQs to architect picks. 0.3.0 7-row monolith REPLACED with hybrid-layered scoring split into 14 rows across 3 sub-releases: 0.3.0 substrate (6 rows CRITICAL — unblocks 0.4.0 auto-apply) + 0.3.1 tailored resume + one-click (4 rows HIGH) + 0.3.2 UI polish + analytics (4 rows MEDIUM) + 0.3.3 deferred-from-0.3.x catch-all. **5 backlog rows filed:** 0.5.0.12.1 (LinkedIn MCP outreach) + 0.8.0.40-43 (Platt calibration / cross-encoder rerank / per-source trust weighting / score-trend insights). LinkedIn MCP deferred to Phase 5 per OQ-3. Architect plan-author dispatch for plan 65 (0.3.0 substrate) in flight.)
+> **Last updated:** 2026-05-21. (**0.3.0 SHIPPED.** Plan 65 EXECUTED via PR #166 — hybrid layered scoring substrate (tag → semantic → LLM-judge) across all 6 rows + 4 doc graduations in-PR (BACKEND.md + DATA_MODEL.md + SCREENS.md + JOB_MODEL.md). Reviewers: architect APPROVE_WITH_NOTES 18/18 perfect spec match; hacker APPROVE_WITH_NOTES (3 MED + 1 LOW filed to 0.3.3.01-04). 0.3.0 unblocks 0.4.0 auto-apply. **Next: 0.3.1 (tailored resume + one-click) + 0.3.2 (UI polish + analytics) parallel-shippable.** 0.3.3 catch-all now holds 4 reviewer-filed follow-ups.)
 
 ---
 
@@ -30,7 +30,7 @@
 | 0.2.5 | Observability cleanup (DEF) | ✅ Complete (2026-05-20) | 0.2.5.02/03/04 shipped; 0.2.5.01 closed moot; 0.2.5.05+06 moved to 0.2.7.06 (paired UI editors) |
 | 0.2.6 | Tooling cleanup (DEF + A.28a) | ✅ Complete (2026-05-20) | 0.2.6.06/07/08/09 shipped; 0.2.6.01-05 moved to 0.2.7.13-17 |
 | 0.2.7 | Deferred-from-0.2.x catch-all | ✅ Complete (2026-05-21) | All in-cycle rows shipped (incl. design-heavy sweep PRs #162/#163/#164/#165); 6 small follow-ups deferred to 0.8.0.33-38 |
-| 0.3.0 | Scoring substrate (hybrid layered: tag → semantic → LLM-judge) | 🟡 Queued (plan 65 in flight 2026-05-21) | — |
+| 0.3.0 | Scoring substrate (hybrid layered: tag → semantic → LLM-judge) | ✅ Complete (2026-05-21) | All 6 rows shipped via PR #166; 4 follow-ups filed to 0.3.3 |
 | 0.3.1 | Tailored resume preview + one-click generation | ⚪ Future (post-0.3.0) | — |
 | 0.3.2 | UI polish + score analytics | ⚪ Future (parallel w/ 0.3.1) | — |
 | 0.3.3 | Deferred-from-0.3.x catch-all | ⚪ Future (rolling) | — |
@@ -350,20 +350,20 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 
 ### 0.3.0 — Scoring substrate (legacy Phase 3 cut 1 — CRITICAL; unblocks 0.4.0 auto-apply)
 > **Goal:** Hybrid layered scoring (tag overlap → semantic cosine → LLM-as-judge) writes `Job.score` + `Job.score_explanation` + `Job.match_breakdown` for every job in the queue. Cost-cap-aware with graceful fallback to layers 2-3 composite.
-> **Status:** 🟡 Queued — plan-authoring in flight 2026-05-21 per research memo `docs/design/research/0.3.0-intelligent-scoring-research.md`.
-> **Plan:** `docs/plans/65-0.3.0-scoring-substrate.md` (in flight).
+> **Status:** ✅ Complete (2026-05-21) — all 6 rows shipped via PR #166 (plan 65). Reviewers: architect APPROVE_WITH_NOTES 18/18 spec match (1 LOW + 1 INFO cosmetic); hacker APPROVE_WITH_NOTES (3 MED + 1 LOW filed as 0.3.3.01-04). 4 doc graduations landed in-PR (BACKEND.md + DATA_MODEL.md + SCREENS.md + JOB_MODEL.md).
+> **Plan:** `docs/plans/archive/65-0.3.0-scoring-substrate.md` (EXECUTED 2026-05-21).
 > **Implementation contract:** `docs/design/BACKEND.md` § H.1 (`scorer` service), § M.3 (`score_job` prompt). DATA_MODEL.md § C (`Job.score`, `Job.score_explanation`, `Job.match_breakdown`). Re-uses 0.2.7.16 `JobEmbedding` substrate. New `ProfileEmbedding` sibling table.
 > **Estimated effort:** ~6 dev-days · ~1500 LOC across 6 rows.
 > **Locked decisions (2026-05-21 user lock-in post-research memo):** OQ-1 hybrid layered · OQ-2 LLM tier user-configurable via `Settings.llm_provider` (default Claude Sonnet 4.6 on cloud; skip layer 4 if no provider configured) · OQ-3 LinkedIn MCP deferred to `0.5.0.12.1` · OQ-4 3-sub-release cut · OQ-5 silent fallback + banner on Settings · LLM tab · OQ-6 on-edit + nightly idempotent refresh · OQ-7 1-2 sentence + 3-5 gap bullets for Discover card; structured `{strengths, gaps, visa_note}` for full match modal.
 
 | # | Task | Status | Priority | Legacy ID | Notes |
 |---|---|---|---|---|---|
-| 0.3.0.01 | Visa filter consolidation + Discover `visa_concern` chip wiring | [ ] | HIGH | 3.3 | Existing `services/scorer.py:apply_visa_filter` shipped Phase 1; this row makes it layer-1 of the hybrid scorer + surfaces chip in Discover UI. ~50 LOC. |
-| 0.3.0.02 | Tag-based matching layer (Jaccard + weighted overlap) | [ ] | HIGH | 3.1 | New `services/scorer._tag_overlap_score`. 9-tag vocab; per-tag weights configurable via `Settings.score_per_dim_weights`. ~250 LOC. |
-| 0.3.0.03 | Profile embedding sibling table + service | [ ] | HIGH | (new) | New `src/models/profile_embedding.py` (mirrors `JobEmbedding` shape; 1:1 keyed by `user_id`); new `embedding_service.embed_profile`; alembic 0017. ~350 LOC. |
-| 0.3.0.04 | Semantic scoring layer (cosine + ProfileEmbedding lookup) | [ ] | HIGH | (new) | New `scorer._semantic_score` using pgvector cosine sim. Re-uses `embedding_service.search_similar` pattern. ~200 LOC. |
-| 0.3.0.05 | LLM-as-judge layer + `JobScore` schema expansion | [ ] | CRITICAL | 3.2 | Extends `score_job.py` prompt + `JobScore` Pydantic w/ `per_dimension`, `suggested_bullets`, `gaps`, `visa_concern`, `strengths`. Cost-cap fallback to layer 2-3 composite. ~400 LOC. |
-| 0.3.0.06 | Score orchestrator + `jobs.score_pending` cron wiring | [ ] | CRITICAL | (new) | `scorer.score_job_layered` orchestrates layers 1→4; `jobs.score_pending` cron entry per `BACKEND.md § I.1`. ~250 LOC. |
+| 0.3.0.01 | Visa filter consolidation + Discover `visa_concern` chip wiring | [x] | HIGH | 3.3 | **Plan 65 EXECUTED 2026-05-21 via PR #166.** `src/services/scorer/visa.py` extracted from legacy `scorer.py`; layer-1 of orchestrator. `swipe_card.html` renders visa chip when triggered. `SCREENS.md § 7` visa-chip line graduated. |
+| 0.3.0.02 | Tag-based matching layer (weighted overlap, asymmetric) | [x] | HIGH | 3.1 | **Plan 65 EXECUTED 2026-05-21 via PR #166.** `src/services/scorer/tag_layer.py` ships T3 weighted-overlap formula (favors profile-coverage of job tags). `Settings.score_per_dim_weights` JSONB column (validator clamps `[0, 3]`; unknown keys dropped). |
+| 0.3.0.03 | Profile embedding sibling table + service | [x] | HIGH | (new) | **Plan 65 EXECUTED 2026-05-21 via PR #166.** New `src/models/profile_embedding.py` (mirrors `JobEmbedding` shape; vector(768) HNSW cosine m=16/ef_construction=200; PK keyed by `user_id`). `embedding_service.embed_profile` + `search_similar_profile_bullets`. Alembic 0017. `embed_pending_profiles` nightly 02:00 UTC cron. On-edit hook in `profile_service.py`. DATA_MODEL.md § B entity 22→23. |
+| 0.3.0.04 | Semantic scoring layer (cosine + ProfileEmbedding lookup) | [x] | HIGH | (new) | **Plan 65 EXECUTED 2026-05-21 via PR #166.** `src/services/scorer/semantic_layer.py` ships pgvector cosine + T4 `_TAG_FLOOR = 0.10` gate. T5 composite `0.4 × tag + 0.6 × semantic ≥ 0.50` to promote to layer 3. |
+| 0.3.0.05 | LLM-as-judge layer + `JobScore` schema expansion | [x] | CRITICAL | 3.2 | **Plan 65 EXECUTED 2026-05-21 via PR #166.** `src/services/scorer/llm_judge.py` ships LLM-judge with T1 per-job cost-cap pre-flight probe + graceful skip when no LLM provider configured (returns None → composite layers 1-3 returned with `judge_skipped=true`). Extended `JobScore` Pydantic: `per_dimension`/`strengths`/`gaps≤5`/`suggested_bullets≤8`/`visa_concern`/`visa_note`/`layers_run`/`judge_skipped`/`layer_4_provider`. Hallucinated-bullet-ID defense via `_filter_valid_bullet_ids` (JOINs through `Experience.profile_id`). |
+| 0.3.0.06 | Score orchestrator + `jobs.score_pending` cron wiring | [x] | CRITICAL | (new) | **Plan 65 EXECUTED 2026-05-21 via PR #166.** `src/services/scorer/orchestrator.py` ships `score_job_layered(job_id, session, source_trust_weight=1.0)`. `Job.match_breakdown` 18-key JSONB with `schema_version=1`. T9 `source_trust_weight` forward-compat seam to 0.8.0.42. T10 3 re-scoring triggers: `jobs.score_pending` (15min) + `score.recompute_stale` (nightly 03:30 UTC) + `POST /api/v1/jobs/{id}/rescore` (promoted 501→real-auth: CSRF + IDOR via `_effective_user_id` + `_job_or_404`). T11 `scorer/` package w/ backward-compat `__init__.py` lazy `__getattr__` re-exports. Visa filter re-applied post-LLM (belt-and-suspenders). |
 
 **Deliverable (0.3.0):** Every job in the queue scored with per-dimension breakdown + explanation persisted to `Job.match_breakdown`; LLM-judge gated by daily cost cap with graceful fallback; UI consumer (`SCREENS.md § 7`) ready to render `MATCH · 0.86`.
 
@@ -410,7 +410,10 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 
 | # | Task | Status | Priority | Legacy ID | Notes |
 |---|---|---|---|---|---|
-| (empty) | — | — | — | — | Filed as 0.3.0/0.3.1/0.3.2 rows ship — engineer deviations + reviewer-flagged follow-ups land here. |
+| 0.3.3.01 | Extend `test_no_cross_user_embedding_reads.py` lint to cover `ProfileEmbedding` | [ ] | MEDIUM | (hacker PR #166 MED-1) | **Filed 2026-05-21 via PR #166 hacker review.** `tests/test_no_cross_user_embedding_reads.py:25` lint guards `JobEmbedding` + `ProfileAnswer` but missed the new `ProfileEmbedding` model shipped 0.3.0.03. Code is clean today (3 reads correctly filter by `user_id`); guardrail isn't. ~10 LOC + 1 test fixture. |
+| 0.3.3.02 | Rate limit on `POST /api/v1/jobs/{id}/rescore` (10/min, 60/hr) | [ ] | MEDIUM | (hacker PR #166 MED-2) | **Filed 2026-05-21 via PR #166 hacker review.** Rescore route promoted 501→real-auth this PR but lacks rate limit. T1 cost-cap probe is per-call so LLM spend is capped, but the route burns DB CPU + orchestrator work before reaching it; below-LLM-gate paths never hit the cap. Suggested ceiling 10/min, 60/hr per user. ~30 LOC + 3 tests. |
+| 0.3.3.03 | `json_jobstore._decode_datetime` should reject naive timestamps explicitly (not silent UTC rebase) | [ ] | MEDIUM | (hacker PR #166 MED-3) | **Filed 2026-05-21 via PR #166 hacker review.** `src/scheduler/json_jobstore.py:155` silently rebases naive timestamps to UTC. Allowlist-validated `func` ref makes RCE moot; the risk is misfire timing on tamper. Either reject naive timestamps explicitly OR document the UTC-rebase rule + add a regression test. ~5 LOC + 2 tests. |
+| 0.3.3.04 | LLM cost-cap probe race condition (concurrent callers; ~$0.075 overshoot worst case) | [ ] | LOW | (hacker PR #166 LOW-4) | **Filed 2026-05-21 via PR #166 hacker review.** `src/services/scorer/llm_judge.py:30` cost-cap probe is racy with concurrent rescore requests + cron firings. Acceptable for v1 (worst case ~5 concurrent calls × $0.015 = $0.075 overshoot per minute window). Mitigation: row-lock `ApiUsage` table OR Redis-style atomic counter. Defer until first cost-cap-thrash observation. ~50 LOC. |
 
 **Deliverable (0.3.3):** Pickup queue for product-side cleanup deferred from 0.3.x. Items graduate to a future release version when scheduled.
 
