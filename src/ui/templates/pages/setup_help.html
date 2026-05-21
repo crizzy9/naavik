@@ -1,5 +1,5 @@
 {#
-  setup_help.html — first-run diagnostic + recovery page (plan 71 / 0.3.3.14).
+  setup_help.html — first-run diagnostic + recovery page (plan 83 / 0.7.0.36).
 
   Args:
     state           : services.first_run.FirstRunState
@@ -20,14 +20,14 @@
 
   <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">First-run authentication</h1>
   <p class="mt-1.5 text-sm text-slate-400">
-    Locked out? This page diagnoses the three things plan&nbsp;10c
-    (<a href="https://github.com/crizzy9/naavik/blob/main/docs/RUNBOOK.md{{ runbook_anchor }}"
-        class="text-indigo-300 hover:text-indigo-200 underline"
-        target="_blank" rel="noopener">RUNBOOK §&nbsp;2.12</a>)
-    sets up automatically when you run <code class="font-mono text-slate-200">nix run .#dev</code>.
+    Naavik does not auto-seed a user. On a fresh database you create your account via
+    <a href="/signup" class="text-indigo-300 hover:text-indigo-200 underline">/signup</a>.
+    See <a href="https://github.com/crizzy9/naavik/blob/main/docs/RUNBOOK.md{{ runbook_anchor }}"
+           class="text-indigo-300 hover:text-indigo-200 underline"
+           target="_blank" rel="noopener">RUNBOOK § 2.12</a> for full troubleshooting.
   </p>
 
-  {# ── Diagnostic table — three signals ──────────────────────────────── #}
+  {# ── Diagnostic table — one signal (user_count) ─────────────────────── #}
   <section data-setup-help-diagnostic class="mt-6 rounded-lg bg-slate-950/50 border border-slate-800 overflow-hidden">
     <table class="w-full text-sm">
       <thead class="bg-slate-900/60 text-[11px] uppercase tracking-wide text-slate-500">
@@ -38,33 +38,13 @@
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-800 text-slate-300">
-        {# Signal 1 — NAAVIK_DEBUG #}
-        <tr data-signal="debug">
-          <td class="px-4 py-2.5 font-mono text-xs text-slate-400">NAAVIK_DEBUG</td>
-          <td class="px-4 py-2.5">
-            {% if state.debug_enabled %}
-              set (boot-time triple-gate active)
-            {% else %}
-              not set (dev-credentials file not written at boot)
-            {% endif %}
-          </td>
-          <td class="px-4 py-2.5 text-right">
-            {% if state.debug_enabled %}
-              <span class="inline-flex items-center gap-1 text-xs text-emerald-300"><i data-lucide="check-circle-2" class="h-4 w-4" stroke-width="1.5"></i>ok</span>
-            {% else %}
-              <span class="inline-flex items-center gap-1 text-xs text-amber-300"><i data-lucide="alert-triangle" class="h-4 w-4" stroke-width="1.5"></i>off</span>
-            {% endif %}
-          </td>
-        </tr>
-
-        {# Signal 2 — User row count #}
         <tr data-signal="users">
           <td class="px-4 py-2.5 font-mono text-xs text-slate-400">user_count</td>
           <td class="px-4 py-2.5">
             {% if state.user_count == 0 %}
-              no users seeded — sign-up form will render on /login
+              no users yet — sign-up form will render on /login
             {% else %}
-              {{ state.user_count }} user{{ "" if state.user_count == 1 else "s" }} present — sign-up disabled
+              {{ state.user_count }} user{{ "" if state.user_count == 1 else "s" }} present — sign-in available
             {% endif %}
           </td>
           <td class="px-4 py-2.5 text-right">
@@ -75,53 +55,23 @@
             {% endif %}
           </td>
         </tr>
-
-        {# Signal 3 — dev-credentials file #}
-        <tr data-signal="dev-credentials">
-          <td class="px-4 py-2.5 font-mono text-xs text-slate-400">dev-credentials</td>
-          <td class="px-4 py-2.5">
-            <code class="font-mono text-xs text-slate-200">{{ state.dev_credentials_path }}</code>
-            {% if state.dev_credentials_present %}— present{% else %}— missing{% endif %}
-          </td>
-          <td class="px-4 py-2.5 text-right">
-            {% if state.dev_credentials_present %}
-              <span class="inline-flex items-center gap-1 text-xs text-emerald-300"><i data-lucide="check-circle-2" class="h-4 w-4" stroke-width="1.5"></i>ok</span>
-            {% else %}
-              <span class="inline-flex items-center gap-1 text-xs text-amber-300"><i data-lucide="circle" class="h-4 w-4" stroke-width="1.5"></i>none</span>
-            {% endif %}
-          </td>
-        </tr>
       </tbody>
     </table>
   </section>
 
   {# ── Overall verdict ──────────────────────────────────────────────── #}
   <div class="mt-5">
-    {% if state.broken %}
-      {% with tone="warning",
-              icon="alert-triangle",
-              title="Locked out — three-signal diagnosis matches the plan-10c gap.",
-              body="A user is seeded, <code class=\"font-mono\">NAAVIK_DEBUG</code> is unset, and no dev-credentials file exists. Pick one recovery path below." %}
-        {% include "components/info_card.html" %}
-      {% endwith %}
-    {% elif state.dev_credentials_present %}
-      {% with tone="success",
-              icon="check-circle-2",
-              title="dev-credentials file present.",
-              body="Run <code class=\"font-mono\">cat ~/.naavik/dev-credentials</code> in your shell to retrieve the seeded login." %}
-        {% include "components/info_card.html" %}
-      {% endwith %}
-    {% elif not state.has_users %}
+    {% if state.is_first_run %}
       {% with tone="info",
               icon="user-plus",
-              title="Fresh install — no user seeded yet.",
+              title="Fresh install — no user yet.",
               body="Visit <a href=\"/login?mode=signup\" class=\"underline hover:text-indigo-100\">/login?mode=signup</a> to create the first account." %}
         {% include "components/info_card.html" %}
       {% endwith %}
     {% else %}
       {% with tone="info",
               icon="check-circle-2",
-              title="State looks healthy.",
+              title="An account exists on this instance.",
               body="Visit <a href=\"/login\" class=\"underline hover:text-indigo-100\">/login</a> to sign in." %}
         {% include "components/info_card.html" %}
       {% endwith %}
@@ -132,65 +82,54 @@
   <section data-setup-help-recipes class="mt-6 flex flex-col gap-4">
     <h2 class="text-base font-medium text-slate-50">Recovery options</h2>
 
-    {# Recipe 1 — nix run .#dev preferred #}
+    {# Recipe 1 — visit signup #}
     <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
       <div class="flex items-baseline justify-between gap-3 mb-2">
-        <h3 class="text-sm font-medium text-slate-100">1. Restart with <code class="font-mono text-slate-200">nix run .#dev</code> (recommended)</h3>
+        <h3 class="text-sm font-medium text-slate-100">1. Create your account via <code class="font-mono text-slate-200">/signup</code></h3>
         <span class="text-[10px] font-mono uppercase tracking-wide text-emerald-300/80 ring-1 ring-emerald-500/30 bg-emerald-500/5 px-1.5 py-0.5 rounded">canonical</span>
       </div>
       <p class="text-xs text-slate-400 mb-2">
-        The dev orchestrator exports <code class="font-mono">NAAVIK_DEBUG=1</code> and runs the seeder, so the dev-credentials file lands automatically.
+        First-time setup on a self-hosted instance is signup-driven. The form is enabled while the User table is empty.
       </p>
 <pre class="font-mono text-xs bg-slate-900 border border-slate-800 rounded p-3 text-slate-200 overflow-x-auto">
-# Stop the current server, then:
-nix run .#dev
+# Open in your browser:
+http://localhost:8000/login?mode=signup
 
-# Once the app starts:
-cat ~/.naavik/dev-credentials
+# Or hit the API directly (replace [email protected] / your-12+-char-password):
+curl -X POST http://localhost:8000/api/v1/auth/signup \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d '[email protected]&password=your-12-char-password'
 </pre>
     </div>
 
-    {# Recipe 2 — Set NAAVIK_DEBUG manually #}
+    {# Recipe 2 — Check orchestrator logs #}
     <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
       <div class="flex items-baseline justify-between gap-3 mb-2">
-        <h3 class="text-sm font-medium text-slate-100">2. Set <code class="font-mono text-slate-200">NAAVIK_DEBUG=1</code> + restart</h3>
-        <span class="text-[10px] font-mono uppercase tracking-wide text-slate-500 ring-1 ring-slate-700 bg-slate-900 px-1.5 py-0.5 rounded">manual</span>
+        <h3 class="text-sm font-medium text-slate-100">2. App not responding? Check orchestrator logs</h3>
+        <span class="text-[10px] font-mono uppercase tracking-wide text-slate-500 ring-1 ring-slate-700 bg-slate-900 px-1.5 py-0.5 rounded">debug</span>
       </div>
       <p class="text-xs text-slate-400 mb-2">
-        Tells the seeder to write the dev-credentials artifact at next boot. The seeder only writes when no User row exists, so you may also need recipe 3.
+        If <code class="font-mono">/login</code> doesn't load at all, Postgres or alembic likely failed. The orchestrator multiplexes <code class="font-mono">[db]</code> / <code class="font-mono">[migrate]</code> / <code class="font-mono">[app]</code> log lines.
       </p>
 <pre class="font-mono text-xs bg-slate-900 border border-slate-800 rounded p-3 text-slate-200 overflow-x-auto">
-export NAAVIK_DEBUG=1
-# (then restart the server)
-uv run fastapi dev src/main.py
+# Tail the orchestrator output. If [migrate] errored, fix that first.
+nix run .#dev
 </pre>
     </div>
 
-    {# Recipe 3 — Drop + re-seed #}
+    {# Recipe 3 — Drop the dev DB #}
     <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
       <div class="flex items-baseline justify-between gap-3 mb-2">
-        <h3 class="text-sm font-medium text-slate-100">3. Drop the dev DB + re-seed (last resort)</h3>
+        <h3 class="text-sm font-medium text-slate-100">3. Reset everything and start fresh</h3>
         <span class="text-[10px] font-mono uppercase tracking-wide text-rose-300/80 ring-1 ring-rose-500/30 bg-rose-500/5 px-1.5 py-0.5 rounded">destructive</span>
       </div>
       <p class="text-xs text-slate-400 mb-2">
-        Wipes the local Postgres data + dev-credentials file so the seeder runs fresh. Loses any locally-entered data.
+        Wipes the local Postgres data so you can sign up again from a clean slate. Loses any locally-entered data.
       </p>
 <pre class="font-mono text-xs bg-slate-900 border border-slate-800 rounded p-3 text-slate-200 overflow-x-auto">
 rm -rf .naavik/db
-rm -f {{ state.dev_credentials_path }}
-NAAVIK_DEBUG=1 nix run .#dev
+nix run .#dev
 </pre>
-    </div>
-
-    {# Recipe 4 — Multi-user signup #}
-    <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-      <div class="flex items-baseline justify-between gap-3 mb-2">
-        <h3 class="text-sm font-medium text-slate-100">4. Enable multi-user signup (cloud / shared instance)</h3>
-        <span class="text-[10px] font-mono uppercase tracking-wide text-indigo-300/80 ring-1 ring-indigo-500/30 bg-indigo-500/5 px-1.5 py-0.5 rounded">alt</span>
-      </div>
-      <p class="text-xs text-slate-400">
-        If you can sign in with the existing account, flip <code class="font-mono text-slate-200">Settings · Deployment → Allow multiple users</code>. The signup form will then render on <a href="/login?mode=signup" class="text-indigo-300 hover:text-indigo-200 underline">/login?mode=signup</a> for everyone.
-      </p>
     </div>
   </section>
 

@@ -69,7 +69,7 @@ docker compose up -d
 ```
 
 - Migrations run automatically on first start.
-- State persists in named volumes: `naavik-db-data` (Postgres) + `naavik-data` (snapshots, generated PDFs, dev-credentials).
+- State persists in named volumes: `naavik-db-data` (Postgres) + `naavik-data` (snapshots, generated PDFs).
 - Secrets live in `.env` (gitignored, `chmod 0600`); see § Configuration for the slot inventory.
 - To upgrade: `git pull && docker compose pull && docker compose up -d`.
 - To reset: `docker compose down -v` (wipes volumes!).
@@ -109,32 +109,20 @@ nix develop          # or set up direnv to load automatically
 
 ### First-time dev setup
 
-On first `nix run .#dev`, the orchestrator's `seed` step prints + persists a dev credential. Three paths to retrieve it:
+Plan 83 (0.7.0.36, 2026-05-21) replaced the auto-seeded dev user + `~/.naavik/dev-credentials` artifact with the standard self-hosted "first user signs up" flow:
 
 ```bash
-# 1. Read from stdout (orchestrator prints both at seed time and again ~750 ms after app startup)
-nix run .#dev   # watch for `[seed] dev password: ...`
-
-# 2. Read from disk (mode 0600, owner-readable only)
-cat ~/.naavik/dev-credentials
-
-# 3. Shred-after-read
-cat ~/.naavik/dev-credentials && rm ~/.naavik/dev-credentials
+nix run .#dev                                   # orchestrator: Postgres + alembic + FastAPI
+# Open http://localhost:8000 — redirects to /login.
+# Click "Create account" → enter email + 12+ char password (letter + digit).
+# Onboarding flow uploads your resume + extracts profile.
 ```
 
-The credentials file is only written when (a) `NAAVIK_DEV_PASSWORD` env var is unset, (b) `NAAVIK_DEBUG=1` (orchestrator sets it; production stacks don't), and (c) the seeded `Settings.deployment_mode` is `SELF_HOSTED` (cloud-tier installs never persist plaintext creds).
-
-To pin a credential up-front so reseeds don't surprise you:
-
-```bash
-export NAAVIK_DEV_PASSWORD='your-stable-password'
-nix run .#dev
-# With NAAVIK_DEV_PASSWORD set, the dev-credentials file is NOT written.
-```
+If `/login` doesn't load, visit `/setup-help` — public diagnostic page that surfaces the User-table count + recovery recipes (signup CTA, orchestrator-log troubleshooting, optional `rm -rf .naavik/db` for a clean reset).
 
 ### Manual setup (without the Nix orchestrator)
 
-If you prefer fine-grained control, see `README.md` § "Manual local development setup" — that's the long-form path with explicit `uv run alembic upgrade head` + `uv run python -m db.seed` + `uv run fastapi dev` steps.
+If you prefer fine-grained control, see `README.md` § "Manual local development setup" — that's the long-form path with explicit `uv run alembic upgrade head` + `uv run fastapi dev` steps.
 
 ---
 
@@ -184,7 +172,7 @@ Critical envs to consider in production:
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OLLAMA_BASE_URL` | At least one LLM provider. Plan 26: env-only post-vault. |
 | `DISCORD_WEBHOOK_URL` / `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` / `PORTFOLIO_WEBHOOK_URL` | Optional outbound channels. Plan 26: env-only post-vault. |
 | `DATABASE_URL` | Compose / NixOS provision their own; only override if connecting elsewhere. |
-| `DATA_DIR` | State root for snapshots + PDFs + dev-credentials. Default `.naavik`; production typically `/var/lib/naavik` or `~/.naavik`. |
+| `DATA_DIR` | State root for snapshots + generated PDFs + postmortems. Default `.naavik`; production typically `/var/lib/naavik` or `~/.naavik`. |
 
 ---
 
@@ -242,7 +230,7 @@ aws s3 sync /var/lib/naavik-backups/ s3://<your-bucket>/naavik/ --delete
 
 **Reminder.** Rotating `SECRET_KEY` invalidates **all** JWTs — active sessions die, users re-auth from the UI. Treat `.env` as crown jewels. The managed cloud tier ($15/month) handles all of this for users who don't want to operate backups.
 
-- **Reset dev DB:** `rm -rf .naavik/db` OR `uv run alembic downgrade base && upgrade head && python -m db.seed`.
+- **Reset dev DB:** `rm -rf .naavik/db` (then `nix run .#dev` + sign up again). Plan 83 removed `python -m db.seed`.
 - **Rotate `SECRET_KEY`:** edit `.env`, restart. Active sessions are invalidated; users re-auth from the UI.
 
 ---

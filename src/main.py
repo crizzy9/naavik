@@ -4,10 +4,8 @@ Plan 08 shrinks main.py to lifespan + middleware + router mounting + health.
 Per-domain routers live under `src/ui/routes/`.
 """
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -39,95 +37,15 @@ from ui.routes import settings as ui_settings
 log = logging.getLogger(__name__)
 
 
-_DEV_CREDENTIALS_ECHO_DELAY_SEC = 0.75
-
-
-async def _emit_first_run_warning_if_broken() -> None:
-    """Plan 71 (0.3.3.14): boot-time WARN when first-run auth is broken.
-
-    Fires when the plan-10c trifecta indicates the operator is locked
-    out: `NAAVIK_DEBUG` unset AND a User row exists AND no
-    `<data_dir>/dev-credentials` file. The matching `/setup-help` route
-    surfaces the same diagnostic + recovery recipes; the WARN log line
-    is the earliest possible touch-point so the operator sees it in
-    the orchestrator's interleaved scrollback.
-
-    Best-effort. Any probe error is swallowed; the log line is
-    informational and never blocks startup.
-    """
-    try:
-        from db.session import async_session
-        from services.first_run import probe_first_run_state
-
-        async with async_session() as session:
-            state = await probe_first_run_state(session)
-        if not state.broken:
-            return
-        log.warning(
-            "first-run auth gap detected: NAAVIK_DEBUG=%s, user_count=%d, "
-            "dev_credentials_present=%s (path=%s). Visit /setup-help for recovery. "
-            "Canonical fix: `nix run .#dev` (auto-exports NAAVIK_DEBUG=1).",
-            "set" if state.debug_enabled else "unset",
-            state.user_count,
-            state.dev_credentials_present,
-            state.dev_credentials_path,
-        )
-    except Exception as exc:  # noqa: BLE001
-        log.debug("first-run state probe skipped at boot: %s", exc)
-
-
-async def _echo_dev_credentials_after_start() -> None:
-    """Re-emit `<data_dir>/dev-credentials` near the bottom of startup logs.
-
-    Plan 10c (10c.3a, 2026-05-11): with `PC_DISABLE_TUI=true` in the
-    orchestrator, all four `[deps]`/`[migrate]`/`[seed]`/`[app]` streams
-    interleave; the `[seed]` credential line lands ~5 s before uvicorn's
-    "Application startup complete." and scrolls above the fold. The
-    on-disk file at `<data_dir>/dev-credentials` (written by `db/seed.py`
-    when debug + SELF_HOSTED + generated) is the canonical recovery path
-    via `cat`; this echo also surfaces it through the FastAPI logger so
-    it interleaves with `[app]` lines after the uvicorn banner.
-
-    Best-effort. If the file doesn't exist (env-supplied password, debug
-    off, cloud-tier deploy, or a re-seed that found an existing user),
-    this is a no-op.
-    """
-    try:
-        await asyncio.sleep(_DEV_CREDENTIALS_ECHO_DELAY_SEC)
-        creds_path = Path(app_settings.data_dir) / "dev-credentials"
-        if not creds_path.exists():
-            return
-        log.info("─── dev credentials (also at ~/.naavik/dev-credentials) ───")
-        for line in creds_path.read_text().splitlines():
-            if line.strip():
-                log.info("  %s", line)
-        log.info("───────────────────────────────────────────────────────────")
-    except Exception as exc:  # noqa: BLE001
-        # Never let credential echo crash the lifespan. The file is the
-        # canonical recovery path either way.
-        log.debug("dev-credentials echo skipped: %s", exc)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Wave 6: boot the APScheduler with Wave-6 cron jobs registered.
+    """Boot the APScheduler with Wave-6 cron jobs registered.
 
     Scheduler is gracefully optional — if Postgres isn't reachable on boot
     (dev-only edge cases), the app still serves; jobs are no-ops.
-
-    Plan 10c (10c.3a, 2026-05-11): in debug mode, also spawn a fire-and-
-    forget task that re-emits the seeded dev credential ~750 ms after
-    startup so it lands at the bottom of the orchestrator's interleaved
-    scrollback (see `_echo_dev_credentials_after_start`).
     """
     if app_settings.debug:
-        asyncio.create_task(_echo_dev_credentials_after_start())
-    else:
-        # Plan 71 (0.3.3.14): when NAAVIK_DEBUG is off, watch for the
-        # plan-10c first-run trifecta + emit a WARN if the operator's
-        # locked out. Fire-and-forget; the canonical recovery surface
-        # is /setup-help.
-        asyncio.create_task(_emit_first_run_warning_if_broken())
+        log.info("dev server up at http://localhost:8000 — visit /signup to create your account")
 
     try:
         from scheduler import shutdown as shutdown_scheduler

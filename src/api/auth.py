@@ -8,7 +8,6 @@ The HTML page handlers (`GET /login`, `GET /onboarding`) stay in
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import (
@@ -25,7 +24,6 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from config import settings as app_settings
 from db.session import get_session
 from models import Profile, Settings, User
 from services.auth import (
@@ -347,15 +345,6 @@ async def post_change_password(
     user.must_change_password = False
     await session.commit()
     record_login_attempt(ip, success=True)
-
-    # Plan 18 § Open Q2: delete the stale on-disk dev credential once the
-    # operator has chosen their own password. The file is owner-only (mode
-    # 0600) and best-effort — fs errors don't fail the rotation.
-    try:
-        creds_path = Path(app_settings.data_dir) / "dev-credentials"
-        creds_path.unlink(missing_ok=True)
-    except OSError as exc:
-        log.warning("could not remove stale dev-credentials file: %s", exc)
 
     # Rotate session + CSRF cookies on credential change (auth event).
     secure = not request.app.debug if hasattr(request.app, "debug") else True

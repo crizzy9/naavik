@@ -1,10 +1,13 @@
-"""`/setup-help` — public first-run diagnostic page (plan 71 / 0.3.3.14).
+"""`/setup-help` — public first-run diagnostic page (plan 83 / 0.7.0.36).
 
-When the operator hits the plan-10c trifecta — `NAAVIK_DEBUG` unset AND
-users seeded AND no `~/.naavik/dev-credentials` artifact — they're
-locked out of both `/login` (no creds) and `/login?mode=signup` (gate
-disabled). This page surfaces the diagnosis + copy-pasteable recovery
-recipes. No auth required: this IS the auth-help surface.
+After plan 83 deleted the auto-seed dev user + `~/.naavik/dev-credentials`
+artifact, this page collapses to a thin redirect surface:
+
+- DB has no users → "Visit /signup to create your account"
+- DB has at least one user → "Visit /login to sign in"
+
+No auth required — operators reach this when their login flow stalled
+or when they're following the RUNBOOK link.
 """
 
 from __future__ import annotations
@@ -20,8 +23,7 @@ from ui.templates_setup import templates
 router = APIRouter()
 
 
-# Anchor into docs/RUNBOOK.md § 2.12 First-run authentication. Kept as a
-# constant so tests can assert the link is wired without parsing markdown.
+# Anchor into docs/RUNBOOK.md § 2.12 First-run authentication.
 _RUNBOOK_ANCHOR = "#212-first-run-authentication--401-troubleshooting"
 
 
@@ -30,13 +32,7 @@ async def get_setup_help(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    """Render the diagnostic + recovery page.
-
-    Unauthenticated by design — operators reach this exactly when their
-    auth flow is broken. Probes via `services.first_run.probe_first_run_state`,
-    which the lifespan WARN logger also consumes (single canonical
-    diagnostic shape).
-    """
+    """Render the diagnostic + recovery page (unauthenticated)."""
     state = await first_run.probe_first_run_state(session)
     return templates.TemplateResponse(
         request,
