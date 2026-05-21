@@ -21,7 +21,7 @@ from llm import get_provider
 from llm.anthropic import AnthropicProvider, BatchRequest, BatchResponse
 from llm.base import LLMProviderError
 from llm.prompts.critique_personas import PERSONAS, PROMPT_BUILDERS, CritiqueVote
-from services.council import _sync_fallback
+from services._council_common import sync_fallback as _sync_fallback
 from services.llm_tracker import _persist_usage as _persist_apiusage
 
 if TYPE_CHECKING:

@@ -8,7 +8,6 @@ synchronous `asyncio.gather` when the batch API is unavailable.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -17,7 +16,8 @@ from llm import get_provider
 from llm.anthropic import AnthropicProvider, BatchRequest, BatchResponse
 from llm.base import LLMProviderError
 from llm.prompts.council_personas import PERSONAS, PROMPT_BUILDERS, CouncilVote
-from services import llm_tracker
+from services import llm_tracker  # noqa: F401  (preserved for test monkeypatch path)
+from services._council_common import sync_fallback
 from services.llm_tracker import _persist_usage as _persist_apiusage
 
 if TYPE_CHECKING:
@@ -67,52 +67,11 @@ def _borda_merge(
     return selected, scores
 
 
-async def _sync_fallback(
-    *,
-    session: AsyncSession | None,
-    user_id: int,
-    application_id: int | None,
-    provider,
-    requests: list[BatchRequest],
-    system: str | None,
-    cache_system: bool,
-) -> list[BatchResponse]:
-    """Submit 3 personas sequentially via `provider.structured`.
-
-    Loses the 50% batch discount but keeps the council shape working when
-    batch API returns 503 or polling times out. Uses
-    `asyncio.gather` so the 3 calls go in parallel inside the asyncio loop
-    even though each persona is its own tracked_call invocation.
-    """
-
-    async def _one(req: BatchRequest) -> BatchResponse:
-        try:
-            result = await llm_tracker.tracked_call(
-                session=session,
-                user_id=user_id,
-                provider=provider,
-                method="structured",
-                prompt_name=f"council_{req.custom_id}",
-                application_id=application_id,
-                prompt=req.prompt,
-                schema=req.schema,
-                max_tokens=req.max_tokens,
-                system=system,
-                cache_system=cache_system,
-            )
-            return BatchResponse(
-                custom_id=req.custom_id,
-                value=getattr(result, "value", {}) or {},
-                text=getattr(result, "text", "") or "",
-                input_tokens=int(getattr(result, "input_tokens", 0) or 0),
-                output_tokens=int(getattr(result, "output_tokens", 0) or 0),
-                succeeded=True,
-            )
-        except LLMProviderError as exc:
-            log.warning("council sync fallback failed for %s: %s", req.custom_id, exc)
-            return BatchResponse(custom_id=req.custom_id, succeeded=False, error=str(exc))
-
-    return list(await asyncio.gather(*(_one(req) for req in requests)))
+# Plan 75 / 0.3.3.11 — `_sync_fallback` body moved to `services._council_common`
+# so the cross-module use (critique_council also calls it) is explicit. Kept as
+# a module-local alias for back-compat with any direct callers / tests pinning
+# the private name.
+_sync_fallback = sync_fallback
 
 
 async def vote_on_bullet_selection(
