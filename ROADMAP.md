@@ -2,7 +2,7 @@
 
 > **Single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. Tracking-only (per `AGENTS.md` § Single-doc-tracking).
 >
-> **Last updated:** 2026-05-21. (**0.3.0 SHIPPED.** Plan 65 EXECUTED via PR #166 — hybrid layered scoring substrate (tag → semantic → LLM-judge) across all 6 rows + 4 doc graduations in-PR (BACKEND.md + DATA_MODEL.md + SCREENS.md + JOB_MODEL.md). Reviewers: architect APPROVE_WITH_NOTES 18/18 perfect spec match; hacker APPROVE_WITH_NOTES (3 MED + 1 LOW filed to 0.3.3.01-04). 0.3.0 unblocks 0.4.0 auto-apply. **Next: 0.3.1 (tailored resume + one-click) + 0.3.2 (UI polish + analytics) parallel-shippable.** 0.3.3 catch-all now holds 4 reviewer-filed follow-ups.)
+> **Last updated:** 2026-05-21. (**0.3.1 RESTRUCTURED with SOTA+Claude-mythos.** Synthesized research memo `docs/design/research/0.3.1-resume-generation-sota.md` (1590 lines, merges v1-foundation + claude-mythos parallel dispatches). User locked 10 OQs to architect picks. 0.3.1 monolith 4-row sketch REPLACED with 12 rows across 2 sub-releases: **0.3.1 FREE core (6 rows, ~$0.06-0.12/app)** voice grounding + ATS-friendly Typst + recruiter-priority headline + adaptive cover letter + ethics pre-flight; **0.3.4 PREMIUM Claude-mythos (6 rows, ~$0.40-1.20/app, opt-in)** adversarial detector loop + 3-agent council + multi-persona critique + tool-loop orchestrator + parser ensemble + Settings tier-toggle UI. Architect plan-author for plan 66 (0.3.1 FREE) in flight; 0.3.4 PREMIUM plan dispatched after 0.3.1 merge.)
 
 ---
 
@@ -31,9 +31,10 @@
 | 0.2.6 | Tooling cleanup (DEF + A.28a) | ✅ Complete (2026-05-20) | 0.2.6.06/07/08/09 shipped; 0.2.6.01-05 moved to 0.2.7.13-17 |
 | 0.2.7 | Deferred-from-0.2.x catch-all | ✅ Complete (2026-05-21) | All in-cycle rows shipped (incl. design-heavy sweep PRs #162/#163/#164/#165); 6 small follow-ups deferred to 0.8.0.33-38 |
 | 0.3.0 | Scoring substrate (hybrid layered: tag → semantic → LLM-judge) | ✅ Complete (2026-05-21) | All 6 rows shipped via PR #166; 4 follow-ups filed to 0.3.3 |
-| 0.3.1 | Tailored resume preview + one-click generation | ⚪ Future (post-0.3.0) | — |
+| 0.3.1 | Tailored resume + cover letter FREE-tier (voice grounding + ATS-friendly Typst + adaptive cover) | 🟡 Queued (plan 66 in flight 2026-05-21) | — |
 | 0.3.2 | UI polish + score analytics | ⚪ Future (parallel w/ 0.3.1) | — |
-| 0.3.3 | Deferred-from-0.3.x catch-all | ⚪ Future (rolling) | — |
+| 0.3.3 | Deferred-from-0.3.x catch-all | 🟡 Active (4 rows filed from 0.3.0 reviewers) | — |
+| 0.3.4 | PREMIUM-tier Claude-mythos generation (adversarial detector loop + 3-agent council + multi-persona critique + tool-loop) | ⚪ Future (post-0.3.1; opt-in via Settings) | — |
 | 0.4.0 | Application Tracking & Auto-Apply | ⚪ Future | — |
 | 0.5.0 | Email Monitoring & Outreach | ⚪ Future | — |
 | 0.6.0 | Optimization & Polish (observability, LaTeX, ML calibration — light mode moved to 0.8.0) | ⚪ Future | — |
@@ -369,20 +370,42 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 
 ---
 
-### 0.3.1 — Tailored resume preview + one-click generation (HIGH; depends on 0.3.0.05)
-> **Goal:** One-click from Discover card swipe → tailored PDF resume + cover letter; page-valid via typst retry-drop loop.
-> **Status:** ⚪ Future (post-0.3.0).
-> **Plan:** TBD post-0.3.0.06.
-> **Estimated effort:** ~4 dev-days · ~950 LOC across 4 rows.
+### 0.3.1 — Tailored resume + cover letter FREE-tier (CRITICAL; depends on 0.3.0.05+.06)
+> **Goal:** Ship the FREE-tier resume + cover letter generation pipeline — voice-grounded constitution preamble (corpus + ProfileAnswer + summary) + ATS-friendly Typst (PDF/A-1b + new `onepage_ats.typ`) + recruiter-priority headline + adaptive cover letter + ethics pre-flight + page-valid retry-drop. Survives parsing across 9 ATS systems (>85% field-extraction fidelity); evades the 5 major AI-detector classifiers via voice grounding (the highest-ROI lever — it's truth, not evasion). Cost: ~$0.06-0.12/app at Sonnet 4.6 + prompt caching.
+> **Status:** 🟡 Queued — plan-authoring in flight 2026-05-21 per synthesized research memo `docs/design/research/0.3.1-resume-generation-sota.md`.
+> **Plan:** `docs/plans/66-0.3.1-free-tier-generation.md` (in flight).
+> **Locked decisions (2026-05-21 user lock-in post-synthesized memo):** OQ-1 2-tier FREE/PREMIUM (this row = FREE) · OQ-2 council N=3 (PREMIUM-only) · OQ-3 tool-loop cap N=3 (PREMIUM-only) · OQ-4 hybrid Claude-as-detector + Originality.ai spot-check (PREMIUM-only) · OQ-5 adaptive cover letter format (Claude picks per JD) · OQ-6 TIER-2 evasion all opt-in via Settings · Advanced · OQ-7 smart-default parse-fidelity tiers (>90% silent / 75-90% toast / <75% loop+surface) · OQ-8 2 templates (`onepage.typ` + new `onepage_ats.typ`; auto-select by `Application.board`) · OQ-9 `Settings.ai_writing_voice_samples` field (no profile migration) · OQ-10 graceful skip with warning on cost-cap exhaustion.
+> **Estimated effort:** ~6 dev-days · ~1850 LOC across 6 rows.
 
 | # | Task | Status | Priority | Legacy ID | Notes |
 |---|---|---|---|---|---|
-| 0.3.1.01 | Bullet selection pipeline (`document_generator.generate_tailored_resume`) | [ ] | HIGH | 3.4 | Uses `JobScore.suggested_bullets` + `selection_override` + tag-rank fallback. Wires existing `select_bullets.py` skeleton end-to-end. ~350 LOC. |
-| 0.3.1.02 | Bullet trim pipeline (`document_generator` calls `trim_bullet.py` per selected bullet) | [ ] | HIGH | (new) | Target chars derived from typst row width; existing prompt; wiring + length-validation only. ~150 LOC. |
-| 0.3.1.03 | Typst page-count validator + retry-drop loop (max 3 retries; drop lowest-priority bullet each retry) | [ ] | MEDIUM | (new) | Already specced in `BACKEND.md § K.4`; never wired. ~200 LOC. |
-| 0.3.1.04 | One-click generation endpoint + Discover wiring (`POST /api/v1/applications/{id}/generate-bundle`) | [ ] | HIGH | 3.5 | Wires Discover card "Review & apply" button per `SCREENS.md § 8`. Resume + cover-letter typst compile + persist. ~250 LOC. |
+| 0.3.1.01 | Bullet selection pipeline + JobScore integration + corpus voice grounding | [ ] | HIGH | 3.4 | Wires `select_bullets.py` end-to-end. Uses `JobScore.suggested_bullets` + `selection_override` + tag-rank fallback. Adds corpus voice grounding (§ G.1) + constitution preamble (§ G.2) + metrics-preference + JD-keyword preference. ~350 LOC. |
+| 0.3.1.02 | Bullet trim w/ voice grounding + burstiness target + AI-tell blocklist | [ ] | HIGH | (new) | Extends `trim_bullet.py` with constitution + corpus + burstiness target (variance across all output bullets) + 30-entry AI-tell vocabulary blocklist (em-dash, delve, leverage, robust, ...) + post-process strip. ~250 LOC. |
+| 0.3.1.03 | ATS-friendly Typst template variant (`onepage_ats.typ`) + parse-fidelity validator | [ ] | HIGH | (new) | New strict-single-column template — plain `•` bullets, MM/YYYY dates, no header/footer, PDF/A-1b output, ligatures-disabled Helvetica. + `services/ats_parser_fidelity.py` (pdfplumber heuristic + 8-field round-trip score; test corpus at `tests/data/ats_corpus/`; UI warning chip). Smart-default fail-mode per OQ-7. ~350 LOC. |
+| 0.3.1.04 | Recruiter-priority headline + summary generator + keyword coverage validator | [ ] | HIGH | (new) | New `services/recruiter_optimization.py` + `llm/prompts/tailor_headline.py` — LLM-generated 1-line pitch (title + years + specialty + sponsorship signal — 10.6× interview-signal per research). + `services/keyword_coverage.py` (top-30% must-have-keyword presence; score 0-1). ~300 LOC. |
+| 0.3.1.05 | Cover letter SOTA (Hook/Match/Close + voice grounding + adaptive format + hiring-manager personalization) | [ ] | HIGH | 3.5 | `llm/prompts/draft_cover_letter_sota.py` replaces existing `draft_cover_letter.py`. Voice-grounded; verbatim weaving of profile achievements. Adaptive format (Claude picks per JD signal per OQ-5). `services/hiring_manager_extractor.py` (regex + LLM extract from `Job.description`; UI field on bundle review for manual override). 50% callback uplift per TopResume/SHRM. ~300 LOC. |
+| 0.3.1.06 | One-click generation endpoint + Discover wiring + page-count retry loop + ethics pre-flight | [ ] | HIGH | (new) | `POST /api/v1/applications/{id}/generate-bundle`; resume + cover letter compile + persist; existing retry-drop loop + new ethics pre-flight (no claims unsupported by profile; § G.10) + citation-grounded audit trail in `Application.generation_trace`. Wires Discover card "Review & apply" per `SCREENS.md § 8`. ~300 LOC. |
 
-**Deliverable (0.3.1):** One-click from Discover swipe to tailored PDF resume + cover letter, page-valid, with bullet-selection audit trail.
+**Deliverable (0.3.1):** One-click from Discover swipe to ATS-passable PDF resume + cover letter, voice-grounded, parse-validated across 9 ATS, page-valid via retry-drop, citation-grounded audit. Cost ~$0.06-0.12/app.
+
+---
+
+### 0.3.4 — PREMIUM-tier Claude-mythos generation (MEDIUM; opt-in via Settings · Generation; depends on 0.3.1.06)
+> **Goal:** PREMIUM-tier opt-in adds Claude-mythos force-multiplier layer on top of FREE substrate: adversarial detector loop + 3-agent voting council + multi-persona recruiter critique + tool-loop orchestrator + ATS parser ensemble + Settings UI tier-toggle. Cost: ~$0.40-1.20/app. User toggles per-app for high-priority jobs (score > 0.85) OR globally in Settings · Generation.
+> **Status:** ⚪ Future (post-0.3.1).
+> **Plan:** TBD post-0.3.1.06 merge.
+> **Estimated effort:** ~6 dev-days · ~1700 LOC across 6 rows.
+
+| # | Task | Status | Priority | Legacy ID | Notes |
+|---|---|---|---|---|---|
+| 0.3.4.01 | Adversarial detector loop (Claude-as-detector + refine) + hybrid real-detector spot-check | [ ] | MEDIUM | (new) | New `services/detector_loop.py` — runs Claude-as-detector on each bullet + cover letter; refines if flag-confidence > 0.25; max 3 iterations per OQ-3. Hybrid: spot-check with Originality.ai at convergence per OQ-4. ~300 LOC. |
+| 0.3.4.02 | 3-agent voting council for bullet selection (Borda count, batch API) | [ ] | MEDIUM | (new) | New `services/council.py` — 3 persona prompts (Pragmatic recruiter / Hiring manager / Cultural-fit assessor); Borda count merge per OQ-2. Uses `messages.batches.create` for 50% cost reduction. ~250 LOC. |
+| 0.3.4.03 | Multi-persona recruiter critique council | [ ] | MEDIUM | (new) | 3 persona reviewers (FAANG L5/L6 / startup founder / Fortune-500 HR). Surface common feedback (all 3 flag same thing). Batch API. ~250 LOC. |
+| 0.3.4.04 | Tool-loop orchestrator (ats_parse_test + detector + skim + keyword + defensibility) | [ ] | MEDIUM | (new) | Implements § G.6 — 5 tools; `interleaved-thinking-2025-05-14` beta header; 3-iteration cap with budget-aware early exit per OQ-3. ~400 LOC. |
+| 0.3.4.05 | ATS parser ensemble (pyresparser + OpenResume + pyresume cross-check) | [ ] | MEDIUM | (new) | New `services/ats_parser_ensemble.py` — runs 3 OS parsers + scores. Optional dep `pyresparser`. OpenResume TypeScript→Python subset port (~600 LOC of `parse-resume-from-pdf/`) OR Node subprocess shell-out. ~250 LOC. |
+| 0.3.4.06 | Settings UI surface + PREMIUM tier toggle + cost projection display + audit-trail viewer | [ ] | MEDIUM | (new) | Settings · Generation tab: tier-toggle, per-app cost projection, opt-in for TIER-2 evasion, audit-trail viewer for past `Application.generation_trace`. ~250 LOC. |
+
+**Deliverable (0.3.4):** PREMIUM-tier opt-in. Independently shippable; doesn't block any 0.3.x dependency. User-facing cost surface explicit; PREMIUM converts in jobs scoring > 0.85.
 
 ---
 
