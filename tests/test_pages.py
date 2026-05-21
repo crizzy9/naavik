@@ -87,8 +87,10 @@ _PAGES = [
     (
         "settings",
         "/settings",
-        ["Settings", "Active provider", "Anthropic Claude", "THIS MONTH"],
-        [],
+        ["Settings", "Anthropic Claude", "THIS MONTH"],
+        # Plan 70 (0.3.3.13): "Active provider" radio surface deleted; the
+        # API-key env-presence card section is the single canonical surface.
+        ["Active provider"],
     ),
     (
         "bullet_modal",

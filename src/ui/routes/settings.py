@@ -204,6 +204,10 @@ async def _ctx_for_tab(
         "selected_model": settings.llm_model or _llm_default_model_for(provider_id),
         "env_indicators": env_secrets.env_indicators_for_llm_tab(),
         "notify_env_indicators": env_secrets.env_indicators_for_notifications_tab(),
+        # Plan 70 (0.3.3.13): single env-resolved active-provider label.
+        # Replaces the deleted "Active provider" radio surface — no UI
+        # mutation; precedence ANTHROPIC > OPENAI > OLLAMA.
+        "active_provider": env_secrets.resolve_active_llm_provider(),
         "save_status": None,
         "deployment": deployment_info,
         "log_lines": _LOG_LINES_SEED,

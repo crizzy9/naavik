@@ -9,13 +9,17 @@
     model_options   : list[str] — model IDs valid for the active provider
     selected_model  : str — currently-selected model
     env_indicators  : dict[str, bool] — {anthropic, openai, ollama} env-presence
+    active_provider : str | None — env-resolved active provider id (plan 70)
     save_status     : str | None — "saved" / "error" — re-render hint after PUT
 
   Plan 26 (0.2.0.01): vault deprecated. API keys are configured via env
   vars (ANTHROPIC_API_KEY / OPENAI_API_KEY / OLLAMA_BASE_URL) in `.env`;
-  this tab no longer accepts secret input. The form mutates only the
-  active provider + model + fallback provider; the env-indicator section
-  surfaces presence without exposing values.
+  this tab no longer accepts secret input.
+
+  Plan 70 (0.3.3.13): the "Active provider" radio surface was deleted —
+  whichever provider has its env key set wins (precedence ANTHROPIC >
+  OPENAI > OLLAMA, resolved by `env_secrets.resolve_active_llm_provider`).
+  The env-presence card section below remains canonical.
 #}
 <div id="llm-form" class="flex flex-col gap-6 max-w-5xl">
   <form
@@ -24,29 +28,6 @@
     hx-swap="outerHTML"
     hx-disabled-elt="find button[type=submit]"
     class="flex flex-col gap-6">
-
-    <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
-      <header class="flex items-baseline justify-between mb-4 gap-3">
-        <div>
-          <h2 class="text-base font-medium text-slate-50">Active provider</h2>
-          <p class="text-xs text-slate-400 mt-0.5">Which model handles bullet selection, cover-letter drafts, and screener answers.</p>
-        </div>
-        <span class="text-xs text-slate-500 font-mono">{{ providers | length }} providers</span>
-      </header>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {% for p in providers %}
-          {% set _radio_attrs %}
-            hx-trigger="change"
-            hx-get="/_fragments/settings/llm/model-options?provider={{ p.id }}"
-            hx-target="#llm-model-container"
-            hx-swap="innerHTML"
-          {% endset %}
-          {% with provider=p, selected=(p.id == provider_id), radio_attrs=_radio_attrs %}
-            {% include "components/provider_card.html" %}
-          {% endwith %}
-        {% endfor %}
-      </div>
-    </section>
 
     <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
       <header class="flex items-baseline justify-between mb-4 gap-3">
@@ -60,6 +41,23 @@
                    target="_blank" rel="noopener">README · Configuration</a>.
           </p>
         </div>
+        {# Plan 70 — env-resolved active-provider chip (replaces the deleted radio surface). #}
+        {% if active_provider %}
+          {% set _active_name = providers | selectattr("id", "equalto", active_provider) | map(attribute="name") | first %}
+          <span data-active-provider="{{ active_provider }}"
+                class="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-wide
+                       px-2 py-1 rounded ring-1 bg-indigo-500/10 text-indigo-200 ring-indigo-500/30">
+            <i data-lucide="check-circle-2" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+            Active: {{ _active_name or active_provider }}
+          </span>
+        {% else %}
+          <span data-active-provider="none"
+                class="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-wide
+                       px-2 py-1 rounded ring-1 bg-amber-500/10 text-amber-200 ring-amber-500/30">
+            <i data-lucide="alert-triangle" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+            No provider configured
+          </span>
+        {% endif %}
       </header>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
