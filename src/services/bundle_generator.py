@@ -512,14 +512,47 @@ async def generate_bundle(
             deduped.append(v)
     trace["ai_tell_violations"] = deduped
 
-    # Burstiness — std-dev over trimmed bullet word counts; record only.
-    # One-shot regen of worst offender deferred to 0.3.3 (requires a
-    # bullet-id-targeted regen surface in document_generator).
+    # Burstiness — std-dev over trimmed bullet word counts.
+    # Plan 75 / 0.3.3.05 — when std-dev < 6 (AI-uniform reading), regen the
+    # worst-offender bullet once with explicit variance instruction. Cap at
+    # one regen per bundle (mirrors critique-council T4). Cost-cap probe
+    # gates the regen LLM call so a runaway burstiness path doesn't
+    # exhaust the daily cap.
     if result.resume is not None and result.resume.bullet_selection:
         trimmed = result.resume.bullet_selection.get("trimmed_lines") or {}
         if isinstance(trimmed, dict) and len(trimmed) >= 2:
-            report = check_and_score([str(v) for v in trimmed.values()])
+            # Materialize as list while preserving key order to map idx → key.
+            keys: list = list(trimmed.keys())
+            values: list[str] = [str(trimmed[k]) for k in keys]
+            report = check_and_score(values)
             trace["burstiness_std"] = report.std_dev
+            if not report.passed and report.worst_offender_idx is not None:
+                trace["burstiness_std_pre_regen"] = report.std_dev
+                worst_idx = report.worst_offender_idx
+                if await dg.is_cost_capped(session, user_id, settings):
+                    trace["burstiness_regen_skipped_cost_cap"] = True
+                else:
+                    worst_key = keys[worst_idx]
+                    regen_text = await dg.regen_bullet_for_variance(
+                        session=session,
+                        settings=settings,
+                        user_id=user_id,
+                        application_id=application.id,
+                        original_text=values[worst_idx],
+                        target=report.suggested_target,
+                        target_words=report.suggested_target_words,
+                        system=preamble,
+                        cache_system=cache_preamble,
+                    )
+                    if regen_text and regen_text != values[worst_idx]:
+                        # Substitute + recompute. Hard cap = 1 regen per bundle.
+                        trimmed[worst_key] = regen_text
+                        values[worst_idx] = regen_text
+                        result.resume.bullet_selection["trimmed_lines"] = trimmed
+                        post_report = check_and_score(values)
+                        trace["burstiness_std"] = post_report.std_dev
+                        if not post_report.passed:
+                            trace["burstiness_regen_insufficient"] = True
 
     # Stage 7 — parse fidelity (cheap; always run)
     if result.resume is not None and result.resume.path:
