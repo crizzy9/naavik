@@ -207,6 +207,7 @@ async def put_auto_apply(
     request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     """Plan 78 (0.4.0.13 + 0.4.0.20) — form-encoded support added for the
     new per-board cap editor + dry-run toggle alongside the existing JSON
@@ -306,11 +307,14 @@ async def post_auto_apply_drain(
     back to SAVED. Returns `{drained: N}`. CSRF + auth gated.
     """
     from services import application_service as application_service_mod
+    from ui.routes.settings import _effective_user_id
 
-    # Self-host MVP: pin user_id=1 to match the rest of the Settings API
-    # surface. Cloud multi-tenancy (0.8.0.NN) swaps in per-request resolution.
+    # Resolve per authed caller (hacker MED-2 PR #193 fix). Pattern matches
+    # put_sources (line 403) + put_generation (line 487). Avoids destructive
+    # cross-tenant drain in any future allow_multiple_users path.
+    user_id = _effective_user_id(_user)
     drained = await application_service_mod.drain_auto_apply_queue(
-        session, user_id=1, reason="settings_drain"
+        session, user_id=user_id, reason="settings_drain"
     )
     await session.commit()
     return {"drained": drained}
