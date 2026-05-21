@@ -2,7 +2,7 @@
 
 > **Single source of truth for project progress.** Phases describe the long arc; per-phase wave/task tables are checked off as work lands. Tracking-only (per `AGENTS.md` § Single-doc-tracking).
 >
-> **Last updated:** 2026-05-21. (**0.2.7 CLOSED** — design-heavy sweep complete via PRs #162/#163/#164/#165 covering 0.2.7.07/10/11/14/16. Remaining 6 small follow-ups (13a/13b/17a/24/25/26) DEFERRED to 0.8.0.33-38 per user directive. 36 total 0.8.0 rows now (0.8.0.01-38). **Next: 0.3.0 Intelligent Scoring & Matching** — architect research-mode dispatch in flight for concrete deliverable breakdown + LinkedIn MCP + alternative-scoring-approach research; returns to discuss findings before plan-authoring.)
+> **Last updated:** 2026-05-21. (**0.3.x SPLIT LANDED.** Research memo `docs/design/research/0.3.0-intelligent-scoring-research.md` published; user locked 7 OQs to architect picks. 0.3.0 7-row monolith REPLACED with hybrid-layered scoring split into 14 rows across 3 sub-releases: 0.3.0 substrate (6 rows CRITICAL — unblocks 0.4.0 auto-apply) + 0.3.1 tailored resume + one-click (4 rows HIGH) + 0.3.2 UI polish + analytics (4 rows MEDIUM) + 0.3.3 deferred-from-0.3.x catch-all. **5 backlog rows filed:** 0.5.0.12.1 (LinkedIn MCP outreach) + 0.8.0.40-43 (Platt calibration / cross-encoder rerank / per-source trust weighting / score-trend insights). LinkedIn MCP deferred to Phase 5 per OQ-3. Architect plan-author dispatch for plan 65 (0.3.0 substrate) in flight.)
 
 ---
 
@@ -30,7 +30,10 @@
 | 0.2.5 | Observability cleanup (DEF) | ✅ Complete (2026-05-20) | 0.2.5.02/03/04 shipped; 0.2.5.01 closed moot; 0.2.5.05+06 moved to 0.2.7.06 (paired UI editors) |
 | 0.2.6 | Tooling cleanup (DEF + A.28a) | ✅ Complete (2026-05-20) | 0.2.6.06/07/08/09 shipped; 0.2.6.01-05 moved to 0.2.7.13-17 |
 | 0.2.7 | Deferred-from-0.2.x catch-all | ✅ Complete (2026-05-21) | All in-cycle rows shipped (incl. design-heavy sweep PRs #162/#163/#164/#165); 6 small follow-ups deferred to 0.8.0.33-38 |
-| 0.3.0 | Intelligent Scoring & Matching | ⚪ Future | — |
+| 0.3.0 | Scoring substrate (hybrid layered: tag → semantic → LLM-judge) | 🟡 Queued (plan 65 in flight 2026-05-21) | — |
+| 0.3.1 | Tailored resume preview + one-click generation | ⚪ Future (post-0.3.0) | — |
+| 0.3.2 | UI polish + score analytics | ⚪ Future (parallel w/ 0.3.1) | — |
+| 0.3.3 | Deferred-from-0.3.x catch-all | ⚪ Future (rolling) | — |
 | 0.4.0 | Application Tracking & Auto-Apply | ⚪ Future | — |
 | 0.5.0 | Email Monitoring & Outreach | ⚪ Future | — |
 | 0.6.0 | Optimization & Polish (observability, LaTeX, ML calibration — light mode moved to 0.8.0) | ⚪ Future | — |
@@ -345,24 +348,71 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 
 ---
 
-### 0.3.0 — Intelligent Scoring & Matching (legacy Phase 3)
-> **Goal:** AI compatibility scoring with tag-based profile matching and explainable results.
-> **Status:** ⚪ Future.
-> **Plan:** `docs/plans/12-phase-3-scoring.md` (to be authored after plan 11 ships).
-> **Implementation contract:** `docs/design/BACKEND.md` § H.1 (`scorer` service), § M.3 (`score_job` prompt). DATA_MODEL.md § C (`Job.score`, `Job.score_explanation`, `Job.match_breakdown`).
-> **Estimated effort:** 1–2 weeks.
+### 0.3.0 — Scoring substrate (legacy Phase 3 cut 1 — CRITICAL; unblocks 0.4.0 auto-apply)
+> **Goal:** Hybrid layered scoring (tag overlap → semantic cosine → LLM-as-judge) writes `Job.score` + `Job.score_explanation` + `Job.match_breakdown` for every job in the queue. Cost-cap-aware with graceful fallback to layers 2-3 composite.
+> **Status:** 🟡 Queued — plan-authoring in flight 2026-05-21 per research memo `docs/design/research/0.3.0-intelligent-scoring-research.md`.
+> **Plan:** `docs/plans/65-0.3.0-scoring-substrate.md` (in flight).
+> **Implementation contract:** `docs/design/BACKEND.md` § H.1 (`scorer` service), § M.3 (`score_job` prompt). DATA_MODEL.md § C (`Job.score`, `Job.score_explanation`, `Job.match_breakdown`). Re-uses 0.2.7.16 `JobEmbedding` substrate. New `ProfileEmbedding` sibling table.
+> **Estimated effort:** ~6 dev-days · ~1500 LOC across 6 rows.
+> **Locked decisions (2026-05-21 user lock-in post-research memo):** OQ-1 hybrid layered · OQ-2 LLM tier user-configurable via `Settings.llm_provider` (default Claude Sonnet 4.6 on cloud; skip layer 4 if no provider configured) · OQ-3 LinkedIn MCP deferred to `0.5.0.12.1` · OQ-4 3-sub-release cut · OQ-5 silent fallback + banner on Settings · LLM tab · OQ-6 on-edit + nightly idempotent refresh · OQ-7 1-2 sentence + 3-5 gap bullets for Discover card; structured `{strengths, gaps, visa_note}` for full match modal.
 
 | # | Task | Status | Priority | Legacy ID | Notes |
 |---|---|---|---|---|---|
-| 0.3.0.01 | Tag-based matching: job desc → identify tags → match against profile bullets | [ ] | — | 3.1 | |
-| 0.3.0.02 | AI scoring: structured output (score 0-1, explanation, gap analysis) | [ ] | — | 3.2 | Cloud + local model support |
-| 0.3.0.03 | Visa/sponsorship auto-filter (score 0 for citizenship-required / no-sponsorship) | [ ] | — | 3.3 | |
-| 0.3.0.04 | Tailored resume preview: show which bullets selected/excluded for a job | [ ] | — | 3.4 | |
-| 0.3.0.05 | One-click generation: from job detail → tailored resume + cover letter | [ ] | — | 3.5 | |
-| 0.3.0.06 | Score history + analytics | [ ] | — | 3.6 | |
-| 0.3.0.07 | HTMX UI: score card, match explanation, bullet selection preview | [ ] | — | 3.7 | |
+| 0.3.0.01 | Visa filter consolidation + Discover `visa_concern` chip wiring | [ ] | HIGH | 3.3 | Existing `services/scorer.py:apply_visa_filter` shipped Phase 1; this row makes it layer-1 of the hybrid scorer + surfaces chip in Discover UI. ~50 LOC. |
+| 0.3.0.02 | Tag-based matching layer (Jaccard + weighted overlap) | [ ] | HIGH | 3.1 | New `services/scorer._tag_overlap_score`. 9-tag vocab; per-tag weights configurable via `Settings.score_per_dim_weights`. ~250 LOC. |
+| 0.3.0.03 | Profile embedding sibling table + service | [ ] | HIGH | (new) | New `src/models/profile_embedding.py` (mirrors `JobEmbedding` shape; 1:1 keyed by `user_id`); new `embedding_service.embed_profile`; alembic 0017. ~350 LOC. |
+| 0.3.0.04 | Semantic scoring layer (cosine + ProfileEmbedding lookup) | [ ] | HIGH | (new) | New `scorer._semantic_score` using pgvector cosine sim. Re-uses `embedding_service.search_similar` pattern. ~200 LOC. |
+| 0.3.0.05 | LLM-as-judge layer + `JobScore` schema expansion | [ ] | CRITICAL | 3.2 | Extends `score_job.py` prompt + `JobScore` Pydantic w/ `per_dimension`, `suggested_bullets`, `gaps`, `visa_concern`, `strengths`. Cost-cap fallback to layer 2-3 composite. ~400 LOC. |
+| 0.3.0.06 | Score orchestrator + `jobs.score_pending` cron wiring | [ ] | CRITICAL | (new) | `scorer.score_job_layered` orchestrates layers 1→4; `jobs.score_pending` cron entry per `BACKEND.md § I.1`. ~250 LOC. |
 
-**Deliverable (0.3.0):** Every job scored with explanation. User sees bullet selection preview and generates tailored docs in one click.
+**Deliverable (0.3.0):** Every job in the queue scored with per-dimension breakdown + explanation persisted to `Job.match_breakdown`; LLM-judge gated by daily cost cap with graceful fallback; UI consumer (`SCREENS.md § 7`) ready to render `MATCH · 0.86`.
+
+---
+
+### 0.3.1 — Tailored resume preview + one-click generation (HIGH; depends on 0.3.0.05)
+> **Goal:** One-click from Discover card swipe → tailored PDF resume + cover letter; page-valid via typst retry-drop loop.
+> **Status:** ⚪ Future (post-0.3.0).
+> **Plan:** TBD post-0.3.0.06.
+> **Estimated effort:** ~4 dev-days · ~950 LOC across 4 rows.
+
+| # | Task | Status | Priority | Legacy ID | Notes |
+|---|---|---|---|---|---|
+| 0.3.1.01 | Bullet selection pipeline (`document_generator.generate_tailored_resume`) | [ ] | HIGH | 3.4 | Uses `JobScore.suggested_bullets` + `selection_override` + tag-rank fallback. Wires existing `select_bullets.py` skeleton end-to-end. ~350 LOC. |
+| 0.3.1.02 | Bullet trim pipeline (`document_generator` calls `trim_bullet.py` per selected bullet) | [ ] | HIGH | (new) | Target chars derived from typst row width; existing prompt; wiring + length-validation only. ~150 LOC. |
+| 0.3.1.03 | Typst page-count validator + retry-drop loop (max 3 retries; drop lowest-priority bullet each retry) | [ ] | MEDIUM | (new) | Already specced in `BACKEND.md § K.4`; never wired. ~200 LOC. |
+| 0.3.1.04 | One-click generation endpoint + Discover wiring (`POST /api/v1/applications/{id}/generate-bundle`) | [ ] | HIGH | 3.5 | Wires Discover card "Review & apply" button per `SCREENS.md § 8`. Resume + cover-letter typst compile + persist. ~250 LOC. |
+
+**Deliverable (0.3.1):** One-click from Discover swipe to tailored PDF resume + cover letter, page-valid, with bullet-selection audit trail.
+
+---
+
+### 0.3.2 — UI polish + score analytics (MEDIUM; parallel-shippable with 0.3.1; depends on 0.3.0.06)
+> **Goal:** Every UI surface that consumes `match_breakdown` or `score` honors the mockup contract; user sees "why" + "what's missing" + "what was generated."
+> **Status:** ⚪ Future (post-0.3.0).
+> **Plan:** TBD post-0.3.0.06.
+> **Estimated effort:** ~4 dev-days · ~900 LOC across 4 rows.
+
+| # | Task | Status | Priority | Legacy ID | Notes |
+|---|---|---|---|---|---|
+| 0.3.2.01 | Score card component + per-dim bar component (`score_card.html` + `match_breakdown.html`) | [ ] | HIGH | 3.7 | Wires Discover card `MATCH · 0.86` per `SCREENS.md § 7`. Existing mockup contract; HTMX fragment. ~200 LOC. |
+| 0.3.2.02 | Bullet selection preview UI (Discover · review & apply) — color-coded shipped vs dropped | [ ] | MEDIUM | (new) | `SCREENS.md § 8 Discover · review & apply` already specs. ~250 LOC. |
+| 0.3.2.03 | Score history time-series view (sparkline on Profile + dedicated `/scores` route showing per-role-family trends) | [ ] | LOW | 3.6 | New `ScoreSnapshot` table or aggregation cron output. ~300 LOC. |
+| 0.3.2.04 | Calibration + cost-cap fallback indicator banner ("LLM judge paused — cost cap reached") | [ ] | MEDIUM | (new) | Already specced in `Settings`; surface in Settings · LLM tab per OQ-5 lock. ~150 LOC. |
+
+**Deliverable (0.3.2):** Every UI surface honors `match_breakdown` mockup contract; user sees explanations + cost-cap state.
+
+---
+
+### 0.3.3 — Deferred-from-0.3.x catch-all
+> **Goal:** Catch-all for items deferred or deviated during 0.3.0/0.3.1/0.3.2 implementation. Mirrors the 0.2.7 pattern (which closed 2026-05-21). Items either ship as a future sub-release pickup or graduate to 0.8.0.
+> **Status:** ⚪ Future (rolling pickup queue).
+> **Plan:** Per-row plans authored when picked up.
+
+| # | Task | Status | Priority | Legacy ID | Notes |
+|---|---|---|---|---|---|
+| (empty) | — | — | — | — | Filed as 0.3.0/0.3.1/0.3.2 rows ship — engineer deviations + reviewer-flagged follow-ups land here. |
+
+**Deliverable (0.3.3):** Pickup queue for product-side cleanup deferred from 0.3.x. Items graduate to a future release version when scheduled.
 
 ---
 
@@ -407,6 +457,7 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 | 0.5.0.10 | Outreach template system: personalized messages for recruiters + employees | [ ] | — | 5.10 | Uses profile + job context |
 | 0.5.0.11 | AI-generated outreach messages: referral requests, follow-ups, check-ins | [ ] | — | 5.11 | Tone-appropriate, not spammy |
 | 0.5.0.12 | LinkedIn automation: send connection requests + messages via API | [ ] | — | 5.12 | Rate-limited, anti-detection. **Re-open `docs/design/research/LINKEDIN_SCRAPING.md` option matrix when authoring plan 14** — § 5 stack-rank flags stickerdaniel/linkedin-mcp-server (1.9k stars, Apache-2.0, Patchright-based) as the front-runner for the outreach surface because authenticated session is unavoidable here, unlike 0.2.0.07 where the guest API wins. |
+| 0.5.0.12.1 | LinkedIn MCP adoption — outreach + warm-intro (parented under 0.5.0.12) | [ ] | LOW | (0.3.0 research memo 2026-05-21) | **Filed 2026-05-21 via 0.3.0 research memo § B.5.** stickerdaniel/linkedin-mcp-server (Apache-2.0, Patchright, 17 tools, May 2026 active, 1.9k stars). 4 high-value tools serve Phase 5 outreach: `send_message`, `connect_with_person`, `search_people`, `get_company_employees`. Defer-trigger from 0.3.0 because LinkedIn does NOT expose match-% via any MCP path; Naavik computes its own score regardless. Re-evaluate as a LinkedIn-discovery fallback if 0.2.0.07 guest-API path closes (`LINKEDIN_SCRAPING.md § 8` revisit checklist). |
 | 0.5.0.13 | Outreach history tracking: sent messages, responses, acceptance rates | [ ] | — | 5.13 | |
 | 0.5.0.14 | Warm intro finder: suggest mutual connections for warm outreach | [ ] | — | 5.14 | LinkedIn API |
 | 0.5.0.15 | Interview process accelerator: auto-send thank-you notes, follow-up reminders | [ ] | — | 5.15 | |
@@ -534,6 +585,10 @@ Sort key per `docs/design/PHASE_NUMBERING.md` § 1: **release-version ASC → pr
 | 0.8.0.36 | CSRF gap on `put_auto_apply` + `put_llm` + `put_notifications` Settings PUT routes | [ ] | MEDIUM | (was 0.2.7.25) | **Moved 2026-05-21 from 0.2.7.25 per user defer-0.2.x directive.** Pre-existing on main. 3 settings PUT routes lack `require_csrf` dep — cross-origin form-submit could toggle config on logged-in user. ~3 LOC × 3 routes + 3 tests. |
 | 0.8.0.37 | IDOR `user_id=1` hardcode on `put_auto_apply` + `put_llm` + `put_notifications` | [ ] | MEDIUM | (was 0.2.7.26) | **Moved 2026-05-21 from 0.2.7.26 per user defer-0.2.x directive.** Pre-existing on main. Same pattern as 0.2.7.02 + 0.2.7.23 + 0.8.0.35. Thread `_effective_user_id(_user)` through 3 routes. ~3 LOC × 3 routes + 6 tests. |
 | 0.8.0.38 | Route + ctx rewire — migrate 13 files off `_KNOWN_LEGACY_OFFENDERS` allowlist to service-layer | [ ] | MEDIUM | (was 0.2.7.17a) | **Moved 2026-05-21 from 0.2.7.17a per user defer-0.2.x directive.** Plan 60 shipped env-var removal + service-layer foundation; the route+ctx migration was descoped. 8 route files + 5 ctx-builders + 14 test files w/ `dependency_overrides[get_session]` pattern. ~500-800 LOC + 14 fixture rewrites. |
+| 0.8.0.40 | Score calibration via Platt scaling | [ ] | LOW | (0.3.0 research memo 2026-05-21) | **Filed 2026-05-21 via 0.3.0 research memo § F.3.** Fit a logistic curve over historical `(score, accepted_yes/no)` tuples → surface calibrated probability alongside raw score so "0.86" means the same thing across role families. Defer until 50+ user-accepted-or-rejected signal pairs exist. Needed only if users complain "scores feel inconsistent." ~150 LOC + cron + 4 tests. |
+| 0.8.0.41 | Cross-encoder rerank layer (Cohere rerank v3.5 or `cross-encoder/ms-marco-MiniLM-L-6-v2` self-host) | [ ] | LOW | (0.3.0 research memo 2026-05-21) | **Filed 2026-05-21 via 0.3.0 research memo § F.3.** Optional accuracy bump between layers 2 (semantic) and 3 (LLM-judge) in the hybrid scorer if benchmarks show needed. Cost: $0.02 per top-100 rerank (Cohere). Self-host alternative uses sentence-transformers cross-encoder. ~250 LOC + Pydantic provider extension + 6 tests. |
+| 0.8.0.42 | Per-source trust-score weighting on scoring path (poison-vector mitigation, scoring-side) | [ ] | LOW | (0.3.0 research memo 2026-05-21) | **Filed 2026-05-21 via 0.3.0 research memo § F.3.** Extends `0.8.0.10` (Phase 6 similar-jobs surface) to the scoring path: weight tag/semantic scores by `JobSource` trust tier (n8n_legacy / company_direct = trusted; rsshub = neutral; linkedin/indeed = unverified). Adversarial scraper-controlled `Job.description` could craft embeddings that always score high. Lock the seam in 0.3.0.06 orchestrator. ~80 LOC + tests. |
+| 0.8.0.43 | Score-trend insights surface ("Your score for ML roles trended up 12% this month — consider platform-engineering at 0.75 baseline") | [ ] | LOW | (0.3.0 research memo 2026-05-21) | **Filed 2026-05-21 via 0.3.0 research memo § F.3.** Phase 6 polish surface. Time-series analysis on `ScoreSnapshot` (or aggregated view) → narrative insight rendered on Profile/Scores screens. Requires 0.3.2.03 (score history time-series) shipped first. ~200 LOC + LLM-generated insight prompt + tests. |
 
 **Deliverable (0.8.0):** Long-tail enhancements parking lot. Items graduate to an active release version when scheduled.
 
