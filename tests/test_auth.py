@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 # Force fast bcrypt cost for tests before the service module loads.
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 
+import pytest
+
 from services.auth import (  # noqa: E402
     JWT_ALGORITHM,
     JWT_TTL_DEFAULT,
@@ -28,6 +30,8 @@ from services.auth import (  # noqa: E402
     verify_jwt,
     verify_password,
 )
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 # ── bcrypt ──────────────────────────────────────────────────────────────
 

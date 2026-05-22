@@ -22,6 +22,8 @@ from pydantic import ValidationError
 
 from config import Settings
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @contextmanager
 def _env_isolated():

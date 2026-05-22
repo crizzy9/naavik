@@ -7,7 +7,10 @@ Plan 08 acceptance:
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def _client() -> TestClient:

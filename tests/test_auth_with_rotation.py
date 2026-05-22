@@ -31,6 +31,8 @@ from models import (
 from services.auth import issue_jwt_async, verify_jwt_async
 from services.jwt_rotation_service import expire_retiring_keys, rotate_tenant_key
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture
 async def _session():

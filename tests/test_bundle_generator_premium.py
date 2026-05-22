@@ -20,6 +20,8 @@ from services.bundle_generator import (
     generate_bundle,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _settings(**overrides):
     base = {

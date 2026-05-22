@@ -11,6 +11,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # Matching CSRF pair — mirrors tests/test_stub_endpoints.py.
 _CSRF_TOKEN = "csrf-cookie-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _CSRF_HEADERS = {"X-CSRF-Token": _CSRF_TOKEN}
