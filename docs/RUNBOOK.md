@@ -221,6 +221,42 @@ nix run .#dev
 - The orchestrator scrollback shows `dev server up at http://localhost:8000 — visit /signup to create your account` once the app finishes booting.
 - `curl -s 127.0.0.1:8000/login | grep -iE 'create.account'` returns the signup link.
 
+### 2.13 `FATAL: data directory "..." has invalid permissions` on `nix run .#dev`
+
+**Symptom:** Postgres step in the orchestrator crashes immediately:
+
+```
+2026-MM-DD HH:MM:SS.SSS GMT [PID] FATAL:  data directory "/home/.../.naavik/db" has invalid permissions
+2026-MM-DD HH:MM:SS.SSS GMT [PID] DETAIL:  Permissions should be u=rwx (0700) or u=rwx,g=rx (0750).
+```
+
+`ls -ld .naavik/db/` shows `drwxrwx---+` (the trailing `+` means an extended ACL is set).
+
+**Root cause:** the parent of `.naavik/db/` (typically a directory under your `$HOME`) carries a POSIX default ACL — e.g. `setfacl -d -m user:another-user:rwx ~/personal/dev` for pair-sharing between local Unix users. Any subdir created under such a parent inherits the default ACL at creation time, including an `mask::rwx` entry that makes `stat()` report group-rwx mode bits. Postgres 14+ refuses any data-dir mode beyond 0700 (or 0750 with matching group) regardless of WHO has actual access — it only looks at the mode bits.
+
+**Fix (auto-applied as of 0.7.0.43, 2026-05-22):** the orchestrator's `cli.preHook` in `flake.nix` now strips the parent's default ACL on every boot and re-enforces 0700 on `.naavik/db/` if it exists. Subsequent boots are clean even if your home dir has inherited ACLs.
+
+**Manual recovery (if you're on an older naavik checkout pre-0.7.0.43, or the auto-strip itself failed):**
+
+```bash
+# Strip access ACLs + default ACLs from the data dir + parent
+setfacl -bR ./.naavik/db
+setfacl -k  ./.naavik/db
+setfacl -k  ./.naavik           # stop future re-inheritance
+chmod -R u=rwX,go= ./.naavik/db # 0700 on dirs / 0600 on files
+
+# Verify — no `+` on the listing
+ls -ld ./.naavik/db
+# Expected: drwx------ ...
+```
+
+**Verify:**
+- `ls -ld .naavik/db` shows mode `drwx------` (no trailing `+`).
+- `getfacl .naavik/db` shows ONLY `user::rwx group::--- other::---` (no `user:<name>:rwx` entries).
+- `nix run .#dev` boots through `[db]` cleanly.
+
+**If it recurs after the auto-strip:** check whether some other tool is re-applying ACLs (sync utility, file-manager-set permission, NFS server policy). The auto-strip runs every boot, so it self-heals — but if the source of the ACL keeps adding it back, you'll see the strip in the preHook output every time.
+
 ---
 
 ## 3. Diagnostic recipes
