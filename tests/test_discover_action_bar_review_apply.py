@@ -18,6 +18,8 @@ import pytest
 from fastapi.testclient import TestClient
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 
 

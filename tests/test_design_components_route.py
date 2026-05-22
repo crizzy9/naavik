@@ -12,6 +12,8 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture
 def client_debug(monkeypatch) -> TestClient:

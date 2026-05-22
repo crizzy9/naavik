@@ -17,6 +17,8 @@ from services.detector_loop import (
     run_detector_loop,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _settings(**overrides):
     base = {

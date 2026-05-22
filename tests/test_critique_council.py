@@ -20,6 +20,8 @@ from services.critique_council import (
     critique_bundle,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _settings():
     return SimpleNamespace(

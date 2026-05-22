@@ -17,6 +17,8 @@ from types import SimpleNamespace
 
 import pytest
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture(autouse=True)
 def _stub_url_guard_dns(monkeypatch):
