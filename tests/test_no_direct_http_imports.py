@@ -23,6 +23,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 FORBIDDEN_PREFIXES = (
     "requests",
     "httpx",

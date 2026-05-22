@@ -13,6 +13,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def test_no_flat_scorer_module():
     repo_root = Path(__file__).resolve().parent.parent
