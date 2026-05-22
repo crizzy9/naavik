@@ -23,6 +23,8 @@ from llm.base import StructuredResult  # noqa: E402
 from llm.prompts.score_job import JobScore  # noqa: E402
 from services.scorer import llm_judge  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _settings_stub(cap: float | None = None):
     return SimpleNamespace(

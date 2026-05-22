@@ -9,9 +9,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from llm.prompts.score_job import JobScore
 from models import VisaSponsorship
 from services.scorer import apply_visa_filter, needs_visa_zero_out
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def _profile(visa: VisaSponsorship | None):

@@ -19,6 +19,8 @@ from scraper.crawl4ai_client import Crawl4AIClient
 from scraper.sites.sample import SampleScraper
 from scraper.types import ScrapeQuery
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.mark.asyncio
 async def test_sample_scraper_yields_three_rawjobs():

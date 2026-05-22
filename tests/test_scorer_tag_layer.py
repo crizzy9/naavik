@@ -20,6 +20,8 @@ import pytest  # noqa: E402
 from services.scorer.tag_layer import _tag_overlap_score, aggregated_profile_tags  # noqa: E402
 from services.scorer.weights import PerDimWeights, resolve_weights  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── _tag_overlap_score formula ────────────────────────────────────────
 
 

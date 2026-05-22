@@ -26,6 +26,8 @@ from scraper.sites.sample import SampleScraper
 from scraper.types import RawJob, ScrapeQuery
 from services import scraper_service
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── In-memory fakes ──────────────────────────────────────────────────────
 
 
