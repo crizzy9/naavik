@@ -49,6 +49,8 @@ from sqlmodel import SQLModel
 
 import models  # noqa: F401 — registers metadata
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 MIGRATIONS_DIR = REPO_ROOT / "migrations" / "versions"

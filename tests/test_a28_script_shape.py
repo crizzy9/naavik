@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 _SCRIPT = (
     Path(__file__).resolve().parent.parent / ".claude" / "migrations" / "A.28-board-restructure.sh"
 )

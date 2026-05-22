@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
 from services.ai_tell_blocklist import (
     BAKED_IN_BLOCKLIST,
     effective_blocklist,
     strip_violations,
 )
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def test_baked_in_blocklist_size_meets_minimum():
