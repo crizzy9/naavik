@@ -280,6 +280,7 @@ async def test_kpis_by_company_returns_sorted(session: AsyncSession) -> None:
 
 
 # Analytics page route tests live in `tests/test_plan_81_analytics_page.py`
-# (separate module so they can use the conftest `_patch_services_to_sample_data`
-# fixture; this module is `_SERVICE_DIRECT_TEST_MODULES`-listed so the conftest
-# autouse fixture is skipped and the real sqlite engine is used instead).
+# (separate module so they can opt into the conftest
+# `_patch_services_to_sample_data` fixture via the
+# `pytest.mark.uses_sample_data_shims` marker; this module omits the marker
+# so the real sqlite engine is used instead).
