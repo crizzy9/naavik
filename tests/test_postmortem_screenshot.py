@@ -22,6 +22,8 @@ from llm.base import StructuredResult
 from llm.prompts.ats_postmortem import PostmortemAnalysis
 from services import ats_postmortem
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 _TINY_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+XJ/PtgAAAABJRU5ErkJggg=="
 
 

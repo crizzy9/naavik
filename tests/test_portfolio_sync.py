@@ -31,6 +31,8 @@ from services.portfolio_sync import (
     trigger_netlify_rebuild,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _profile():
     from datetime import UTC, datetime

@@ -18,6 +18,8 @@ from scraper.rate_limit import (
     resolve_rate_limit,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── RateLimitConfig validator ─────────────────────────────────────────────
 
 

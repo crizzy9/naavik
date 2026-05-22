@@ -13,7 +13,10 @@ os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 
 from unittest.mock import AsyncMock, MagicMock, patch  # noqa: E402
 
+import pytest
 from fastapi.testclient import TestClient  # noqa: E402
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def _build_client(*, user_id: int | None = 1):

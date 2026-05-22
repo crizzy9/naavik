@@ -46,6 +46,8 @@ from models import (  # noqa: E402
 from models.enums import ApplicationStatus, ScreenerAnswerSource, ScreenerQuestionType  # noqa: E402
 from services import profile_answer_service  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _strip_checks() -> list:
     from sqlalchemy import CheckConstraint
