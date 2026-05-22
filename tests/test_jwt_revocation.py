@@ -42,6 +42,8 @@ from services.auth import (
     verify_jwt,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture
 async def _session():

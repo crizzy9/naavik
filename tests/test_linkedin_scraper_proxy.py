@@ -18,6 +18,8 @@ import pytest
 
 from models import JobScrapeStatus, JobSource
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _make_settings(*, user_id: int = 1, **kw) -> SimpleNamespace:
     return SimpleNamespace(

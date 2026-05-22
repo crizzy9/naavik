@@ -26,6 +26,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.uses_sample_data_shims
+
 _TARGET_TABLES = ("JobEmbedding", "ProfileAnswer", "ProfileEmbedding")
 _PRAGMA = "lint: cross-user-read-ok"
 

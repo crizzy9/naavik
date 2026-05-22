@@ -11,6 +11,10 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # Bypass SECRET_KEY validator so `from main import main` (transitively imports
 # config) doesn't ValidationError at collection time.
 os.environ.setdefault("NAAVIK_DEBUG", "1")

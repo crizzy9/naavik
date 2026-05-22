@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from db import sample_data as sd
 from models import (
     ApiUsage,
@@ -49,6 +51,8 @@ from models.enums import (
     GeneratedDocumentKind,
     StatusChangeTrigger,
 )
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 # ── Instantiation: every entity round-trips from sample_data shadows ─────
 
