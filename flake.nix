@@ -51,12 +51,49 @@
           # `--theme="Catppuccin Mocha"` so the TUI is readable when re-enabled.
           cli.environment.PC_DISABLE_TUI = true;
 
-          # Self-heal a stale `postmaster.pid` left over from a prior unclean
-          # shutdown (kill -9, OOM, host reboot, etc). Postgres refuses to start
-          # while that lock file points at any PID — even one that's long dead —
-          # producing the cryptic "lock file already exists" loop. We only drop
-          # the file if its recorded PID is genuinely gone, so an actually-
-          # running Postgres is never disturbed.
+          # preHook runs once before any service process starts. Two jobs:
+          #
+          # 1. Self-heal a stale `postmaster.pid` left over from a prior unclean
+          #    shutdown (kill -9, OOM, host reboot, etc). Postgres refuses to
+          #    start while that lock file points at any PID — even one that's
+          #    long dead — producing the cryptic "lock file already exists" loop.
+          #    We only drop the file if its recorded PID is genuinely gone, so
+          #    an actually-running Postgres is never disturbed.
+          #
+          # 2. Normalize `.naavik/db/` permissions to PG-acceptable 0700 (no
+          #    group / no other) AND strip any inherited POSIX ACLs (0.7.0.43,
+          #    2026-05-22). Some operator setups carry a default ACL on a parent
+          #    directory (e.g. `setfacl -d -m user:hermes:rwx ~/personal/dev` for
+          #    pair-sharing between local users). Subdirs created under such a
+          #    parent inherit the default ACL at creation time, which makes
+          #    `ls -ld .naavik/db/` show `drwxrwx---+` (mode 0770 + ACL marker).
+          #    Postgres 14+ tightened the data-dir permission check; it accepts
+          #    only 0700 or 0750-with-matching-group and refuses 0770, producing
+          #    `FATAL: data directory ... has invalid permissions`.
+          #
+          #    The fix is idempotent + safe on hosts without ACLs:
+          #      - `mkdir -p .naavik` then `setfacl -k .naavik` strips the default
+          #        ACL on the PARENT so any subsequent child-mkdir (services-flake's
+          #        initdb on first boot, our own walks on later boots) inherits
+          #        no default ACL. **We do NOT pre-create `.naavik/db` itself** —
+          #        services-flake's setup-script gates initdb on `! -d $PGDATA`
+          #        (juspay/services-flake nix/services/postgres/setup-script.nix),
+          #        so a pre-existing empty dir would silently skip initdb +
+          #        leave the cluster un-bootstrapped → PG `pg_ctl: not a database
+          #        cluster directory` on first boot. Architect PR #209 review
+          #        2026-05-22 surfaced this gotcha.
+          #      - On boots where `.naavik/db` already exists (i.e. NOT first
+          #        boot), do the full cleanup: `setfacl -bR` to remove any access
+          #        ACLs inherited at creation time, `setfacl -k` to strip the
+          #        default ACL on the child too, and `chmod -R u=rwX,go=` to
+          #        enforce 0700 dirs + 0600 files (capital X = "x only if
+          #        already x on dirs"). Matches what initdb itself sets.
+          #      - `|| true` keeps the boot moving if setfacl/chmod fails (NFS,
+          #        SMB, container mounts without xattr support). We INTENTIONALLY
+          #        leave stderr unredirected so a real failure (operator's dir
+          #        owned by another user → `Operation not permitted`) is visible
+          #        in the preHook output instead of buried under PG's downstream
+          #        FATAL. Architect PR #209 LOW F3.
           cli.preHook = ''
             _pid_file=./.naavik/db/postmaster.pid
             if [ -f "$_pid_file" ]; then
@@ -65,6 +102,13 @@
                 echo "[preHook] removing stale postmaster.pid (PID $_stale_pid is gone)"
                 rm -f "$_pid_file"
               fi
+            fi
+            mkdir -p ./.naavik
+            ${pkgs.acl}/bin/setfacl -k ./.naavik || true
+            if [ -d ./.naavik/db ]; then
+              ${pkgs.acl}/bin/setfacl -bR ./.naavik/db || true
+              ${pkgs.acl}/bin/setfacl -k ./.naavik/db || true
+              chmod -R u=rwX,go= ./.naavik/db || true
             fi
             unset _pid_file _stale_pid
           '';
