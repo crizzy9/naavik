@@ -76,44 +76,6 @@ class _NoopSession:
         return _EmptyResult()
 
 
-# Test files that exercise the service layer directly via a real (sqlite or
-# postgres) `session` fixture. The conftest fixture below skips its
-# monkey-patching for these files; they need the real service-layer
-# implementation, not the sample_data-backed shims.
-_SERVICE_DIRECT_TEST_MODULES = frozenset(
-    {
-        "test_service_layer_parity",
-        "test_application_service",
-        "test_job_service",
-        "test_observability_service_helpers",
-        "test_outreach_service",
-        "test_email_service",
-        "test_overview_service",
-        "test_user_service",
-        "test_profile_service",
-        "test_contact_tracker",
-        "test_llm_tracker",
-        "test_llm_tracker_judge_skipped",
-        "test_settings_service",
-        "test_scorer",
-        "test_orchestrator",
-        "test_bundle_generator",
-        "test_bundle_generator_bullet_log",
-        "test_document_generator",
-        "test_ats_postmortem",
-        "test_score_orchestrator",
-        "test_dedup",
-        "test_scoring_history",
-        "test_screener_idor",
-        "test_rate_limit",
-        # Plan 81 § D.4 — analytics service uses real sqlite
-        "test_plan_81_application_analytics",
-        # Plan 86 § W2/W4 — analytics breakdowns + cost-cap row lock use real sqlite
-        "test_plan_86_batched_housekeeping",
-    }
-)
-
-
 @pytest.fixture(autouse=True)
 def _patch_services_to_sample_data(request, monkeypatch):
     """Make route → service-layer reads transparent to the legacy fixtures.
@@ -125,16 +87,19 @@ def _patch_services_to_sample_data(request, monkeypatch):
     rewired surfaces to return the corresponding `sd.*` shadow row, and
     overrides `get_session` globally so routes inject a noop session.
 
-    Skipped for tests that exercise the service layer directly (see
-    `_SERVICE_DIRECT_TEST_MODULES`). Those modules either bring up their
-    own in-memory sqlite or hit live Postgres via `NAAVIK_LIVE_DB=1`.
+    Plan 87 (`0.4.5.03`) inverted the default from autouse + opt-out to
+    opt-in via `@pytest.mark.uses_sample_data_shims` at the module / class
+    / function level. The fixture remains `autouse=True` so pytest still
+    discovers it, but the body is a no-op unless the marker is present.
+    Files that exercise the service layer directly (real sqlite or
+    `NAAVIK_LIVE_DB=1` Postgres) simply omit the marker.
 
     Per-test overrides (`app.dependency_overrides[get_session] = ...` or
     explicit `monkeypatch.setattr(service, "fn", ...)` calls in the test
     body) take precedence — FastAPI's override dict is last-write-wins
     and pytest's monkeypatch is per-test.
     """
-    if request.node.module.__name__.split(".")[-1] in _SERVICE_DIRECT_TEST_MODULES:
+    if not list(request.node.iter_markers("uses_sample_data_shims")):
         yield
         return
     from db import sample_data as sd

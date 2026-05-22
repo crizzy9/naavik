@@ -118,3 +118,6 @@ indent-style = "space"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "uses_sample_data_shims: opt into the conftest fixture that monkey-patches service-layer reads onto the in-memory sample_data shadow rows (plan 87 / 0.4.5.03; previously autouse with opt-out allow-list).",
+]
