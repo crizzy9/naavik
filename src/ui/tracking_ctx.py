@@ -251,6 +251,7 @@ async def build_application_detail_ctx(
     last_failure = None
     board_application_id = None
     postmortem_ts: str | None = None
+    bullet_overrides: dict[str, str] = {}
     if application.submission_artifacts:
         last_failure = application.submission_artifacts.get("last_failure")
         board_application_id = application.submission_artifacts.get("board_application_id")
@@ -262,6 +263,53 @@ async def build_application_detail_ctx(
             pm_path = last_failure.get("postmortem_path")
             if isinstance(pm_path, str) and pm_path:
                 postmortem_ts = pm_path.rsplit("/", 1)[-1]
+        # Plan 86 / 0.4.5.08 — per-application bullet overrides written by
+        # `PUT /api/v1/applications/{id}/bullet-override`. Shape:
+        # `{"<bullet_id>": "always_include" | "never_include"}`. Read here so
+        # the slide-over can render the three-state toggle pre-selected.
+        raw_overrides = application.submission_artifacts.get("bullet_overrides")
+        if isinstance(raw_overrides, dict):
+            for bid, val in raw_overrides.items():
+                if isinstance(val, str) and val in ("always_include", "never_include"):
+                    bullet_overrides[str(bid)] = val
+
+    # Plan 86 / 0.4.5.08 — bullets actually used in the latest resume bundle.
+    # Source: `GeneratedDocument.bullet_selection["selected_ids"]` (plan 66).
+    # Joined with `Bullet.text` for the slide-over override toggle list.
+    bullets_used_rows: list[dict[str, object]] = []
+    try:
+        from sqlmodel import select
+
+        from models import Bullet
+
+        bullet_ids_used: list[int] = []
+        for doc in documents:
+            sel = doc.bullet_selection if hasattr(doc, "bullet_selection") else None
+            if isinstance(sel, dict):
+                for bid in sel.get("selected_ids") or []:
+                    try:
+                        bullet_ids_used.append(int(bid))
+                    except (TypeError, ValueError):
+                        continue
+        if bullet_ids_used:
+            unique_ids = list(dict.fromkeys(bullet_ids_used))
+            b_rows = (
+                await session.exec(select(Bullet.id, Bullet.text).where(Bullet.id.in_(unique_ids)))
+            ).all()
+            for row in b_rows:
+                bid = int(row[0]) if isinstance(row, tuple) else None
+                text = row[1] if isinstance(row, tuple) else None
+                if bid is None:
+                    continue
+                bullets_used_rows.append(
+                    {
+                        "id": bid,
+                        "text": (text or "")[:160],
+                        "override": bullet_overrides.get(str(bid)),
+                    }
+                )
+    except Exception:  # noqa: BLE001 — slide-over override list is optional
+        bullets_used_rows = []
 
     # Plan 81 § D.3 — surface the Job's score on the slide-over header.
     # Best-effort: skip the lookup for manual entries (job_id is null) and
@@ -304,4 +352,6 @@ async def build_application_detail_ctx(
         "contacts": contact_rows,
         "last_failure": last_failure,
         "postmortem_ts": postmortem_ts,
+        # Plan 86 / 0.4.5.08
+        "bullets_used": bullets_used_rows,
     }

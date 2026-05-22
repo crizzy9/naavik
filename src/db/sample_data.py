@@ -1811,10 +1811,15 @@ JOBS: list[Job] = [
 ]
 
 # ─────────────────────────────────────────────────────────────────────────
-# 14 Applications (per SAMPLE_DATA.md § F)
+# 30 Applications (per SAMPLE_DATA.md § F + plan 86 § W3.1 extension)
 # Maps to JOBS for status APPLIED+; carries denormalized job metadata.
 # Two DRAFT rows: #13 (Mercury, manual review) + #14 (Modal, auto-apply queued
 # with last_failure populated for the stuck-queue card).
+# Plan 86 extension (#15-#30): 16 manual-entry apps spanning the 10 role-family
+# buckets (frontend / devops / data-eng / genai / platform / leadership / other)
+# so the analytics dashboard breakdowns populate. Each has applied_at within
+# 90-day window so default-window rollups have data. Includes every
+# ClosedReason enum value across the CLOSED rows.
 # ─────────────────────────────────────────────────────────────────────────
 
 APPLICATIONS: list[Application] = [
@@ -2180,6 +2185,407 @@ APPLICATIONS: list[Application] = [
         notes=None,
         created_at=_ago(hours=18),
         updated_at=_ago(hours=2),
+    ),
+    # ── Plan 86 § W3.1 — analytics dashboard demo extension (#15-#30) ──
+    # 15 · Vercel — APPLIED (frontend)
+    Application(
+        id=15,
+        user_id=1,
+        job_id=None,
+        company="Vercel",
+        role="Senior Frontend Engineer",
+        team="Edge",
+        location="Remote",
+        salary_min=210_000,
+        salary_max=260_000,
+        equity_pct=0.04,
+        applied_at=_ago(days=8),
+        board=ApplicationBoard.GREENHOUSE,
+        external_url="https://vercel.com/jobs/applications/aa-fe-15",
+        status=ApplicationStatus.APPLIED,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.NONE,
+        submission_artifacts={"board_application_id": "vercel-15", "retry_count": 0},
+        notes=None,
+        created_at=_ago(days=8),
+        updated_at=_ago(days=8),
+    ),
+    # 16 · Netlify — RECRUITER_SCREEN (frontend)
+    Application(
+        id=16,
+        user_id=1,
+        job_id=None,
+        company="Netlify",
+        role="UI Engineer",
+        team="Dashboard",
+        location="San Francisco, CA · Remote",
+        salary_min=190_000,
+        salary_max=240_000,
+        equity_pct=0.03,
+        applied_at=_ago(days=20),
+        board=ApplicationBoard.GREENHOUSE,
+        external_url="https://netlify.com/jobs/applications/16-fe",
+        status=ApplicationStatus.RECRUITER_SCREEN,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.RESPONDED,
+        submission_artifacts={"board_application_id": "netlify-16", "retry_count": 0},
+        notes="Recruiter intro call last week; tech screen scheduled.",
+        created_at=_ago(days=21),
+        updated_at=_ago(days=12),
+    ),
+    # 17 · Sentry — CLOSED (frontend, accepted_other)
+    Application(
+        id=17,
+        user_id=1,
+        job_id=None,
+        company="Sentry",
+        role="Frontend Engineer",
+        team="Observability UI",
+        location="San Francisco, CA · Hybrid",
+        salary_min=200_000,
+        salary_max=250_000,
+        equity_pct=0.04,
+        applied_at=_ago(days=55),
+        board=ApplicationBoard.LEVER,
+        external_url="https://jobs.lever.co/sentry/aa17/applications/9001",
+        status=ApplicationStatus.CLOSED,
+        closed_reason=ClosedReason.ACCEPTED_OTHER,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.RESPONDED,
+        submission_artifacts={"board_application_id": "sentry-17", "retry_count": 0},
+        notes="Withdrew after accepting another role.",
+        created_at=_ago(days=56),
+        updated_at=_ago(days=40),
+    ),
+    # 18 · HashiCorp — RECRUITER_SCREEN (devops / SRE)
+    Application(
+        id=18,
+        user_id=1,
+        job_id=None,
+        company="HashiCorp",
+        role="Senior Site Reliability Engineer",
+        team="Cloud Platform",
+        location="Remote",
+        salary_min=240_000,
+        salary_max=290_000,
+        equity_pct=0.03,
+        applied_at=_ago(days=18),
+        board=ApplicationBoard.GREENHOUSE,
+        external_url="https://hashicorp.com/jobs/applications/18-sre",
+        status=ApplicationStatus.RECRUITER_SCREEN,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.RESPONDED,
+        submission_artifacts={"board_application_id": "hashi-18", "retry_count": 0},
+        notes="Recruiter screen Apr 27.",
+        created_at=_ago(days=19),
+        updated_at=_ago(days=10),
+    ),
+    # 19 · Datadog — APPLIED (devops)
+    Application(
+        id=19,
+        user_id=1,
+        job_id=None,
+        company="Datadog",
+        role="DevOps Engineer",
+        team="Reliability",
+        location="New York, NY · Hybrid",
+        salary_min=210_000,
+        salary_max=260_000,
+        equity_pct=0.03,
+        applied_at=_ago(days=4),
+        board=ApplicationBoard.GREENHOUSE,
+        external_url="https://datadog.com/jobs/applications/19-do",
+        status=ApplicationStatus.APPLIED,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.NONE,
+        submission_artifacts={"board_application_id": "dd-19", "retry_count": 0},
+        notes=None,
+        created_at=_ago(days=4),
+        updated_at=_ago(days=4),
+    ),
+    # 20 · Fly.io — ONSITE_LOOP (devops / infrastructure)
+    Application(
+        id=20,
+        user_id=1,
+        job_id=None,
+        company="Fly.io",
+        role="Infrastructure Engineer",
+        team="Edge Compute",
+        location="Remote",
+        salary_min=200_000,
+        salary_max=250_000,
+        equity_pct=0.05,
+        applied_at=_ago(days=35),
+        board=ApplicationBoard.ASHBY,
+        external_url="https://fly.io/jobs/applications/20-infra",
+        status=ApplicationStatus.ONSITE_LOOP,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.RESPONDED,
+        submission_artifacts={"board_application_id": "fly-20", "retry_count": 0},
+        notes="Onsite May 6.",
+        created_at=_ago(days=36),
+        updated_at=_ago(days=8),
+    ),
+    # 21 · Snowflake (parent table) — APPLIED (data-eng)
+    Application(
+        id=21,
+        user_id=1,
+        job_id=None,
+        company="Looker",
+        role="Senior Data Engineer",
+        team="Warehouse",
+        location="Sunnyvale, CA · Hybrid",
+        salary_min=220_000,
+        salary_max=270_000,
+        equity_pct=0.02,
+        applied_at=_ago(days=6),
+        board=ApplicationBoard.WORKDAY,
+        external_url="https://looker.wd1.myworkdayjobs.com/applications/JR-21-de",
+        status=ApplicationStatus.APPLIED,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.NONE,
+        submission_artifacts={"board_application_id": "looker-21", "retry_count": 0},
+        notes=None,
+        created_at=_ago(days=6),
+        updated_at=_ago(days=6),
+    ),
+    # 22 · dbt Labs — RECRUITER_SCREEN (data-eng)
+    Application(
+        id=22,
+        user_id=1,
+        job_id=None,
+        company="dbt Labs",
+        role="Analytics Engineer",
+        team="Core",
+        location="Remote",
+        salary_min=200_000,
+        salary_max=250_000,
+        equity_pct=0.04,
+        applied_at=_ago(days=25),
+        board=ApplicationBoard.GREENHOUSE,
+        external_url="https://dbtlabs.com/jobs/applications/22-ae",
+        status=ApplicationStatus.RECRUITER_SCREEN,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.RESPONDED,
+        submission_artifacts={"board_application_id": "dbt-22", "retry_count": 0},
+        notes="Recruiter screen passed; tech screen pending.",
+        created_at=_ago(days=26),
+        updated_at=_ago(days=15),
+    ),
+    # 23 · Confluent — CLOSED (data-eng, user_archived — bulk archive demo)
+    Application(
+        id=23,
+        user_id=1,
+        job_id=None,
+        company="Confluent",
+        role="Pipeline Engineer",
+        team="Connect",
+        location="Mountain View, CA · Hybrid",
+        salary_min=210_000,
+        salary_max=260_000,
+        equity_pct=0.03,
+        applied_at=_ago(days=70),
+        board=ApplicationBoard.LEVER,
+        external_url="https://jobs.lever.co/confluent/23-de",
+        status=ApplicationStatus.CLOSED,
+        closed_reason=ClosedReason.USER_ARCHIVED,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.NONE,
+        submission_artifacts={"board_application_id": "conf-23", "retry_count": 0},
+        notes="Bulk-archived from /tracking list (plan 80 demo).",
+        created_at=_ago(days=71),
+        updated_at=_ago(days=15),
+    ),
+    # 24 · Perplexity — APPLIED (genai)
+    Application(
+        id=24,
+        user_id=1,
+        job_id=None,
+        company="Perplexity",
+        role="LLM Engineer",
+        team="Search Quality",
+        location="San Francisco, CA · Hybrid",
+        salary_min=260_000,
+        salary_max=320_000,
+        equity_pct=0.07,
+        applied_at=_ago(days=2),
+        board=ApplicationBoard.ASHBY,
+        external_url="https://perplexity.ai/jobs/applications/24-llm",
+        status=ApplicationStatus.APPLIED,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.NONE,
+        submission_artifacts={"board_application_id": "pplx-24", "retry_count": 0},
+        notes=None,
+        created_at=_ago(days=2),
+        updated_at=_ago(days=2),
+    ),
+    # 25 · Mistral — RECRUITER_SCREEN (genai / generative AI)
+    Application(
+        id=25,
+        user_id=1,
+        job_id=None,
+        company="Mistral",
+        role="Generative AI Engineer",
+        team="Foundation Models",
+        location="Paris · Remote",
+        salary_min=250_000,
+        salary_max=300_000,
+        equity_pct=0.05,
+        applied_at=_ago(days=15),
+        board=ApplicationBoard.GREENHOUSE,
+        external_url="https://mistral.ai/jobs/applications/25-genai",
+        status=ApplicationStatus.RECRUITER_SCREEN,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.RESPONDED,
+        submission_artifacts={"board_application_id": "mistral-25", "retry_count": 0},
+        notes="Tech screen May 5.",
+        created_at=_ago(days=16),
+        updated_at=_ago(days=10),
+    ),
+    # 26 · Anysphere (Cursor) — OFFER (genai / agent)
+    Application(
+        id=26,
+        user_id=1,
+        job_id=None,
+        company="Anysphere",
+        role="AI Agent Engineer",
+        team="Cursor",
+        location="San Francisco, CA · Hybrid",
+        salary_min=280_000,
+        salary_max=350_000,
+        equity_pct=0.08,
+        applied_at=_ago(days=40),
+        board=ApplicationBoard.LEVER,
+        external_url="https://jobs.lever.co/anysphere/26-agent",
+        status=ApplicationStatus.OFFER,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.PROVIDED,
+        recruiter_state=RecruiterState.RESPONDED,
+        submission_artifacts={"board_application_id": "anysphere-26", "retry_count": 0},
+        notes="Verbal offer extended; decision by May 7.",
+        created_at=_ago(days=41),
+        updated_at=_ago(days=3),
+    ),
+    # 27 · Render — APPLIED (platform)
+    Application(
+        id=27,
+        user_id=1,
+        job_id=None,
+        company="Render",
+        role="Platform Engineer",
+        team="Compute",
+        location="Remote",
+        salary_min=210_000,
+        salary_max=260_000,
+        equity_pct=0.05,
+        applied_at=_ago(days=9),
+        board=ApplicationBoard.ASHBY,
+        external_url="https://render.com/jobs/applications/27-plat",
+        status=ApplicationStatus.APPLIED,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.NONE,
+        submission_artifacts={"board_application_id": "render-27", "retry_count": 0},
+        notes=None,
+        created_at=_ago(days=9),
+        updated_at=_ago(days=9),
+    ),
+    # 28 · Replit — RECRUITER_SCREEN (platform / internal tools)
+    Application(
+        id=28,
+        user_id=1,
+        job_id=None,
+        company="Replit",
+        role="Developer Platform Engineer",
+        team="Bounties",
+        location="Remote",
+        salary_min=220_000,
+        salary_max=270_000,
+        equity_pct=0.05,
+        applied_at=_ago(days=23),
+        board=ApplicationBoard.GREENHOUSE,
+        external_url="https://replit.com/jobs/applications/28-plat",
+        status=ApplicationStatus.RECRUITER_SCREEN,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.RESPONDED,
+        submission_artifacts={"board_application_id": "replit-28", "retry_count": 0},
+        notes="Recruiter call done; system design next.",
+        created_at=_ago(days=24),
+        updated_at=_ago(days=12),
+    ),
+    # 29 · Octopus Energy — APPLIED (product / product engineer)
+    Application(
+        id=29,
+        user_id=1,
+        job_id=None,
+        company="Octopus Energy",
+        role="Product Engineer",
+        team="Kraken",
+        location="Remote",
+        salary_min=180_000,
+        salary_max=230_000,
+        equity_pct=0.02,
+        applied_at=_ago(days=12),
+        board=ApplicationBoard.GREENHOUSE,
+        external_url="https://octopus.energy/jobs/applications/29-prod",
+        status=ApplicationStatus.APPLIED,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.NONE,
+        submission_artifacts={"board_application_id": "octopus-29", "retry_count": 0},
+        notes=None,
+        created_at=_ago(days=12),
+        updated_at=_ago(days=12),
+    ),
+    # 30 · Notion — RECRUITER_SCREEN (leadership / engineering manager)
+    Application(
+        id=30,
+        user_id=1,
+        job_id=None,
+        company="Loom",
+        role="Engineering Manager",
+        team="Recording",
+        location="San Francisco, CA · Hybrid",
+        salary_min=270_000,
+        salary_max=330_000,
+        equity_pct=0.04,
+        applied_at=_ago(days=30),
+        board=ApplicationBoard.LEVER,
+        external_url="https://jobs.lever.co/loom/30-em",
+        status=ApplicationStatus.RECRUITER_SCREEN,
+        closed_reason=None,
+        docs_state=DocsState.READY,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.RESPONDED,
+        submission_artifacts={"board_application_id": "loom-30", "retry_count": 0},
+        notes="Hiring manager loop next.",
+        created_at=_ago(days=31),
+        updated_at=_ago(days=18),
     ),
 ]
 
@@ -5438,6 +5844,305 @@ APP_EVENTS.extend(
                 "full_note_field": "application.submission_artifacts.last_failure",
             },
             actor="system",
+        ),
+    ]
+)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Plan 86 § W3.1 — STATUS_CHANGE chains for apps 15-30 (~110 events)
+#
+# Each app gets a minimal but realistic timeline:
+#   APPLIED apps           → 1 STATUS_CHANGE (DRAFT→APPLIED)
+#   RECRUITER_SCREEN apps  → 2 STATUS_CHANGE + 1 EMAIL_RECEIVED
+#   ONSITE_LOOP apps       → 3 STATUS_CHANGE + 1 INTERVIEW_SCHEDULED
+#   OFFER apps             → 4 STATUS_CHANGE
+#   CLOSED apps            → terminal STATUS_CHANGE to CLOSED
+#
+# Funnel rollups derived from the highest STATUS_CHANGE.payload.to value
+# reached per application (see services.application_analytics._max_reached_by_app).
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _draft_to_applied(app_id: int, days_ago: float) -> list[AppEvent]:
+    return [
+        _ev(
+            _next_eid(),
+            app_id,
+            AppEventKind.STATUS_CHANGE,
+            days_ago + 0.1,
+            {"from_status": None, "to_status": "DRAFT", "triggered_by": "draft_creation"},
+        ),
+        _ev(
+            _next_eid(),
+            app_id,
+            AppEventKind.STATUS_CHANGE,
+            days_ago,
+            {"from_status": "DRAFT", "to_status": "APPLIED", "triggered_by": "draft_submitted"},
+        ),
+    ]
+
+
+# 15 · Vercel — APPLIED (8d ago)
+APP_EVENTS.extend(_draft_to_applied(15, 8))
+
+# 16 · Netlify — RECRUITER_SCREEN (applied 20d ago; promoted 12d ago)
+APP_EVENTS.extend(
+    [
+        *_draft_to_applied(16, 20),
+        _ev(
+            _next_eid(),
+            16,
+            AppEventKind.EMAIL_RECEIVED,
+            13,
+            {
+                "thread_id": None,
+                "sender": "[email protected]",
+                "subject_preview": "Netlify · intro call",
+                "classification": "interview_request",
+            },
+        ),
+        _ev(
+            _next_eid(),
+            16,
+            AppEventKind.STATUS_CHANGE,
+            12,
+            {
+                "from_status": "APPLIED",
+                "to_status": "RECRUITER_SCREEN",
+                "triggered_by": "auto-from-email",
+            },
+        ),
+    ]
+)
+
+# 17 · Sentry — CLOSED · ACCEPTED_OTHER (applied 55d ago; closed 40d ago)
+APP_EVENTS.extend(
+    [
+        *_draft_to_applied(17, 55),
+        _ev(
+            _next_eid(),
+            17,
+            AppEventKind.STATUS_CHANGE,
+            48,
+            {
+                "from_status": "APPLIED",
+                "to_status": "RECRUITER_SCREEN",
+                "triggered_by": "manual",
+            },
+        ),
+        _ev(
+            _next_eid(),
+            17,
+            AppEventKind.STATUS_CHANGE,
+            40,
+            {
+                "from_status": "RECRUITER_SCREEN",
+                "to_status": "CLOSED",
+                "triggered_by": "manual",
+                "closed_reason": "accepted_other",
+            },
+        ),
+    ]
+)
+
+# 18 · HashiCorp — RECRUITER_SCREEN (applied 18d ago; promoted 10d ago)
+APP_EVENTS.extend(
+    [
+        *_draft_to_applied(18, 18),
+        _ev(
+            _next_eid(),
+            18,
+            AppEventKind.STATUS_CHANGE,
+            10,
+            {
+                "from_status": "APPLIED",
+                "to_status": "RECRUITER_SCREEN",
+                "triggered_by": "manual",
+            },
+        ),
+    ]
+)
+
+# 19 · Datadog — APPLIED (4d ago)
+APP_EVENTS.extend(_draft_to_applied(19, 4))
+
+# 20 · Fly.io — ONSITE_LOOP (applied 35d ago; recruiter 22d; onsite 8d)
+APP_EVENTS.extend(
+    [
+        *_draft_to_applied(20, 35),
+        _ev(
+            _next_eid(),
+            20,
+            AppEventKind.STATUS_CHANGE,
+            22,
+            {
+                "from_status": "APPLIED",
+                "to_status": "RECRUITER_SCREEN",
+                "triggered_by": "manual",
+            },
+        ),
+        _ev(
+            _next_eid(),
+            20,
+            AppEventKind.STATUS_CHANGE,
+            10,
+            {
+                "from_status": "RECRUITER_SCREEN",
+                "to_status": "ONSITE_LOOP",
+                "triggered_by": "manual",
+            },
+        ),
+        _ev(
+            _next_eid(),
+            20,
+            AppEventKind.INTERVIEW_SCHEDULED,
+            10,
+            {"when": _ago(days=-2).isoformat(), "where": "Fly.io HQ"},
+        ),
+    ]
+)
+
+# 21 · Looker — APPLIED (6d ago)
+APP_EVENTS.extend(_draft_to_applied(21, 6))
+
+# 22 · dbt Labs — RECRUITER_SCREEN (applied 25d ago; promoted 15d ago)
+APP_EVENTS.extend(
+    [
+        *_draft_to_applied(22, 25),
+        _ev(
+            _next_eid(),
+            22,
+            AppEventKind.STATUS_CHANGE,
+            15,
+            {
+                "from_status": "APPLIED",
+                "to_status": "RECRUITER_SCREEN",
+                "triggered_by": "manual",
+            },
+        ),
+    ]
+)
+
+# 23 · Confluent — CLOSED · USER_ARCHIVED (applied 70d ago; archived 15d ago)
+APP_EVENTS.extend(
+    [
+        *_draft_to_applied(23, 70),
+        _ev(
+            _next_eid(),
+            23,
+            AppEventKind.STATUS_CHANGE,
+            15,
+            {
+                "from_status": "APPLIED",
+                "to_status": "CLOSED",
+                "triggered_by": "bulk_archive",
+                "closed_reason": "user_archived",
+            },
+        ),
+    ]
+)
+
+# 24 · Perplexity — APPLIED (2d ago)
+APP_EVENTS.extend(_draft_to_applied(24, 2))
+
+# 25 · Mistral — RECRUITER_SCREEN (applied 15d ago; promoted 10d ago)
+APP_EVENTS.extend(
+    [
+        *_draft_to_applied(25, 15),
+        _ev(
+            _next_eid(),
+            25,
+            AppEventKind.STATUS_CHANGE,
+            10,
+            {
+                "from_status": "APPLIED",
+                "to_status": "RECRUITER_SCREEN",
+                "triggered_by": "manual",
+            },
+        ),
+    ]
+)
+
+# 26 · Anysphere — OFFER (applied 40d → recruiter 30d → onsite 14d → offer 3d)
+APP_EVENTS.extend(
+    [
+        *_draft_to_applied(26, 40),
+        _ev(
+            _next_eid(),
+            26,
+            AppEventKind.STATUS_CHANGE,
+            30,
+            {
+                "from_status": "APPLIED",
+                "to_status": "RECRUITER_SCREEN",
+                "triggered_by": "manual",
+            },
+        ),
+        _ev(
+            _next_eid(),
+            26,
+            AppEventKind.STATUS_CHANGE,
+            14,
+            {
+                "from_status": "RECRUITER_SCREEN",
+                "to_status": "ONSITE_LOOP",
+                "triggered_by": "manual",
+            },
+        ),
+        _ev(
+            _next_eid(),
+            26,
+            AppEventKind.STATUS_CHANGE,
+            3,
+            {
+                "from_status": "ONSITE_LOOP",
+                "to_status": "OFFER",
+                "triggered_by": "manual",
+                "notes": "Verbal offer on call",
+            },
+        ),
+    ]
+)
+
+# 27 · Render — APPLIED (9d ago)
+APP_EVENTS.extend(_draft_to_applied(27, 9))
+
+# 28 · Replit — RECRUITER_SCREEN (applied 23d ago; promoted 12d ago)
+APP_EVENTS.extend(
+    [
+        *_draft_to_applied(28, 23),
+        _ev(
+            _next_eid(),
+            28,
+            AppEventKind.STATUS_CHANGE,
+            12,
+            {
+                "from_status": "APPLIED",
+                "to_status": "RECRUITER_SCREEN",
+                "triggered_by": "manual",
+            },
+        ),
+    ]
+)
+
+# 29 · Octopus Energy — APPLIED (12d ago)
+APP_EVENTS.extend(_draft_to_applied(29, 12))
+
+# 30 · Loom — RECRUITER_SCREEN (applied 30d ago; promoted 18d ago)
+APP_EVENTS.extend(
+    [
+        *_draft_to_applied(30, 30),
+        _ev(
+            _next_eid(),
+            30,
+            AppEventKind.STATUS_CHANGE,
+            18,
+            {
+                "from_status": "APPLIED",
+                "to_status": "RECRUITER_SCREEN",
+                "triggered_by": "manual",
+            },
         ),
     ]
 )

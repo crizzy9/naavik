@@ -239,20 +239,114 @@ async def kpis_by_company(
     return out[:limit]
 
 
+async def _load_apps_with_roles(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    window_days: int,
+) -> list[tuple[int, str | None]]:
+    """Return (application_id, role) for visible apps in the window."""
+    from models import Application
+
+    threshold = datetime.now(UTC) - timedelta(days=window_days)
+    stmt = (
+        select(Application.id, Application.role)
+        .where(Application.user_id == user_id)
+        .where(Application.applied_at.is_not(None))
+        .where(Application.applied_at >= threshold)
+        .where(Application.deleted_at.is_(None))
+        .where(Application.status != ApplicationStatus.DRAFT)
+    )
+    rows = (await session.exec(stmt)).all()
+    return [(int(r[0]), r[1]) for r in rows]
+
+
+def _bucket_kpis(max_reached: dict[int, int]) -> dict[str, float | int]:
+    """Reduce `{app_id: max_rank}` to the per-bucket KPI dict.
+
+    Shape matches `kpis_by_company`'s per-company shape so the template can
+    render any breakdown uniformly.
+    """
+    total = len(max_reached)
+    if total == 0:
+        return {"applied": 0, "response_rate": 0.0, "onsite_rate": 0.0, "offer_rate": 0.0}
+    recruiter = sum(1 for v in max_reached.values() if v >= 2)
+    onsite = sum(1 for v in max_reached.values() if v >= 3)
+    offer = sum(1 for v in max_reached.values() if v >= 4)
+    return {
+        "applied": total,
+        "response_rate": recruiter / total,
+        "onsite_rate": onsite / total,
+        "offer_rate": offer / total,
+    }
+
+
 async def kpis_by_role_family(
     session: AsyncSession,
     *,
     user_id: int,
     window_days: int = 90,
-) -> dict[str, dict]:
-    """Role-family breakdown — stubbed in plan 81 § D.4.
+) -> dict[str, dict[str, float | int]]:
+    """Role-family breakdown (plan 86 / 0.4.5.06).
 
-    The role-family classifier ships in plan 73 (Profile.score_history),
-    but threading it through here is out of scope for plan 81's first cut.
-    Returns an empty dict so the template can no-op-render a "coming soon"
-    placeholder until the follow-up extends this.
+    Buckets each in-window Application by the role-family classifier from
+    `services.scoring_history.classify_role_family`. Empty families dropped
+    (same convention as `aggregate_score_history`).
     """
-    return {}
+    from services.scoring_history import classify_role_family
+
+    apps = await _load_apps_with_roles(session, user_id=user_id, window_days=window_days)
+    if not apps:
+        return {}
+    per_family_ids: dict[str, list[int]] = {}
+    for app_id, role in apps:
+        family = classify_role_family(role)
+        per_family_ids.setdefault(family, []).append(app_id)
+    all_ids = [aid for aid, _ in apps]
+    max_reached = await _max_reached_by_app(session, application_ids=all_ids)
+    out: dict[str, dict[str, float | int]] = {}
+    for family, ids in per_family_ids.items():
+        subset = {aid: max_reached.get(aid, 1) for aid in ids}
+        out[family] = _bucket_kpis(subset)
+    return out
+
+
+async def _bullets_used_by_app(
+    session: AsyncSession,
+    *,
+    application_ids: list[int],
+) -> dict[int, set[int]]:
+    """For each application_id, the set of Bullet IDs used in any GeneratedDocument.
+
+    Plan 86 / W2.2 deviation from plan: bullet provenance lives on
+    `GeneratedDocument.bullet_selection["selected_ids"]` (plan 66 substrate),
+    not on `Application.submission_artifacts`. Aggregates across all
+    documents (resume + cover_letter + audit_trail) for the application —
+    a bullet shows up anywhere counts.
+    """
+    if not application_ids:
+        return {}
+    from models import GeneratedDocument
+
+    stmt = select(GeneratedDocument.application_id, GeneratedDocument.bullet_selection).where(
+        GeneratedDocument.application_id.in_(application_ids)
+    )
+    rows = (await session.exec(stmt)).all()
+    out: dict[int, set[int]] = {}
+    for row in rows:
+        app_id, selection = (row[0], row[1]) if isinstance(row, tuple) else (None, None)
+        if app_id is None or not isinstance(selection, dict):
+            continue
+        ids = selection.get("selected_ids") or []
+        if not isinstance(ids, list):
+            continue
+        bucket = out.setdefault(int(app_id), set())
+        for bid in ids:
+            try:
+                bucket.add(int(bid))
+            except (TypeError, ValueError):
+                continue
+    return out
 
 
 async def kpis_by_tag(
@@ -260,12 +354,89 @@ async def kpis_by_tag(
     *,
     user_id: int,
     window_days: int = 90,
-) -> dict[str, dict]:
-    """Tag-intersection breakdown — stubbed in plan 81 § D.4.
+) -> dict[str, dict[str, float | int]]:
+    """Tag-intersection breakdown (plan 86 / 0.4.5.07).
 
-    Follow-up will join `Bullet.tags ∩ Job.tags`; out of scope for plan 81.
+    For each in-window Application, intersects the union of `Bullet.tags`
+    across bullets actually used in the resume bundle with `Job.tags`. Each
+    tag in the intersection gets one count from the Application. Empty
+    intersections (manual apps, legacy apps without bullet provenance) are
+    skipped — bucketing them as "other" would obscure the metric.
     """
-    return {}
+    from models import Application, Bullet, Job
+
+    threshold = datetime.now(UTC) - timedelta(days=window_days)
+    stmt = (
+        select(Application.id, Application.job_id)
+        .where(Application.user_id == user_id)
+        .where(Application.applied_at.is_not(None))
+        .where(Application.applied_at >= threshold)
+        .where(Application.deleted_at.is_(None))
+        .where(Application.status != ApplicationStatus.DRAFT)
+        .where(Application.job_id.is_not(None))
+    )
+    rows = (await session.exec(stmt)).all()
+    if not rows:
+        return {}
+    pairs = [(int(r[0]), int(r[1])) for r in rows if r[1] is not None]
+    if not pairs:
+        return {}
+    app_ids = [a for a, _ in pairs]
+    job_ids = [j for _, j in pairs]
+
+    bullets_by_app = await _bullets_used_by_app(session, application_ids=app_ids)
+    if not bullets_by_app:
+        return {}
+
+    all_bullet_ids: set[int] = set()
+    for s in bullets_by_app.values():
+        all_bullet_ids.update(s)
+    bullet_tags_by_id: dict[int, list[str]] = {}
+    if all_bullet_ids:
+        b_rows = (
+            await session.exec(
+                select(Bullet.id, Bullet.tags).where(Bullet.id.in_(list(all_bullet_ids)))
+            )
+        ).all()
+        for row in b_rows:
+            bid = int(row[0]) if isinstance(row, tuple) else None
+            tags = row[1] if isinstance(row, tuple) else None
+            if bid is None:
+                continue
+            bullet_tags_by_id[bid] = list(tags) if tags else []
+
+    job_tags_by_id: dict[int, set[str]] = {}
+    j_rows = (await session.exec(select(Job.id, Job.tags).where(Job.id.in_(job_ids)))).all()
+    for row in j_rows:
+        jid = int(row[0]) if isinstance(row, tuple) else None
+        tags = row[1] if isinstance(row, tuple) else None
+        if jid is None:
+            continue
+        job_tags_by_id[jid] = set(tags) if tags else set()
+
+    max_reached = await _max_reached_by_app(session, application_ids=app_ids)
+
+    per_tag_ids: dict[str, list[int]] = {}
+    for app_id, job_id in pairs:
+        used = bullets_by_app.get(app_id)
+        if not used:
+            continue
+        bullet_tag_union: set[str] = set()
+        for bid in used:
+            for t in bullet_tags_by_id.get(bid, []):
+                bullet_tag_union.add(t)
+        if not bullet_tag_union:
+            continue
+        job_tags = job_tags_by_id.get(job_id, set())
+        intersection = bullet_tag_union & job_tags
+        for tag in intersection:
+            per_tag_ids.setdefault(tag, []).append(app_id)
+
+    out: dict[str, dict[str, float | int]] = {}
+    for tag, ids in per_tag_ids.items():
+        subset = {aid: max_reached.get(aid, 1) for aid in ids}
+        out[tag] = _bucket_kpis(subset)
+    return out
 
 
 __all__ = [

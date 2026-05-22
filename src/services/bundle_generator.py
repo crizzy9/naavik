@@ -180,6 +180,95 @@ def _resume_text_for_coverage(resume: GeneratedDocument | None) -> str:
     return "\n".join(str(v) for v in trimmed.values() if v)
 
 
+async def regenerate_cover_letter(
+    session: AsyncSession,
+    application: Application,
+    *,
+    settings: Settings,
+    hiring_manager_override: str | None = None,
+) -> BundleResult:
+    """Re-render ONLY the cover letter for `application` (plan 86 R1 round 2).
+
+    Short-circuits the full bundle pipeline: no resume regen, no bullet
+    selection re-run, no screener answers. Re-runs corpus assembly +
+    hiring manager extraction (cheap, needed for cover-letter inputs)
+    then `dg.generate_cover_letter`.
+
+    Returns a `BundleResult` carrying only the new cover letter; resume +
+    screeners are left as None (caller handles via response shape — the
+    `/api/v1/applications/{id}/generate-bundle` route checks `resume_id`
+    for null and surfaces only the cover_letter_id).
+    """
+    result = BundleResult()
+    user_id = application.user_id
+
+    if await dg.is_cost_capped(session, user_id, settings):
+        result.skipped_reason = "cost_cap_reached"
+        result.degraded = True
+        result.degraded_reason = "cost_cap_reached"
+        return result
+
+    if application.job_id is None:
+        raise ValueError(f"application {application.id} has no job context")
+    job = (await session.exec(select(Job).where(Job.id == application.job_id))).one_or_none()
+    if job is None:
+        raise ValueError(f"application {application.id} has no job context")
+
+    corpus = await assemble_corpus(session, user_id)
+    user_blocklist = effective_blocklist(corpus.full_text) if corpus else set()
+    profile_for_preamble, _ = await _load_profile_experiences(session, user_id)
+    preamble: str | None = None
+    cache_preamble = False
+    if profile_for_preamble is not None and corpus and corpus.full_text:
+        preamble = render_preamble(
+            corpus,
+            profile_for_preamble.full_name,
+            blocklist=user_blocklist,
+        )
+        cache_preamble = True
+
+    hiring_manager = await extract_hiring_manager(
+        session=session,
+        user_id=user_id,
+        settings=settings,
+        job_description=job.description or job.description_html or "",
+        application_id=application.id,
+        manual_override=hiring_manager_override,
+        system=preamble,
+        cache_system=cache_preamble,
+    )
+    result.hiring_manager = hiring_manager
+
+    hm_payload: dict | None = None
+    if hiring_manager is not None:
+        hm_payload = {
+            "name": hiring_manager.name,
+            "title": hiring_manager.title,
+            "source": hiring_manager.source,
+            "confidence": hiring_manager.confidence,
+        }
+
+    breakdown = getattr(job, "match_breakdown", None) or {}
+    matched_tags = list(breakdown.get("matched_tags") or [])
+
+    try:
+        cover = await dg.generate_cover_letter(
+            session,
+            application,
+            settings=settings,
+            job=job,
+            system=preamble,
+            cache_system=cache_preamble,
+            hiring_manager=hm_payload,
+            matched_tags=matched_tags,
+        )
+        result.cover_letter = cover
+    except dg.CostCapExceededError:
+        result.degraded = True
+        result.degraded_reason = "cost_cap_reached"
+    return result
+
+
 async def generate_bundle(
     session: AsyncSession,
     application: Application,

@@ -173,7 +173,7 @@ def test_counts_match_inventory() -> None:
     assert len(sd.CERTIFICATIONS) == 1
     # Jobs ~20: spec is approximate; allow 18-30 range.
     assert 18 <= len(sd.JOBS) <= 30
-    assert len(sd.APPLICATIONS) == 14
+    assert len(sd.APPLICATIONS) == 30  # plan 86 W3.1 extension: 14 → 30
     assert 18 <= len(sd.CONTACTS) <= 25
     assert 20 <= len(sd.CONTACT_APPLICATION_LINKS) <= 30
     # Outreach: spec says ~40

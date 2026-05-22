@@ -38,12 +38,26 @@ async def cost_cap_exhausted(
     Pre-flight probe — runs before each per-job LLM dispatch. The estimate
     is conservative (`_ESTIMATED_JUDGE_COST_USD = 0.015`); over-blocking
     one borderline job beats overshooting the cap.
+
+    Plan 86 / 0.4.5.01 + R5 round 2 — thin wrapper around
+    `llm_tracker.acquire_cost_cap_slot`. Acquires + immediately releases
+    the placeholder slot for "check-only" callers (existing scorer
+    orchestrator path that runs the probe, then dispatches
+    `_llm_judge_score` separately). Direct callers wanting the real
+    placeholder-row protection should use `acquire_cost_cap_slot` +
+    `release_cost_cap_slot` directly so the placeholder holds the slot
+    across the LLM call window.
     """
-    cap = settings.daily_llm_cost_cap_usd
-    if cap is None:
-        return False
-    today_spend = await llm_tracker.today_cost_usd(session, user_id=user_id)
-    return (today_spend + _ESTIMATED_JUDGE_COST_USD) > cap
+    slot_id = await llm_tracker.acquire_cost_cap_slot(
+        session,
+        user_id=user_id,
+        estimated_cost_usd=_ESTIMATED_JUDGE_COST_USD,
+        cap_usd=settings.daily_llm_cost_cap_usd,
+    )
+    if slot_id is None:
+        return True
+    await llm_tracker.release_cost_cap_slot(session, slot_id)
+    return False
 
 
 def _compose_profile_summary(profile: Profile) -> str:

@@ -108,6 +108,8 @@ _SERVICE_DIRECT_TEST_MODULES = frozenset(
         "test_rate_limit",
         # Plan 81 § D.4 — analytics service uses real sqlite
         "test_plan_81_application_analytics",
+        # Plan 86 § W2/W4 — analytics breakdowns + cost-cap row lock use real sqlite
+        "test_plan_86_batched_housekeeping",
     }
 )
 

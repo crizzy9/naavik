@@ -27,6 +27,37 @@ MAX_BULLET_STRING_LENGTH = 120
 MAX_VISA_NOTE_LENGTH = 256
 MAX_EXPLANATION_LENGTH = 512
 
+# Plan 86 / 0.4.5.02 — second prompt-caching breakpoint threshold.
+# Heuristic: Anthropic tokens ≈ len(text) / 4 chars-per-token. When the
+# rendered prompt exceeds ~60K tokens (~240K chars) a second
+# `cache_control: ephemeral` breakpoint at the midpoint pays off — the
+# fixed-prefix-only cache misses on the bullet corpus that varies between
+# users but is stable per user across calls. Below the threshold, the
+# single-block cache already covers the whole prompt cheaply.
+_CACHE_SECOND_BREAKPOINT_TOKENS = 60_000
+_CHARS_PER_TOKEN_ESTIMATE = 4
+
+
+def should_insert_second_cache_breakpoint(rendered: str) -> bool:
+    """True iff the rendered score_job prompt exceeds the 60K-token threshold.
+
+    Plan 86 / 0.4.5.02. Heuristic token count uses `len(rendered) / 4` —
+    matches Anthropic's published rough estimate. Boundary cases pinned by
+    `test_second_cache_breakpoint_threshold`.
+    """
+    return (len(rendered) / _CHARS_PER_TOKEN_ESTIMATE) > _CACHE_SECOND_BREAKPOINT_TOKENS
+
+
+def split_for_double_cache(rendered: str) -> tuple[str, str]:
+    """Return (first_half, second_half) of `rendered` for double-cache wiring.
+
+    Split point is the midpoint by length — the actual provider wrapper
+    decides whether to attach the second `cache_control` marker. Callers
+    should gate this on `should_insert_second_cache_breakpoint(rendered)`.
+    """
+    mid = len(rendered) // 2
+    return rendered[:mid], rendered[mid:]
+
 
 PROMPT = """You are an expert technical recruiter scoring how well a candidate matches a job.
 
