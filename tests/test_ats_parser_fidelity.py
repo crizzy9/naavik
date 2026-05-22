@@ -22,6 +22,8 @@ from services.ats_parser_fidelity import (
     validate_parse_fidelity,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 _HAS_TYPST = shutil.which("typst") is not None
 
 

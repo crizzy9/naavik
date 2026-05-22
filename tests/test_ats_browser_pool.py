@@ -16,6 +16,8 @@ import pytest
 
 from services.ats._browser_pool import ATSBrowserPool
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 class _FakeBrowser:
     """Stub `Browser` — `new_context()` returns a `_FakeContext` with a close hook."""

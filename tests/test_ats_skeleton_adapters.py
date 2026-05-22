@@ -20,6 +20,8 @@ from services.ats.indeed import IndeedAdapter
 from services.ats.linkedin_apply import LinkedInAdapter
 from services.ats.workday import WorkdayAdapter
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _empty_bundle(board: ApplicationBoard) -> ApplicationBundle:
     app = SimpleNamespace(id=1, user_id=1, board=board, submission_artifacts=None, external_url="")

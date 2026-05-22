@@ -19,6 +19,8 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:

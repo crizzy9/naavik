@@ -13,6 +13,8 @@ from config import settings as app_settings
 from models import ApplicationBoard
 from services import env_secrets
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture
 def _clear_ats_env(monkeypatch):
