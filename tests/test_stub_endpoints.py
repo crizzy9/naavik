@@ -14,6 +14,8 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # DB-backed handlers run only when NAAVIK_LIVE_DB=1 is set. Plain pytest runs
 # skip them — the unit tests for auth/vault/llm cover the same code paths
 # without needing live DB.

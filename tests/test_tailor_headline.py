@@ -14,6 +14,8 @@ from llm.prompts.tailor_headline import (
     TailoredHeadline,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def test_tailored_headline_clamps_total_length():
     """Overly-long headline_one_line is truncated with ellipsis."""

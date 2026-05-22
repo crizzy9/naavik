@@ -23,6 +23,8 @@ from services.tool_loop import (
     orchestrate_refinement,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _settings(**overrides):
     base = {

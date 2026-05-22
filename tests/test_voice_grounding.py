@@ -15,6 +15,8 @@ from services.voice_grounding import (
     voice_fingerprint_hash,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def test_compute_sentence_stats_handles_empty_corpus():
     stats = compute_sentence_stats("")

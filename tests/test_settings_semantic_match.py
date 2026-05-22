@@ -16,6 +16,8 @@ import pytest  # noqa: E402
 
 from services import settings_service  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # Service-level guards (don't need TestClient for these).
 
 

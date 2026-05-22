@@ -22,9 +22,10 @@ from typst.compiler import CompileResult, TypstError
 
 _HAS_TYPST = shutil.which("typst") is not None
 
-pytestmark = pytest.mark.skipif(
-    not _HAS_TYPST, reason="typst CLI not on PATH; install via Nix devshell"
-)
+pytestmark = [
+    pytest.mark.skipif(not _HAS_TYPST, reason="typst CLI not on PATH; install via Nix devshell"),
+    pytest.mark.uses_sample_data_shims,
+]
 
 
 @pytest.fixture

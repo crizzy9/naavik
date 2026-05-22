@@ -15,6 +15,8 @@ import pytest
 
 from scraper import user_agents
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def test_pool_has_eight_user_agents():
     assert user_agents.pool_size() == 8

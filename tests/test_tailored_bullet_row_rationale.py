@@ -15,6 +15,8 @@ from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
 from ui.templates_setup import STATUS_DOT_COLORS, TAG_VOCAB
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 _TEMPLATES_DIR = "src/ui/templates"
 
 
