@@ -32,6 +32,8 @@ from services.job_extractor import (
     enrich_raw_job,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 FIXTURES = Path(__file__).parent / "fixtures" / "html"
 
 

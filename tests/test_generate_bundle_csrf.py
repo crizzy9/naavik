@@ -9,6 +9,10 @@ from __future__ import annotations
 import os
 from types import SimpleNamespace
 
+import pytest
+
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # bcrypt cost low for test isolation (mirrors test_scheduler_endpoints.py).
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 

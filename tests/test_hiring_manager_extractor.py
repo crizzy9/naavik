@@ -13,6 +13,8 @@ from services.hiring_manager_extractor import (
     extract_hiring_manager,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def test_regex_picks_up_hiring_manager_explicit():
     desc = "We're a tight team. Hiring Manager: Jane Smith. You'll join product."

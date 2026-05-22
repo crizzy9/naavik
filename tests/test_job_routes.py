@@ -33,6 +33,8 @@ from models.enums import (
 )
 from ui import discover_ctx as dctx
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── Fixtures ─────────────────────────────────────────────────────────────
 
 

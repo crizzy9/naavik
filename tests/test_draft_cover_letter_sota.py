@@ -11,6 +11,8 @@ from llm.prompts.draft_cover_letter_sota import (
     detect_pain_letter_format,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def test_detect_pain_letter_format_two_signals():
     """≥2 pain-point matches → True."""

@@ -55,6 +55,8 @@ from scheduler.json_jobstore import (
     _encode_job_state,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
