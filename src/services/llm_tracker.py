@@ -51,6 +51,12 @@ _RETRY_ATTEMPTS = {
 }
 _BACKOFF_BASE_SECONDS = 1.0
 
+# Plan 86 R5 round 2 — cost-cap slot placeholder marker (see
+# `acquire_cost_cap_slot`). Promoted to module-level so `today_cost_usd`
+# can exclude these synthetic rows from the user-facing spend widget.
+_COST_CAP_SLOT_PLACEHOLDER_KIND = "cost_cap_slot_placeholder"
+_COST_CAP_NO_CAP_SENTINEL = 0
+
 
 def _provider_id_to_enum(provider_id: str) -> LLMProviderEnum:
     return LLMProviderEnum(provider_id)
@@ -215,9 +221,14 @@ async def today_cost_usd(session: AsyncSession, *, user_id: int) -> float:
     spend into the wrong window for non-UTC operators.
     """
     midnight = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Plan 86 R5 round 2 — exclude cost-cap-slot placeholder rows from the
+    # user-facing spend total. NULL-safe via `IS DISTINCT FROM`-equivalent
+    # `(col IS NULL OR col != X)` so real-spend rows w/ `error_kind=None`
+    # still count.
     stmt = select(func.coalesce(func.sum(ApiUsage.cost_usd), 0.0)).where(
         ApiUsage.user_id == user_id,
         ApiUsage.occurred_at >= midnight,
+        (ApiUsage.error_kind.is_(None) | (ApiUsage.error_kind != _COST_CAP_SLOT_PLACEHOLDER_KIND)),
     )
     result = await session.exec(stmt)
     row = result.one()
@@ -241,45 +252,101 @@ async def acquire_cost_cap_slot(
     user_id: int,
     estimated_cost_usd: float,
     cap_usd: float | None,
-) -> bool:
+    provider_id: str = "anthropic",
+    model: str = "claude-sonnet-4-7",
+    method: str = "structured",
+    prompt_name: str | None = "score_job",
+) -> int | None:
     """Atomic check-and-acquire of a cost-cap slot for the LLM judge probe.
 
-    Plan 86 / 0.4.5.01. Tightens the previous racy `today_cost_usd + est >
-    cap` pre-flight: concurrent callers (rescore + cron firing in the same
-    tick) could each observe `today_cost == 0.95`, both decide "headroom
-    for $0.015", and both fire — overshooting the cap by ~$0.075 worst case.
+    Plan 86 / 0.4.5.01 + R5 round 2. Tightens the previous racy
+    `today_cost_usd + est > cap` pre-flight: concurrent callers (rescore +
+    cron firing in the same tick) could each observe `today_cost == 0.95`,
+    both decide "headroom for $0.015", and both fire — overshooting the cap
+    by ~$0.075 worst case.
 
     Atomicity strategy:
     - Postgres: take a row-level lock on all of today's ApiUsage rows for
-      `user_id` via `SELECT ... FOR UPDATE`. Holds the lock until the
-      caller's transaction commits — concurrent callers serialize through
-      the same predicate read.
-    - sqlite (in-memory parity tests): degrade to non-atomic fallback with
-      a single WARN log. Production path always hits Postgres.
+      `user_id` via `SELECT ... FOR UPDATE`, THEN insert a placeholder
+      `ApiUsage(cost_usd=estimated_cost_usd, succeeded=False,
+      error_kind="cost_cap_slot_placeholder")` row inside the same
+      transaction. The placeholder counts against `today_cost_usd` for the
+      duration of the LLM call window — concurrent callers entering the
+      probe will observe it under the lock + back off when over cap.
+    - sqlite (in-memory parity tests): degrade gracefully — the placeholder
+      INSERT still fires (single-writer test isolation makes the race
+      hypothetical), but the row-lock primitive is unavailable.
 
-    Returns True iff slot acquired (the caller may proceed with the LLM
-    call). Returns False iff `cap_usd` is set AND `today_cost + estimated
-    > cap`. Caller commits the surrounding transaction either way; the
-    lock releases on commit. Pass `cap_usd=None` to short-circuit True
-    (no cap configured).
+    Returns:
+      - ``int > 0`` — placeholder ApiUsage.id holding the slot. Caller must
+        eventually call ``release_cost_cap_slot(session, slot_id)`` (when
+        short-circuiting before any real LLM call) OR let ``tracked_call``
+        write the real ApiUsage row (the placeholder lingers until cron
+        cleanup, but the spend already counts via the real row — accepted
+        floor of one orphan placeholder per failed LLM call).
+      - ``0`` — no cap configured (``cap_usd is None``). Caller proceeds;
+        no placeholder to release.
+      - ``None`` — cap exhausted. Caller skips.
     """
     if cap_usd is None:
-        return True
+        return _COST_CAP_NO_CAP_SENTINEL
+    midnight = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Counts ALL ApiUsage rows including placeholders (which pre-count spend
+    # for atomicity) — distinct from `today_cost_usd` which strips them for
+    # the user-facing widget.
+    spend_stmt = (
+        select(ApiUsage.cost_usd)
+        .where(ApiUsage.user_id == user_id)
+        .where(ApiUsage.occurred_at >= midnight)
+    )
     if _dialect_supports_for_update(session):
-        midnight = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-        stmt = (
-            select(ApiUsage.cost_usd)
-            .where(ApiUsage.user_id == user_id)
-            .where(ApiUsage.occurred_at >= midnight)
-            .with_for_update()
-        )
-        result = await session.exec(stmt)
-        rows = result.all()
-        today_spend = float(sum(r[0] if isinstance(r, tuple) else r for r in rows) or 0.0)
+        spend_stmt = spend_stmt.with_for_update()
     else:
         log.warning("acquire_cost_cap_slot: sqlite dialect — degrading to non-atomic fallback")
-        today_spend = await today_cost_usd(session, user_id=user_id)
-    return (today_spend + estimated_cost_usd) <= cap_usd
+    result = await session.exec(spend_stmt)
+    rows = result.all()
+    today_spend = float(sum(r[0] if isinstance(r, tuple) else r for r in rows) or 0.0)
+    if (today_spend + estimated_cost_usd) > cap_usd:
+        return None
+    placeholder = ApiUsage(
+        user_id=user_id,
+        application_id=None,
+        provider=_provider_id_to_enum(provider_id),
+        model=model,
+        method=method,
+        prompt_name=prompt_name,
+        input_tokens=0,
+        output_tokens=0,
+        cost_usd=estimated_cost_usd,
+        latency_ms=0,
+        succeeded=False,
+        error_kind=_COST_CAP_SLOT_PLACEHOLDER_KIND,
+    )
+    session.add(placeholder)
+    await session.flush()
+    return placeholder.id
+
+
+async def release_cost_cap_slot(session: AsyncSession, slot_id: int | None) -> None:
+    """Delete the placeholder ApiUsage row holding a cost-cap slot.
+
+    Plan 86 R5 round 2. Call when the surrounding LLM dispatch short-
+    circuits before any real ApiUsage row gets written (e.g. provider
+    misconfigured, judge bails). When ``tracked_call`` succeeds, the
+    placeholder lingers but real spend is already recorded — accepted floor.
+
+    ``slot_id`` of ``None`` or ``_COST_CAP_NO_CAP_SENTINEL`` (``0``) is a
+    no-op — covers the "cap exhausted" + "no cap configured" branches.
+    """
+    if slot_id is None or slot_id == _COST_CAP_NO_CAP_SENTINEL:
+        return
+    row = await session.get(ApiUsage, slot_id)
+    if row is None:
+        return
+    if row.error_kind != _COST_CAP_SLOT_PLACEHOLDER_KIND:
+        return
+    await session.delete(row)
+    await session.flush()
 
 
 # ── Recent-usage + summary (plan 60 / 0.2.7.17) ────────────────────────

@@ -435,16 +435,15 @@ def test_bullet_override_persists_to_artifacts() -> None:
 
 
 @pytest.mark.asyncio
-async def test_acquire_cost_cap_slot_returns_true_when_no_cap(session: AsyncSession) -> None:
-    """`cap_usd=None` short-circuits True (no cap configured)."""
+async def test_acquire_cost_cap_slot_returns_sentinel_when_no_cap(session: AsyncSession) -> None:
+    """`cap_usd=None` short-circuits to the no-cap sentinel (0)."""
     from services import llm_tracker
 
-    assert (
-        await llm_tracker.acquire_cost_cap_slot(
-            session, user_id=1, estimated_cost_usd=10.0, cap_usd=None
-        )
-        is True
+    out = await llm_tracker.acquire_cost_cap_slot(
+        session, user_id=1, estimated_cost_usd=10.0, cap_usd=None
     )
+    assert out == 0
+    assert out is not None  # caller treats `is None` as cap-exhausted
 
 
 @pytest.mark.asyncio
@@ -454,13 +453,14 @@ async def test_acquire_cost_cap_slot_sqlite_degrades_to_non_atomic(
     """sqlite dialect MUST degrade gracefully (no FOR UPDATE) + return correct value."""
     from services import llm_tracker
 
-    # No ApiUsage rows → today_cost == 0.0 → slot available.
-    assert (
-        await llm_tracker.acquire_cost_cap_slot(
-            session, user_id=1, estimated_cost_usd=0.02, cap_usd=1.0
-        )
-        is True
+    # No ApiUsage rows → today_cost == 0.0 → slot available; placeholder inserted.
+    slot_id = await llm_tracker.acquire_cost_cap_slot(
+        session, user_id=1, estimated_cost_usd=0.02, cap_usd=1.0
     )
+    assert isinstance(slot_id, int) and slot_id > 0
+    # Release the placeholder so the next probe sees a clean day.
+    await llm_tracker.release_cost_cap_slot(session, slot_id)
+
     # Seed a row that pushes the day over cap.
     now = datetime.now(UTC)
     session.add(
@@ -482,23 +482,108 @@ async def test_acquire_cost_cap_slot_sqlite_degrades_to_non_atomic(
     )
     await session.commit()
     # 0.99 + 0.02 = 1.01 > 1.0 → no slot.
-    assert (
-        await llm_tracker.acquire_cost_cap_slot(
-            session, user_id=1, estimated_cost_usd=0.02, cap_usd=1.0
-        )
-        is False
+    out = await llm_tracker.acquire_cost_cap_slot(
+        session, user_id=1, estimated_cost_usd=0.02, cap_usd=1.0
     )
+    assert out is None
+
+
+@pytest.mark.asyncio
+async def test_acquire_slot_inserts_placeholder_row(session: AsyncSession) -> None:
+    """Plan 86 R5 round 2 — `acquire_cost_cap_slot` MUST INSERT a placeholder row.
+
+    The row carries `cost_usd=estimated_cost_usd`, `succeeded=False`,
+    `error_kind="cost_cap_slot_placeholder"` so concurrent probes observe it.
+    """
+    from sqlmodel import select
+
+    from services import llm_tracker
+
+    slot_id = await llm_tracker.acquire_cost_cap_slot(
+        session, user_id=1, estimated_cost_usd=0.015, cap_usd=10.0
+    )
+    assert slot_id is not None and slot_id > 0
+    placeholder = (await session.exec(select(ApiUsage).where(ApiUsage.id == slot_id))).one_or_none()
+    assert placeholder is not None
+    assert placeholder.error_kind == "cost_cap_slot_placeholder"
+    assert placeholder.cost_usd == 0.015
+    assert placeholder.succeeded is False
+    assert placeholder.input_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrent_acquires_serialize_via_placeholder_holding_slot(
+    session: AsyncSession,
+) -> None:
+    """Plan 86 R5 round 2 — placeholder rows pre-count spend during the LLM window.
+
+    Sequential probes on a single session simulate the concurrent path: the
+    first probe inserts a placeholder at 0.99; the second probe observes the
+    placeholder + estimated 0.02 + cap 1.0 → 0.99 + 0.02 + 0.02 > 1.0 → no slot.
+    Without the placeholder the second probe would (incorrectly) see only the
+    first probe's estimate post-flush + over-allocate.
+    """
+    from services import llm_tracker
+
+    first = await llm_tracker.acquire_cost_cap_slot(
+        session, user_id=1, estimated_cost_usd=0.99, cap_usd=1.0
+    )
+    assert isinstance(first, int) and first > 0
+
+    second = await llm_tracker.acquire_cost_cap_slot(
+        session, user_id=1, estimated_cost_usd=0.02, cap_usd=1.0
+    )
+    assert second is None  # placeholder from `first` blocked the second slot
+
+    # Release first; now a smaller probe fits.
+    await llm_tracker.release_cost_cap_slot(session, first)
+    third = await llm_tracker.acquire_cost_cap_slot(
+        session, user_id=1, estimated_cost_usd=0.02, cap_usd=1.0
+    )
+    assert isinstance(third, int) and third > 0
+
+
+@pytest.mark.asyncio
+async def test_release_cost_cap_slot_handles_no_op_inputs(session: AsyncSession) -> None:
+    """`release_cost_cap_slot(session, None)` + `(session, 0)` are no-ops."""
+    from services import llm_tracker
+
+    await llm_tracker.release_cost_cap_slot(session, None)
+    await llm_tracker.release_cost_cap_slot(session, 0)
+    # Releasing a non-existent slot id is also a no-op (forgiving cleanup).
+    await llm_tracker.release_cost_cap_slot(session, 99999)
+
+
+@pytest.mark.asyncio
+async def test_today_cost_usd_excludes_placeholders(session: AsyncSession) -> None:
+    """Plan 86 R5 round 2 — `today_cost_usd` excludes placeholder rows.
+
+    Placeholders pre-count spend during the LLM-call window (atomicity
+    guard), but they are NOT user-visible spend — the dashboard widget
+    + cron analytics ignore them.
+    """
+    from services import llm_tracker
+
+    # Acquire a slot (inserts a placeholder at 0.5).
+    slot_id = await llm_tracker.acquire_cost_cap_slot(
+        session, user_id=1, estimated_cost_usd=0.5, cap_usd=10.0
+    )
+    assert isinstance(slot_id, int) and slot_id > 0
+
+    # User-visible today's spend ignores the placeholder.
+    spend = await llm_tracker.today_cost_usd(session, user_id=1)
+    assert spend == 0.0
 
 
 @pytest.mark.asyncio
 async def test_cost_cap_exhausted_delegates_to_acquire_slot(session: AsyncSession) -> None:
-    """`scorer.llm_judge.cost_cap_exhausted` returns the inverse of slot acquisition."""
+    """`scorer.llm_judge.cost_cap_exhausted` wraps acquire+release."""
     from services.scorer.llm_judge import cost_cap_exhausted
 
     s = SimpleNamespace(daily_llm_cost_cap_usd=None)
     assert await cost_cap_exhausted(session, user_id=1, settings=s) is False
 
-    # Cap set, no spend → not exhausted.
+    # Cap set, no spend → not exhausted; placeholder released by wrapper.
     s2 = SimpleNamespace(daily_llm_cost_cap_usd=10.0)
     assert await cost_cap_exhausted(session, user_id=1, settings=s2) is False
 
@@ -560,16 +645,282 @@ def test_sample_data_30plus_applications_with_status_chains() -> None:
 
 
 def test_components_md_count_matches_plan_86_reconciliation() -> None:
-    """COMPONENTS.md must declare Total: 100 + carry the 5 plan-81 partials."""
+    """COMPONENTS.md must declare Total: 102 + carry the plan-81 + plan-86 R3 partials."""
     text = Path("docs/design/COMPONENTS.md").read_text()
-    assert "**Total: 100 components**" in text
-    assert "| **Total** | **100** | |" in text
-    # 5 plan-81 partials must be referenced by name somewhere in the catalog body.
+    assert "**Total: 102 components**" in text
+    assert "| **Total** | **102** | |" in text
+    # 5 plan-81 partials + 2 plan-86 R3 partials must be referenced.
     for new_partial in (
         "postmortem_modal.html",
         "_application_timeline_full.html",
         "analytics_kpi_strip.html",
         "analytics_funnel_card.html",
         "analytics_company_table.html",
+        "kpis_by_role_family.html",
+        "kpis_by_tag.html",
     ):
         assert new_partial in text, f"missing {new_partial} in COMPONENTS.md"
+
+
+# ── Fix 1 / architect R1 round 2 — regenerate_kind dispatch ────────────
+
+
+def test_generate_bundle_regenerate_kind_invalid_returns_422() -> None:
+    """Endpoint rejects unknown `regenerate_kind` payloads with 422."""
+    from api.applications import _REGENERATE_KIND_VALID
+
+    assert {"bundle", "cover_letter", "resume"} == _REGENERATE_KIND_VALID
+
+
+@pytest.mark.asyncio
+async def test_generate_bundle_regenerate_kind_cover_letter_skips_resume(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`regenerate_kind=cover_letter` dispatches to `regenerate_cover_letter`, NOT `generate_bundle`."""
+    from services import bundle_generator
+
+    full_called = False
+    cover_only_called = False
+
+    async def _fake_full(*args, **kwargs):
+        nonlocal full_called
+        full_called = True
+        return bundle_generator.BundleResult()
+
+    async def _fake_cover_only(*args, **kwargs):
+        nonlocal cover_only_called
+        cover_only_called = True
+        return bundle_generator.BundleResult()
+
+    monkeypatch.setattr(bundle_generator, "generate_bundle", _fake_full)
+    monkeypatch.setattr(bundle_generator, "regenerate_cover_letter", _fake_cover_only)
+
+    # Direct invocation (route helper without FastAPI wiring).
+    cover = await bundle_generator.regenerate_cover_letter(
+        session=SimpleNamespace(), application=SimpleNamespace(), settings=SimpleNamespace()
+    )
+    assert cover_only_called is True
+    assert full_called is False
+    assert cover.resume is None
+
+
+def test_regenerate_button_template_uses_cover_letter_kind() -> None:
+    """The Regenerate button template MUST send `regenerate_kind=cover_letter`."""
+    template = Path("src/ui/templates/components/_application_detail.html").read_text()
+    assert "Regenerate cover letter" in template
+    assert '"regenerate_kind": "cover_letter"' in template
+
+
+# ── Fix 2 / architect R2 round 2 — bullet_overrides wiring ─────────────
+
+
+def test_bullet_overrides_per_app_wins_over_model_field() -> None:
+    """`_resolve_override` returns the per-app override when present."""
+    from models.enums import BulletSelectionOverride
+    from services.document_generator import _resolve_override
+
+    bullet = SimpleNamespace(
+        id=42,
+        selection_override=BulletSelectionOverride.NEVER_INCLUDE,
+    )
+    out = _resolve_override(bullet, {42: "always_include"})
+    assert out == BulletSelectionOverride.ALWAYS_INCLUDE
+
+
+def test_bullet_overrides_falls_back_to_model_field_when_unset() -> None:
+    """`_resolve_override` reads model field when per-app dict has no entry."""
+    from models.enums import BulletSelectionOverride
+    from services.document_generator import _resolve_override
+
+    bullet = SimpleNamespace(
+        id=99,
+        selection_override=BulletSelectionOverride.NEVER_INCLUDE,
+    )
+    out = _resolve_override(bullet, {1: "always_include"})  # id 99 not in dict
+    assert out == BulletSelectionOverride.NEVER_INCLUDE
+
+    # Also: None dict falls back.
+    out2 = _resolve_override(bullet, None)
+    assert out2 == BulletSelectionOverride.NEVER_INCLUDE
+
+
+def test_bullet_overrides_empty_dict_uses_model_defaults() -> None:
+    """Empty per-app dict is equivalent to no override; model column wins."""
+    from models.enums import BulletSelectionOverride
+    from services.document_generator import _resolve_override
+
+    b_always = SimpleNamespace(id=1, selection_override=BulletSelectionOverride.ALWAYS_INCLUDE)
+    b_never = SimpleNamespace(id=2, selection_override=BulletSelectionOverride.NEVER_INCLUDE)
+    b_none = SimpleNamespace(id=3, selection_override=None)
+
+    assert _resolve_override(b_always, {}) == BulletSelectionOverride.ALWAYS_INCLUDE
+    assert _resolve_override(b_never, {}) == BulletSelectionOverride.NEVER_INCLUDE
+    assert _resolve_override(b_none, {}) is None
+
+
+def test_application_bullet_overrides_extracts_from_submission_artifacts() -> None:
+    """`_application_bullet_overrides` reads `submission_artifacts['bullet_overrides']`."""
+    from services.document_generator import _application_bullet_overrides
+
+    app = SimpleNamespace(
+        submission_artifacts={
+            "bullet_overrides": {
+                "5": "always_include",
+                "7": "never_include",
+                "9": "garbage_value",  # silently dropped
+                "x": "always_include",  # non-int key → dropped
+            }
+        }
+    )
+    out = _application_bullet_overrides(app)
+    assert out == {5: "always_include", 7: "never_include"}
+
+    # No artifacts → empty.
+    app2 = SimpleNamespace(submission_artifacts=None)
+    assert _application_bullet_overrides(app2) == {}
+
+
+def test_split_bullets_by_override_threads_application_overrides() -> None:
+    """`_split_bullets_by_override` accepts + honors `application_overrides`."""
+    from models.enums import BulletSelectionOverride
+    from services.document_generator import _split_bullets_by_override
+
+    b1 = SimpleNamespace(id=1, selection_override=None)
+    b2 = SimpleNamespace(id=2, selection_override=BulletSelectionOverride.NEVER_INCLUDE)
+    b3 = SimpleNamespace(id=3, selection_override=None)
+
+    # Per-app overrides flip b1 → always, b2 → always (overriding never).
+    always, never, auto = _split_bullets_by_override(
+        [b1, b2, b3],
+        application_overrides={1: "always_include", 2: "always_include"},
+    )
+    always_ids = {b.id for b in always}
+    never_ids = {b.id for b in never}
+    auto_ids = {b.id for b in auto}
+    assert always_ids == {1, 2}
+    assert never_ids == set()
+    assert auto_ids == {3}
+
+
+# ── Fix 3 / architect R3 round 2 — analytics breakdowns rendered ───────
+
+
+@pytest.mark.asyncio
+async def test_tracking_analytics_renders_role_family_section(
+    session: AsyncSession,
+) -> None:
+    """`/tracking/analytics` route ctx MUST carry `by_role_family` + the template
+    MUST render the `kpis_by_role_family.html` partial section."""
+    from ui import tracking_ctx as tctx  # noqa: F401  — ensure import path resolves
+    from ui.routes import tracking as tracking_route
+
+    # Stub the analytics helpers + page template lookup; assert route ctx
+    # threads `by_role_family` through.
+    captured: dict = {}
+
+    class _FakeAnalytics:
+        async def compute_kpis(self, _s, *, user_id, window_days):
+            from services.application_analytics import ApplicationKpis, FunnelCounts
+
+            return ApplicationKpis(
+                window_days=window_days,
+                applied_in_window=0,
+                response_rate=0.0,
+                onsite_rate=0.0,
+                offer_rate=0.0,
+                funnel=FunnelCounts(),
+            )
+
+        async def kpis_by_company(self, _s, *, user_id, window_days):
+            return []
+
+        async def kpis_by_role_family(self, _s, *, user_id, window_days):
+            return {
+                "backend": {
+                    "applied": 5,
+                    "response_rate": 0.4,
+                    "onsite_rate": 0.2,
+                    "offer_rate": 0.1,
+                }
+            }
+
+        async def kpis_by_tag(self, _s, *, user_id, window_days):
+            return {
+                "platform": {
+                    "applied": 3,
+                    "response_rate": 0.33,
+                    "onsite_rate": 0.0,
+                    "offer_rate": 0.0,
+                }
+            }
+
+    import ui.routes.tracking as tracking_mod
+
+    orig = tracking_mod.application_analytics
+    tracking_mod.application_analytics = _FakeAnalytics()  # type: ignore[assignment]
+    try:
+        # Capture the template name + ctx by stubbing templates.TemplateResponse.
+        from ui import templates_setup
+
+        orig_templates = templates_setup.templates.TemplateResponse
+
+        def _capture(request, template_name, ctx):
+            captured["template"] = template_name
+            captured["ctx"] = ctx
+
+            class _R:
+                pass
+
+            return _R()
+
+        templates_setup.templates.TemplateResponse = _capture  # type: ignore[assignment]
+        try:
+            await tracking_route.get_tracking_analytics(
+                request=SimpleNamespace(),
+                window_days=90,
+                session=session,
+                user=SimpleNamespace(id=1),
+            )
+        finally:
+            templates_setup.templates.TemplateResponse = orig_templates  # type: ignore[assignment]
+    finally:
+        tracking_mod.application_analytics = orig  # type: ignore[assignment]
+
+    assert captured["template"] == "pages/tracking_analytics.html"
+    ctx = captured["ctx"]
+    assert "by_role_family" in ctx
+    assert ctx["by_role_family"] == {
+        "backend": {"applied": 5, "response_rate": 0.4, "onsite_rate": 0.2, "offer_rate": 0.1}
+    }
+    assert "by_tag" in ctx
+    assert ctx["by_tag"] == {
+        "platform": {"applied": 3, "response_rate": 0.33, "onsite_rate": 0.0, "offer_rate": 0.0}
+    }
+
+
+def test_tracking_analytics_template_includes_breakdown_partials() -> None:
+    """`tracking_analytics.html` MUST include both new partials."""
+    template = Path("src/ui/templates/pages/tracking_analytics.html").read_text()
+    assert "components/kpis_by_role_family.html" in template
+    assert "components/kpis_by_tag.html" in template
+
+
+def test_kpis_by_role_family_partial_renders_table() -> None:
+    """The role-family partial renders a table with applied/response/onsite/offer cols."""
+    template = Path("src/ui/templates/components/kpis_by_role_family.html").read_text()
+    assert 'data-testid="analytics-role-family-table"' in template
+    assert "by_role_family" in template
+    # Response/Onsite/Offer column headers present.
+    assert "Response" in template
+    assert "Onsite" in template
+    assert "Offer" in template
+
+
+def test_kpis_by_tag_partial_renders_table() -> None:
+    """The tag partial renders a table with the same shape as role-family."""
+    template = Path("src/ui/templates/components/kpis_by_tag.html").read_text()
+    assert 'data-testid="analytics-tag-table"' in template
+    assert "by_tag" in template
+    assert "Response" in template
+    assert "Onsite" in template
+    assert "Offer" in template

@@ -21,10 +21,7 @@ import pytest  # noqa: E402
 from llm import LLMProviderError  # noqa: E402
 from llm.base import StructuredResult  # noqa: E402
 from llm.prompts.score_job import JobScore  # noqa: E402
-from services.scorer import (
-    _ESTIMATED_JUDGE_COST_USD,  # noqa: E402
-    llm_judge,  # noqa: E402
-)
+from services.scorer import llm_judge  # noqa: E402
 
 
 def _settings_stub(cap: float | None = None):
@@ -73,21 +70,35 @@ async def test_cost_cap_unset_returns_false():
 
 @pytest.mark.asyncio
 async def test_cost_cap_well_under_returns_false():
+    """Plan 86 R5 round 2 — `cost_cap_exhausted` now wraps
+    `acquire_cost_cap_slot`. Acquire returning a placeholder id (slot
+    available) → wrapper releases it + returns False (not exhausted)."""
     session = AsyncMock()
     settings = _settings_stub(cap=10.0)
-    with patch.object(llm_judge.llm_tracker, "today_cost_usd", new=AsyncMock(return_value=0.5)):
+    with (
+        patch.object(
+            llm_judge.llm_tracker,
+            "acquire_cost_cap_slot",
+            new=AsyncMock(return_value=42),
+        ),
+        patch.object(
+            llm_judge.llm_tracker,
+            "release_cost_cap_slot",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
         assert not await llm_judge.cost_cap_exhausted(session, user_id=1, settings=settings)
 
 
 @pytest.mark.asyncio
 async def test_cost_cap_at_boundary_returns_true():
-    """today_spend + estimated > cap → True."""
+    """`acquire_cost_cap_slot` returns None when cap is exhausted → wrapper True."""
     session = AsyncMock()
     settings = _settings_stub(cap=1.0)
     with patch.object(
         llm_judge.llm_tracker,
-        "today_cost_usd",
-        new=AsyncMock(return_value=1.0 - _ESTIMATED_JUDGE_COST_USD / 2),
+        "acquire_cost_cap_slot",
+        new=AsyncMock(return_value=None),
     ):
         assert await llm_judge.cost_cap_exhausted(session, user_id=1, settings=settings)
 
@@ -96,7 +107,11 @@ async def test_cost_cap_at_boundary_returns_true():
 async def test_cost_cap_over_returns_true():
     session = AsyncMock()
     settings = _settings_stub(cap=1.0)
-    with patch.object(llm_judge.llm_tracker, "today_cost_usd", new=AsyncMock(return_value=2.0)):
+    with patch.object(
+        llm_judge.llm_tracker,
+        "acquire_cost_cap_slot",
+        new=AsyncMock(return_value=None),
+    ):
         assert await llm_judge.cost_cap_exhausted(session, user_id=1, settings=settings)
 
 
