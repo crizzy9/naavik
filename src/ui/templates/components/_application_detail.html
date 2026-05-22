@@ -150,9 +150,10 @@
     <section data-testid="detail-documents">
       <div class="flex items-baseline justify-between mb-2 gap-3">
         <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Documents</div>
-        {# Plan 86 § W3.2 / 0.4.5.08 — Regenerate cover letter via existing
-           plan 66 bundle generator. Single-click; cost-cap + rate-limit
-           dependencies enforced server-side. #}
+        {# Plan 86 § W3.2 / 0.4.5.08 — Regenerate cover letter only via plan 66's
+           generator. Single-click; cost-cap + rate-limit enforced server-side.
+           `regenerate_kind=cover_letter` short-circuits the resume / screener
+           stages and re-runs only `dg.generate_cover_letter`. #}
         {% if a.job_id %}
           <button type="button"
                   data-testid="regenerate-bundle"
@@ -162,7 +163,7 @@
                   hx-swap="none"
                   class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-indigo-200 bg-indigo-500/20 hover:bg-indigo-500/30 transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
             <i data-lucide="refresh-cw" class="h-3 w-3" stroke-width="1.5"></i>
-            Regenerate
+            Regenerate cover letter
           </button>
         {% endif %}
       </div>

@@ -27,8 +27,10 @@ from db.session import get_session
 from models import ApplicationStatus, ClosedReason, Settings, User
 from services import application_service as svc
 from services.auth import require_password_complete
-from services.bundle_generator import generate_bundle
+from services.bundle_generator import generate_bundle, regenerate_cover_letter
 from services.rate_limit import check_generate_bundle_rate_limit
+
+_REGENERATE_KIND_VALID = {"bundle", "cover_letter", "resume"}
 
 _POSTMORTEM_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
 
@@ -255,18 +257,35 @@ async def generate_bundle_route(
         raise HTTPException(status_code=409, detail="Settings missing for user")
 
     hiring_manager_override = None
+    regenerate_kind = "bundle"
     if payload is not None:
         raw = payload.get("hiring_manager_override")
         if isinstance(raw, str) and raw.strip():
             hiring_manager_override = raw.strip()
+        raw_kind = payload.get("regenerate_kind")
+        if raw_kind is not None:
+            if not isinstance(raw_kind, str) or raw_kind not in _REGENERATE_KIND_VALID:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(f"regenerate_kind must be one of {sorted(_REGENERATE_KIND_VALID)}"),
+                )
+            regenerate_kind = raw_kind
 
     try:
-        bundle = await generate_bundle(
-            session,
-            application,
-            settings=settings,
-            hiring_manager_override=hiring_manager_override,
-        )
+        if regenerate_kind == "cover_letter":
+            bundle = await regenerate_cover_letter(
+                session,
+                application,
+                settings=settings,
+                hiring_manager_override=hiring_manager_override,
+            )
+        else:
+            bundle = await generate_bundle(
+                session,
+                application,
+                settings=settings,
+                hiring_manager_override=hiring_manager_override,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
