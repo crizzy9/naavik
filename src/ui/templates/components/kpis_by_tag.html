@@ -1,0 +1,48 @@
+{#
+  kpis_by_tag.html — applied / response / onsite / offer rates by tag.
+  Plan 86 § Fix 3 (architect R3 round 2 / 0.4.5.07).
+
+  Each tag is the intersection of (bullets_used.tags) ∩ Job.tags for the
+  application — manual entries + apps without bullet provenance are
+  excluded.
+
+  Args:
+    by_tag      : dict[str, {applied: int, response_rate: float,
+                              onsite_rate: float, offer_rate: float}]
+    window_days : int
+#}
+<section data-testid="analytics-tag-table"
+         class="bg-slate-900 border border-slate-800 rounded-lg p-5">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <h2 class="text-base font-medium text-slate-50">By tag</h2>
+      <p class="text-xs text-slate-400 mt-0.5">bullets ∩ job tags · last {{ window_days }} days</p>
+    </div>
+  </div>
+  {% if by_tag %}
+    <table class="w-full text-sm">
+      <thead class="text-xs uppercase tracking-wide text-slate-400 border-b border-slate-800">
+        <tr>
+          <th class="text-left font-medium pb-2">Tag</th>
+          <th class="text-right font-medium pb-2 w-20">Applied</th>
+          <th class="text-right font-medium pb-2 w-24">Response</th>
+          <th class="text-right font-medium pb-2 w-24">Onsite</th>
+          <th class="text-right font-medium pb-2 w-20">Offer</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800">
+        {% for tag, kpi in by_tag.items() %}
+          <tr>
+            <td class="py-2 text-slate-200 truncate font-mono text-xs">{{ tag }}</td>
+            <td class="py-2 text-right font-mono tabular-nums text-slate-300">{{ kpi.applied }}</td>
+            <td class="py-2 text-right font-mono tabular-nums text-cyan-300">{{ "%.0f" | format(kpi.response_rate * 100) }}%</td>
+            <td class="py-2 text-right font-mono tabular-nums text-amber-300">{{ "%.0f" | format(kpi.onsite_rate * 100) }}%</td>
+            <td class="py-2 text-right font-mono tabular-nums text-emerald-300">{{ "%.0f" | format(kpi.offer_rate * 100) }}%</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-sm text-slate-500">No tagged applications yet — generate a few resume bundles for the tag intersection to populate.</p>
+  {% endif %}
+</section>

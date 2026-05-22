@@ -53,8 +53,36 @@ def patched_client(monkeypatch) -> TestClient:
             ),
         ]
 
+    async def _fake_by_role_family(_session, *, user_id, window_days=90):
+        return {
+            "backend": {
+                "applied": 8,
+                "response_rate": 0.5,
+                "onsite_rate": 0.25,
+                "offer_rate": 0.0,
+            },
+            "ai-ml": {
+                "applied": 4,
+                "response_rate": 0.5,
+                "onsite_rate": 0.25,
+                "offer_rate": 0.25,
+            },
+        }
+
+    async def _fake_by_tag(_session, *, user_id, window_days=90):
+        return {
+            "platform": {
+                "applied": 6,
+                "response_rate": 0.33,
+                "onsite_rate": 0.16,
+                "offer_rate": 0.0,
+            },
+        }
+
     monkeypatch.setattr(svc, "compute_kpis", _fake_kpis)
     monkeypatch.setattr(svc, "kpis_by_company", _fake_by_company)
+    monkeypatch.setattr(svc, "kpis_by_role_family", _fake_by_role_family)
+    monkeypatch.setattr(svc, "kpis_by_tag", _fake_by_tag)
 
     from main import app
 
@@ -65,19 +93,27 @@ def patched_client(monkeypatch) -> TestClient:
 
 
 def test_tracking_analytics_page_renders(patched_client: TestClient) -> None:
-    """GET /tracking/analytics renders 4-KPI strip + funnel + company table."""
+    """GET /tracking/analytics renders 4-KPI strip + funnel + company table +
+    role-family + tag breakdowns (plan 86 R3 round 2)."""
     r = patched_client.get("/tracking/analytics")
     assert r.status_code == 200
     body = r.text
     assert 'data-testid="analytics-kpi-strip"' in body
     assert 'data-testid="analytics-funnel-card"' in body
     assert 'data-testid="analytics-company-table"' in body
+    # Plan 86 R3 round 2 — role-family + tag breakdown sections.
+    assert 'data-testid="analytics-role-family-table"' in body
+    assert 'data-testid="analytics-tag-table"' in body
     assert "Tracking · Analytics" in body
     # The mocked applied count surfaces in the strip
     assert ">12<" in body
     # Top company surfaces in the table
     assert "Acme" in body
     assert "Beta" in body
+    # Role-family + tag bucket labels surface from the fixtures.
+    assert "backend" in body
+    assert "ai-ml" in body
+    assert "platform" in body
 
 
 def test_tracking_analytics_route_order_precedence(patched_client: TestClient) -> None:

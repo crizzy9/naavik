@@ -44,5 +44,15 @@
       {% include "components/analytics_company_table.html" %}
     {% endwith %}
   </div>
+
+  {# Role-family + Tag breakdowns — 2-column on md+ (plan 86 R3 round 2). #}
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    {% with by_role_family=by_role_family, window_days=window_days %}
+      {% include "components/kpis_by_role_family.html" %}
+    {% endwith %}
+    {% with by_tag=by_tag, window_days=window_days %}
+      {% include "components/kpis_by_tag.html" %}
+    {% endwith %}
+  </div>
 </div>
 {% endblock %}

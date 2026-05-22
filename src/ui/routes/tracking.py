@@ -180,11 +180,19 @@ async def get_tracking_analytics(
     by_company = await application_analytics.kpis_by_company(
         session, user_id=user_id, window_days=window_days
     )
+    by_role_family = await application_analytics.kpis_by_role_family(
+        session, user_id=user_id, window_days=window_days
+    )
+    by_tag = await application_analytics.kpis_by_tag(
+        session, user_id=user_id, window_days=window_days
+    )
     ctx = {
         "active_sidebar": "tracking",
         "active_template_path": "/tracking",
         "kpis": kpis,
         "by_company": by_company,
+        "by_role_family": by_role_family,
+        "by_tag": by_tag,
         "window_days": window_days,
     }
     return templates.TemplateResponse(request, "pages/tracking_analytics.html", ctx)
