@@ -28,6 +28,8 @@ from llm.base import (
 from models import LLMProvider as LLMProviderEnum
 from models import Settings
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture
 def env_keys(monkeypatch):

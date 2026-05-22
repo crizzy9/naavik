@@ -22,6 +22,7 @@ from pathlib import Path
 # (transitively imports config) doesn't raise at collection.
 os.environ.setdefault("NAAVIK_DEBUG", "1")
 
+import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -30,6 +31,8 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def _load_migration_0009():

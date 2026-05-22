@@ -21,6 +21,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 os.environ.setdefault("NAAVIK_DEBUG", "1")
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 

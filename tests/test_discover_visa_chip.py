@@ -14,9 +14,12 @@ os.environ.setdefault("NAAVIK_DEBUG", "1")
 
 from types import SimpleNamespace  # noqa: E402
 
+import pytest
 from jinja2 import Environment, FileSystemLoader  # noqa: E402
 
 from ui.discover_ctx import swipe_card_dict  # noqa: E402
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def _job_with_breakdown(visa_concern: bool):

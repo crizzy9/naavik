@@ -19,6 +19,8 @@ import pytest
 from scraper.proxy import ProxyURLConfig, safe_proxy_host
 from scraper.redaction import safe_url
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 LEAKED_USER_SENTINEL = "leakeduser123sentinel"
 LEAKED_PASS_SENTINEL = "leakedpass456sentinel"
 PROXY_URL_WITH_LEAK = f"http://{LEAKED_USER_SENTINEL}:{LEAKED_PASS_SENTINEL}@gate.example.com:7000"

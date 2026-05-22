@@ -11,7 +11,11 @@ import os
 
 os.environ.setdefault("NAAVIK_DEBUG", "1")
 
+import pytest
+
 from models import EMBEDDING_DIM, JobEmbedding, ProfileAnswer  # noqa: E402
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def test_profile_answer_metadata():

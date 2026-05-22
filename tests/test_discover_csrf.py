@@ -18,6 +18,8 @@ import os
 
 import pytest
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # Tests bcrypt-init: keep cost low (same as test_auth.py).
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 # CSRF gate is in-app; the swipe body falls through to `db.sample_data`

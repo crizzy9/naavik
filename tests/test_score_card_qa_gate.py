@@ -18,6 +18,8 @@ from fastapi.testclient import TestClient
 
 from main import app
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture
 def auth_cookies() -> dict[str, str]:

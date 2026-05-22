@@ -53,6 +53,8 @@ from models.enums import (
     Tag,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── Round-trip ───────────────────────────────────────────────────────────
 
 

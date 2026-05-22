@@ -21,9 +21,12 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 _VAULT_COLUMNS = (
     "llm_api_key_fingerprint",

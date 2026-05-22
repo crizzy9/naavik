@@ -22,6 +22,8 @@ from services.settings_service import (
     update_generation,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.mark.asyncio
 async def test_cost_projection_fallback_when_no_history():

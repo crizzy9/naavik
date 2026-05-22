@@ -14,6 +14,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 os.environ.setdefault("NAAVIK_DEBUG", "1")
 

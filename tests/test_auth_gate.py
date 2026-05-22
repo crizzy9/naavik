@@ -31,6 +31,8 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # Tests bcrypt-init: keep cost low (same as test_auth.py).
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 

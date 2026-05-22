@@ -12,6 +12,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.uses_sample_data_shims
+
 _FORBIDDEN_PATTERNS = (
     re.compile(r"\bfrom\s+cli\s+import\b"),
     re.compile(r"\bfrom\s+cli\.\w+\s+import\b"),

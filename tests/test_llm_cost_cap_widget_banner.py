@@ -14,6 +14,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:

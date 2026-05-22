@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture
 def env_settings(monkeypatch):

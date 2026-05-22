@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import pytest
+
 from services.keyword_coverage import (
     CoverageReport,
     _normalize_keyword,
     _select_top_section,
     compute_coverage,
 )
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def test_normalize_keyword_collapses_whitespace_and_lowercases():

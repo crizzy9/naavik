@@ -21,6 +21,8 @@ from services.ats.base import (
     SubmissionResult,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def test_atsadapter_cannot_be_instantiated_directly():
     with pytest.raises(TypeError):

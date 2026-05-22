@@ -32,6 +32,8 @@ from services.ats.base import (
 from services.ats.greenhouse import GreenhouseAdapter
 from services.ats.lever import LeverAdapter
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── httpx mock helper ────────────────────────────────────────────────
 
 

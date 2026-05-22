@@ -10,6 +10,8 @@ from __future__ import annotations
 import pytest
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 _TEMPLATES_DIR = "src/ui/templates"
 
 

@@ -20,6 +20,8 @@ from llm.providers.originality import (
     OriginalityProvider,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 class _FakeStreamResponse:
     """Mimics `httpx.Response` as returned from `client.stream(...)`."""

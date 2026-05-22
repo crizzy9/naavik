@@ -33,6 +33,8 @@ from scheduler import scraping
 from scraper.base import ScraperBase
 from scraper.types import RawJob, ScrapeQuery
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── In-memory Settings + Session fakes ─────────────────────────────────
 
 

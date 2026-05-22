@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from services.ethics_preflight import EthicsReport, preflight_check
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def test_preflight_passes_when_all_bullets_in_profile():

@@ -25,6 +25,8 @@ from typing import Any
 import pytest
 from apscheduler.jobstores.base import JobLookupError
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # bcrypt cost low for test isolation (mirrors test_auth.py / test_discover_csrf.py).
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 # Memory persistence keeps the matching-CSRF path away from Postgres — this

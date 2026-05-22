@@ -42,6 +42,8 @@ from services.auth import (
 )
 from services.jwt_rotation_service import rotate_tenant_key
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture
 async def _session():

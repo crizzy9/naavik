@@ -7,6 +7,10 @@ artifact, the probe collapses to a single signal: `user_count`.
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── FirstRunState dataclass invariants ───────────────────────────────────
 
 

@@ -22,6 +22,8 @@ from models import (
 from scraper.types import RawJob, ScrapeQuery
 from services.job_service import _JOB_CREATE_FIELDS, _create_payload
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _minimal_rawjob_kwargs() -> dict:
     return {

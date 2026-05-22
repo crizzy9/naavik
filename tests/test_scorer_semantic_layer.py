@@ -22,6 +22,8 @@ import pytest  # noqa: E402
 
 from services.scorer.semantic_layer import _semantic_score  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _job_stub(id_: int = 7, user_id: int = 1):
     return SimpleNamespace(id=id_, user_id=user_id)

@@ -19,6 +19,8 @@ from services.ats_parser_ensemble import (
     ensemble_score,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _mock_pdfplumber_report(score: float = 0.85):
     return SimpleNamespace(

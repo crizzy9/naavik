@@ -15,6 +15,8 @@ from models import ApplicationBoard, JobSource
 from scraper.base import ScraperBase
 from scraper.types import RawJob, ScrapeQuery
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def test_scraperbase_cannot_instantiate_directly():
     """ABC enforcement — abstract `scrape()` blocks direct construction."""

@@ -17,6 +17,8 @@ os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 _CSRF_TOKEN = "csrf-cookie-token-plan-81-anpage-eeeeeeee"
 
 

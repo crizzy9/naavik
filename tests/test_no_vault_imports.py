@@ -13,6 +13,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.uses_sample_data_shims
+
 _FORBIDDEN_PATTERNS = (
     # Match `from services import vault` or `from services.vault import ...`
     re.compile(r"\bfrom\s+services\s+import\s+vault\b"),

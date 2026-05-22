@@ -18,6 +18,8 @@ from pydantic import ValidationError
 from models import JobSource
 from scraper.proxy import ProxyURLConfig, resolve_proxy_config, safe_proxy_host
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── ProxyURLConfig validator ──────────────────────────────────────────────
 
 

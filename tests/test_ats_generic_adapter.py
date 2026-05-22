@@ -16,6 +16,8 @@ from llm.prompts.ats_generic_form_fill import (
     GenericFormFillPlan,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def test_prompt_template_includes_user_content_fences():
     """Hostile-template-injection guard: DOM excerpt sits inside fences so the LLM

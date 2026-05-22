@@ -23,6 +23,8 @@ from services.ats.lever import LeverAdapter
 from services.ats.linkedin_apply import LinkedInAdapter
 from services.ats.workday import WorkdayAdapter
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.mark.parametrize(
     "board, expected_cls",

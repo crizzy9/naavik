@@ -5,7 +5,11 @@ Pure-function tests; no DB, no fixtures, no Crawl4AI.
 
 from __future__ import annotations
 
+import pytest
+
 from scraper.redaction import safe_exc, safe_msg, safe_url
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def test_safe_url_strips_query_and_fragment():

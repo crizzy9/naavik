@@ -22,6 +22,8 @@ os.environ.setdefault("NAAVIK_DEBUG", "1")
 
 from services.application_service import cleanup_stale_drafts  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 class _FakeSession:
     def __init__(self) -> None:

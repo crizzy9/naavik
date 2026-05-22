@@ -10,9 +10,12 @@ import os
 
 os.environ.setdefault("NAAVIK_DEBUG", "1")
 
+import pytest
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # noqa: E402
 
 from scheduler import jobs  # noqa: E402
+
+pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def test_score_pending_registers_with_15min_interval():

@@ -23,6 +23,8 @@ from llm.base import EmbeddingResult  # noqa: E402
 from models import EMBEDDING_DIM  # noqa: E402
 from services import embedding_service  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @compiles(JSONB, "sqlite")
 def _compile_jsonb_sqlite(_type, _compiler, **_kw):  # type: ignore[misc]

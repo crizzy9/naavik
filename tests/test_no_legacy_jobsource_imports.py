@@ -19,6 +19,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def test_no_legacy_jobsource_automated_in_src():
     src = Path(__file__).resolve().parent.parent / "src"

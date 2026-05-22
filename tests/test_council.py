@@ -18,6 +18,8 @@ from services.council import (
     vote_on_bullet_selection,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _settings(**overrides):
     base = {

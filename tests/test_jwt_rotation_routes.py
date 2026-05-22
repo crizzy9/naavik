@@ -36,6 +36,8 @@ from models import (
 )
 from services.auth import issue_csrf_token, issue_jwt_async
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 @pytest.fixture
 async def _session():

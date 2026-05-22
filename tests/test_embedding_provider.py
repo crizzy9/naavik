@@ -17,6 +17,8 @@ from llm.base import EmbeddingResult, LLMProviderError  # noqa: E402
 from llm.ollama import OllamaProvider  # noqa: E402
 from llm.openai import OpenAIProvider  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── ABC default ─────────────────────────────────────────────────────────
 
 

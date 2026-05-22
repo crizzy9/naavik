@@ -21,6 +21,8 @@ from llm.base import EmbeddingResult  # noqa: E402
 from models import EMBEDDING_DIM  # noqa: E402
 from services import embedding_service  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _profile_stub(user_id: int = 1, *, id_: int = 100, headline: str = "Senior SWE"):
     from models import Profile

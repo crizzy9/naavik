@@ -37,6 +37,8 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from apscheduler.jobstores.base import JobLookupError
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 os.environ.setdefault("NAAVIK_DEBUG", "1")
 os.environ["NAAVIK_PERSISTENCE"] = "memory"

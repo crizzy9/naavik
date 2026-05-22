@@ -17,6 +17,8 @@ import pytest
 
 from services.document_generator import generate_cover_letter
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _make_settings(**overrides):
     base = {

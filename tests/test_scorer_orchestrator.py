@@ -22,6 +22,8 @@ from llm.prompts.score_job import JobScore  # noqa: E402
 from models import VisaSponsorship  # noqa: E402
 from services.scorer import orchestrator  # noqa: E402
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _profile_stub(*, needs_sponsorship: bool = False, id_: int = 100, user_id: int = 1):
     return SimpleNamespace(

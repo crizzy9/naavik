@@ -17,6 +17,8 @@ from services.bundle_generator import generate_bundle
 from services.hiring_manager_extractor import HiringManagerHit
 from services.voice_grounding import VoiceCorpus
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 
 def _make_application(**overrides):
     base = {

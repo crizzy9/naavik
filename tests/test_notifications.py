@@ -37,6 +37,8 @@ from services.notifications import (
     send_telegram,
 )
 
+pytestmark = pytest.mark.uses_sample_data_shims
+
 # ── Fakes ────────────────────────────────────────────────────────────
 
 
