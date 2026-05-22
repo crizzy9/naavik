@@ -247,16 +247,43 @@ def _bullet_inventory(snap: ProfileSnapshot) -> list[Bullet]:
 # ── Bullet selection (pre-LLM honoring overrides) ───────────────────────
 
 
+def _resolve_override(
+    bullet: Bullet,
+    application_overrides: dict[int, str] | None,
+) -> BulletSelectionOverride | None:
+    """Per-app `bullet_overrides` win over `Bullet.selection_override` (plan 86 / 0.4.5.08).
+
+    Architect R2 round 2 — `PUT /api/v1/applications/{id}/bullet-override`
+    writes `submission_artifacts["bullet_overrides"][<str(bid)>]` but the
+    document generator previously ignored that dict. Resolution order per
+    bullet:
+      1. Per-app override (`always_include` / `never_include`) wins.
+      2. Model column `Bullet.selection_override`.
+      3. `None` (LLM picks).
+    Unknown override values silently fall through to the model column —
+    defense-in-depth in case future enum additions ship before this resolver.
+    """
+    if application_overrides:
+        raw = application_overrides.get(bullet.id)
+        if raw == BulletSelectionOverride.ALWAYS_INCLUDE.value:
+            return BulletSelectionOverride.ALWAYS_INCLUDE
+        if raw == BulletSelectionOverride.NEVER_INCLUDE.value:
+            return BulletSelectionOverride.NEVER_INCLUDE
+    return bullet.selection_override
+
+
 def _split_bullets_by_override(
     bullets: list[Bullet],
+    application_overrides: dict[int, str] | None = None,
 ) -> tuple[list[Bullet], list[Bullet], list[Bullet]]:
     always: list[Bullet] = []
     never: list[Bullet] = []
     auto: list[Bullet] = []
     for b in bullets:
-        if b.selection_override == BulletSelectionOverride.ALWAYS_INCLUDE:
+        effective = _resolve_override(b, application_overrides)
+        if effective == BulletSelectionOverride.ALWAYS_INCLUDE:
             always.append(b)
-        elif b.selection_override == BulletSelectionOverride.NEVER_INCLUDE:
+        elif effective == BulletSelectionOverride.NEVER_INCLUDE:
             never.append(b)
         else:
             auto.append(b)
@@ -274,12 +301,18 @@ async def _ai_select_bullets(
     max_select: int = 12,
     system: str | None = None,
     cache_system: bool = False,
+    application_overrides: dict[int, str] | None = None,
 ) -> list[int]:
-    """Return ordered list of selected bullet ids honoring overrides + LLM."""
+    """Return ordered list of selected bullet ids honoring overrides + LLM.
+
+    `application_overrides` (plan 86 / 0.4.5.08) — per-application bullet
+    overrides keyed by bullet id, values `"always_include"` / `"never_include"`.
+    Win over the model-level `Bullet.selection_override` column.
+    """
     inventory = _bullet_inventory(snap)
     if not inventory:
         return []
-    always, never, auto = _split_bullets_by_override(inventory)
+    always, never, auto = _split_bullets_by_override(inventory, application_overrides)
 
     selected_ids: list[int] = [b.id for b in always]
     remaining = max_select - len(selected_ids)
@@ -538,6 +571,33 @@ def _select_template(application: Application, settings: Settings) -> tuple[str,
     return "onepage", None
 
 
+def _application_bullet_overrides(application: Application) -> dict[int, str]:
+    """Extract per-app bullet overrides from `submission_artifacts` (plan 86 / 0.4.5.08).
+
+    Returns `{bullet_id: "always_include" | "never_include"}`. The wire shape
+    keys by `str(bid)` (JSONB friendly); this normalizes to `int` for the
+    document generator's resolver. Silently drops malformed entries.
+    """
+    artifacts = getattr(application, "submission_artifacts", None) or {}
+    raw = artifacts.get("bullet_overrides") if isinstance(artifacts, dict) else None
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[int, str] = {}
+    for key, value in raw.items():
+        if not isinstance(value, str):
+            continue
+        if value not in (
+            BulletSelectionOverride.ALWAYS_INCLUDE.value,
+            BulletSelectionOverride.NEVER_INCLUDE.value,
+        ):
+            continue
+        try:
+            out[int(key)] = value
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 async def generate_resume(
     session: AsyncSession,
     application: Application,
@@ -573,6 +633,7 @@ async def generate_resume(
     session.add(application)
     await session.flush()
 
+    application_overrides = _application_bullet_overrides(application)
     selected_ids = await _ai_select_bullets(
         session=session,
         settings=settings,
@@ -583,6 +644,7 @@ async def generate_resume(
         max_select=12,
         system=system,
         cache_system=cache_system,
+        application_overrides=application_overrides or None,
     )
     selected_bullets: list[Bullet] = [b for b in _bullet_inventory(snap) if b.id in selected_ids]
     trimmed: dict[int, str] = {}
