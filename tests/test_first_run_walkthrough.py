@@ -59,7 +59,12 @@ def test_login_page_renders_signin_form_by_default(client: TestClient):
 
 
 def test_signup_disabled_banner_when_user_exists(client: TestClient, monkeypatch):
-    """When `_compute_signup_disabled` returns True → amber banner renders."""
+    """When `_compute_signup_disabled` returns True → amber banner renders
+    AND the signin form is rendered alongside (plan 0.7.0.45 — the
+    original "banner-only, no form" UX was a dead-end; operator who
+    clicked "Create account" by mistake had no signin form to fall back
+    to without navigating away).
+    """
     from ui.routes import auth as auth_routes
 
     async def _disabled(session):
@@ -69,10 +74,41 @@ def test_signup_disabled_banner_when_user_exists(client: TestClient, monkeypatch
     r = client.get("/login?mode=signup")
     assert r.status_code == 200
     body = r.text
-    # The amber banner replaces the signup form.
+    # The amber banner explains why signup is gated.
     assert "data-signup-disabled-banner" in body
-    # No signup form rendered.
+    assert "This instance already has an account." in body
+    # The signin form is rendered immediately below the banner —
+    # operator can sign in without navigating away.
+    assert 'hx-post="/api/v1/auth/login"' in body
+    # No signup form (would 403 anyway).
     assert 'hx-post="/api/v1/auth/signup"' not in body
+
+
+def test_signup_disabled_renders_welcome_back_header(client: TestClient, monkeypatch):
+    """Plan 0.7.0.45: when signup_disabled fires on `?mode=signup`, the
+    template's `is_signup` flag is rewritten to False so the header
+    reads "Welcome back" (not "Create your account") + the submit button
+    reads "Sign in" (not "Create account") + the SSO info card renders.
+    Heading/button/CTA stay coherent with the signin form rendered below
+    the banner.
+    """
+    from ui.routes import auth as auth_routes
+
+    async def _disabled(session):
+        return True
+
+    monkeypatch.setattr(auth_routes, "_compute_signup_disabled", _disabled)
+    r = client.get("/login?mode=signup")
+    body = r.text
+    assert "Welcome back" in body
+    assert "Create your account" not in body
+    # Submit button text mirrors signin mode.
+    assert "Sign in</span>" in body or ">Sign in<" in body
+    # SSO info card renders only in signin mode.
+    assert "SSO coming soon" in body
+    # "First time? Create account" CTA is hidden when signup is disabled
+    # (clicking it would just bounce back to this same banner).
+    assert "First time?" not in body
 
 
 def test_setup_help_link_path_matches_route(client: TestClient):

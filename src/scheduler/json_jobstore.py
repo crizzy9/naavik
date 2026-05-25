@@ -243,20 +243,82 @@ class NaavikJsonJobStore(SQLAlchemyJobStore):
     """
 
     def add_job(self, job: Job) -> None:
+        """Insert a job row; raise `ConflictingIdError` on duplicate id.
+
+        Plan 0.7.0.44 — 2026-05-22: use Postgres `INSERT ... ON CONFLICT
+        DO NOTHING` instead of the bare `INSERT` + catch-IntegrityError
+        pattern. The catch-IntegrityError approach was correct
+        functionally (APScheduler's Scheduler.add_job falls back to
+        `update_job` when `replace_existing=True`), but Postgres logs
+        the conflicted INSERT as a server-side `ERROR: duplicate key
+        value violates unique constraint` line before the Python side
+        catches the exception. Result: every orchestrator boot spammed
+        the `[db]` log channel with one ERROR per registered job
+        (~16 noisy lines on a fresh boot). `ON CONFLICT DO NOTHING`
+        suppresses both the ERROR log and the IntegrityError, leaving
+        the row state unchanged when the id already exists; the
+        `rowcount == 0` check below detects the no-op and raises
+        ConflictingIdError so APScheduler's update_job fallback fires
+        on `replace_existing=True` as before.
+
+        sqlite fallback: in-memory sqlite (test path) supports the same
+        `INSERT ... ON CONFLICT (id) DO NOTHING` syntax since SQLite
+        3.24 (2018). SQLAlchemy's dialect-aware `insert(...).
+        on_conflict_do_nothing(index_elements=['id'])` constructs the
+        right SQL per dialect.
+        """
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
         try:
             blob = _encode_job_state(job.__getstate__())
         except (TypeError, ValueError, UnsupportedTriggerError) as exc:
             raise TypeError(f"Job {job.id!r} is not JSON-serializable: {exc}") from exc
-        insert = self.jobs_t.insert().values(
-            id=job.id,
-            next_run_time=datetime_to_utc_timestamp(job.next_run_time),
-            job_state=blob,
-        )
+
+        # Dialect-aware INSERT builder. Both Postgres + SQLite support
+        # ON CONFLICT; other dialects (we don't ship any) fall through
+        # to the legacy IntegrityError-catch path.
+        dialect_name = self.engine.dialect.name
+        if dialect_name == "postgresql":
+            stmt = (
+                pg_insert(self.jobs_t)
+                .values(
+                    id=job.id,
+                    next_run_time=datetime_to_utc_timestamp(job.next_run_time),
+                    job_state=blob,
+                )
+                .on_conflict_do_nothing(index_elements=["id"])
+            )
+        elif dialect_name == "sqlite":
+            stmt = (
+                sqlite_insert(self.jobs_t)
+                .values(
+                    id=job.id,
+                    next_run_time=datetime_to_utc_timestamp(job.next_run_time),
+                    job_state=blob,
+                )
+                .on_conflict_do_nothing(index_elements=["id"])
+            )
+        else:
+            stmt = self.jobs_t.insert().values(
+                id=job.id,
+                next_run_time=datetime_to_utc_timestamp(job.next_run_time),
+                job_state=blob,
+            )
+
         with self.engine.begin() as connection:
             try:
-                connection.execute(insert)
+                result = connection.execute(stmt)
             except IntegrityError as exc:
+                # Defense-in-depth for the legacy fallback path
+                # (non-postgres / non-sqlite dialects).
                 raise ConflictingIdError(job.id) from exc
+            # ON CONFLICT DO NOTHING returns rowcount == 0 when the row
+            # already exists. Raise ConflictingIdError so APScheduler's
+            # Scheduler.add_job falls back to update_job under
+            # replace_existing=True (preserving the prior behavior).
+            if result.rowcount == 0:
+                raise ConflictingIdError(job.id)
 
     def update_job(self, job: Job) -> None:
         try:
