@@ -24,7 +24,87 @@ from ui.templates_setup import templates
 router = APIRouter()
 
 
-# ── Per-field PUT (autosave) ────────────────────────────────────────────
+# ── Bulk PUT (Save changes) ─────────────────────────────────────────────
+
+
+@router.put("/api/v1/profile", name="api_profile_put_bulk")
+async def put_profile_bulk(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+) -> HTMLResponse:
+    """Bulk save the profile editor form.
+
+    Walks the posted FormData, routes each field through the appropriate
+    service (`update_field` for identity / summary / etc., `update_application_questions`
+    for the EEO bag), and returns an HTML fragment swapped into
+    `#profile-edit-save-result` on the edit page (0.7.0.48 fold-in for owner
+    bug #4 — replaces the misleading static autosave indicator with an
+    explicit Save button).
+    """
+    form = await request.form()
+    eeo_fields = {
+        "work_authorization",
+        "visa_sponsorship_needed",
+        "willing_to_relocate",
+        "notice_period_days",
+        "salary_expectation_usd",
+        "earliest_start",
+        "veteran_status",
+        "disability_status",
+        "race_ethnicity",
+        "gender_identity",
+    }
+    eeo_payload: dict[str, Any] = {}
+    saved_fields: list[str] = []
+    failed: list[tuple[str, str]] = []
+
+    for name, value in form.multi_items():
+        if name in eeo_fields:
+            eeo_payload[name] = value
+            continue
+        if name in profile_service.ALLOWED_PROFILE_FIELDS:
+            try:
+                await profile_service.update_field(
+                    session,
+                    user_id=1,
+                    field=name,
+                    value=value,
+                )
+                saved_fields.append(name)
+            except (LookupError, ValueError) as exc:
+                failed.append((name, str(exc)))
+        # Unknown names (e.g. `title_<id>`, `start_<id>`, `end_<id>` per-experience
+        # editors) are intentionally ignored at the bulk endpoint — experience edits
+        # have dedicated routes scoped by id; the bulk save covers Profile fields.
+
+    if eeo_payload:
+        try:
+            await profile_service.update_application_questions(
+                session,
+                user_id=1,
+                payload=eeo_payload,
+            )
+            saved_fields.extend(sorted(eeo_payload.keys()))
+        except LookupError as exc:
+            failed.append(("application_questions", str(exc)))
+
+    if failed:
+        await session.rollback()
+        msg = "; ".join(f"{name}: {err}" for name, err in failed)
+        return HTMLResponse(
+            f'<span class="text-rose-300">Save failed — {msg}</span>',
+            status_code=422,
+        )
+
+    await session.commit()
+    return HTMLResponse(
+        f'<span class="text-emerald-300">Saved · {len(saved_fields)} field'
+        f"{'s' if len(saved_fields) != 1 else ''}</span>"
+    )
+
+
+# ── Per-field PUT (legacy autosave — retained for non-profile-edit consumers) ──
 
 
 @router.put("/api/v1/profile/{field}", name="api_profile_put_field")

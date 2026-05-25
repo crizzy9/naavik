@@ -66,19 +66,48 @@ def test_select_options_use_human_labels(client: TestClient, auth_cookies: dict[
     assert "H-1B Visa Holder" in body
 
 
-def test_select_autosave_uses_change_trigger(
+def test_profile_edit_selects_have_no_per_field_autosave(
     client: TestClient, auth_cookies: dict[str, str]
 ) -> None:
-    """`<select>` autosave fires on `change`, not `blur changed`."""
+    """0.7.0.48 fold-in for owner bug #4: per-field autosave is OFF on the
+    profile editor. Fields submit via the explicit Save button (parent
+    `#profile-edit-form` PUTs `/api/v1/profile`). The misleading static
+    "Auto-saved · just now" indicator is gone.
+    """
     body = client.get("/profile/edit", cookies=auth_cookies).text
-    # The select for work_authorization should carry hx-trigger="change..."
-    assert 'hx-put="/api/v1/profile/work_authorization"' in body
-    # Find the surrounding <select> tag and confirm it carries change-trigger.
-    # The class string is large (Tailwind + inline SVG arrow), so widen the window.
-    select_idx = body.find('id="editor-work_authorization"')
-    assert select_idx > 0
-    snippet = body[select_idx : select_idx + 2000]
-    assert 'hx-trigger="change' in snippet, "select autosave should trigger on change"
+    # No per-field PUTs anywhere in the profile editor form.
+    assert 'hx-put="/api/v1/profile/work_authorization"' not in body
+    assert 'hx-put="/api/v1/profile/visa_sponsorship_needed"' not in body
+    assert 'hx-put="/api/v1/profile/full_name"' not in body
+    # The bulk PUT form is present.
+    assert 'hx-put="/api/v1/profile"' in body
+    assert 'data-testid="profile-edit-save"' in body
+
+
+def test_editor_field_select_uses_change_trigger_when_autosave_enabled() -> None:
+    """The select-autosave-on-change wiring is preserved for OTHER consumers
+    of `editor_field.html` that opt into autosave (e.g. settings tabs). When
+    `autosave_enabled=true` + `type="select"`, the partial emits
+    `hx-trigger="change delay:200ms"`. Direct template render, no HTTP.
+    """
+    from jinja2 import ChainableUndefined, Environment, FileSystemLoader
+
+    env = Environment(
+        loader=FileSystemLoader("src/ui/templates"),
+        autoescape=True,
+        undefined=ChainableUndefined,
+    )
+    tmpl = env.get_template("components/editor_field.html")
+    out = tmpl.render(
+        label="WORK AUTH",
+        name="work_authorization",
+        value="h1b",
+        type="select",
+        options=[("h1b", "H-1B Visa Holder"), ("citizen", "US Citizen")],
+        autosave_enabled=True,
+    )
+    assert 'hx-put="/api/v1/profile/work_authorization"' in out
+    assert 'hx-trigger="change delay:200ms"' in out
 
 
 # ---- Profile read-only: human labels on display ------------------------

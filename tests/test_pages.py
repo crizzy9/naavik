@@ -49,8 +49,20 @@ _PAGES = [
     (
         "profile_edit",
         "/profile/edit",
-        ["Edit profile", "data-sortable", "application-qs", "bullet-list-1"],
-        [],
+        [
+            "Edit profile",
+            "data-sortable",
+            "application-qs",
+            "bullet-list-1",
+            # 0.7.0.48 fold-in for owner bug #4: explicit Save button replaces
+            # the misleading static "Auto-saved · just now" indicator.
+            'data-testid="profile-edit-save"',
+            'id="profile-edit-form"',
+            'hx-put="/api/v1/profile"',
+        ],
+        # The static "Auto-saved · just now" indicator was a lie — it rendered
+        # the same string regardless of whether anything had saved. Gone.
+        ["Auto-saved · just now", "Auto-saved"],
     ),
     (
         "discover",
