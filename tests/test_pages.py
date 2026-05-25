@@ -516,3 +516,39 @@ def test_settings_notifications_tab_renders_env_indicators_not_inputs(
     assert 'data-channel="telegram"' in body
     assert "DISCORD_WEBHOOK_URL" in body
     assert "TELEGRAM_BOT_TOKEN" in body
+
+
+# ── 0.7.0.48 fold-in (owner bugs #7 + #8): sign out + favicon ──────────
+
+
+def test_sidebar_has_signout_button(client: TestClient, auth_cookies):
+    """Owner bug #7 — Sign out affordance lives in the sidebar bottom block,
+    wired to POST /api/v1/auth/logout. No CSRF wiring needed (the logout
+    endpoint is intentionally permissive — it just clears the cookies).
+    """
+    body = client.get("/", cookies=auth_cookies).text
+    assert 'data-testid="sidebar-signout"' in body, (
+        "Owner bug #7: sidebar must render a Sign out affordance"
+    )
+    assert 'hx-post="/api/v1/auth/logout"' in body, (
+        "Sign out button must POST to the logout endpoint"
+    )
+    assert 'data-lucide="log-out"' in body
+
+
+def test_base_html_links_favicon(client: TestClient, auth_cookies):
+    """Owner bug #8 — `<link rel="icon">` must point at /static/favicon.svg
+    on every authed page so the browser stops 404'ing /favicon.ico fallback.
+    """
+    body = client.get("/", cookies=auth_cookies).text
+    assert '<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">' in body
+
+
+def test_favicon_ico_route_returns_svg(client: TestClient):
+    """Owner bug #8 — /favicon.ico legacy browser request returns the SVG
+    so we don't generate a 404 every page load.
+    """
+    r = client.get("/favicon.ico")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/svg+xml"
+    assert r.text.startswith("<svg")
