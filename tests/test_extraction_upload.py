@@ -69,9 +69,19 @@ def _hand_rolled_pdf_bytes() -> bytes:
 
 @pytest.fixture
 def client_with_user(tmp_path: Path, monkeypatch):
-    """TestClient with auth dep overridden + data_dir pointed at tmp_path."""
+    """TestClient with auth + CSRF deps overridden + data_dir pointed at tmp_path.
+
+    Plan 0.7.0.48 Wave 2 hacker MED fold-in (2026-05-25): `require_csrf`
+    now gates the upload endpoint. Tests override BOTH `require_password_complete`
+    and `require_csrf` so they exercise the happy + validation paths without
+    needing to craft a double-submit token roundtrip per request.
+
+    A dedicated `test_upload_csrf_enforced` (below) does NOT override
+    `require_csrf` to pin the regression.
+    """
     from fastapi.testclient import TestClient
 
+    from api.auth import require_csrf
     from config import settings as app_settings
     from main import app
     from services.auth import require_password_complete
@@ -86,12 +96,17 @@ def client_with_user(tmp_path: Path, monkeypatch):
     async def _override():
         return user
 
+    def _csrf_pass() -> None:
+        return None
+
     app.dependency_overrides[require_password_complete] = _override
+    app.dependency_overrides[require_csrf] = _csrf_pass
     monkeypatch.setattr(app_settings, "data_dir", str(tmp_path))
 
     yield TestClient(app, raise_server_exceptions=True), user, tmp_path
 
     app.dependency_overrides.pop(require_password_complete, None)
+    app.dependency_overrides.pop(require_csrf, None)
 
 
 def test_upload_happy_path_writes_pdf_and_returns_partial(client_with_user):
@@ -144,3 +159,51 @@ def test_upload_rejects_oversize_body(client_with_user):
         files={"resume": ("huge.pdf", big, "application/pdf")},
     )
     assert r.status_code == 413
+
+
+def test_upload_csrf_enforced(tmp_path: Path, monkeypatch):
+    """Regression for plan 0.7.0.48 Wave 2 hacker MED fold-in (2026-05-25):
+    `/api/v1/extraction/upload` MUST be gated by `require_csrf`. Pre-fold,
+    this state-changing route was the only POST in `src/` lacking
+    double-submit CSRF enforcement — narrow exploitability today (SameSite=Strict
+    on the JWT cookie blocks most browser cross-origin abuse) but a real
+    gap before any multi-user deployment.
+
+    This test asserts the route returns 403 when `require_csrf` is NOT
+    overridden — i.e. the dependency actually fires. The other 4 tests in
+    this file override `require_csrf` for ergonomics.
+    """
+    from fastapi.testclient import TestClient
+
+    from config import settings as app_settings
+    from main import app
+    from services.auth import require_password_complete
+
+    user = SimpleNamespace(
+        id=7,
+        is_active=True,
+        is_admin=True,
+        must_change_password=False,
+    )
+
+    async def _override():
+        return user
+
+    # Override ONLY the auth dep, NOT require_csrf — exercises the gate.
+    app.dependency_overrides[require_password_complete] = _override
+    monkeypatch.setattr(app_settings, "data_dir", str(tmp_path))
+
+    try:
+        client = TestClient(app, raise_server_exceptions=True)
+        payload = _hand_rolled_pdf_bytes()
+        # No CSRF cookie + header → 403 "CSRF token invalid".
+        r = client.post(
+            "/api/v1/extraction/upload",
+            files={"resume": ("regress.pdf", payload, "application/pdf")},
+        )
+        assert r.status_code == 403, (
+            f"upload route must enforce CSRF; got {r.status_code}: {r.text[:200]}"
+        )
+        assert "CSRF" in r.text
+    finally:
+        app.dependency_overrides.pop(require_password_complete, None)

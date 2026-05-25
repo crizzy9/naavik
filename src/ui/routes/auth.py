@@ -22,6 +22,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
+from api.auth import require_csrf
 from config import settings as app_settings
 from models import User
 from services.auth import get_current_user, require_password_complete
@@ -116,6 +117,7 @@ async def post_extraction_upload(
     request: Request,
     resume: UploadFile,
     user: User = Depends(require_password_complete),
+    _csrf: None = Depends(require_csrf),
 ):
     """Receive a resume PDF, persist it under `<data_dir>/uploads/<user_id>/`,
     extract plaintext via `pdfplumber`, and return a confirmation partial.
@@ -124,6 +126,13 @@ async def post_extraction_upload(
     stub. No LLM call — pdfplumber raw text only. The extracted text is
     not yet persisted to Profile (operator fills profile fields manually);
     persistence is a future plan once we have an LLM-driven extractor.
+
+    Plan 0.7.0.48 Wave 2 hacker MED fold-in (2026-05-25): `require_csrf`
+    enforces double-submit on this state-changing route. The dropzone form
+    inherits the global `hx-headers='{"X-CSRF-Token": ...}'` from
+    `base.html`, so the dependency fires cleanly on HTMX-driven uploads;
+    direct curl callers need to send both the `naavik_csrf` cookie + the
+    `X-CSRF-Token` header (issued at signup/login).
     """
     if resume.content_type not in {"application/pdf", "application/x-pdf"}:
         raise HTTPException(status_code=422, detail="Only PDF uploads are supported.")

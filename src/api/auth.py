@@ -201,10 +201,16 @@ async def post_signup(
     # Default Settings + skeleton Profile so the rest of the UI doesn't trip
     # over a missing per-user singleton on the next page load.
     session.add(Settings(user_id=user.id))
+    # Plan 0.7.0.48 Wave 2 hacker LOW fold-in (2026-05-25): default
+    # `full_name` to empty string instead of the email-local-part. The
+    # local part leaks operator-PII to the public-no-auth
+    # `/api/portfolio/cv` endpoint until the user replaces it via
+    # `/profile/edit`. Empty default surfaces an obvious "fill me in"
+    # prompt + carries no PII.
     session.add(
         Profile(
             user_id=user.id,
-            full_name=norm_email.split("@", 1)[0],
+            full_name="",
             headline="",
             email=norm_email,
         )
