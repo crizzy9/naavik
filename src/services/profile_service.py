@@ -7,6 +7,7 @@ extract_resume_to_profile + AI tag inference + AppEvent emission for `profile_up
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -219,6 +220,63 @@ async def update_field(
     from services.embedding_service import maybe_refresh_profile_embedding
 
     await maybe_refresh_profile_embedding(session, user_id=user_id)
+    return profile
+
+
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+_PHONE_RE = re.compile(r"(\+?\d[\d\s\-().]{8,}\d)")
+_NAME_ALLOWED_RE = re.compile(r"^[A-Za-z][A-Za-z\s\-'.]*$")
+
+
+def parse_resume_heuristics(text: str) -> dict[str, str]:
+    """Pure regex extract of email / phone / name from raw resume text.
+
+    Returns a dict with keys present only when a candidate was found. The
+    caller decides whether to populate (we never overwrite operator edits
+    in `set_raw_resume_text`).
+    """
+    out: dict[str, str] = {}
+    if not text:
+        return out
+    if m := _EMAIL_RE.search(text):
+        out["email"] = m.group(0)
+    if m := _PHONE_RE.search(text):
+        out["phone"] = m.group(1).strip()
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or len(line) > 60:
+            continue
+        if "@" in line or any(ch.isdigit() for ch in line):
+            continue
+        if _NAME_ALLOWED_RE.match(line):
+            out["full_name"] = line
+            break
+    return out
+
+
+async def set_raw_resume_text(
+    session: AsyncSession,
+    user_id: int,
+    text: str,
+) -> Profile | None:
+    """Persist `text` as `Profile.raw_resume_text` + heuristically populate
+    empty identity fields (full_name, email, phone) from regex matches.
+
+    Won't overwrite operator hand-edits — only fills fields that are
+    currently falsy. Returns the updated Profile, or None when the user has
+    no Profile row yet (best-effort; caller can ignore).
+    """
+    profile = await get_profile(session, user_id)
+    if profile is None:
+        return None
+    profile.raw_resume_text = text
+    parsed = parse_resume_heuristics(text)
+    for field in ("full_name", "email", "phone"):
+        if parsed.get(field) and not getattr(profile, field, None):
+            setattr(profile, field, parsed[field])
+    profile.updated_at = datetime.now(UTC)
+    session.add(profile)
+    await session.flush()
     return profile
 
 

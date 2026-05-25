@@ -21,10 +21,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
 from config import settings as app_settings
+from db.session import get_session
 from models import User
+from services import profile_service
 from services.auth import get_current_user, require_password_complete
 from ui.templates_setup import templates
 
@@ -116,16 +119,19 @@ async def get_change_password(
 async def post_extraction_upload(
     request: Request,
     resume: UploadFile,
+    session: AsyncSession = Depends(get_session),
     user: User = Depends(require_password_complete),
     _csrf: None = Depends(require_csrf),
 ):
     """Receive a resume PDF, persist it under `<data_dir>/uploads/<user_id>/`,
-    extract plaintext via `pdfplumber`, and return a confirmation partial.
+    extract plaintext via `pdfplumber`, persist the text on `Profile.raw_resume_text`,
+    heuristically populate empty identity fields (full_name / email / phone),
+    and return a confirmation partial.
 
-    Plan 0.7.0.48 Wave 2 (2026-05-25): replaces the prior SSE+fake-session
-    stub. No LLM call — pdfplumber raw text only. The extracted text is
-    not yet persisted to Profile (operator fills profile fields manually);
-    persistence is a future plan once we have an LLM-driven extractor.
+    Plan 0.7.0.48 Wave 3 fold-in (2026-05-25): Wave 2 dropped the extracted
+    text on the floor. Now we persist + heuristically backfill empty profile
+    identity fields (regex only — no LLM call per owner directive). Operator
+    hand-edits are never overwritten.
 
     Plan 0.7.0.48 Wave 2 hacker MED fold-in (2026-05-25): `require_csrf`
     enforces double-submit on this state-changing route. The dropzone form
@@ -172,6 +178,12 @@ async def post_extraction_upload(
             status_code=422,
             detail="Couldn't read that PDF. Try a different file.",
         ) from exc
+
+    # Best-effort persistence: the PDF is already on disk regardless.
+    try:
+        await profile_service.set_raw_resume_text(session, user.id, extracted)
+    except Exception as exc:  # noqa: BLE001 — persistence is best-effort
+        log.warning("set_raw_resume_text failed user=%s: %s", user.id, exc)
 
     log.info(
         "extraction upload user=%s file=%s bytes=%d chars=%d",

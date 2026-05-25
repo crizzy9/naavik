@@ -111,6 +111,49 @@
       {% with profile=profile %}
         {% include "components/application_qs_form.html" %}
       {% endwith %}
+
+      {# Raw resume text — source-of-truth for what the parser saw #}
+      <details class="bg-slate-900 border border-slate-800 rounded-lg p-5 group">
+        <summary class="flex items-center justify-between gap-3 cursor-pointer text-sm font-medium text-slate-100 list-none">
+          <span class="flex items-center gap-2">
+            <i data-lucide="file-text" class="h-4 w-4 text-slate-400" stroke-width="1.5"></i>
+            Raw resume text (parsed source)
+            {% if profile.raw_resume_text %}
+              <span class="text-xs text-slate-500 font-mono">· {{ profile.raw_resume_text | length }} chars</span>
+            {% else %}
+              <span class="text-xs text-slate-500">· none uploaded yet</span>
+            {% endif %}
+          </span>
+          <i data-lucide="chevron-down" class="h-4 w-4 text-slate-500 group-open:rotate-180 transition" stroke-width="1.5"></i>
+        </summary>
+        <div class="mt-4 flex flex-col gap-4">
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Updated when you upload a resume PDF. Edit the profile fields above — this is read-only source-of-truth showing what the heuristic parser saw.
+          </p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <label for="resume-replace-input"
+                   class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium cursor-pointer transition">
+              <i data-lucide="upload" class="h-4 w-4" stroke-width="1.5"></i>
+              Replace resume
+            </label>
+            <span class="text-xs text-slate-500">PDF only · max 10 MB</span>
+          </div>
+          <form
+            hx-post="/api/v1/extraction/upload"
+            hx-encoding="multipart/form-data"
+            hx-target="#resume-replace-result"
+            hx-swap="innerHTML"
+            hx-trigger="change from:#resume-replace-input">
+            <input id="resume-replace-input" name="resume" type="file" accept="application/pdf" class="sr-only">
+          </form>
+          <div id="resume-replace-result"></div>
+          {% if profile.raw_resume_text %}
+            <pre class="bg-slate-950 border border-slate-800 rounded p-4 text-xs text-slate-300 font-mono whitespace-pre-wrap max-h-96 overflow-auto">{{ profile.raw_resume_text }}</pre>
+          {% else %}
+            <div class="text-xs text-slate-500 italic">Upload a resume from /onboarding (or the button above) to populate.</div>
+          {% endif %}
+        </div>
+      </details>
     </div>
 
     {# Sticky right rail #}

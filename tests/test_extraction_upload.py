@@ -1,4 +1,4 @@
-"""Resume PDF upload — plan 0.7.0.48 Wave 2 (2026-05-25).
+"""Resume PDF upload — plan 0.7.0.48 Wave 2 (2026-05-25) + Wave 3 fold-in.
 
 Pins the happy-path + validation surfaces of `/api/v1/extraction/upload`:
 
@@ -7,6 +7,9 @@ Pins the happy-path + validation surfaces of `/api/v1/extraction/upload`:
   - Non-PDF content-type → 422 (no file written).
   - Empty body → 422.
   - >10 MB body → 413.
+  - Wave 3 (2026-05-25): extracted text persisted via
+    `profile_service.set_raw_resume_text`; heuristic identity-field
+    populate; existing operator hand-edits NOT overwritten.
 
 The endpoint requires real-JWT auth via `require_password_complete`; we
 override the dep with a SimpleNamespace stub user (same pattern as
@@ -78,12 +81,17 @@ def client_with_user(tmp_path: Path, monkeypatch):
 
     A dedicated `test_upload_csrf_enforced` (below) does NOT override
     `require_csrf` to pin the regression.
+
+    Wave 3 fold-in (2026-05-25): `profile_service.set_raw_resume_text` is
+    stub-replaced with a recorder so the happy-path test can assert the
+    call shape without mutating the in-memory `sd.PROFILE` singleton.
     """
     from fastapi.testclient import TestClient
 
     from api.auth import require_csrf
     from config import settings as app_settings
     from main import app
+    from services import profile_service
     from services.auth import require_password_complete
 
     user = SimpleNamespace(
@@ -99,18 +107,25 @@ def client_with_user(tmp_path: Path, monkeypatch):
     def _csrf_pass() -> None:
         return None
 
+    calls: list[dict[str, object]] = []
+
+    async def _stub_set_raw_resume_text(_session, user_id, text):
+        calls.append({"user_id": user_id, "text": text})
+        return None
+
     app.dependency_overrides[require_password_complete] = _override
     app.dependency_overrides[require_csrf] = _csrf_pass
     monkeypatch.setattr(app_settings, "data_dir", str(tmp_path))
+    monkeypatch.setattr(profile_service, "set_raw_resume_text", _stub_set_raw_resume_text)
 
-    yield TestClient(app, raise_server_exceptions=True), user, tmp_path
+    yield TestClient(app, raise_server_exceptions=True), user, tmp_path, calls
 
     app.dependency_overrides.pop(require_password_complete, None)
     app.dependency_overrides.pop(require_csrf, None)
 
 
-def test_upload_happy_path_writes_pdf_and_returns_partial(client_with_user):
-    client, user, data_dir = client_with_user
+def test_upload_happy_path_writes_pdf_and_persists_text(client_with_user):
+    client, user, data_dir, calls = client_with_user
     payload = _hand_rolled_pdf_bytes()
     r = client.post(
         "/api/v1/extraction/upload",
@@ -130,9 +145,17 @@ def test_upload_happy_path_writes_pdf_and_returns_partial(client_with_user):
     assert len(saved) == 1, f"expected exactly one saved PDF, got {len(saved)}"
     assert saved[0].read_bytes() == payload
 
+    # Wave 3: route calls set_raw_resume_text with the user's id + extracted
+    # text. The hand-rolled PDF is text-empty (one blank page), so the
+    # extracted string is "" — the call still fires so the column gets
+    # reset to "" on a fresh upload.
+    assert len(calls) == 1
+    assert calls[0]["user_id"] == user.id
+    assert isinstance(calls[0]["text"], str)
+
 
 def test_upload_rejects_non_pdf_content_type(client_with_user):
-    client, _user, _data_dir = client_with_user
+    client, _user, _data_dir, _calls = client_with_user
     r = client.post(
         "/api/v1/extraction/upload",
         files={"resume": ("evil.docx", b"PK\x03\x04", "application/vnd.openxmlformats")},
@@ -141,7 +164,7 @@ def test_upload_rejects_non_pdf_content_type(client_with_user):
 
 
 def test_upload_rejects_empty_body(client_with_user):
-    client, _user, _data_dir = client_with_user
+    client, _user, _data_dir, _calls = client_with_user
     r = client.post(
         "/api/v1/extraction/upload",
         files={"resume": ("empty.pdf", b"", "application/pdf")},
@@ -150,7 +173,7 @@ def test_upload_rejects_empty_body(client_with_user):
 
 
 def test_upload_rejects_oversize_body(client_with_user):
-    client, _user, _data_dir = client_with_user
+    client, _user, _data_dir, _calls = client_with_user
     # 11 MB > 10 MB cap. Bytes don't need to be valid PDF — size-check runs
     # before pdfplumber.
     big = b"%PDF-1.4\n" + (b"\x00" * (11 * 1024 * 1024))
@@ -159,6 +182,23 @@ def test_upload_rejects_oversize_body(client_with_user):
         files={"resume": ("huge.pdf", big, "application/pdf")},
     )
     assert r.status_code == 413
+
+
+def test_upload_with_text_pdf_populates_extracted_text(client_with_user):
+    """Wave 3 fold-in: a real text-bearing PDF round-trips through
+    pdfplumber and lands as the second arg to `set_raw_resume_text`.
+
+    Skips when `reportlab` is missing (CI without the dev extra).
+    """
+    client, user, _data_dir, calls = client_with_user
+    payload = _minimal_pdf_bytes()
+    r = client.post(
+        "/api/v1/extraction/upload",
+        files={"resume": ("text.pdf", payload, "application/pdf")},
+    )
+    assert r.status_code == 200
+    assert len(calls) == 1
+    assert "Hello Naavik test PDF" in str(calls[0]["text"])
 
 
 def test_upload_csrf_enforced(tmp_path: Path, monkeypatch):

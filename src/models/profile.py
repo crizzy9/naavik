@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Column, DateTime, Index, String
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
 
@@ -84,6 +84,11 @@ class Profile(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
+
+    # Raw plaintext from the most-recent resume upload (pdfplumber extract).
+    # Drives the "Raw resume text (parsed source)" panel on /profile/edit so
+    # operators can see what the heuristic parser saw.
+    raw_resume_text: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
     created_at: datetime = Field(
         default_factory=utcnow,
