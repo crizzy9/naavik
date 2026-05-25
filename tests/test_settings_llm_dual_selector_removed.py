@@ -66,3 +66,86 @@ def test_settings_llm_tab_renders_env_resolved_active_provider_chip(
     assert 'data-active-provider="anthropic"' in body
     # Defensive: should NOT carry the deleted "Active provider" header.
     assert "Active provider</h2>" not in body
+
+
+# ── 0.7.0.48 fold-in: env-var workflow clarifications ───────────────────
+
+
+def test_settings_llm_tab_renders_howto_instructional_block(client: TestClient, auth_cookies):
+    """The "How LLM providers work" block always renders + names the env vars."""
+    r = client.get("/settings/llm-provider", cookies=auth_cookies)
+    assert r.status_code == 200
+    body = r.text
+    assert "data-llm-howto" in body
+    assert "How LLM providers work" in body
+    # Names the canonical env-var workflow.
+    assert "ANTHROPIC_API_KEY" in body
+    assert "OPENAI_API_KEY" in body
+    assert "OLLAMA_BASE_URL" in body
+    assert "restart" in body.lower()
+
+
+def test_settings_llm_tab_renders_unconfigured_warning_when_no_env_keys(
+    client: TestClient, auth_cookies, monkeypatch
+):
+    """No provider env-configured → prominent amber `data-llm-warning="unconfigured"` banner."""
+    from config import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "anthropic_api_key", None)
+    monkeypatch.setattr(app_settings, "openai_api_key", None)
+    monkeypatch.setattr(app_settings, "ollama_base_url", None)
+
+    r = client.get("/settings/llm-provider", cookies=auth_cookies)
+    assert r.status_code == 200
+    body = r.text
+    assert 'data-llm-warning="unconfigured"' in body
+    assert "No LLM provider configured" in body
+    # Mismatch banner must NOT also fire (mutually exclusive).
+    assert 'data-llm-warning="mismatch"' not in body
+
+
+def test_settings_llm_tab_renders_mismatch_warning_when_pref_lacks_env(
+    client: TestClient, auth_cookies, monkeypatch
+):
+    """Saved pref = ANTHROPIC, only OPENAI_API_KEY set → mismatch banner.
+
+    Models for the active (env-resolved) provider populate the dropdown so the
+    operator sees the catalog for the provider LLM calls will actually use.
+    """
+    from config import settings as app_settings
+
+    # `Settings.llm_provider` defaults to ANTHROPIC for the sample-data user.
+    monkeypatch.setattr(app_settings, "anthropic_api_key", None)
+    monkeypatch.setattr(app_settings, "openai_api_key", "sk-openai-mismatch")
+
+    r = client.get("/settings/llm-provider", cookies=auth_cookies)
+    assert r.status_code == 200
+    body = r.text
+    assert 'data-llm-warning="mismatch"' in body
+    assert 'data-active-provider="openai"' in body
+    # The mismatch section carries pref-vs-active attributes.
+    assert 'data-pref-provider="anthropic"' in body
+    # Model dropdown follows env-resolved provider (OpenAI models, not Claude).
+    assert "gpt-4o" in body
+    # Unconfigured banner must NOT also fire.
+    assert 'data-llm-warning="unconfigured"' not in body
+
+
+def test_settings_llm_tab_active_chip_when_pref_matches_env(
+    client: TestClient, auth_cookies, monkeypatch
+):
+    """Saved pref = ANTHROPIC + `ANTHROPIC_API_KEY` set → no warning banner."""
+    from config import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "anthropic_api_key", "sk-ant-match")
+    monkeypatch.setattr(app_settings, "openai_api_key", None)
+
+    r = client.get("/settings/llm-provider", cookies=auth_cookies)
+    assert r.status_code == 200
+    body = r.text
+    assert 'data-llm-warning="mismatch"' not in body
+    assert 'data-llm-warning="unconfigured"' not in body
+    # Active-provider env card carries `data-is-active="true"`.
+    assert 'data-env-indicator="anthropic"\n               data-configured="true"' in body or (
+        'data-env-indicator="anthropic"' in body and 'data-is-active="true"' in body
+    )
