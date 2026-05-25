@@ -167,7 +167,15 @@
           </form>
           <div id="resume-replace-result"></div>
           {% if profile.raw_resume_text %}
-            <pre class="bg-slate-950 border border-slate-800 rounded p-4 text-xs text-slate-300 font-mono whitespace-pre-wrap max-h-96 overflow-auto">{{ profile.raw_resume_text }}</pre>
+            {# Plan 0.7.0.48 W3 hacker LOW fold-in (2026-05-25): truncate
+               unbounded raw_resume_text render at 32 KB so an adversarial
+               PDF can't slow a single-page render to a crawl (self-DoS).
+               The `max-h-96 overflow-auto` already scroll-bounds the
+               visible area; this caps the bytes the browser parses. #}
+            {% set _resume_display_cap = 32 * 1024 %}
+            <pre class="bg-slate-950 border border-slate-800 rounded p-4 text-xs text-slate-300 font-mono whitespace-pre-wrap max-h-96 overflow-auto">{{ profile.raw_resume_text[:_resume_display_cap] }}{% if profile.raw_resume_text | length > _resume_display_cap %}
+
+… (truncated · upload smaller resume to see more){% endif %}</pre>
           {% else %}
             <div class="text-xs text-slate-500 italic">Upload a resume from /onboarding (or the button above) to populate.</div>
           {% endif %}

@@ -223,9 +223,19 @@ async def update_field(
     return profile
 
 
-_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
-_PHONE_RE = re.compile(r"(\+?\d[\d\s\-().]{8,}\d)")
-_NAME_ALLOWED_RE = re.compile(r"^[A-Za-z][A-Za-z\s\-'.]*$")
+# Plan 0.7.0.48 W3 hacker HIGH fold-in (2026-05-25): bounded quantifiers
+# on email/phone regexes + 32 KB input truncation defense-in-depth. The
+# previous unbounded `[\w.+-]+@[\w-]+\.[\w.-]+` showed catastrophic
+# backtracking on adversarial PDF text (measured: 20 KB alpha → 0.8 s;
+# 100 KB → 19.6 s, blocking the async event loop in C). Combined with
+# the now-open signup, any unauth visitor could DoS the instance via a
+# crafted PDF upload. Bounds match RFC 5321 local-part (64) + domain
+# label (63 per label, 253 total) + TLD (63). Phone capped per E.164
+# practical limit (15 digits + ~10 separators).
+_HEURISTIC_INPUT_CAP = 32 * 1024  # 32 KB — defense-in-depth truncation
+_EMAIL_RE = re.compile(r"[\w.+-]{1,64}@[\w-]{1,255}\.[\w.-]{1,255}")
+_PHONE_RE = re.compile(r"(\+?\d[\d\s\-().]{8,30}\d)")
+_NAME_ALLOWED_RE = re.compile(r"^[A-Za-z][A-Za-z\s\-'.]{0,59}$")
 
 
 def parse_resume_heuristics(text: str) -> dict[str, str]:
@@ -234,10 +244,16 @@ def parse_resume_heuristics(text: str) -> dict[str, str]:
     Returns a dict with keys present only when a candidate was found. The
     caller decides whether to populate (we never overwrite operator edits
     in `set_raw_resume_text`).
+
+    Input is truncated to `_HEURISTIC_INPUT_CAP` before any regex runs —
+    defense in depth on top of the bounded quantifiers above. A real
+    resume's first-page email/name/phone sits well within 32 KB.
     """
     out: dict[str, str] = {}
     if not text:
         return out
+    if len(text) > _HEURISTIC_INPUT_CAP:
+        text = text[:_HEURISTIC_INPUT_CAP]
     if m := _EMAIL_RE.search(text):
         out["email"] = m.group(0)
     if m := _PHONE_RE.search(text):

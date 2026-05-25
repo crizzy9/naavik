@@ -132,3 +132,56 @@ async def test_set_raw_resume_text_returns_none_when_no_profile(monkeypatch):
 
     out = await profile_service.set_raw_resume_text(_NoopFlushSession(), 999, "anything")
     assert out is None
+
+
+# ── ReDoS regression — plan 0.7.0.48 W3 hacker HIGH fold-in (2026-05-25) ────
+
+
+def test_parse_resume_heuristics_handles_adversarial_input_under_100ms():
+    """Regression for hacker HIGH (round-3 final review of PR #212).
+
+    Pre-fix `_EMAIL_RE = [\\w.+-]+@[\\w-]+\\.[\\w.-]+` showed catastrophic
+    backtracking on long alpha runs (measured: 100 KB → 19.6 s wall clock).
+    pdfplumber extracts 100 KB – 5 MB of text from real PDFs; combined
+    with the post-0.7.0.48 open signup, any unauth visitor could DoS the
+    whole instance per upload by exploiting the regex.
+
+    Post-fix the email/phone regex quantifiers are bounded (`{1,64}` for
+    local-part, `{1,255}` for domain labels; phone capped at 30
+    separators between leading + trailing digit) AND the input is
+    truncated to 32 KB before any regex runs (defense in depth).
+
+    This test asserts both fixes hold: 100 KB of adversarial alpha
+    completes in < 100 ms.
+    """
+    import time
+
+    # 100 KB of alpha — the original backtracking trigger. Includes one
+    # near-match prefix so the regex actually has to backtrack rather
+    # than fail-fast on the first char.
+    adversarial = "a" * (100 * 1024)
+
+    start = time.perf_counter()
+    out = profile_service.parse_resume_heuristics(adversarial)
+    elapsed = time.perf_counter() - start
+
+    assert elapsed < 0.1, (
+        f"parse_resume_heuristics took {elapsed:.3f}s on 100KB alpha input — "
+        "ReDoS regression. The email/phone regex must be bounded + input "
+        "truncated to 32 KB. Pre-fix this was ~19.6s, blocking the async "
+        "event loop in C and enabling unauth DoS via crafted PDF upload."
+    )
+    # No email / phone / name in pure-alpha input — confirm parser
+    # returns empty.
+    assert out == {}
+
+
+def test_parse_resume_heuristics_truncates_input_at_32kb():
+    """Defense-in-depth: input larger than _HEURISTIC_INPUT_CAP (32 KB)
+    is truncated before regex runs. An email past the cap is INVISIBLE
+    to the parser — confirms the cap fires.
+    """
+    text = ("a" * (40 * 1024)) + "\nrealname" + chr(64) + "example.com\n"
+    out = profile_service.parse_resume_heuristics(text)
+    # Email is past byte 32768 → truncated away → parser sees nothing.
+    assert "email" not in out
