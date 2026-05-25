@@ -325,8 +325,9 @@ def test_unauthenticated_caller_gets_401_across_groups(client: TestClient):
 
 class _FakeUserCountSession:
     """Stand-in `AsyncSession` whose `.exec(...)` returns a result wrapping
-    the configured count value. Mirrors the shape `_compute_signup_disabled`
-    + `post_signup` unwrap (`.one()` returns a tuple-like with `[0]` = int).
+    the configured count value. Mirrors the User-count-probe pattern used by
+    `post_signup` + `post_profile_from_extraction` (`.one()` returns a
+    tuple-like with `[0]` = int).
     """
 
     def __init__(self, count: int) -> None:

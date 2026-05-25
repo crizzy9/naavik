@@ -161,11 +161,10 @@ async def post_signup(
     keep_signed_in: Annotated[str | None, Form()] = None,
     session: AsyncSession = Depends(get_session),
 ):
-    """First-user bootstrap + multi-user signup (gated by Settings.allow_multiple_users).
-
-    On a fresh DB (no User row) any signup succeeds and the new account is
-    flagged `is_admin=True`. Once the first user exists, subsequent signups
-    return 403 unless the admin opted into multi-user via Settings.
+    """Open signup. First user becomes admin (`is_admin=True`); subsequent
+    users sign up as regular users (`is_admin=False`). No gate — operators
+    who need to lock down signups gate externally via firewall / reverse
+    proxy / OIDC (plan 0.7.0.48 supersedes 10b/10c/0.7.0.45/0.7.0.47).
     """
     from sqlalchemy import func
     from sqlmodel import select
@@ -189,10 +188,9 @@ async def post_signup(
     if "@" not in norm_email or "." not in norm_email.split("@", 1)[-1]:
         return _login_error_card("Enter a valid email address.", 422)
 
-    # Single-user MVP guard: if any User exists, signup is gated by
-    # Settings.allow_multiple_users on the existing instance Settings row.
-    # `session.exec(select(func.count()))` under SQLModel returns a Row, not
-    # the bare int — unwrap explicitly so the > 0 comparison works.
+    # First-user-becomes-admin probe: count of existing User rows feeds the
+    # `is_admin` flag below. `session.exec(select(func.count()))` returns a
+    # Row under SQLModel, not the bare int — unwrap explicitly.
     count_row = (await session.exec(select(func.count()).select_from(User))).one()
     if hasattr(count_row, "_mapping"):
         # SQLAlchemy Row → first column.
@@ -201,24 +199,6 @@ async def post_signup(
         existing_count = int(count_row[0])
     else:
         existing_count = int(count_row)
-
-    if existing_count > 0:
-        # Query the single boolean column directly. Loading the full Settings
-        # row via `select(Settings)` and reading the attribute hit a SQLAlchemy
-        # "_key_not_found" KeyError on `allow_multiple_users` under the live
-        # FastAPI worker (cached compiled SELECT did not pick up the freshly
-        # migrated column). Scalar select sidesteps the cache + ORM mapping.
-        allow_multi_scalar = await session.exec(
-            select(Settings.allow_multiple_users).order_by(Settings.user_id).limit(1)
-        )
-        allow_multi = bool(allow_multi_scalar.one_or_none())
-        if not allow_multi:
-            record_login_attempt(ip, success=False)
-            return _login_error_card(
-                "Sign-ups are disabled on this instance (single-user MVP). "
-                "Sign in with the existing account instead.",
-                status.HTTP_403_FORBIDDEN,
-            )
 
     if await get_user_by_email(session, norm_email) is not None:
         return _login_error_card(

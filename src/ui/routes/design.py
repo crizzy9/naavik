@@ -29,7 +29,8 @@ def _legacy_env_gate() -> bool:
 async def _settings_gate(session: AsyncSession) -> bool:
     """True iff any user has `Settings.debug=True`. Single-user MVP — first row wins."""
     try:
-        # Cheap: read settings for user_id=1 (single-user MVP).
+        # Cheap: read settings for user_id=1 (dev/seed convention; multi-user
+        # wiring is post-0.7.0.48 follow-up).
         s = await get_or_create(session, user_id=1)
         return bool(s.debug)
     except Exception:

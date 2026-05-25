@@ -180,7 +180,7 @@ def _make_sources_settings(**overrides):
         "notify_on_errors": True,
         "notifications_enabled": {},
         "portfolio_cors_allowed_origins": ["https://crypticsoul.dev"],
-        "allow_multiple_users": False,
+        "allow_multiple_users": True,
         "jwt_rotation_days": 90,
         "jwt_rotation_grace_days": 7,
         "debug": False,
@@ -502,7 +502,8 @@ def test_sources_tab_does_not_render_raw_meta_or_internal_fields(
 def test_submissions_helper_threads_user_id_one_under_phase_1_single_user_mode(
     client: TestClient, auth_cookies, monkeypatch
 ):
-    """The route helper passes user_id=1 to the service (Phase-1 single-user MVP).
+    """The route helper passes user_id=1 to the service (dev fixture;
+    multi-user-ready post-0.7.0.48).
 
     Mirrors the latent IDOR captured against `_build_sources_view` in PR #149
     (`0.2.7.02`). Multi-user enforcement upgrades happen once real auth lands.

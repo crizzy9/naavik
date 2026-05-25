@@ -279,6 +279,116 @@ def test_signup_rejects_invalid_email_shape() -> None:
     assert "valid email" in r.text
 
 
+def test_signup_succeeds_when_user_exists() -> None:
+    """Plan 0.7.0.48 (2026-05-24, supersedes 10b/10c/0.7.0.45/0.7.0.47):
+    no signup gate. Second signup succeeds with is_admin=False; first
+    user (admin) remains unchanged. The pre-fix behavior was 403.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.auth import router as api_auth_router
+    from db.session import get_session
+
+    added_users: list = []
+    next_id = [1]
+
+    class _StubSession:
+        """Stub AsyncSession that simulates the signup-path interactions.
+
+        Tracks adds (so the count probe sees them), assigns sequential ids
+        on flush, and accepts commits/queries the way the live ORM does.
+        """
+
+        async def exec(self, _stmt):
+            # The signup endpoint calls:
+            #   1. select(func.count()).select_from(User) — count probe
+            #   2. (via get_user_by_email) select(User).where(email == ...)
+            # We don't distinguish — first call is the count, second is the
+            # email lookup (we always return None for it so signup proceeds).
+            count = sum(1 for u in added_users if type(u).__name__ == "User")
+            call_n = self._exec_calls
+            self._exec_calls += 1
+
+            class _Result:
+                def __init__(self, val):
+                    self._val = val
+
+                def one(self):
+                    return (self._val,)
+
+                def one_or_none(self):
+                    return self._val
+
+                def first(self):
+                    return self._val
+
+                def scalar_one_or_none(self):
+                    return self._val
+
+            if call_n == 0:
+                # Count probe — return the tracked user count.
+                return _Result(count)
+            # get_user_by_email lookup — always miss (email is unique per test).
+            return _Result(None)
+
+        def __init__(self):
+            self._exec_calls = 0
+
+        def add(self, obj):
+            # Assign an id if it's a User row (mimicks autoincrement on flush).
+            if type(obj).__name__ == "User" and getattr(obj, "id", None) is None:
+                obj.id = next_id[0]
+                next_id[0] += 1
+            added_users.append(obj)
+
+        async def flush(self):
+            return None
+
+        async def commit(self):
+            return None
+
+        async def refresh(self, _obj):
+            return None
+
+        async def rollback(self):
+            return None
+
+    async def _override_session():
+        yield _StubSession()
+
+    app = FastAPI()
+    app.include_router(api_auth_router)
+    app.dependency_overrides[get_session] = _override_session
+    client = TestClient(app)
+
+    # User 1 — first signup, becomes admin.
+    r1 = client.post(
+        "/api/v1/auth/signup",
+        data={"email": "admin@local.test", "password": "AdminPass1234"},
+    )
+    assert r1.status_code == 204, f"first signup expected 204, got {r1.status_code}: {r1.text}"
+    assert r1.headers.get("hx-redirect") == "/onboarding"
+
+    user1 = next(u for u in added_users if type(u).__name__ == "User")
+    assert user1.is_admin is True, "first signup must mint admin"
+
+    # User 2 — second signup, would have been 403 pre-fix; now succeeds.
+    r2 = client.post(
+        "/api/v1/auth/signup",
+        data={"email": "second@local.test", "password": "SecondUser1234"},
+    )
+    assert r2.status_code == 204, (
+        f"second signup expected 204 (was 403 pre-plan-0.7.0.48), got {r2.status_code}: {r2.text}"
+    )
+    assert r2.headers.get("hx-redirect") == "/onboarding"
+
+    users = [u for u in added_users if type(u).__name__ == "User"]
+    assert len(users) == 2, f"expected 2 users added, got {len(users)}"
+    assert users[1].is_admin is False, "subsequent signups must NOT mint admin"
+    assert users[1].email == "second@local.test"
+
+
 def test_signup_password_round_trips_via_real_bcrypt() -> None:
     """Whatever is stored MUST be a real bcrypt hash that verify_password accepts."""
     raw = "hunter2hunter2"

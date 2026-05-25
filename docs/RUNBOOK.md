@@ -286,7 +286,7 @@ GROUP BY provider, model
 ORDER BY total_cost DESC;
 ```
 
-Expected for healthy production (single user, semi-active day): < 50 calls, < $1 spend, > 90% ok-rate. Spike → investigate the calling service.
+Expected for a healthy semi-active day, per active user: < 50 calls, < $1 spend, > 90% ok-rate. Spike → investigate the calling service.
 
 ### 3.3 Inspect DRAFT lifecycle
 
@@ -436,7 +436,7 @@ From `docs/plans/POST_PHASE_1.md` § Cross-cutting concerns.
 ```sql
 -- 1. Cost in last 24h
 SELECT SUM(cost_usd) FROM api_usage WHERE occurred_at >= now() - interval '24 hours';
--- Healthy: < $1 single-user, < $5 multi-user (when applicable).
+-- Healthy: < $1 per active user / day; scale linearly with active users.
 
 -- 2. Failure rate in last 24h
 SELECT

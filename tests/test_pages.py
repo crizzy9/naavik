@@ -244,7 +244,7 @@ def test_login_invalid_mode_rejected(client: TestClient):
     assert r.status_code == 422
 
 
-# ── Plan 10c (10c.2) — signup CTA promotion + signup_disabled gate ───────
+# ── Plan 10c (10c.2a) + 0.7.0.48 — signup CTA promotion ─────────────────
 
 
 def test_login_signin_has_prominent_signup_link(client: TestClient):
@@ -276,53 +276,14 @@ def test_login_signin_has_prominent_signup_link(client: TestClient):
     assert "/login?mode=signup" not in footer_html
 
 
-def test_login_signup_mode_renders_form_on_fresh_db(client: TestClient, monkeypatch):
-    """On a fresh DB (no users), `/login?mode=signup` renders the signup form.
-
-    Plan 10c (10c.2b, 2026-05-11): server-side `signup_disabled` is False
-    when the User table is empty, so the form renders normally.
-    """
-    from ui.routes import auth as auth_routes
-
-    async def _gate_false(_session):
-        return False
-
-    monkeypatch.setattr(auth_routes, "_compute_signup_disabled", _gate_false)
-
+def test_login_signup_mode_renders_form(client: TestClient):
+    """`/login?mode=signup` renders the signup form unconditionally (plan 0.7.0.48)."""
     r = client.get("/login?mode=signup")
     assert r.status_code == 200
     body = r.text
     assert 'hx-post="/api/v1/auth/signup"' in body
     assert "Create your account" in body
     assert 'data-signup-disabled-banner="true"' not in body
-
-
-def test_login_signup_mode_renders_banner_on_seeded_db(client: TestClient, monkeypatch):
-    """When `signup_disabled` is True (seeded single-user DB),
-    `/login?mode=signup` renders an explanatory banner instead of the
-    form so the operator doesn't submit a request that comes back 403.
-
-    Plan 10c (10c.2b, 2026-05-11).
-    """
-    from ui.routes import auth as auth_routes
-
-    async def _gate_true(_session):
-        return True
-
-    monkeypatch.setattr(auth_routes, "_compute_signup_disabled", _gate_true)
-
-    r = client.get("/login?mode=signup")
-    assert r.status_code == 200
-    body = r.text
-
-    assert 'data-signup-disabled-banner="true"' in body
-    assert "This instance already has an account." in body
-    assert "Settings · Deployment" in body
-    # Form is suppressed.
-    assert 'hx-post="/api/v1/auth/signup"' not in body
-    # Lucide lock icon, stroke width 1.5 (DESIGN.md § Iconography).
-    assert 'data-lucide="lock"' in body
-    assert 'stroke-width="1.5"' in body
 
 
 # ── Plan 18 (PC.6) — /auth/change-password page ─────────────────────────

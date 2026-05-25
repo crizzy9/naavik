@@ -311,7 +311,7 @@ async def post_auto_apply_drain(
 
     # Resolve per authed caller (hacker MED-2 PR #193 fix). Pattern matches
     # put_sources (line 403) + put_generation (line 487). Avoids destructive
-    # cross-tenant drain in any future allow_multiple_users path.
+    # cross-tenant drain in any future multi-user path.
     user_id = _effective_user_id(_user)
     drained = await application_service_mod.drain_auto_apply_queue(
         session, user_id=user_id, reason="settings_drain"
