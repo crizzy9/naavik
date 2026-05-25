@@ -174,8 +174,31 @@ def test_settings_all_seven_tabs(client: TestClient, auth_cookies, monkeypatch):
     monkeypatch.setattr(job_service, "list_recent_scrape_runs", _fake_recent_runs)
     monkeypatch.setattr(application_service, "aggregate_submission_failures", _fake_failures)
     monkeypatch.setattr(llm_tracker, "today_cost_usd", _fake_today_cost)
+
+    # 0.7.0.48 fold-in — extending the loop to cover `security` (skipped pre-fix)
+    # tripped _NoopSession not having `.exec`. Stub the security panel builder
+    # so the route renders to base.html w/ sidebar without hitting the DB.
+    from ui.routes import settings as settings_routes
+
+    async def _fake_security_view(session, *, user_id):
+        return {
+            "active_key": None,
+            "retiring_keys": [],
+            "retired_count": 0,
+            "rotation_days": 90,
+            "rotation_grace_days": 7,
+        }
+
+    monkeypatch.setattr(settings_routes, "_build_security_view", _fake_security_view)
     app.dependency_overrides[get_session] = _fake_get_session
     try:
+        # 0.7.0.48 fold-in (bug #3): every settings tab MUST return the full
+        # base.html shell (sidebar included) even under HX-Request, because
+        # `hx-boost="true"` on <body> sends every boosted nav with that header
+        # and HTMX needs a full body in the response to do its swap. Five
+        # routes (sources/submissions/llm-provider/generation/security) used
+        # to return a partial when HX-Request: true — that stripped the sidebar
+        # on click.
         for tab in (
             "llm-provider",
             "deployment",
@@ -184,11 +207,46 @@ def test_settings_all_seven_tabs(client: TestClient, auth_cookies, monkeypatch):
             "auto-apply",
             "sources",
             "submissions",
+            "generation",
+            "security",
         ):
-            r = client.get(f"/settings/{tab}", cookies=auth_cookies)
-            assert r.status_code == 200, f"/settings/{tab}: HTTP {r.status_code}"
+            for headers in ({}, {"HX-Request": "true", "HX-Boosted": "true"}):
+                r = client.get(f"/settings/{tab}", cookies=auth_cookies, headers=headers)
+                assert r.status_code == 200, (
+                    f"/settings/{tab} headers={headers}: HTTP {r.status_code}"
+                )
+                body = r.text
+                assert 'id="sidebar-drawer"' in body, (
+                    f"/settings/{tab} headers={headers}: sidebar drawer missing — "
+                    "hx-boost click would strip the sidebar"
+                )
+                assert "Naavik" in body, f"/settings/{tab} headers={headers}: lockup missing"
     finally:
         app.dependency_overrides.pop(get_session, None)
+
+
+def test_tracking_list_fragment_is_partial_not_full_page(client: TestClient, auth_cookies):
+    """0.7.0.48 fold-in (bug #6): /_fragments/tracking/list MUST return the
+    list partial only — NOT a full base.html page. view_toggle.html points
+    HTMX at /_fragments/tracking/<view> precisely so the swap into
+    `#tracking-main` doesn't inject a duplicate sidebar inside the existing
+    layout. If this fragment regressed to extending base.html, the toggle
+    would render a second sidebar nested in the page.
+    """
+    for view in ("board", "list"):
+        r = client.get(f"/_fragments/tracking/{view}", cookies=auth_cookies)
+        assert r.status_code == 200, f"/_fragments/tracking/{view}: HTTP {r.status_code}"
+        body = r.text
+        assert 'id="sidebar-drawer"' not in body, (
+            f"/_fragments/tracking/{view}: sidebar drawer must NOT appear in the "
+            "fragment response — it would render a duplicate sidebar when swapped "
+            "into #tracking-main"
+        )
+        # Sanity check that the fragment IS returning the expected payload.
+        if view == "list":
+            assert "Company" in body, "list fragment missing list-table header"
+        else:
+            assert "data-column" in body, "board fragment missing column markers"
 
 
 def test_settings_unknown_tab_returns_404(client: TestClient, auth_cookies):
