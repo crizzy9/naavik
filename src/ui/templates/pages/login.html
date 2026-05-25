@@ -2,12 +2,22 @@
 {% set mode = mode | default("signin") %}
 {% set _requested_signup = (mode == "signup") %}
 {% set signup_disabled = signup_disabled | default(false) %}
-{# Plan 0.7.0.45 (2026-05-22): if signup is disabled, force `is_signup = false`
-   for the entire template — the heading, form-action, button label, and
-   alt-mode CTA all read this flag. `_requested_signup` is preserved so the
-   banner block can tell whether to render (true only when the user
-   intentionally hit `?mode=signup`). #}
-{% set is_signup = _requested_signup and not signup_disabled %}
+{# Plan 0.7.0.47 (2026-05-24): `is_signup` honors the operator's explicit
+   `?mode=signup` intent regardless of `signup_disabled`. The banner block
+   below contextualizes the gate; the signup form itself stays accessible
+   so a 403 (or successful multi-user signup if the operator enabled it)
+   lands inline via `hx-target-error`. The "First time? Create account"
+   alt-CTA on the signin page is also unconditional — operators have a
+   discoverable path to signup mode, and the banner explains the gate
+   once they get there.
+
+   Supersedes the 0.7.0.45 `_requested_signup and not signup_disabled`
+   rewrite which created a UI dead-end for operators who legitimately
+   needed to attempt signup (forgot credentials, want a fresh account,
+   testing the flow). The 0.7.0.45 "operator misclicks signup" scenario
+   is covered by the form's existing "Already have an account? Sign in"
+   footer link (line 100 below). #}
+{% set is_signup = _requested_signup %}
 {% block title %}{% if is_signup %}Create account{% else %}Sign in{% endif %} — Naavik{% endblock %}
 
 {% block caller %}
@@ -30,21 +40,23 @@
     <p class="mt-1.5 text-sm text-slate-400">Sign in to your Naavik instance.</p>
   {% endif %}
 
-  {# Plan 10c (10c.2b, 2026-05-11) + Plan 0.7.0.45 (2026-05-22).
+  {# Plan 10c (10c.2b, 2026-05-11) + Plan 0.7.0.47 (2026-05-24).
 
      The banner fires when the operator hit `?mode=signup` ON a single-user
-     instance that already has an account. We display the banner explaining
-     why signup is disabled, then render the SIGNIN form below (controlled
-     by the top-of-template `is_signup` rewrite — `_requested_signup and
-     not signup_disabled` collapses to False here). The original
-     "banner-only, no form" UX was a dead-end. #}
+     instance that already has an account. Banner explains the gate; the
+     signup form renders BELOW so the operator can attempt submission
+     (the API at `src/api/auth.py:218` returns a 403 inline error card if
+     the gate actually fires). The banner also links to `/setup-help` for
+     the destructive-recovery path (Recipe 3 — wipe `.naavik/db`) used by
+     operators who lost their credentials. #}
   {% if _requested_signup and signup_disabled %}
     <div data-signup-disabled-banner="true" class="mt-6 rounded-lg bg-amber-500/10 border border-amber-500/30 p-4">
       <div class="flex gap-3 items-start">
         <i data-lucide="lock" class="h-5 w-5 text-amber-300 shrink-0" stroke-width="1.5"></i>
         <div class="flex-1 min-w-0">
           <h3 class="text-sm font-medium text-amber-100">This instance already has an account.</h3>
-          <p class="text-xs text-amber-200/80 mt-1">Sign-ups are disabled on a single-user instance. Use the form below to sign in, or contact your admin to enable multi-user (Settings · Deployment).</p>
+          <p class="text-xs text-amber-200/80 mt-1">Sign-ups are gated on a single-user instance. The form below will return 403 unless you enable multi-user in Settings · Deployment, or wipe and reset the instance via
+            <a href="/setup-help" class="font-medium underline underline-offset-2 hover:text-amber-50">Setup help →</a>.</p>
         </div>
       </div>
     </div>
@@ -89,17 +101,21 @@
         <span class="htmx-hide-loading">{% if is_signup %}Create account{% else %}Sign in{% endif %}</span>
       </button>
 
-      {# Plan 10c (10c.2a, 2026-05-11): prominent alternate-mode CTA below
-         the submit button. Lifted out of the footer so the operator finds
-         it before scanning past the SSO info-card. Plan 0.7.0.45 — hide the
-         "First time? Create account" link when signup_disabled, since
-         clicking it would just bounce them back to this same banner. #}
+      {# Plan 10c (10c.2a, 2026-05-11) + Plan 0.7.0.47 (2026-05-24):
+         prominent alternate-mode CTA below the submit button. Lifted out
+         of the footer so the operator finds it before scanning past the
+         SSO info-card. The "First time? Create account" link renders
+         unconditionally — operators on a single-user instance with an
+         existing account get the signup form on click, accompanied by
+         the amber banner explaining the gate and pointing at
+         `/setup-help` for recovery. Supersedes the 0.7.0.45 conditional
+         hide, which left operators without a discoverable signup path. #}
       {% if is_signup %}
         <p data-auth-mode-toggle="signin" class="mt-1 text-center text-sm text-slate-400">
           Already have an account?
           <a href="/login" class="text-indigo-300 hover:text-indigo-200 font-medium transition">Sign in</a>
         </p>
-      {% elif not signup_disabled %}
+      {% else %}
         <p data-auth-mode-toggle="signup" class="mt-1 text-center text-sm text-slate-400">
           First time?
           <a href="/login?mode=signup" class="text-indigo-300 hover:text-indigo-200 font-medium transition">Create account</a>

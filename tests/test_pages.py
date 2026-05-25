@@ -299,10 +299,14 @@ def test_login_signup_mode_renders_form_on_fresh_db(client: TestClient, monkeypa
 
 def test_login_signup_mode_renders_banner_on_seeded_db(client: TestClient, monkeypatch):
     """When `signup_disabled` is True (seeded single-user DB),
-    `/login?mode=signup` renders an explanatory banner instead of the
-    form so the operator doesn't submit a request that comes back 403.
+    `/login?mode=signup` renders an explanatory banner ABOVE the signup
+    form (operator's explicit `?mode=signup` intent honored) so they can
+    either attempt submit (lands as 403 inline error card) or click the
+    banner's `/setup-help` recovery link.
 
-    Plan 10c (10c.2b, 2026-05-11).
+    Plan 10c (10c.2b, 2026-05-11) + Plan 0.7.0.47 (2026-05-24, supersedes
+    0.7.0.45 which had collapsed this to "render signin form instead",
+    creating a UI dead-end for legitimate signup attempts).
     """
     from ui.routes import auth as auth_routes
 
@@ -318,8 +322,12 @@ def test_login_signup_mode_renders_banner_on_seeded_db(client: TestClient, monke
     assert 'data-signup-disabled-banner="true"' in body
     assert "This instance already has an account." in body
     assert "Settings · Deployment" in body
-    # Form is suppressed.
-    assert 'hx-post="/api/v1/auth/signup"' not in body
+    # Plan 0.7.0.47: signup form renders alongside the banner so the
+    # operator's explicit `?mode=signup` intent is honored.
+    assert 'hx-post="/api/v1/auth/signup"' in body
+    # Plan 0.7.0.47: banner carries `/setup-help` recovery link for the
+    # forgot-credentials path.
+    assert 'href="/setup-help"' in body
     # Lucide lock icon, stroke width 1.5 (DESIGN.md § Iconography).
     assert 'data-lucide="lock"' in body
     assert 'stroke-width="1.5"' in body

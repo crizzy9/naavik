@@ -58,12 +58,18 @@ def test_login_page_renders_signin_form_by_default(client: TestClient):
     assert "Welcome back" in body
 
 
-def test_signup_disabled_banner_when_user_exists(client: TestClient, monkeypatch):
-    """When `_compute_signup_disabled` returns True → amber banner renders
-    AND the signin form is rendered alongside (plan 0.7.0.45 — the
-    original "banner-only, no form" UX was a dead-end; operator who
-    clicked "Create account" by mistake had no signin form to fall back
-    to without navigating away).
+def test_signup_disabled_renders_signup_form_with_banner(client: TestClient, monkeypatch):
+    """Plan 0.7.0.47 (2026-05-24, supersedes 0.7.0.45 UI fix): when
+    `_compute_signup_disabled` returns True AND operator hits
+    `/login?mode=signup`, the SIGNUP FORM renders alongside the amber
+    banner explaining the gate. The 0.7.0.45 "render signin form
+    instead" rewrite removed the operator's ability to attempt signup
+    from the UI; this plan restores explicit-intent honoring.
+
+    The form's API endpoint will 403 if the gate actually fires
+    (`src/api/auth.py:218`), but the operator gets an inline error card
+    via `hx-target-error="#login-card"` — not a silent demotion to a
+    different page.
     """
     from ui.routes import auth as auth_routes
 
@@ -77,20 +83,21 @@ def test_signup_disabled_banner_when_user_exists(client: TestClient, monkeypatch
     # The amber banner explains why signup is gated.
     assert "data-signup-disabled-banner" in body
     assert "This instance already has an account." in body
-    # The signin form is rendered immediately below the banner —
-    # operator can sign in without navigating away.
-    assert 'hx-post="/api/v1/auth/login"' in body
-    # No signup form (would 403 anyway).
-    assert 'hx-post="/api/v1/auth/signup"' not in body
+    # Signup form renders — operator's `?mode=signup` intent is honored.
+    assert 'hx-post="/api/v1/auth/signup"' in body
+    # Not the signin form.
+    assert 'hx-post="/api/v1/auth/login"' not in body
 
 
-def test_signup_disabled_renders_welcome_back_header(client: TestClient, monkeypatch):
-    """Plan 0.7.0.45: when signup_disabled fires on `?mode=signup`, the
-    template's `is_signup` flag is rewritten to False so the header
-    reads "Welcome back" (not "Create your account") + the submit button
-    reads "Sign in" (not "Create account") + the SSO info card renders.
-    Heading/button/CTA stay coherent with the signin form rendered below
-    the banner.
+def test_signup_disabled_renders_create_account_header(client: TestClient, monkeypatch):
+    """Plan 0.7.0.47 (2026-05-24, replaces 0.7.0.45's stale
+    `_renders_welcome_back_header`): when `signup_disabled` fires on
+    `?mode=signup`, `is_signup` stays True (per plan 0.7.0.47 — the
+    operator's explicit intent is honored). Heading reads "Create your
+    account", submit button reads "Create account", SSO info card is
+    suppressed (signin-only), and the "Already have an account? Sign
+    in" footer link covers the misclick-recovery case the 0.7.0.45 fix
+    was originally targeting.
     """
     from ui.routes import auth as auth_routes
 
@@ -100,15 +107,68 @@ def test_signup_disabled_renders_welcome_back_header(client: TestClient, monkeyp
     monkeypatch.setattr(auth_routes, "_compute_signup_disabled", _disabled)
     r = client.get("/login?mode=signup")
     body = r.text
-    assert "Welcome back" in body
-    assert "Create your account" not in body
-    # Submit button text mirrors signin mode.
-    assert "Sign in</span>" in body or ">Sign in<" in body
-    # SSO info card renders only in signin mode.
-    assert "SSO coming soon" in body
-    # "First time? Create account" CTA is hidden when signup is disabled
-    # (clicking it would just bounce back to this same banner).
-    assert "First time?" not in body
+    assert "Create your account" in body
+    assert "Welcome back" not in body
+    # Submit button text mirrors signup mode.
+    assert "Create account</span>" in body or ">Create account<" in body
+    # SSO info card renders only in signin mode — suppressed here.
+    assert "SSO coming soon" not in body
+    # Alt-mode CTA points BACK to /login signin — misclick recovery.
+    assert "Already have an account?" in body
+
+
+def test_signup_disabled_banner_carries_setup_help_link(client: TestClient, monkeypatch):
+    """Plan 0.7.0.47 (2026-05-24): the amber `signup_disabled` banner
+    MUST link to `/setup-help` so operators who lost their credentials
+    have a discoverable recovery path (Recipe 3 — wipe `.naavik/db`).
+    Without this link the operator has no escape from the gate other
+    than going to `psql` directly, which they can't be expected to know.
+    """
+    from ui.routes import auth as auth_routes
+
+    async def _disabled(session):
+        return True
+
+    monkeypatch.setattr(auth_routes, "_compute_signup_disabled", _disabled)
+    r = client.get("/login?mode=signup")
+    body = r.text
+    assert "data-signup-disabled-banner" in body
+    # Recovery affordance inline in the banner body.
+    assert 'href="/setup-help"' in body, (
+        "signup_disabled banner missing /setup-help link — operators who "
+        "lost credentials have no recovery path from the /login surface"
+    )
+
+
+def test_signup_disabled_create_account_link_visible_on_signin_default(
+    client: TestClient, monkeypatch
+):
+    """Plan 0.7.0.47 (2026-05-24, reverses 0.7.0.45's `elif not
+    signup_disabled` hide): `GET /login` (no mode param) MUST render
+    the "First time? Create account" alt-mode CTA even when signup is
+    disabled, so the operator has a discoverable path to signup mode.
+    The signup page itself explains the gate via the amber banner.
+
+    The 0.7.0.45 hide removed agency — operators saw the signin form
+    and had no UI affordance to even ATTEMPT signup or discover the
+    recovery flow.
+    """
+    from ui.routes import auth as auth_routes
+
+    async def _disabled(session):
+        return True
+
+    monkeypatch.setattr(auth_routes, "_compute_signup_disabled", _disabled)
+    r = client.get("/login")
+    assert r.status_code == 200
+    body = r.text
+    # Default signin surface — banner is suppressed (no _requested_signup).
+    assert "data-signup-disabled-banner" not in body
+    # Alt-mode CTA visible — operator can navigate to signup mode.
+    assert "First time?" in body
+    assert 'href="/login?mode=signup"' in body
+    # Still the signin form (mode default).
+    assert 'hx-post="/api/v1/auth/login"' in body
 
 
 def test_setup_help_link_path_matches_route(client: TestClient):
