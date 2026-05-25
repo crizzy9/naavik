@@ -180,10 +180,19 @@ async def post_extraction_upload(
         ) from exc
 
     # Best-effort persistence: the PDF is already on disk regardless.
+    # `set_raw_resume_text` flushes the TX (per service-layer convention);
+    # this route owns the commit (mirrors `src/api/profile.py:put_profile_bulk`
+    # + every other state-changing handler in the codebase). Without this
+    # commit the TX rolls back at request end + `raw_resume_text` never
+    # persists. (Plan 0.7.0.48 W3-followup fix — owner manual QA round 3
+    # surfaced raw_resume_text NULL post-upload despite the service call
+    # firing cleanly.)
     try:
         await profile_service.set_raw_resume_text(session, user.id, extracted)
+        await session.commit()
     except Exception as exc:  # noqa: BLE001 — persistence is best-effort
         log.warning("set_raw_resume_text failed user=%s: %s", user.id, exc)
+        await session.rollback()
 
     log.info(
         "extraction upload user=%s file=%s bytes=%d chars=%d",

@@ -160,6 +160,9 @@ _COLUMNS_ADDED_LATER: dict[str, frozenset[str]] = {
         {
             # 0020 plan 73
             "score_history",
+            # 0023 plan 0.7.0.48 W3 — raw_resume_text persisted from
+            # /api/v1/extraction/upload after pdfplumber raw-text extract.
+            "raw_resume_text",
         }
     ),
 }
