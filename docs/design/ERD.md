@@ -47,7 +47,7 @@ erDiagram
     }
 
     Settings {
-        int user_id PK_FK "→ User.id (1:1)"
+        int user_id PK "FK → User.id (1:1)"
         enum llm_provider "ANTHROPIC|OPENAI|OLLAMA"
         string llm_model
         bool auto_apply_enabled
@@ -129,7 +129,7 @@ erDiagram
 
     Profile {
         int id PK
-        int user_id FK_UK "→ User (1:1)"
+        int user_id FK "UK 1:1 → User"
         string full_name
         string headline
         string current_company
@@ -242,7 +242,7 @@ erDiagram
     }
 
     ProfileEmbedding {
-        int user_id PK_FK "→ User (1:1)"
+        int user_id PK "FK → User (1:1)"
         vector embedding "768d pgvector"
         string model "provider/model@dim"
         int dim
@@ -345,7 +345,7 @@ erDiagram
     }
 
     JobEmbedding {
-        int job_id PK_FK "→ Job (1:1)"
+        int job_id PK "FK → Job (1:1)"
         int user_id FK
         vector embedding "768d pgvector"
         string model "provider/model@dim"
