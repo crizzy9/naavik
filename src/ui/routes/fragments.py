@@ -99,15 +99,12 @@ async def profile_bullet_row(
     name="onboarding_step_fragment",
 )
 async def onboarding_step(request: Request, step: int):
-    if step not in (1, 2, 3):
+    # Plan 0.7.0.48 Wave 2 (2026-05-25): onboarding collapsed to a single
+    # upload step. The legacy SSE-extracting + review partials are deleted.
+    if step != 1:
         raise HTTPException(status_code=404, detail="Unknown step")
-    template_map = {
-        1: "pages/_onboarding_step_upload.html",
-        2: "pages/_onboarding_step_extracting.html",
-        3: "pages/_onboarding_step_review.html",
-    }
     return templates.TemplateResponse(
         request,
-        template_map[step],
-        {"extraction_id": "fake-1"},
+        "pages/_onboarding_step_upload.html",
+        {},
     )

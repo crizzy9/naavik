@@ -41,8 +41,9 @@ def test_login_page_renders_signup_form_when_no_user(client: TestClient):
     body = r.text
     # Form posts to the signup endpoint.
     assert 'hx-post="/api/v1/auth/signup"' in body
-    # Password hint visible (PC.6 complexity rules).
-    assert "12 characters" in body
+    # Password hint visible (PC.6 complexity rules; min-length lowered
+    # to 8 in plan 0.7.0.48 Wave 2).
+    assert "8 characters" in body
     # No signup-disabled banner anywhere (deleted in plan 0.7.0.48).
     assert "data-signup-disabled-banner" not in body
 

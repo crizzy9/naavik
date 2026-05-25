@@ -72,7 +72,9 @@ _login_attempts: dict[str, deque[datetime]] = {}
 
 # ── Password complexity (plan 18 / PC.6) ─────────────────────────────────
 
-PASSWORD_MIN_LENGTH = 12
+# Plan 0.7.0.48 Wave 2 (2026-05-25): 12 → 8 chars. 8 is the standard
+# self-hosted-app baseline; 12 was over-tuned for the original cloud framing.
+PASSWORD_MIN_LENGTH = 8
 
 
 def validate_password_complexity(plain: str) -> str | None:

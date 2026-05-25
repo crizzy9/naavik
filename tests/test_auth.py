@@ -259,11 +259,11 @@ def test_signup_rejects_short_password() -> None:
     client = _signup_client()
     r = client.post(
         "/api/v1/auth/signup",
-        data={"email": "[email protected]", "password": "short"},
+        data={"email": "[email protected]", "password": "abc"},
     )
     assert r.status_code == 422
-    # Plan 18 (PC.6): the 8-char rule tightened to 12 + complexity.
-    assert "at least 12 characters" in r.text
+    # Plan 0.7.0.48 Wave 2: min-length lowered 12 → 8 per owner directive.
+    assert "at least 8 characters" in r.text
     assert "naavik_session" not in r.cookies
 
 
@@ -280,9 +280,11 @@ def test_signup_rejects_invalid_email_shape() -> None:
 
 
 def test_signup_succeeds_when_user_exists() -> None:
-    """Plan 0.7.0.48 (2026-05-24, supersedes 10b/10c/0.7.0.45/0.7.0.47):
-    no signup gate. Second signup succeeds with is_admin=False; first
-    user (admin) remains unchanged. The pre-fix behavior was 403.
+    """Plan 0.7.0.48 Wave 1+2 (2026-05-24/25): no signup gate, no admin
+    differentiation. Second signup succeeds; every user has `is_admin=True`
+    by default (admin concept deprecated — every user owns their own data).
+    The pre-Wave-1 behavior was 403; the pre-Wave-2 behavior minted
+    `is_admin=False` for non-first users.
     """
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -294,46 +296,26 @@ def test_signup_succeeds_when_user_exists() -> None:
     next_id = [1]
 
     class _StubSession:
-        """Stub AsyncSession that simulates the signup-path interactions.
+        """Stub AsyncSession for the signup path.
 
-        Tracks adds (so the count probe sees them), assigns sequential ids
-        on flush, and accepts commits/queries the way the live ORM does.
+        Wave 2 dropped the `select(func.count())` probe (admin concept
+        deprecated). The only `exec` call now is `get_user_by_email`'s
+        `select(User).where(email == ...)`; we always return None so the
+        endpoint proceeds with user creation.
         """
 
         async def exec(self, _stmt):
-            # The signup endpoint calls:
-            #   1. select(func.count()).select_from(User) — count probe
-            #   2. (via get_user_by_email) select(User).where(email == ...)
-            # We don't distinguish — first call is the count, second is the
-            # email lookup (we always return None for it so signup proceeds).
-            count = sum(1 for u in added_users if type(u).__name__ == "User")
-            call_n = self._exec_calls
-            self._exec_calls += 1
-
             class _Result:
-                def __init__(self, val):
-                    self._val = val
-
-                def one(self):
-                    return (self._val,)
-
                 def one_or_none(self):
-                    return self._val
+                    return None
 
                 def first(self):
-                    return self._val
+                    return None
 
                 def scalar_one_or_none(self):
-                    return self._val
+                    return None
 
-            if call_n == 0:
-                # Count probe — return the tracked user count.
-                return _Result(count)
-            # get_user_by_email lookup — always miss (email is unique per test).
-            return _Result(None)
-
-        def __init__(self):
-            self._exec_calls = 0
+            return _Result()
 
         def add(self, obj):
             # Assign an id if it's a User row (mimicks autoincrement on flush).
@@ -362,7 +344,7 @@ def test_signup_succeeds_when_user_exists() -> None:
     app.dependency_overrides[get_session] = _override_session
     client = TestClient(app)
 
-    # User 1 — first signup, becomes admin.
+    # User 1 — first signup.
     r1 = client.post(
         "/api/v1/auth/signup",
         data={"email": "admin@local.test", "password": "AdminPass1234"},
@@ -371,9 +353,10 @@ def test_signup_succeeds_when_user_exists() -> None:
     assert r1.headers.get("hx-redirect") == "/onboarding"
 
     user1 = next(u for u in added_users if type(u).__name__ == "User")
-    assert user1.is_admin is True, "first signup must mint admin"
+    # Wave 2: admin concept deprecated; every user defaults `is_admin=True`.
+    assert user1.is_admin is True, "user must default is_admin=True post-Wave-2"
 
-    # User 2 — second signup, would have been 403 pre-fix; now succeeds.
+    # User 2 — second signup, would have been 403 pre-Wave-1.
     r2 = client.post(
         "/api/v1/auth/signup",
         data={"email": "second@local.test", "password": "SecondUser1234"},
@@ -385,7 +368,8 @@ def test_signup_succeeds_when_user_exists() -> None:
 
     users = [u for u in added_users if type(u).__name__ == "User"]
     assert len(users) == 2, f"expected 2 users added, got {len(users)}"
-    assert users[1].is_admin is False, "subsequent signups must NOT mint admin"
+    # Wave 2: every user (not just the first) defaults `is_admin=True`.
+    assert users[1].is_admin is True, "subsequent signups also default is_admin=True post-Wave-2"
     assert users[1].email == "second@local.test"
 
 
@@ -414,9 +398,10 @@ def test_validate_password_complexity_passes_strong() -> None:
 def test_validate_password_complexity_fails_too_short() -> None:
     from services.auth import validate_password_complexity
 
-    msg = validate_password_complexity("abc123")
+    # Plan 0.7.0.48 Wave 2 (2026-05-25): min-length lowered 12 → 8.
+    msg = validate_password_complexity("abc1")
     assert msg is not None
-    assert "12" in msg
+    assert "8" in msg
 
 
 def test_validate_password_complexity_fails_no_digit() -> None:
@@ -448,8 +433,9 @@ def test_hash_password_with_complexity_check_rejects_weak() -> None:
     from services.auth import hash_password_with_complexity_check
 
     with pytest.raises(ValueError) as exc:
-        hash_password_with_complexity_check("short")
-    assert "12" in str(exc.value)
+        hash_password_with_complexity_check("a1")
+    # Plan 0.7.0.48 Wave 2 (2026-05-25): min-length lowered 12 → 8.
+    assert "8" in str(exc.value)
 
 
 def test_hash_password_with_complexity_check_accepts_strong() -> None:

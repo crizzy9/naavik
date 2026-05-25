@@ -26,7 +26,10 @@ class User(SQLModel, table=True):
     password_hash: str = Field(max_length=256)
 
     is_active: bool = Field(default=True)
-    is_admin: bool = Field(default=False)
+    # Plan 0.7.0.48 Wave 2 (2026-05-25): deprecated — every user has full
+    # ownership of their own data. No admin-only operations exist in this app.
+    # Column kept for schema compat; drop migration filed as 0.7.0.49 follow-up.
+    is_admin: bool = Field(default=True)
 
     # Plan 18 (PC.6, 2026-05-17): forced-rotation flag. Cleared on the first
     # successful POST /api/v1/auth/change-password that satisfies

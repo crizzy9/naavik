@@ -161,14 +161,10 @@ async def post_signup(
     keep_signed_in: Annotated[str | None, Form()] = None,
     session: AsyncSession = Depends(get_session),
 ):
-    """Open signup. First user becomes admin (`is_admin=True`); subsequent
-    users sign up as regular users (`is_admin=False`). No gate — operators
-    who need to lock down signups gate externally via firewall / reverse
-    proxy / OIDC (plan 0.7.0.48 supersedes 10b/10c/0.7.0.45/0.7.0.47).
+    """Open signup. Every user owns their own data — no admin concept (plan
+    0.7.0.48 Wave 2 supersedes 10b/10c/0.7.0.45/0.7.0.47). Operators who need
+    to lock down signups gate externally via firewall / reverse proxy / OIDC.
     """
-    from sqlalchemy import func
-    from sqlmodel import select
-
     ip = get_client_ip(request)
     if is_rate_limited(ip):
         return _login_error_card(
@@ -188,30 +184,16 @@ async def post_signup(
     if "@" not in norm_email or "." not in norm_email.split("@", 1)[-1]:
         return _login_error_card("Enter a valid email address.", 422)
 
-    # First-user-becomes-admin probe: count of existing User rows feeds the
-    # `is_admin` flag below. `session.exec(select(func.count()))` returns a
-    # Row under SQLModel, not the bare int — unwrap explicitly.
-    count_row = (await session.exec(select(func.count()).select_from(User))).one()
-    if hasattr(count_row, "_mapping"):
-        # SQLAlchemy Row → first column.
-        existing_count = int(count_row[0])
-    elif isinstance(count_row, tuple):
-        existing_count = int(count_row[0])
-    else:
-        existing_count = int(count_row)
-
     if await get_user_by_email(session, norm_email) is not None:
         return _login_error_card(
             "Email already registered. Sign in instead.",
             status.HTTP_400_BAD_REQUEST,
         )
 
-    is_first_user = existing_count == 0
     user = User(
         email=norm_email,
         password_hash=hash_password_with_complexity_check(password),
         is_active=True,
-        is_admin=is_first_user,
     )
     session.add(user)
     await session.flush()

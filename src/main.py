@@ -73,6 +73,12 @@ app = FastAPI(
     description="Self-hosted-first career automation platform",
     version="0.1.0",
     lifespan=lifespan,
+    # Plan 0.7.0.48 Wave 2 (2026-05-25): pass through `app_settings.debug` so
+    # `request.app.debug` resolves correctly. Auth cookie code reads this attr
+    # to decide `Secure=True/False`; when omitted, `request.app.debug` is always
+    # False, so dev (http://localhost:8000) gets Secure cookies that the browser
+    # refuses to send → infinite redirect to /login on every authed request.
+    debug=app_settings.debug,
 )
 
 app.mount("/static", StaticFiles(directory="src/ui/static"), name="static")

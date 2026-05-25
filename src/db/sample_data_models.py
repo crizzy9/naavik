@@ -66,7 +66,8 @@ class User(_Base):
     email: str
     password_hash: str
     is_active: bool = True
-    is_admin: bool = False
+    # Plan 0.7.0.48 Wave 2 (2026-05-25): default True; admin concept deprecated.
+    is_admin: bool = True
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None = None
