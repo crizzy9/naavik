@@ -256,12 +256,24 @@ async def issue_jwt_async(
 ) -> str:
     """Issue a JWT signed with the tenant's ACTIVE signing key.
 
-    Falls back to `issue_jwt` (sync, env-legacy HS256) when no ACTIVE key
-    exists for the tenant — keeps the test harness + fresh-install path
-    working before alembic 0014 has run.
+    Falls back to `issue_jwt` (sync, env-legacy HS256) when:
+      - no ACTIVE key exists for the tenant (fresh-install / test-harness
+        before alembic 0014 has run), OR
+      - the ACTIVE key's `kid` is `env-legacy` (plan 0.7.0.48 Wave 2 fix:
+        symmetry with `verify_jwt_async` which delegates `env-legacy` kid
+        to sync `verify_jwt`). Without this branch, the issuer signed with
+        the DB row's material — which migration 0014 plants as
+        `os.environ.get("SECRET_KEY") or secrets.token_urlsafe(32)`. When
+        `SECRET_KEY` is unset (dev default), the migration plants a random
+        URL-safe-32 key, but the sync verifier always reads
+        `app_settings.secret_key` (`"change-me-in-production"` by default
+        in dev) → `InvalidSignatureError` on every authed request →
+        "Session expired" 307 → login loop. With this fix the env-legacy
+        DB row is informational only; the env material is the single
+        source of truth for both issue + verify on the env-legacy path.
     """
     key = await _get_active_signing_key(session, tenant_id=tenant_id)
-    if key is None:
+    if key is None or key.kid == ENV_LEGACY_KID:
         return issue_jwt(user_id, keep_signed_in=keep_signed_in)
     ttl = JWT_TTL_KEEP_SIGNED_IN if keep_signed_in else JWT_TTL_DEFAULT
     now = datetime.now(UTC)
