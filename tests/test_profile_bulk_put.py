@@ -161,3 +161,54 @@ def test_bulk_put_response_is_html_fragment(client: TestClient, auth_cookies):
         assert "text-emerald-300" in r.text
     finally:
         sd.PROFILE.full_name = original
+
+
+# ── EEO empty-string coercion regression (W4 fold-in 2026-05-26) ────────────
+
+
+def test_bulk_put_handles_all_empty_eeo_fields(client: TestClient, auth_cookies):
+    """Regression for owner-reported 500 on profile save (PR #212 W4).
+
+    Pre-fix: `put_profile_bulk` forwarded raw form values to
+    `update_application_questions`, which `setattr`'d empty strings onto
+    typed INTEGER / ENUM columns. asyncpg's int4 encoder raised
+    `DataError: 'str' object cannot be interpreted as an integer` on
+    `notice_period_days=''` (any blank EEO field surfaced the same shape).
+
+    Post-fix: the route coerces `''` → None for EEO fields, so the
+    operator can save a profile WITH the EEO bag fully blank (first-time
+    save, EEO not yet entered).
+    """
+    from db import sample_data as sd
+
+    eeo_keys = (
+        "work_authorization",
+        "visa_sponsorship_needed",
+        "willing_to_relocate",
+        "notice_period_days",
+        "salary_expectation_usd",
+        "earliest_start",
+        "veteran_status",
+        "disability_status",
+        "race_ethnicity",
+        "gender_identity",
+    )
+    orig_name = sd.PROFILE.full_name
+    orig_eeo = {k: getattr(sd.PROFILE, k, None) for k in eeo_keys}
+    try:
+        r = client.put(
+            "/api/v1/profile",
+            data={
+                "full_name": "Coerce Save",
+                **{k: "" for k in eeo_keys},
+            },
+            cookies=auth_cookies,
+        )
+        assert r.status_code == 200, r.text
+        assert "Saved" in r.text
+        # 10 EEO + 1 identity = 11 fields recorded as saved.
+        assert "11 fields" in r.text or "fields" in r.text
+    finally:
+        sd.PROFILE.full_name = orig_name
+        for k, v in orig_eeo.items():
+            setattr(sd.PROFILE, k, v)

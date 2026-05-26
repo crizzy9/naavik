@@ -258,3 +258,42 @@ def test_put_llm_form_round_trip_persists_provider(client: TestClient, auth_cook
         cookies=auth_cookies,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
+
+
+# ── W4 fold-in regression (2026-05-26) ────────────────────────────────────
+
+
+def test_put_llm_form_no_live_db_does_not_500(client: TestClient, auth_cookies, monkeypatch):
+    """Regression for owner-reported 500 on settings/llm save (PR #212 W4).
+
+    Pre-fix: `src/api/settings.py:put_llm` called
+    `_ctx_for_tab(request, "llm-provider")` without the required
+    keyword-only `session=` + `user_id=` args. Every form-shape PUT
+    500'd with `TypeError: _ctx_for_tab() missing 1 required
+    keyword-only argument: 'session'`.
+
+    Post-fix: kwargs threaded through. The form PUT path returns the
+    rendered `_settings_llm.html` partial (200) instead of a 500.
+
+    Tested with monkey-patched settings_service so we don't need
+    NAAVIK_LIVE_DB. Exercises the same code path the live-DB
+    round-trip test does, minus the persistence assertion.
+    """
+    from services import settings_service
+
+    async def _stub_update_llm(session, **kwargs):
+        from db import sample_data as sd
+
+        return sd.SETTINGS
+
+    monkeypatch.setattr(settings_service, "update_llm", _stub_update_llm)
+
+    r = client.put(
+        "/api/v1/settings/llm",
+        data={"llm_provider": "ollama", "llm_model": "llama3.1:8b"},
+        cookies=auth_cookies,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r.status_code == 200, f"expected 200, got {r.status_code}: {r.text[:500]}"
+    # Form-path returns rendered HTML (not JSON).
+    assert '<form' in r.text or 'hx-put=' in r.text

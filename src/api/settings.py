@@ -155,7 +155,12 @@ async def put_llm(
         from ui.routes.settings import _ctx_for_tab
         from ui.templates_setup import templates as ui_templates
 
-        ctx = await _ctx_for_tab(request, "llm-provider")
+        # Plan 0.7.0.48 W4 fix (2026-05-26): `_ctx_for_tab` is keyword-only
+        # on `session` + `user_id` (line 177 signature). The other 2 call
+        # sites in this file (lines 436 + 527) pass both; this one missed
+        # them, so every form-shaped LLM settings PUT 500'd with
+        # `TypeError: _ctx_for_tab() missing 1 required keyword-only argument: 'session'`.
+        ctx = await _ctx_for_tab(request, "llm-provider", session=session, user_id=1)
         ctx["save_status"] = "saved"
         return ui_templates.TemplateResponse(
             request,

@@ -61,7 +61,14 @@ async def put_profile_bulk(
 
     for name, value in form.multi_items():
         if name in eeo_fields:
-            eeo_payload[name] = value
+            # Empty form values → NULL. Several EEO columns are typed
+            # INTEGER / ENUM (notice_period_days, salary_expectation_usd,
+            # work_authorization, visa_sponsorship_needed, …); asyncpg
+            # raises `DataError: 'str' object cannot be interpreted as an
+            # integer` if `''` reaches the encoder. Coerce at the boundary
+            # so the operator can save a profile with EEO fields blank.
+            # (Plan 0.7.0.48 W4 fix — owner-reported 500 on profile save.)
+            eeo_payload[name] = value if value != "" else None
             continue
         if name in profile_service.ALLOWED_PROFILE_FIELDS:
             try:
