@@ -93,9 +93,20 @@ def _patch_services(monkeypatch):
     monkeypatch.setattr(settings_service, "update_sources", _stub_update_sources)
     monkeypatch.setattr(settings_service, "get_or_create", _stub_get_or_create)
     monkeypatch.setattr(profile_service, "update_field", _stub_update_field)
+    # Plan 0.7.0.48 W4 (2026-05-26): `put_llm` / `put_notifications` /
+    # `put_account` now enforce `require_csrf` (defense-in-depth fold-in
+    # per round-5 reviewer pair). Override so the existing tests don't
+    # need to craft a double-submit token roundtrip per request.
+    from api.auth import require_csrf
+
+    def _csrf_pass() -> None:
+        return None
+
     app.dependency_overrides[get_session] = _fake_get_session
+    app.dependency_overrides[require_csrf] = _csrf_pass
     yield
     app.dependency_overrides.pop(get_session, None)
+    app.dependency_overrides.pop(require_csrf, None)
 
 
 def _assert_fragment(text: str, *, must_have_savedness: bool = True):
@@ -229,3 +240,67 @@ def test_put_account_rejects_unknown_field(client: TestClient, auth_cookies):
     _assert_fragment(r.text)
     # Only the whitelisted field counted.
     assert "1 field" in r.text and "fields" not in r.text.replace("field</span>", "")
+
+
+# ── CSRF enforcement regression — plan 0.7.0.48 W4 reviewer fold-in 2026-05-26 ──
+
+
+def _without_csrf_override(test_fn):
+    """Decorator: temporarily pop the autouse fixture's `require_csrf`
+    override so the wrapped test exercises the real gate. Restored after
+    the test runs (the autouse cleanup re-pops anyway, so this is safe).
+    """
+    import functools
+
+    @functools.wraps(test_fn)
+    def wrapper(*args, **kwargs):
+        from api.auth import require_csrf
+        from main import app
+
+        saved = app.dependency_overrides.pop(require_csrf, None)
+        try:
+            return test_fn(*args, **kwargs)
+        finally:
+            if saved is not None:
+                app.dependency_overrides[require_csrf] = saved
+
+    return wrapper
+
+
+@_without_csrf_override
+def test_put_llm_csrf_enforced(client: TestClient):
+    """Regression: `put_llm` MUST gate on `require_csrf`. Pre-W4-reviewer
+    fold-in this route was missing the dep (architect + hacker LOW). Test
+    asserts the gate fires when the CSRF dep is NOT overridden.
+    """
+    r = client.put(
+        "/api/v1/settings/llm",
+        data={"llm_provider": "anthropic"},
+        cookies={"naavik_session": "fake-1"},
+    )
+    assert r.status_code == 403, f"expected 403, got {r.status_code}: {r.text[:200]}"
+    assert "CSRF" in r.text
+
+
+@_without_csrf_override
+def test_put_notifications_csrf_enforced(client: TestClient):
+    """Regression: `put_notifications` MUST gate on `require_csrf`."""
+    r = client.put(
+        "/api/v1/settings/notifications",
+        data={"notify_threshold": "80"},
+        cookies={"naavik_session": "fake-1"},
+    )
+    assert r.status_code == 403, f"expected 403, got {r.status_code}: {r.text[:200]}"
+    assert "CSRF" in r.text
+
+
+@_without_csrf_override
+def test_put_account_csrf_enforced(client: TestClient):
+    """Regression: `put_account` (new in W4) MUST gate on `require_csrf`."""
+    r = client.put(
+        "/api/v1/settings/account",
+        data={"full_name": "Anything"},
+        cookies={"naavik_session": "fake-1"},
+    )
+    assert r.status_code == 403, f"expected 403, got {r.status_code}: {r.text[:200]}"
+    assert "CSRF" in r.text

@@ -77,6 +77,7 @@ async def put_llm(
     request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     """Update LLM provider config.
 
@@ -564,6 +565,7 @@ async def put_notifications(
     request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     """Update notification preferences.
 
@@ -716,6 +718,7 @@ async def put_account(
     request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     """Save Settings · Account identity fields (full_name + email).
 

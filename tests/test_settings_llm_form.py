@@ -60,7 +60,13 @@ def _patch_db_dependencies(monkeypatch):
     """Plan 54 / 0.2.5.03: `/settings/llm-provider` now `Depends(get_session)` to
     drive the daily cost-cap widget. Stub the session + cost-tracker so the
     existing assertions remain DB-free.
+
+    Plan 0.7.0.48 W4 (2026-05-26): `put_llm` + `put_notifications` now
+    enforce `require_csrf` (defense-in-depth fold-in per round-5 reviewer
+    pair). Override the CSRF dep here so the existing surface-shape tests
+    don't have to craft a double-submit token roundtrip per request.
     """
+    from api.auth import require_csrf
     from db.session import get_session
     from main import app
     from services import llm_tracker
@@ -68,10 +74,15 @@ def _patch_db_dependencies(monkeypatch):
     async def _fake_today_cost(session, *, user_id):
         return 0.0
 
+    def _csrf_pass() -> None:
+        return None
+
     monkeypatch.setattr(llm_tracker, "today_cost_usd", _fake_today_cost)
     app.dependency_overrides[get_session] = _fake_get_session
+    app.dependency_overrides[require_csrf] = _csrf_pass
     yield
     app.dependency_overrides.pop(get_session, None)
+    app.dependency_overrides.pop(require_csrf, None)
 
 
 # ── Fragment endpoints — provider-aware swaps ────────────────────────────
