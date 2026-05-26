@@ -4,20 +4,25 @@
     profile : Profile (read display name + email)
 #}
 <div class="flex flex-col gap-6 max-w-3xl">
-  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
-    <h2 class="text-base font-medium text-slate-50">Identity</h2>
-    <p class="text-xs text-slate-400 mt-0.5">Used for the sidebar avatar + portfolio API.</p>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
-      {% with label="DISPLAY NAME", name="full_name", value=profile.full_name,
-              autosave_url="/api/v1/settings/account" %}
-        {% include "components/editor_field.html" %}
-      {% endwith %}
-      {% with label="EMAIL", name="email", type="email", value=profile.email,
-              autosave_url="/api/v1/settings/account" %}
-        {% include "components/editor_field.html" %}
-      {% endwith %}
-    </div>
-  </section>
+  <form id="{{ save_form_id }}"
+        hx-put="{{ active_save_endpoint }}"
+        hx-target="#settings-save-result"
+        hx-swap="innerHTML">
+    <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+      <h2 class="text-base font-medium text-slate-50">Identity</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Used for the sidebar avatar + portfolio API.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+        {% with label="DISPLAY NAME", name="full_name", value=profile.full_name,
+                autosave_enabled=false %}
+          {% include "components/editor_field.html" %}
+        {% endwith %}
+        {% with label="EMAIL", name="email", type="email", value=profile.email,
+                autosave_enabled=false %}
+          {% include "components/editor_field.html" %}
+        {% endwith %}
+      </div>
+    </section>
+  </form>
 
   <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
     <h2 class="text-base font-medium text-slate-50">Password</h2>

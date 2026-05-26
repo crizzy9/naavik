@@ -14,10 +14,10 @@ env-derived presence indicators (bools), never values.
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -152,21 +152,9 @@ async def put_llm(
     await session.commit()
 
     if is_form:
-        from ui.routes.settings import _ctx_for_tab
-        from ui.templates_setup import templates as ui_templates
-
-        # Plan 0.7.0.48 W4 fix (2026-05-26): `_ctx_for_tab` is keyword-only
-        # on `session` + `user_id` (line 177 signature). The other 2 call
-        # sites in this file (lines 436 + 527) pass both; this one missed
-        # them, so every form-shaped LLM settings PUT 500'd with
-        # `TypeError: _ctx_for_tab() missing 1 required keyword-only argument: 'session'`.
-        ctx = await _ctx_for_tab(request, "llm-provider", session=session, user_id=1)
-        ctx["save_status"] = "saved"
-        return ui_templates.TemplateResponse(
-            request,
-            "pages/_settings_llm.html",
-            ctx,
-        )
+        # 0.7.0.48 W4 — common Save returns a tiny fragment for
+        # #settings-save-result rather than the full re-rendered partial.
+        return HTMLResponse('<span class="text-emerald-300">Saved · LLM settings</span>')
 
     return _llm_response_payload(s)
 
@@ -237,13 +225,19 @@ async def put_auto_apply(
     # key means "skip" (partial PUTs), a present key (truthy or falsy)
     # means "set bool(value)". Required so unchecking the toggle in the
     # Settings UI persists False rather than silently skipping assignment.
-    immediate = (
-        bool(payload.get("auto_apply_immediate_dispatch"))
-        if "auto_apply_immediate_dispatch" in payload
-        else None
-    )
-    # Plan 78 § D.5 — dry-run toggle with the same tri-state idiom.
-    dry_run = bool(payload.get("auto_apply_dry_run")) if "auto_apply_dry_run" in payload else None
+    # 0.7.0.48 W4 — the common Save fires a full-form submit; on that path
+    # absent checkbox = unchecked = False (handled below via `is_full_form_save`).
+    is_full_form_save = is_form and "auto_apply_score_threshold" in payload
+
+    def _tri_state(field: str) -> bool | None:
+        if field in payload:
+            return bool(payload.get(field))
+        if is_full_form_save:
+            return False
+        return None
+
+    immediate = _tri_state("auto_apply_immediate_dispatch")
+    dry_run = _tri_state("auto_apply_dry_run")
 
     # Plan 78 § D.3 — assemble per-board caps from either flat form fields
     # (`<board>_cap`) or a pre-shaped `auto_apply_per_board_daily_caps` dict
@@ -277,16 +271,20 @@ async def put_auto_apply(
     s = await settings_service.update_auto_apply(
         session,
         user_id=1,
-        auto_apply_enabled=payload.get("auto_apply_enabled"),
+        auto_apply_enabled=_tri_state("auto_apply_enabled"),
         auto_apply_score_threshold=payload.get("auto_apply_score_threshold"),
         auto_apply_daily_cap=payload.get("auto_apply_daily_cap"),
-        eager_review_generation=payload.get("eager_review_generation"),
+        eager_review_generation=_tri_state("eager_review_generation"),
         daily_llm_cost_cap_usd=payload.get("daily_llm_cost_cap_usd"),
         auto_apply_immediate_dispatch=immediate,
         auto_apply_per_board_daily_caps=per_board,
         auto_apply_dry_run=dry_run,
     )
     await session.commit()
+
+    if is_form:
+        return HTMLResponse('<span class="text-emerald-300">Saved · auto-apply</span>')
+
     return {
         "auto_apply_enabled": s.auto_apply_enabled,
         "auto_apply_score_threshold": s.auto_apply_score_threshold,
@@ -339,6 +337,12 @@ def _form_to_sources_payload(form: dict[str, str]) -> dict[str, Any]:
     fields collapse into a nested `scraper_rate_limits[<source>]` dict per
     `RateLimitConfig`. Keywords/location shape — `<source>_keywords` is
     comma-split into list[str]; `<source>_location` passes through.
+
+    Per-source enable toggle (0.7.0.48 W4 fix) — the source-row checkbox
+    sends `hx-vals='{"source": "<sv>"}'` plus its own `name="<sv>"` value
+    when checked (HTML omits unchecked checkboxes). Detect via the `source`
+    sentinel field + presence-of-key semantics: `<sv> in form` = ON,
+    absent = OFF. Resolves the long-standing per-source-toggle no-op.
     """
     payload: dict[str, Any] = {}
     rate_limits: dict[str, dict[str, float]] = {}
@@ -369,6 +373,12 @@ def _form_to_sources_payload(form: dict[str, str]) -> dict[str, Any]:
         payload["indeed_keywords"] = _split_keywords(raw)
     if (loc := form.get("indeed_location")) is not None:
         payload["indeed_location"] = loc
+
+    sentinel = form.get("source")
+    if sentinel:
+        valid = {s.value for s in JobSource}
+        if sentinel in valid:
+            payload["sources_enabled"] = {sentinel: sentinel in form}
     return payload
 
 
@@ -411,6 +421,14 @@ async def put_sources(
 
     user_id = _effective_user_id(_user)
 
+    # 0.7.0.48 W4 — per-source toggle sends only `{<source>: bool}`; merge
+    # onto the persisted dict so flipping one source doesn't wipe the others.
+    if isinstance(body.get("sources_enabled"), dict) and len(body["sources_enabled"]) == 1:
+        current = await settings_service.get_or_create(session, user_id=user_id)
+        merged = dict(getattr(current, "sources_enabled", None) or {})
+        merged.update(body["sources_enabled"])
+        body["sources_enabled"] = merged
+
     try:
         s = await settings_service.update_sources(
             session,
@@ -435,11 +453,17 @@ async def put_sources(
     await session.commit()
 
     if is_form:
+        # Sources tab keeps the full-partial re-render: the per-source
+        # rate-limit + keywords popover editors each have their own
+        # `<form hx-target="closest [data-source-editor]" hx-swap="outerHTML">`
+        # that needs the whole `_settings_sources.html` body back to swap
+        # the editor block. The Sources tab does NOT have a common Save
+        # button (0.7.0.48 W4 — active_save_endpoint=None) so there's no
+        # competing fragment consumer to worry about.
         from ui.routes.settings import _ctx_for_tab
         from ui.templates_setup import templates as ui_templates
 
         ctx = await _ctx_for_tab(request, "sources", session=session, user_id=user_id)
-        ctx["save_status"] = "saved"
         return ui_templates.TemplateResponse(
             request,
             "pages/_settings_sources.html",
@@ -526,16 +550,7 @@ async def put_generation(
     await session.commit()
 
     if is_form:
-        from ui.routes.settings import _ctx_for_tab
-        from ui.templates_setup import templates as ui_templates
-
-        ctx = await _ctx_for_tab(request, "generation", session=session, user_id=user_id)
-        ctx["save_status"] = "saved"
-        return ui_templates.TemplateResponse(
-            request,
-            "pages/_settings_generation.html",
-            ctx,
-        )
+        return HTMLResponse('<span class="text-emerald-300">Saved · generation</span>')
 
     return {
         "generation_tier": s.generation_tier,
@@ -546,7 +561,7 @@ async def put_generation(
 
 @router.put("/api/v1/settings/notifications", name="api_settings_notifications_put")
 async def put_notifications(
-    payload: Annotated[dict[str, Any] | None, Body()] = None,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
 ):
@@ -555,8 +570,24 @@ async def put_notifications(
     Plan 26 (0.2.0.01): rejects any payload carrying `discord_webhook_url`,
     `telegram_bot_token`, or `telegram_chat_id` with a 422 + env-migration
     guidance. Webhook URL, bot token, and chat ID are env-only post-vault.
+
+    0.7.0.48 W4 — form-encoded support added so the common Save button on
+    the Settings · Notifications tab persists per-event toggles + threshold.
+    The HTMX form sends each enabled toggle by `name=<event>`; absent fields
+    = unchecked; the notification_enabled dict is rebuilt from the known
+    catalog. Returns a tiny `#settings-save-result` fragment when form-shaped.
     """
-    payload = payload or {}
+    is_form = _is_form_request(request)
+    if is_form:
+        form = await request.form()
+        payload: dict[str, Any] = {k: str(v) for k, v in form.items()}
+    else:
+        try:
+            payload_raw = await request.json()
+        except Exception:  # noqa: BLE001
+            payload_raw = {}
+        payload = payload_raw if isinstance(payload_raw, dict) else {}
+
     if (
         payload.get("discord_webhook_url")
         or payload.get("telegram_bot_token")
@@ -574,14 +605,44 @@ async def put_notifications(
             },
         )
 
+    notifications_enabled: dict[str, bool] | None = None
+    if is_form:
+        notif_catalog = (
+            "new_high_score_job",
+            "application_sent",
+            "interview_scheduled",
+            "offer_received",
+            "rejection",
+            "auto_apply_failed",
+            "scrape_run_new_jobs",
+        )
+        notifications_enabled = {key: key in payload for key in notif_catalog}
+    elif "notifications_enabled" in payload:
+        v = payload["notifications_enabled"]
+        notifications_enabled = v if isinstance(v, dict) else None
+
+    threshold_raw = payload.get("notify_threshold")
+    notify_threshold: float | None = None
+    if threshold_raw not in (None, ""):
+        try:
+            notify_threshold = float(threshold_raw)
+        except (TypeError, ValueError):
+            return JSONResponse(
+                status_code=422, content={"detail": "notify_threshold must be a float"}
+            )
+
     s = await settings_service.update_notifications(
         session,
         user_id=1,
-        notify_threshold=payload.get("notify_threshold"),
+        notify_threshold=notify_threshold,
         notify_on_errors=payload.get("notify_on_errors"),
-        notifications_enabled=payload.get("notifications_enabled"),
+        notifications_enabled=notifications_enabled,
     )
     await session.commit()
+
+    if is_form:
+        return HTMLResponse('<span class="text-emerald-300">Saved · notifications</span>')
+
     return _notifications_response_payload(s)
 
 
@@ -645,3 +706,74 @@ async def post_rotate_jwt_key(
 
     ctx = {"security": await _build_security_view(session, user_id=user_id)}
     return templates.TemplateResponse(request, "pages/_settings_security.html", ctx)
+
+
+# ── Account bulk PUT (plan 0.7.0.48 W4) ──────────────────────────────────
+
+
+@router.put("/api/v1/settings/account", name="api_settings_account_put")
+async def put_account(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+):
+    """Save Settings · Account identity fields (full_name + email).
+
+    Replaces the previous `ui/routes/settings.py:put_account` stub that
+    returned `{"ok": true}` without persisting anything (root cause of the
+    owner-reported "save doesn't work" on the Account tab — 0.7.0.48 W4).
+
+    Mirrors `api/profile.py:put_profile_bulk`: walks the posted form,
+    routes whitelisted fields through `profile_service.update_field`, and
+    returns a `#settings-save-result` fragment when form-shaped.
+    """
+    from services import profile_service
+    from ui.routes.settings import _effective_user_id
+
+    is_form = _is_form_request(request)
+    if is_form:
+        form = await request.form()
+        payload: dict[str, Any] = {k: str(v) for k, v in form.items()}
+    else:
+        try:
+            raw = await request.json()
+        except Exception:  # noqa: BLE001
+            raw = {}
+        payload = raw if isinstance(raw, dict) else {}
+
+    user_id = _effective_user_id(_user)
+    allowed = {"full_name", "email"}
+    saved: list[str] = []
+    failed: list[tuple[str, str]] = []
+    for field, value in payload.items():
+        if field not in allowed:
+            continue
+        try:
+            await profile_service.update_field(
+                session,
+                user_id=user_id,
+                field=field,
+                value=value,
+            )
+            saved.append(field)
+        except (LookupError, ValueError) as exc:
+            failed.append((field, str(exc)))
+
+    if failed:
+        await session.rollback()
+        msg = "; ".join(f"{name}: {err}" for name, err in failed)
+        if is_form:
+            return HTMLResponse(
+                f'<span class="text-rose-300">Save failed — {msg}</span>',
+                status_code=422,
+            )
+        return JSONResponse(status_code=422, content={"detail": msg})
+
+    await session.commit()
+
+    if is_form:
+        count = len(saved)
+        plural = "s" if count != 1 else ""
+        return HTMLResponse(f'<span class="text-emerald-300">Saved · {count} field{plural}</span>')
+
+    return {"ok": True, "saved": saved}

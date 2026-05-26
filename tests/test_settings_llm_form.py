@@ -136,7 +136,15 @@ def test_llm_tab_renders_form_wrap(client: TestClient, auth_cookies):
     assert r.status_code == 200
     body = r.text
     assert 'hx-put="/api/v1/settings/llm"' in body
-    assert 'hx-swap="outerHTML"' in body
+    # 0.7.0.48 W4 — common Save button posts to /api/v1/settings/llm via the
+    # `form="settings-active-form"` attr; LLM form targets the shared
+    # `#settings-save-result` aria-live region instead of swapping the
+    # whole partial. The outerHTML/llm-form swap target is gone.
+    assert 'id="settings-active-form"' in body
+    assert 'hx-target="#settings-save-result"' in body
+    assert 'hx-swap="innerHTML"' in body
+    # Common Save button rendered in page header (gated by ctx).
+    assert 'data-testid="settings-save"' in body
     # Plan 70 (0.3.3.13): "Active provider" radio surface deleted; the
     # `/_fragments/settings/llm/model-options?provider=...` fragment is
     # no longer wired via radio change. Endpoint remains usable; the LLM
@@ -233,9 +241,9 @@ def test_put_llm_form_round_trip_persists_provider(client: TestClient, auth_cook
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert r.status_code == 200
-    # HTMX path returns rendered HTML, not JSON
-    assert "<form" in r.text
-    assert "hx-put=" in r.text
+    # 0.7.0.48 W4 — HTMX path returns the `#settings-save-result` fragment.
+    assert "text-emerald-300" in r.text
+    assert "Saved" in r.text
 
     # Confirm the change persisted via the JSON GET
     r2 = client.get("/api/v1/settings/llm", cookies=auth_cookies)
@@ -295,5 +303,11 @@ def test_put_llm_form_no_live_db_does_not_500(client: TestClient, auth_cookies, 
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert r.status_code == 200, f"expected 200, got {r.status_code}: {r.text[:500]}"
-    # Form-path returns rendered HTML (not JSON).
-    assert '<form' in r.text or 'hx-put=' in r.text
+    # 0.7.0.48 W4 — form-path returns the tiny `#settings-save-result`
+    # fragment, not the full re-rendered partial. The fragment carries
+    # the emerald-300 saved class so the aria-live region updates inline.
+    assert "text-emerald-300" in r.text
+    assert "Saved" in r.text
+    # Verify we're NOT re-rendering the whole partial (sentinel).
+    assert "<form" not in r.text
+    assert "<aside" not in r.text

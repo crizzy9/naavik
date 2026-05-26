@@ -200,7 +200,7 @@ def test_bulk_put_handles_all_empty_eeo_fields(client: TestClient, auth_cookies)
             "/api/v1/profile",
             data={
                 "full_name": "Coerce Save",
-                **{k: "" for k in eeo_keys},
+                **dict.fromkeys(eeo_keys, ""),
             },
             cookies=auth_cookies,
         )

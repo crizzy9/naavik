@@ -16,26 +16,18 @@
 #}
 <div id="generation-form" class="flex flex-col gap-6 max-w-5xl">
   <form
-    hx-put="/api/v1/settings/generation"
-    hx-target="#generation-form"
-    hx-swap="outerHTML"
+    id="{{ save_form_id }}"
+    hx-put="{{ active_save_endpoint }}"
+    hx-target="#settings-save-result"
+    hx-swap="innerHTML"
     hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
-    hx-disabled-elt="find button[type=submit]"
     class="flex flex-col gap-6">
 
     {# ── Tier toggle ───────────────────────────────────────────────────── #}
     <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
-      <header class="flex items-baseline justify-between mb-4 gap-3">
-        <div>
-          <h2 class="text-base font-medium text-slate-50">Generation tier</h2>
-          <p class="text-xs text-slate-400 mt-0.5">PREMIUM stacks council voting + AI-detector loop + critique + tool-orchestrated refinement on top of FREE.</p>
-        </div>
-        {% if save_status == "saved" %}
-          <span class="inline-flex items-center gap-1 text-xs text-emerald-300">
-            <i data-lucide="check" class="h-4 w-4" stroke-width="1.5"></i>
-            saved
-          </span>
-        {% endif %}
+      <header class="mb-4">
+        <h2 class="text-base font-medium text-slate-50">Generation tier</h2>
+        <p class="text-xs text-slate-400 mt-0.5">PREMIUM stacks council voting + AI-detector loop + critique + tool-orchestrated refinement on top of FREE.</p>
       </header>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <label class="rounded-lg border {{ 'border-indigo-500/40 bg-indigo-500/5' if settings.generation_tier == 'free' else 'border-slate-800 bg-slate-950/40' }} p-4 cursor-pointer flex flex-col gap-2"
@@ -156,13 +148,6 @@
         Get a key at <a href="https://originality.ai" target="_blank" rel="noopener" class="text-indigo-300 hover:text-indigo-200 underline">originality.ai</a>. Stored per-user in the Settings table (not env).
       </p>
     </section>
-
-    <div class="flex justify-end">
-      <button type="submit"
-              class="bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium px-4 py-2 rounded">
-        Save generation settings
-      </button>
-    </div>
   </form>
 
   {# ── Audit-trail viewer ──────────────────────────────────────────────── #}

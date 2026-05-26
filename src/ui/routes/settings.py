@@ -46,6 +46,23 @@ _TAB_TEMPLATES: dict[str, str] = {
 _VALID_TABS = set(_TAB_TEMPLATES.keys())
 
 
+# 0.7.0.48 W4 — common Save button. Each writable tab maps to the canonical
+# bulk-PUT endpoint the shared header button submits to via the form= attr.
+# `None` hides the button (read-only tabs OR tabs whose only mutation is a
+# dedicated sub-action like "Rotate JWT key").
+_SAVE_ENDPOINT_FOR_TAB: dict[str, str | None] = {
+    "account": "/api/v1/settings/account",
+    "llm-provider": "/api/v1/settings/llm",
+    "generation": "/api/v1/settings/generation",
+    "notifications": "/api/v1/settings/notifications",
+    "auto-apply": "/api/v1/settings/auto-apply",
+    "sources": None,
+    "submissions": None,
+    "security": None,
+    "deployment": None,
+}
+
+
 _PROVIDERS_DISPLAY = [
     {
         "id": "anthropic",
@@ -204,6 +221,8 @@ async def _ctx_for_tab(
     ctx: dict[str, object] = {
         "current_tab": tab,
         "tab_template": _TAB_TEMPLATES[tab],
+        "active_save_endpoint": _SAVE_ENDPOINT_FOR_TAB.get(tab),
+        "save_form_id": "settings-active-form",
         "settings": settings,
         "profile": profile,
         "providers": _PROVIDERS_DISPLAY,

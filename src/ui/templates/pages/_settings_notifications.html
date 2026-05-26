@@ -10,6 +10,11 @@
   input — only the per-event toggles + threshold are user-mutable.
 #}
 <div class="flex flex-col gap-6 max-w-3xl">
+  <form id="{{ save_form_id }}"
+        hx-put="{{ active_save_endpoint }}"
+        hx-target="#settings-save-result"
+        hx-swap="innerHTML"
+        class="flex flex-col gap-6">
   <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
     <h2 class="text-base font-medium text-slate-50">Channels</h2>
     <p class="text-xs text-slate-400 mt-0.5">
@@ -110,10 +115,6 @@
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
             <input type="checkbox" name="{{ key }}" {% if enabled %}checked{% endif %}
-                   hx-put="/api/v1/settings/notifications"
-                   hx-trigger="change"
-                   hx-vals='{"event": "{{ key }}"}'
-                   hx-swap="none"
                    class="sr-only peer">
             <span class="w-9 h-5 bg-slate-700 rounded-full peer-checked:bg-indigo-500 transition relative
                          after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-4 after:w-4
@@ -134,4 +135,5 @@
       {% endwith %}
     </div>
   </section>
+  </form>
 </div>

@@ -3,9 +3,26 @@
 
 {% block main %}
 <div class="flex flex-col min-h-screen">
-  <header class="px-6 lg:px-8 pt-8 pb-4">
-    <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Settings</h1>
-    <p class="mt-1 text-sm text-slate-400">Configure how Naavik runs.</p>
+  <header class="px-6 lg:px-8 pt-8 pb-4 flex items-start justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Settings</h1>
+      <p class="mt-1 text-sm text-slate-400">Configure how Naavik runs.</p>
+    </div>
+    <div class="flex items-center gap-3 shrink-0 pt-1">
+      <span id="settings-save-result"
+            class="text-xs text-slate-400 min-h-[1rem]"
+            aria-live="polite"
+            data-testid="settings-save-result"></span>
+      {% if active_save_endpoint %}
+        <button type="submit"
+                form="settings-active-form"
+                data-testid="settings-save"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i data-lucide="check" class="h-4 w-4" stroke-width="1.5"></i>
+          Save changes
+        </button>
+      {% endif %}
+    </div>
   </header>
 
   {% with current_tab=current_tab %}
