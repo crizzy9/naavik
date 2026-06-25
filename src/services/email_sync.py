@@ -233,6 +233,20 @@ async def sync_account(
     """
     result = SyncResult(account_id=account.id or 0)
     password = email_credentials.load_imap_password(account)
+    if password is None:
+        # Ciphertext no longer decrypts (SECRET_KEY rotated, or never stored).
+        # Fail closed: flip to AUTH_REQUIRED so the operator re-pastes the
+        # app-password; never attempt a login with a missing credential.
+        account.status = EmailAccountStatus.AUTH_REQUIRED
+        account.connection_failure_count = (account.connection_failure_count or 0) + 1
+        account.last_error_message = (
+            "credential decrypt failed (SECRET_KEY rotated?); re-paste app-password"
+        )
+        account.updated_at = datetime.now(UTC)
+        session.add(account)
+        result.status = EmailAccountStatus.AUTH_REQUIRED
+        result.errors.append("decrypt: credential could not be decrypted")
+        return result
 
     def _runner() -> list[tuple[str, bytes]]:
         client = client_factory(account.imap_host, account.imap_port)

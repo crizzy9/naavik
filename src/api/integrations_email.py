@@ -164,11 +164,16 @@ async def test_account(
     ).one_or_none()
     if account is None:
         raise HTTPException(status_code=404, detail="Email account not found")
+    password = email_credentials.load_imap_password(account)
+    if password is None:
+        return TestConnectionResult(
+            ok=False, error="credential decrypt failed; re-paste app-password"
+        )
     ok, err = await email_sync.test_imap_connection(
         host=account.imap_host,
         port=account.imap_port,
         username=account.imap_username,
-        password=email_credentials.load_imap_password(account),
+        password=password,
     )
     return TestConnectionResult(ok=ok, error=err)
 

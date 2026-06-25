@@ -128,7 +128,7 @@ class _FailingFakeIMAP(_FakeIMAP):
 async def test_sync_account_persists_messages(session):
     from models import EmailAccount, EmailMessage, User
     from models.enums import EmailAccountProvider, EmailAccountStatus
-    from services import email_sync
+    from services import email_credentials, email_sync
 
     user = User(email="owner@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -140,8 +140,9 @@ async def test_sync_account_persists_messages(session):
         account_email="owner@example.com",
         imap_host="imap.example.com",
         imap_username="owner@example.com",
-        imap_password="p@ssw0rd",
+        imap_password="",
     )
+    email_credentials.store_imap_password(account, "p@ssw0rd")
     session.add(account)
     await session.flush()
 
@@ -172,7 +173,7 @@ async def test_sync_account_persists_messages(session):
 async def test_sync_account_auth_failure_flips_status(session):
     from models import EmailAccount, User
     from models.enums import EmailAccountProvider, EmailAccountStatus
-    from services import email_sync
+    from services import email_credentials, email_sync
 
     user = User(email="bad@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -184,8 +185,11 @@ async def test_sync_account_auth_failure_flips_status(session):
         account_email="bad@example.com",
         imap_host="imap.example.com",
         imap_username="bad@example.com",
-        imap_password="wrong",
+        imap_password="",
     )
+    # Store a decryptable credential so the failure under test is the IMAP login
+    # (not a decrypt fail-closed) — the server rejects the creds, flipping status.
+    email_credentials.store_imap_password(account, "wrong-but-stored")
     session.add(account)
     await session.flush()
 
@@ -206,7 +210,7 @@ async def test_sync_account_dedup_on_repeat(session):
     `uq_email_message_external` constraint."""
     from models import EmailAccount, EmailMessage, User
     from models.enums import EmailAccountProvider
-    from services import email_sync
+    from services import email_credentials, email_sync
 
     user = User(email="dedup@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -218,8 +222,9 @@ async def test_sync_account_dedup_on_repeat(session):
         account_email="dedup@example.com",
         imap_host="imap.example.com",
         imap_username="dedup@example.com",
-        imap_password="x",
+        imap_password="",
     )
+    email_credentials.store_imap_password(account, "p@ssw0rd")
     session.add(account)
     await session.flush()
 

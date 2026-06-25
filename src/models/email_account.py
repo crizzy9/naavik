@@ -1,14 +1,14 @@
 """EmailAccount entity — per-user IMAP inbox connection (plan 90 / 0.5.0.01).
 
-PLAINTEXT password column by manager directive (manager override on plan § A.2 Q2:
-the plan recommended Fernet column-level encryption [A.2.a]; manager pivoted to
-A.2.b plaintext-DB because Fernet's key would derive from `SECRET_KEY` — the same
-trust posture the owner killed the vault over [plan 26]). The credential read/write
-seam lives in `services/email_credentials.py`; a Fernet swap is a ~10-LOC change
-inside that module if owner opts in at PR review.
+The `imap_password` column holds a Fernet ciphertext token, not plaintext
+(plan 90 § A.2.a — OWNER-APPROVED 2026-06-25). Encrypt/decrypt lives behind the
+`services/email_credentials.py` seam; the column type is unchanged (the token is
+urlsafe-base64 ASCII) so no migration is required. Trust posture = trust the DB
+column + SECRET_KEY, same as JWT signing.
 
-Per `AGENTS.md § Key Conventions § CLI` no new vault / `~/.naavik/*.enc` artifact
-is introduced.
+Per `AGENTS.md § Key Conventions § CLI` this is distinct from the deleted vault:
+no `~/.naavik/*.enc` file, no key.bin, no audit log, no CLI — just a DB column
+cipher.
 """
 
 from __future__ import annotations
@@ -47,10 +47,9 @@ class EmailAccount(SQLModel, table=True):
     imap_host: str
     imap_port: int = Field(default=993)
     imap_username: str
-    # PLAINTEXT by manager directive — Fernet column-encryption (plan 90 § A.2.a)
-    # is the owner-gated Q2 opt-in; the interface in `services/email_credentials.py`
-    # makes that a ~10-LOC swap. Do NOT add SECRET_KEY-derived encryption without
-    # explicit owner sign-off (vault sunset, AGENTS.md § Key Conventions § CLI).
+    # Fernet ciphertext token (plan 90 § A.2.a, OWNER-APPROVED 2026-06-25) — write
+    # via `email_credentials.store_imap_password`, read via `load_imap_password`.
+    # Never construct/read the raw value directly outside that seam.
     imap_password: str
     imap_use_tls: bool = Field(default=True)
 

@@ -2,8 +2,8 @@
   integrations_email.html — Connect IMAP page (plan 90 / 0.5.0.01).
 
   Lists existing EmailAccount rows + provides the Connect IMAP form.
-  Surfaces a clear "your password lives plaintext in this self-hosted DB"
-  trust note so operators understand the posture before pasting.
+  Surfaces a clear "your password is encrypted at rest (Fernet, keyed from
+  SECRET_KEY)" trust note so operators understand the posture before pasting.
 
   Args:
     accounts : list[EmailAccount]
@@ -43,17 +43,22 @@
       <h2 class="text-lg font-semibold text-slate-50 tracking-tight">Connect IMAP inbox</h2>
     </div>
 
-    <div class="mb-5 rounded-lg bg-slate-950/60 border border-amber-700/40 p-3 text-xs text-amber-200">
+    <div class="mb-5 rounded-lg bg-slate-950/60 border border-indigo-700/40 p-3 text-xs text-slate-300">
       <div class="flex items-start gap-2">
-        <i data-lucide="alert-triangle" class="h-4 w-4 shrink-0 mt-0.5" stroke-width="1.5"></i>
+        <i data-lucide="shield-check" class="h-4 w-4 shrink-0 mt-0.5 text-indigo-300" stroke-width="1.5"></i>
         <div>
-          <p class="font-medium text-amber-100">Trust posture</p>
-          <p class="mt-0.5 text-amber-200/80">
-            Your IMAP password lives plaintext in your self-hosted Postgres DB.
-            Naavik treats it the way it treats your profile + settings data.
-            Use a provider-issued <strong>app password</strong> (not your main
-            account password) and rotate / disable in your provider's UI when
-            you stop using Naavik.
+          <p class="font-medium text-slate-100">Trust posture</p>
+          <p class="mt-0.5 text-slate-400">
+            Your IMAP password is <strong>encrypted at rest</strong> in your
+            self-hosted Postgres DB (Fernet, keyed from this instance's
+            <code class="text-slate-300">SECRET_KEY</code>) — a database dump
+            alone won't reveal it. Same trust posture as your login sessions:
+            anyone with <code class="text-slate-300">SECRET_KEY</code> can
+            decrypt it. Use a provider-issued <strong>app password</strong> (not
+            your main account password) and rotate / disable it in your
+            provider's UI when you stop using Naavik. If you rotate
+            <code class="text-slate-300">SECRET_KEY</code>, re-paste the app
+            password here to re-encrypt.
           </p>
         </div>
       </div>

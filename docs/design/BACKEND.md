@@ -862,21 +862,11 @@ class ATSAdapter(ABC):
 
 ## L · External integrations
 
-### L.1 Email (Gmail + Outlook)
+### L.1 Email (IMAP monitoring)
 
-**Gmail OAuth flow:**
+The earlier vault-based Gmail-OAuth sketch here is **obsolete** (vault sunset, plan 26). Email monitoring shipped as an IMAP-only foundation (plan 90 / `0.5.0.01`): per-user inbox connection, the app-password stored as a **Fernet ciphertext column** (no vault, no `.enc` file), LLM-graceful-degrade classification, and human-confirm status suggestions. Gmail API + push webhooks are a post-foundation follow-up (`0.5.0.01.1`).
 
-1. User clicks "Connect Gmail" on Settings · Notifications or Tracking integrations bar.
-2. `GET /api/v1/integrations/gmail/connect` → redirects to Google's OAuth consent with scopes `gmail.readonly` + `gmail.metadata`.
-3. Callback at `/api/v1/integrations/gmail/callback`:
-   - Exchange code for refresh + access tokens.
-   - `vault.set(scope="integrations", key="gmail.refresh_token", value=<encrypted>)` — refresh token persisted to `~/.naavik/secrets.enc`.
-   - DB-side `Integration` row holds metadata only: `(provider, account_email, last_sync_at, status)`.
-4. `tracking.sync_gmail` cron pulls new messages every 10min. Token refresh via `admin.refresh_oauth_tokens` every 6h.
-
-**IMAP fallback** for non-Gmail/Outlook providers: manual setup on Settings · Notifications (host, port, username, password). Password stored via `vault.set(scope="integrations", key="imap.<account>.password", ...)`. Sync mechanism identical.
-
-**Outlook OAuth** identical pattern (Phase 5).
+**Canonical design: [`EMAIL_MONITORING.md`](EMAIL_MONITORING.md).**
 
 ### L.2 LinkedIn
 
