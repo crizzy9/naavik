@@ -177,7 +177,7 @@ nix develop          # or set up direnv to load automatically
 
 1. Open <http://localhost:8003>. You land on `/login`.
 2. Click **Create account** (or visit `/login?mode=signup` directly).
-3. Enter your email + a password of **at least 12 characters with a letter and a digit**, then submit.
+3. Enter your email + a password of **at least 8 characters with a letter and a digit**, then submit.
 4. You land on the onboarding flow — upload your resume, AI extracts your profile, you edit + save.
 5. Once on Overview: set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` / `OLLAMA_BASE_URL`) in `.env` (`chmod 0600 .env`), restart the server. Visit `/settings/llm-provider` to confirm the green env-presence chip + pick your provider as Active.
 
