@@ -214,6 +214,53 @@ async def test_classifier_happy_path(session, monkeypatch):
     assert msg.classification_model == "claude-sonnet-stub"
 
 
+async def test_classifier_caps_subject_and_sender_in_prompt(session, monkeypatch):
+    """A pre-existing over-long subject/sender is capped before it reaches the
+    classify_email prompt (PR #214 hacker M1 defense-in-depth)."""
+    from types import SimpleNamespace
+
+    from llm.prompts.classify_email import EmailClassificationResult
+    from models import User
+    from services import email_classifier
+
+    user = User(email="cap2@example.com", password_hash="x", is_active=True)
+    session.add(user)
+    await session.flush()
+    msg = await _seed_message(session, user_id=user.id)
+    # Simulate a pre-existing row that escaped the persist-time cap.
+    msg.subject = "X" * 5000
+    msg.sender_email = "a" * 4000 + "@evil.example.com"
+    session.add(msg)
+    await session.flush()
+
+    captured: dict[str, str] = {}
+
+    class _FakeProvider:
+        model = "stub"
+
+    class _FakeStructured:
+        def __init__(self, value):
+            self.value = value
+
+    async def _fake_get_settings(_session, *, user_id):
+        return SimpleNamespace(user_id=user_id)
+
+    async def _fake_tracked_call(**kwargs):
+        captured["prompt"] = kwargs["prompt"]
+        return _FakeStructured(EmailClassificationResult(classification="other"))
+
+    monkeypatch.setattr(email_classifier, "_get_settings", _fake_get_settings)
+    monkeypatch.setattr(email_classifier, "get_provider", lambda _s: _FakeProvider())
+    monkeypatch.setattr(email_classifier.llm_tracker, "tracked_call", _fake_tracked_call)
+
+    await email_classifier.classify_unprocessed(session)
+
+    assert "X" * 200 in captured["prompt"]
+    assert "X" * 201 not in captured["prompt"]
+    assert "a" * 254 in captured["prompt"]
+    assert "a" * 255 not in captured["prompt"]
+
+
 async def test_classifier_llm_failure_marks_llm_failed(session, monkeypatch):
     from types import SimpleNamespace
 

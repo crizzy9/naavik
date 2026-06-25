@@ -37,6 +37,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import EmailAccount, EmailAccountStatus, EmailMessage, EmailThread
 from services import email_credentials
+from services.imap_host_guard import (
+    SAFE_ERROR_MESSAGE as _ERR_HOST,
+)
+from services.imap_host_guard import (
+    ImapHostNotAllowed,
+    ensure_imap_host_allowed,
+)
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +52,17 @@ _MAX_MESSAGES_PER_SYNC = 500
 # First sync: pull the last N messages so the user sees signal immediately.
 _FIRST_SYNC_BACKFILL = 50
 _IMAP_CONNECT_TIMEOUT_S = 30
+
+# Untrusted-field caps (PR #214 hacker M1/L3). subject/sender_name mirror the
+# 200-char snippet cap; sender_email caps at the RFC 5321 local+domain max.
+_MAX_SUBJECT_LEN = 200
+_MAX_SENDER_EMAIL_LEN = 254
+_MAX_SENDER_NAME_LEN = 200
+
+# Canonical client-facing connection errors — never echo raw `str(exc)`, which
+# leaks IMAP server banners / internal-topology signal (PR #214 hacker H1/L1).
+_ERR_CONN = "Could not connect to the mail server."
+_ERR_AUTH = "Authentication failed — check the username and app-password."
 
 
 class _IMAPClient(Protocol):
@@ -249,6 +267,9 @@ async def sync_account(
         return result
 
     def _runner() -> list[tuple[str, bytes]]:
+        # Re-check the host at every sync (not just at connect) so a DNS-rebind
+        # to an internal target between connect-time and now is caught here.
+        ensure_imap_host_allowed(account.imap_host, account.imap_port)
         client = client_factory(account.imap_host, account.imap_port)
         return _fetch_imap_messages(
             client,
@@ -259,21 +280,35 @@ async def sync_account(
 
     try:
         rows = await asyncio.to_thread(_runner)
-    except imaplib.IMAP4.error as exc:
+    except ImapHostNotAllowed as exc:
+        # Fail closed: a now-disallowed host (e.g. DNS-rebind) stops syncing
+        # until the operator re-connects, which re-runs the guard.
+        log.warning("email_sync: blocked host account_id=%s reason=%s", account.id, exc.reason)
         account.status = EmailAccountStatus.AUTH_REQUIRED
         account.connection_failure_count = (account.connection_failure_count or 0) + 1
-        account.last_error_message = str(exc)[:500]
+        account.last_error_message = _ERR_HOST
         account.updated_at = datetime.now(UTC)
         session.add(account)
         result.status = EmailAccountStatus.AUTH_REQUIRED
-        result.errors.append(f"auth: {exc}")
+        result.errors.append(_ERR_HOST)
         return result
-    except Exception as exc:  # noqa: BLE001
+    except imaplib.IMAP4.error as exc:
+        log.warning("email_sync: auth error account_id=%s err=%s", account.id, exc)
+        account.status = EmailAccountStatus.AUTH_REQUIRED
         account.connection_failure_count = (account.connection_failure_count or 0) + 1
-        account.last_error_message = str(exc)[:500]
+        account.last_error_message = _ERR_AUTH
         account.updated_at = datetime.now(UTC)
         session.add(account)
-        result.errors.append(f"transport: {exc}")
+        result.status = EmailAccountStatus.AUTH_REQUIRED
+        result.errors.append(_ERR_AUTH)
+        return result
+    except Exception as exc:  # noqa: BLE001
+        log.warning("email_sync: transport error account_id=%s err=%s", account.id, exc)
+        account.connection_failure_count = (account.connection_failure_count or 0) + 1
+        account.last_error_message = _ERR_CONN
+        account.updated_at = datetime.now(UTC)
+        session.add(account)
+        result.errors.append(_ERR_CONN)
         return result
 
     result.fetched = len(rows)
@@ -282,7 +317,10 @@ async def sync_account(
         try:
             msg = _parse_message(raw)
             sender_email, sender_name = _extract_sender(msg)
-            subject = (msg.get("Subject") or "").strip()
+            sender_email = sender_email[:_MAX_SENDER_EMAIL_LEN]
+            if sender_name is not None:
+                sender_name = sender_name[:_MAX_SENDER_NAME_LEN]
+            subject = (msg.get("Subject") or "").strip()[:_MAX_SUBJECT_LEN]
             received_at = _extract_received_at(msg)
             thread_key = _extract_thread_key(msg)
             message_id_external = (msg.get("Message-ID") or f"uid-{uid}").strip()
@@ -375,9 +413,15 @@ async def test_imap_connection(
     password: str,
     client_factory=_default_client_factory,
 ) -> tuple[bool, str | None]:
-    """One-shot login+logout — used by Connect IMAP form to verify creds."""
+    """One-shot login+logout — used by Connect IMAP form to verify creds.
+
+    Returns a canonical error message on failure (never the raw `str(exc)`):
+    the SSRF guard runs first, then the connection itself; details are logged
+    server-side only (PR #214 hacker H1/L1).
+    """
 
     def _runner() -> None:
+        ensure_imap_host_allowed(host, port)
         client = client_factory(host, port)
         client.login(username, password)
         client.select("INBOX")
@@ -386,7 +430,12 @@ async def test_imap_connection(
     try:
         await asyncio.to_thread(_runner)
         return True, None
+    except ImapHostNotAllowed as exc:
+        log.warning("test_imap_connection: blocked host=%r reason=%s", host, exc.reason)
+        return False, _ERR_HOST
     except imaplib.IMAP4.error as exc:
-        return False, f"auth: {exc}"
+        log.warning("test_imap_connection: auth error host=%r err=%s", host, exc)
+        return False, _ERR_AUTH
     except Exception as exc:  # noqa: BLE001
-        return False, f"transport: {exc}"
+        log.warning("test_imap_connection: transport error host=%r err=%s", host, exc)
+        return False, _ERR_CONN

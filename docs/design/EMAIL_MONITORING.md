@@ -118,6 +118,22 @@ fake client with canned RFC 5322 messages — no live network in CI.
   classification) and IMAP IDLE-mode is `0.5.0.01.2` (Gmail connection-cap
   dodge).
 
+**SSRF guard (`src/services/imap_host_guard.py`).** The `imap_host:port` is a
+user-supplied request target, so it is screened at every connection point —
+the connect route, the test route, and `sync_account`'s `_runner` (which
+drives both the cron and the manual sync-now). Mirroring
+`src/scraper/url_guard.is_safe_destination`: the host is resolved (bounded-TTL
+DNS cache, re-resolved every 60s to cap the DNS-rebind TOCTOU window) and
+DENIED if any resolved IP lands in a private range (`10/8`, `172.16/12`,
+`192.168/16`, `169.254/16` incl. AWS IMDS, `127/8`, `0/8`, IPv6 `::1/128`,
+`fe80::/10`, `fc00::/7`); the port is restricted to the `{143, 993}` allowlist.
+The guard fails CLOSED (a resolution failure DENIES) and re-checks at sync time
+(not only at connect). `Settings.debug=True` opens a loopback-only escape hatch
+for local-mail-server testing; RFC1918 / IMDS / ULA stay blocked even in debug.
+On rejection the routes return a canonical "host or port is not permitted"
+message and never echo the raw connection exception (service-discovery oracle
+defense — PR #214 hacker H1).
+
 ---
 
 ## D. Credentials — Fernet column-level encryption (OWNER-APPROVED 2026-06-25)
@@ -174,9 +190,15 @@ wrapped in `services/llm_tracker.tracked_call(prompt_name="classify_email")`
   those rows. Mirrors the scorer (`BACKEND.md § H.4`) and the pdfplumber-only
   resume-extract degrade pattern the owner already accepted (0.7.0.48).
 - **LLM call fails** → `unclassified_reason=LLM_FAILED`; retried next tick.
-- **Cost-cap integration:** the classifier consults the cost-cap slot before
-  each `tracked_call`; on exhaustion it persists
-  `unclassified_reason=COST_CAP_EXHAUSTED` and retries next tick.
+- **Cost-cap integration (partial — `0.5.0.02a` follow-up).** Every classify
+  call is wrapped in `tracked_call`, so each persists an `ApiUsage` row that
+  feeds the daily cost-cap accounting + the cost widget. The classifier does
+  NOT yet probe/acquire a per-message cost-cap slot before each call, so it
+  cannot short-circuit mid-tick on exhaustion; `unclassified_reason=
+  COST_CAP_EXHAUSTED` is a RESERVED enum value, not yet emitted. Wiring the
+  pre-call probe (mirroring the scorer's `acquire_cost_cap_slot` path) is
+  tracked as `0.5.0.02a`. Per-tick spend is bounded today by the `limit=200`
+  message cap on `tracking.classify_emails`.
 - On success: persists `classification` + `urgency` + model name, then runs the
   post-classify dispatch (emit `AppEvent(EMAIL_RECEIVED)`, propose a status
   change per § F, fire priority notifications per § G).

@@ -34,6 +34,7 @@ from models import (
 )
 from models.enums import EmailClassification
 from services import email_status_mapper, llm_tracker, notifications
+from services.email_sync import _MAX_SENDER_EMAIL_LEN, _MAX_SUBJECT_LEN
 
 log = logging.getLogger(__name__)
 
@@ -177,9 +178,12 @@ async def classify_unprocessed(
                 continue
             raise
 
+        # Cap untrusted fields before they reach the prompt (PR #214 hacker M1).
+        # New rows are capped at persist; this also bounds any pre-existing
+        # uncapped row's prompt-injection budget.
         rendered = CLASSIFY_PROMPT.format(
-            sender=msg.sender_email,
-            subject=msg.subject,
+            sender=msg.sender_email[:_MAX_SENDER_EMAIL_LEN],
+            subject=msg.subject[:_MAX_SUBJECT_LEN],
             body=msg.snippet,
         )
         try:

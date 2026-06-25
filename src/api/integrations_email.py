@@ -24,8 +24,9 @@ from api.auth import require_csrf
 from db.session import get_session
 from models import EmailAccount, EmailAccountStatus, User
 from models.enums import EmailAccountProvider
-from services import email_credentials, email_sync
+from services import email_credentials, email_sync, imap_host_guard
 from services.auth import require_authed_session
+from services.rate_limit import check_email_sync_now_rate_limit
 from ui.routes.profile import _effective_user_id
 
 router = APIRouter()
@@ -87,6 +88,16 @@ async def connect_imap(
 ) -> EmailAccountRead:
     user_id = _effective_user_id(_user)
 
+    # SSRF guard: reject internal / disallowed-port targets before any
+    # connection attempt (PR #214 hacker H1). The connection helpers re-check
+    # at every connect + sync for DNS-rebind TOCTOU defense.
+    host_ok, _reason = imap_host_guard.check_imap_host(imap_host, imap_port)
+    if not host_ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=imap_host_guard.SAFE_ERROR_MESSAGE,
+        )
+
     ok, err = await email_sync.test_imap_connection(
         host=imap_host,
         port=imap_port,
@@ -96,7 +107,7 @@ async def connect_imap(
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"IMAP connection failed: {err or 'unknown'}",
+            detail=err or "Could not connect to the mail server.",
         )
 
     existing = (
@@ -216,6 +227,7 @@ async def sync_account_now(
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
+    _rl: None = Depends(check_email_sync_now_rate_limit),
 ) -> dict[str, object]:
     user_id = _effective_user_id(_user)
     account = (

@@ -80,6 +80,11 @@ RESCORE_LIMIT_HR = RateLimit(window=timedelta(hours=1), threshold=60)
 # runaway client can still exhaust daily cap quickly.
 GENERATE_BUNDLE_LIMIT_HR = RateLimit(window=timedelta(hours=1), threshold=10)
 
+# Plan 90 / 0.5.0.01 — manual email sync. Each call opens an IMAP connection +
+# a fan of FETCHes; 1/min/user bounds connection spawn + downstream LLM cost
+# (EMAIL_MONITORING.md § H).
+EMAIL_SYNC_NOW_LIMIT_MIN = RateLimit(window=timedelta(minutes=1), threshold=1)
+
 
 def _enforce(
     limiter: RateLimit,
@@ -120,8 +125,22 @@ async def check_generate_bundle_rate_limit(
     _enforce(GENERATE_BUNDLE_LIMIT_HR, _user.id, name="generate-bundle/hr")
 
 
+async def check_email_sync_now_rate_limit(
+    _user: User | None = Depends(require_authed_session),
+) -> None:
+    """Plan 90 / 0.5.0.01 — 1/min per user for manual email sync.
+
+    Skips fake-session callers (`_user is None`) — same posture as the other
+    limiters; the transitional auth stub has no stable user identity.
+    """
+    if _user is None:
+        return
+    _enforce(EMAIL_SYNC_NOW_LIMIT_MIN, _user.id, name="email-sync-now/min")
+
+
 def reset_all() -> None:
     """Test helper — clear every limiter."""
     RESCORE_LIMIT_MIN.reset()
     RESCORE_LIMIT_HR.reset()
     GENERATE_BUNDLE_LIMIT_HR.reset()
+    EMAIL_SYNC_NOW_LIMIT_MIN.reset()

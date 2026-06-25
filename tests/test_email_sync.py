@@ -55,6 +55,30 @@ def _email_test_tables():
     return tables
 
 
+@pytest.fixture(autouse=True)
+def _patch_imap_host_guard_dns(monkeypatch):
+    """The SSRF host guard resolves real DNS at every connection point. Map the
+    canned test host to a public IP (IP literals resolve to themselves) so sync
+    exercises the guard without live network."""
+    import ipaddress
+
+    from services import imap_host_guard
+
+    def _fake_resolve(host: str) -> tuple[str, ...]:
+        if host == "imap.example.com":
+            return ("93.184.216.34",)
+        try:
+            ipaddress.ip_address(host)
+            return (host,)
+        except ValueError:
+            return ()
+
+    imap_host_guard._DNS_CACHE.clear()
+    monkeypatch.setattr(imap_host_guard, "_resolve_host", _fake_resolve)
+    yield
+    imap_host_guard._DNS_CACHE.clear()
+
+
 @pytest.fixture
 async def session():
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -255,3 +279,88 @@ async def test_sync_account_dedup_on_repeat(session):
 
     msgs = (await session.exec(select(EmailMessage))).all()
     assert len(msgs) == 1
+
+
+async def test_sync_account_caps_untrusted_fields(session):
+    """subject capped to 200, sender_email to 254 at persist (PR #214 M1/L3)."""
+    from models import EmailAccount, EmailMessage, User
+    from models.enums import EmailAccountProvider
+    from services import email_credentials, email_sync
+
+    user = User(email="cap@example.com", password_hash="x", is_active=True)
+    session.add(user)
+    await session.flush()
+
+    account = EmailAccount(
+        user_id=user.id,
+        provider=EmailAccountProvider.IMAP,
+        account_email="cap@example.com",
+        imap_host="imap.example.com",
+        imap_username="cap@example.com",
+        imap_password="",
+    )
+    email_credentials.store_imap_password(account, "p@ssw0rd")
+    session.add(account)
+    await session.flush()
+
+    long_subject = "S" * 5000
+    long_local = "a" * 4000
+    raws = [
+        _make_rfc822(
+            msg_id="<cap-1@example.com>",
+            sender=f"Spammy <{long_local}@evil.example.com>",
+            subject=long_subject,
+        )
+    ]
+    fake_client = _FakeIMAP(raws)
+
+    result = await email_sync.sync_account(
+        session, account, client_factory=lambda h, p: fake_client
+    )
+    await session.commit()
+    assert result.new == 1
+
+    from sqlmodel import select
+
+    msg = (await session.exec(select(EmailMessage))).one()
+    assert len(msg.subject) == 200
+    assert len(msg.sender_email) == 254
+
+
+async def test_sync_account_blocks_internal_host(session, monkeypatch):
+    """A host resolving to an internal IP is rejected; account fails closed and
+    the persisted error is canonical (no raw exception / IP leak)."""
+    from models import EmailAccount, EmailMessage, User
+    from models.enums import EmailAccountProvider, EmailAccountStatus
+    from services import email_credentials, email_sync, imap_host_guard
+
+    # Rebind the test host to an internal IP (DNS-rebind simulation).
+    monkeypatch.setattr(imap_host_guard, "_resolve_host", lambda host: ("169.254.169.254",))
+
+    user = User(email="ssrf@example.com", password_hash="x", is_active=True)
+    session.add(user)
+    await session.flush()
+    account = EmailAccount(
+        user_id=user.id,
+        provider=EmailAccountProvider.IMAP,
+        account_email="ssrf@example.com",
+        imap_host="imap.example.com",
+        imap_username="ssrf@example.com",
+        imap_password="",
+    )
+    email_credentials.store_imap_password(account, "p@ssw0rd")
+    session.add(account)
+    await session.flush()
+
+    def _factory(host, port):
+        raise AssertionError("guard must block before a client is created")
+
+    result = await email_sync.sync_account(session, account, client_factory=_factory)
+    await session.commit()
+
+    assert result.status == EmailAccountStatus.AUTH_REQUIRED
+    assert account.last_error_message == imap_host_guard.SAFE_ERROR_MESSAGE
+    assert "169.254" not in (account.last_error_message or "")
+    from sqlmodel import select
+
+    assert (await session.exec(select(EmailMessage))).all() == []

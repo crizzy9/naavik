@@ -5,9 +5,11 @@ Revises: 0023_profile_raw_resume_text
 Create Date: 2026-06-25
 
 Additive:
-- `email_account` table (per-user IMAP inbox connection; plaintext password
-  column by manager directive — Fernet column-encryption (plan § A.2.a) is a
-  ~10-LOC swap inside `services/email_credentials.py` if owner opts in).
+- `email_account` table (per-user IMAP inbox connection; the `imap_password`
+  column holds a Fernet ciphertext token — keyed off `SECRET_KEY` via
+  `services/email_credentials.py` (plan § A.2.a, owner-approved 2026-06-25).
+  The column type is plain `str` because the token is ASCII; no schema change
+  was needed for the encryption).
 - `email_message` table (per-message metadata + 200-char snippet; classification
   + suggested_status surfaces).
 - 3 new Postgres ENUM types (`emailaccountprovider`, `emailaccountstatus`,

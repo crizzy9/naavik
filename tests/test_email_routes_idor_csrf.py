@@ -20,6 +20,30 @@ os.environ.setdefault("NAAVIK_DEBUG", "1")
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 
 
+@pytest.fixture(autouse=True)
+def _patch_imap_host_guard_dns(monkeypatch):
+    """The connect route runs the SSRF host guard (real DNS). Map the canned
+    test host to a public IP so the happy-path tests pass without live network;
+    IP literals resolve to themselves."""
+    import ipaddress
+
+    from services import imap_host_guard
+
+    def _fake_resolve(host: str) -> tuple[str, ...]:
+        if host == "imap.example.com":
+            return ("93.184.216.34",)
+        try:
+            ipaddress.ip_address(host)
+            return (host,)
+        except ValueError:
+            return ()
+
+    imap_host_guard._DNS_CACHE.clear()
+    monkeypatch.setattr(imap_host_guard, "_resolve_host", _fake_resolve)
+    yield
+    imap_host_guard._DNS_CACHE.clear()
+
+
 @compiles(JSONB, "sqlite")
 def _compile_jsonb_sqlite(_type, _compiler, **_kw):  # type: ignore[misc]
     return "TEXT"
@@ -225,3 +249,77 @@ async def test_delete_account_idor_404_on_cross_user(client_with_user_42):
 
     r = client.delete("/api/v1/integrations/email/777")
     assert r.status_code == 404
+
+
+async def test_connect_blocks_internal_host_sanitized(client_with_user_42, monkeypatch):
+    """Connect to an internal target is rejected 400 with a canonical message —
+    no raw exception, no resolved-IP leak (PR #214 hacker H1)."""
+    from services import imap_host_guard
+
+    monkeypatch.setattr(imap_host_guard, "_resolve_host", lambda host: ("169.254.169.254",))
+
+    client, _, _ = client_with_user_42
+    r = client.post(
+        "/api/v1/integrations/email/imap",
+        data={
+            "account_email": "u42@example.com",
+            "imap_host": "metadata.internal",
+            "imap_username": "u42@example.com",
+            "imap_password": "secret-42",
+        },
+    )
+    assert r.status_code == 400, r.text[:300]
+    assert "169.254" not in r.text
+    assert "not permitted" in r.text.lower()
+
+
+async def test_connect_blocks_disallowed_port(client_with_user_42):
+    """A non-IMAP port (e.g. loopback Ollama 11434) is rejected before DNS."""
+    client, _, _ = client_with_user_42
+    r = client.post(
+        "/api/v1/integrations/email/imap",
+        data={
+            "account_email": "u42@example.com",
+            "imap_host": "imap.example.com",
+            "imap_username": "u42@example.com",
+            "imap_password": "secret-42",
+            "imap_port": "11434",
+        },
+    )
+    assert r.status_code == 400, r.text[:300]
+    assert "not permitted" in r.text.lower()
+
+
+async def test_sync_now_rate_limited_1_per_min(client_with_user_42):
+    """Second sync-now within a minute is 429 (plan 90 § H; architect MED)."""
+    from models import EmailAccount
+    from models.enums import EmailAccountProvider
+    from services import email_sync, rate_limit
+
+    client, _, maker = client_with_user_42
+    rate_limit.reset_all()
+
+    async with maker() as s:
+        s.add(
+            EmailAccount(
+                id=501,
+                user_id=42,
+                provider=EmailAccountProvider.IMAP,
+                account_email="u42@x.test",
+                imap_host="imap.example.com",
+                imap_username="u42@x.test",
+                imap_password="",
+            )
+        )
+        await s.commit()
+
+    async def _spy_sync(session, account, *, client_factory=None):
+        return email_sync.SyncResult(account_id=account.id or 0)
+
+    with patch("services.email_sync.sync_account", new=_spy_sync):
+        r1 = client.post("/api/v1/integrations/email/501/sync-now")
+        r2 = client.post("/api/v1/integrations/email/501/sync-now")
+
+    assert r1.status_code == 200, r1.text[:300]
+    assert r2.status_code == 429, r2.text[:300]
+    rate_limit.reset_all()
