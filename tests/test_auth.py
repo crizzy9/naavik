@@ -385,6 +385,95 @@ def test_signup_password_round_trips_via_real_bcrypt() -> None:
     assert "placeholder.hash.for.dev.password" not in hashed
 
 
+def test_signup_does_not_clear_failed_login_bucket() -> None:
+    """Plan 0.7.0.48 hacker F2 (2026-06-25): signup MUST NOT clear the
+    failed-LOGIN brute-force rate-limit bucket for the caller's IP.
+
+    Pre-fix: `post_signup` called `record_login_attempt(ip, success=True)`
+    on the success path, which wiped the failure deque for the IP. With
+    open signup (post-Wave-1 / 0.7.0.48), an attacker could plant 4 failed
+    logins, register a throwaway account to reset the bucket, plant 4 more
+    failed logins, and so on — bypassing the 5-attempts/15-min defense.
+
+    Post-fix: signup does not interact with the login-attempt bucket.
+    Regression asserts a planted 4-failure deque survives an interleaved
+    successful signup from the same IP.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.auth import router as api_auth_router
+    from db.session import get_session
+    from services.auth import is_rate_limited, reset_rate_limit
+
+    attacker_ip = "203.0.113.42"
+    reset_rate_limit()
+
+    # Plant 4 failed logins — one below the 5-attempt threshold.
+    for _ in range(4):
+        record_login_attempt(attacker_ip, success=False)
+    assert is_rate_limited(attacker_ip) is False
+
+    # Reuse the stub-session pattern from test_signup_succeeds_when_user_exists.
+    next_id = [1]
+
+    class _StubSession:
+        async def exec(self, _stmt):
+            class _Result:
+                def one_or_none(self):
+                    return None
+
+                def first(self):
+                    return None
+
+                def scalar_one_or_none(self):
+                    return None
+
+            return _Result()
+
+        def add(self, obj):
+            if type(obj).__name__ == "User" and getattr(obj, "id", None) is None:
+                obj.id = next_id[0]
+                next_id[0] += 1
+
+        async def flush(self):
+            return None
+
+        async def commit(self):
+            return None
+
+        async def refresh(self, _obj):
+            return None
+
+        async def rollback(self):
+            return None
+
+    async def _override_session():
+        yield _StubSession()
+
+    app = FastAPI()
+    app.include_router(api_auth_router)
+    app.dependency_overrides[get_session] = _override_session
+    client = TestClient(app)
+
+    # Successful signup from the SAME IP as the planted failures.
+    r = client.post(
+        "/api/v1/auth/signup",
+        data={"email": "throwaway@local.test", "password": "ResetMe123"},
+        headers={"X-Forwarded-For": attacker_ip},
+    )
+    assert r.status_code == 204, f"signup expected 204, got {r.status_code}: {r.text}"
+
+    # Bucket survived: one more failed login tips it over the threshold.
+    record_login_attempt(attacker_ip, success=False)
+    assert is_rate_limited(attacker_ip) is True, (
+        "post-fix: signup MUST NOT clear the failed-login bucket; pre-fix this "
+        "assertion failed because record_login_attempt(success=True) wiped the deque"
+    )
+
+    reset_rate_limit()
+
+
 # ── Plan 18 (PC.6) — password complexity validator ──────────────────────
 
 

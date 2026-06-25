@@ -218,7 +218,13 @@ async def post_signup(
     user.last_login_at = _now()
     await session.commit()
 
-    record_login_attempt(ip, success=True)
+    # Plan 0.7.0.48 hacker F2 (2026-06-25): do NOT call
+    # `record_login_attempt(ip, success=True)` from signup. Signup is open
+    # since Wave 1 — calling the login-success recorder here clears the
+    # failed-LOGIN brute-force bucket, letting an attacker reset the
+    # 5-attempts/15-min defense by registering a throwaway account between
+    # password-guessing batches. Signup creates a user, it doesn't
+    # authenticate one — the rate-limit bucket only tracks login attempts.
 
     secure = not request.app.debug if hasattr(request.app, "debug") else True
     jwt_value = await issue_jwt_async(session, user_id=user.id, keep_signed_in=bool(keep_signed_in))
