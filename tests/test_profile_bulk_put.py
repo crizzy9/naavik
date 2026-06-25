@@ -34,6 +34,26 @@ def auth_cookies() -> dict[str, str]:
     return {"naavik_session": "fake-1"}
 
 
+@pytest.fixture(autouse=True)
+def _override_csrf():
+    """Plan 0.7.0.48 hacker F6 (2026-06-25): `put_profile_bulk` now enforces
+    `require_csrf` (matches `put_llm` / `put_notifications` / `put_account`).
+    Override the dep here so the existing surface-shape tests don't need to
+    craft a double-submit token roundtrip per request. The dedicated
+    CSRF-enforcement regression at the bottom of this file pops the override
+    via a wrapper decorator to exercise the real gate.
+    """
+    from api.auth import require_csrf
+    from main import app
+
+    def _csrf_pass() -> None:
+        return None
+
+    app.dependency_overrides[require_csrf] = _csrf_pass
+    yield
+    app.dependency_overrides.pop(require_csrf, None)
+
+
 def test_bulk_put_persists_identity_field(client: TestClient, auth_cookies):
     from db import sample_data as sd
 
@@ -212,3 +232,46 @@ def test_bulk_put_handles_all_empty_eeo_fields(client: TestClient, auth_cookies)
         sd.PROFILE.full_name = orig_name
         for k, v in orig_eeo.items():
             setattr(sd.PROFILE, k, v)
+
+
+# ── CSRF enforcement regression — plan 0.7.0.48 hacker F6 fold-in 2026-06-25 ──
+
+
+def _without_csrf_override(test_fn):
+    """Decorator: temporarily pop the autouse fixture's `require_csrf` override
+    so the wrapped test exercises the real gate. Restored after the test runs
+    (the autouse cleanup re-pops anyway, so this is safe). Mirrors the
+    pattern in `tests/test_settings_save_fragment_response.py`.
+    """
+    import functools
+
+    @functools.wraps(test_fn)
+    def wrapper(*args, **kwargs):
+        from api.auth import require_csrf
+        from main import app
+
+        saved = app.dependency_overrides.pop(require_csrf, None)
+        try:
+            return test_fn(*args, **kwargs)
+        finally:
+            if saved is not None:
+                app.dependency_overrides[require_csrf] = saved
+
+    return wrapper
+
+
+@_without_csrf_override
+def test_bulk_put_csrf_enforced(client: TestClient, auth_cookies):
+    """Regression: `PUT /api/v1/profile` MUST gate on `require_csrf`. Pre-fix
+    this was the lone state-changing settings/profile mutation without CSRF
+    after the W4 fold-in shipped `require_csrf` on every sibling. The hacker
+    F6 finding on PR #212 flagged the asymmetry. Test asserts the gate fires
+    when no CSRF token is present (cookies + headers stripped of CSRF).
+    """
+    r = client.put(
+        "/api/v1/profile",
+        data={"full_name": "Should Not Persist"},
+        cookies=auth_cookies,
+    )
+    assert r.status_code == 403, f"expected 403, got {r.status_code}: {r.text[:200]}"
+    assert "CSRF" in r.text

@@ -66,8 +66,13 @@ def _notifications_response_payload(s) -> dict[str, Any]:
 
 
 @router.get("/api/v1/settings/llm", name="api_settings_llm_get")
-async def get_llm(session: AsyncSession = Depends(get_session)):
-    s = await settings_service.get_or_create(session, user_id=1)
+async def get_llm(
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+):
+    from ui.routes.settings import _effective_user_id
+
+    s = await settings_service.get_or_create(session, user_id=_effective_user_id(_user))
     await session.commit()
     return _llm_response_payload(s)
 
@@ -136,10 +141,12 @@ async def put_llm(
                 status_code=422,
                 content={"detail": "semantic_match_threshold must be a float"},
             )
+    from ui.routes.settings import _effective_user_id
+
     try:
         s = await settings_service.update_llm(
             session,
-            user_id=1,
+            user_id=_effective_user_id(_user),
             provider=LLMProviderEnum(provider) if provider else None,
             model=payload.get("llm_model"),
             fallback_provider=(LLMProviderEnum(fallback_provider) if fallback_provider else None),
@@ -171,8 +178,9 @@ async def post_llm_test(
     env-presence indicators instead of `Settings.llm_api_key_fingerprint`.
     """
     from llm import get_provider
+    from ui.routes.settings import _effective_user_id
 
-    s = await settings_service.get_or_create(session, user_id=1)
+    s = await settings_service.get_or_create(session, user_id=_effective_user_id(_user))
     if not env_secrets.llm_provider_configured(s.llm_provider) and s.llm_provider.value != "ollama":
         return {"ok": False, "error": "no api_key configured", "model": s.llm_model}
 
@@ -269,9 +277,11 @@ async def put_auto_apply(
         v = payload["auto_apply_per_board_daily_caps"]
         per_board = v if isinstance(v, dict) else {}
 
+    from ui.routes.settings import _effective_user_id
+
     s = await settings_service.update_auto_apply(
         session,
-        user_id=1,
+        user_id=_effective_user_id(_user),
         auto_apply_enabled=_tri_state("auto_apply_enabled"),
         auto_apply_score_threshold=payload.get("auto_apply_score_threshold"),
         auto_apply_daily_cap=payload.get("auto_apply_daily_cap"),
@@ -633,9 +643,11 @@ async def put_notifications(
                 status_code=422, content={"detail": "notify_threshold must be a float"}
             )
 
+    from ui.routes.settings import _effective_user_id
+
     s = await settings_service.update_notifications(
         session,
-        user_id=1,
+        user_id=_effective_user_id(_user),
         notify_threshold=notify_threshold,
         notify_on_errors=payload.get("notify_on_errors"),
         notifications_enabled=notifications_enabled,
@@ -649,8 +661,13 @@ async def put_notifications(
 
 
 @router.get("/api/v1/settings/deployment", name="api_settings_deployment_get")
-async def get_deployment(session: AsyncSession = Depends(get_session)):
-    info = await settings_service.get_deployment_info(session, user_id=1)
+async def get_deployment(
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+):
+    from ui.routes.settings import _effective_user_id
+
+    info = await settings_service.get_deployment_info(session, user_id=_effective_user_id(_user))
     await session.commit()
     return info
 

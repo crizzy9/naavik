@@ -15,10 +15,12 @@ from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Reques
 from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
 from db.session import get_session
 from models import User
 from services import profile_service
 from services.auth import require_authed_session
+from ui.routes.profile import _effective_user_id
 from ui.templates_setup import templates
 
 router = APIRouter()
@@ -32,6 +34,7 @@ async def put_profile_bulk(
     request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ) -> HTMLResponse:
     """Bulk save the profile editor form.
 
@@ -58,6 +61,7 @@ async def put_profile_bulk(
     eeo_payload: dict[str, Any] = {}
     saved_fields: list[str] = []
     failed: list[tuple[str, str]] = []
+    user_id = _effective_user_id(_user)
 
     for name, value in form.multi_items():
         if name in eeo_fields:
@@ -74,7 +78,7 @@ async def put_profile_bulk(
             try:
                 await profile_service.update_field(
                     session,
-                    user_id=1,
+                    user_id=user_id,
                     field=name,
                     value=value,
                 )
@@ -89,7 +93,7 @@ async def put_profile_bulk(
         try:
             await profile_service.update_application_questions(
                 session,
-                user_id=1,
+                user_id=user_id,
                 payload=eeo_payload,
             )
             saved_fields.extend(sorted(eeo_payload.keys()))
@@ -138,10 +142,9 @@ async def put_field(
     raw_value = form.get("value")
 
     try:
-        # Single-user MVP: user_id=1.
         await profile_service.update_field(
             session,
-            user_id=1,
+            user_id=_effective_user_id(_user),
             field=field,
             value=raw_value,
         )
@@ -168,7 +171,7 @@ async def put_application_questions(
     try:
         await profile_service.update_application_questions(
             session,
-            user_id=1,
+            user_id=_effective_user_id(_user),
             payload=payload,
         )
         await session.commit()
