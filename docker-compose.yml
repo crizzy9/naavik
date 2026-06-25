@@ -59,8 +59,10 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       PORTFOLIO_WEBHOOK_URL: ${PORTFOLIO_WEBHOOK_URL:-}
+      # Container-internal bind remains 8000; published host port defaults to 8003 below.
+      PORT: 8000
     ports:
-      - "${PORT:-8000}:8000"
+      - "${PORT:-8003}:8000"
     depends_on:
       db:
         condition: service_healthy

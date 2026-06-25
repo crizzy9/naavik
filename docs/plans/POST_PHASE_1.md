@@ -33,7 +33,7 @@ After plan 10 Wave 6 ships, the deliverable line in `ROADMAP.md` § Phase 1 is s
 Concretely, **end-to-end smoke after Phase 1**:
 
 1. `nix run .#dev` boots Postgres + alembic + FastAPI in one terminal.
-2. Visit `http://localhost:8000/login`. **Plan 83 (0.7.0.36, 2026-05-21)**: no auto-seed — click "Create account" to sign up + onboard with your real resume.
+2. Visit `http://localhost:8003/login`. **Plan 83 (0.7.0.36, 2026-05-21)**: no auto-seed — click "Create account" to sign up + onboard with your real resume.
 3. Land on Overview. Real KPIs from seeded `Application` rows. Email signal feed shows seeded `EmailThread` rows. Pipeline strip shows 5 stages.
 4. Visit `/profile/edit`. Edit a bullet via the modal. Autosave indicator cycles `saving → saved`. Tag picker toggles. Drag a bullet to reorder — Sortable.js fires the reorder API; bullet order persists across reload.
 5. Visit `/discover`. The seeded queue is sorted by score. Skip / Save / Auto-apply work via keyboard (←/↑/→). Auto-apply right-swipe creates a DRAFT; the queue advances.
@@ -43,7 +43,7 @@ Concretely, **end-to-end smoke after Phase 1**:
 9. Visit `/outreach`. Pick an application. The recommended-move card shows a real AI draft. Click "Send via LinkedIn" — stubbed in MVP (real LinkedIn is Phase 5).
 10. Visit `/settings`. Switch LLM provider. Test connection — real API call, real round-trip latency. Cost cards show this-month aggregates from `ApiUsage`.
 11. Visit `/_design/components` (toggle `Settings.debug=True` first via SQL or settings tab). All 85 components render in a single fixture page.
-12. `curl http://localhost:8000/api/portfolio/cv` returns Profile JSON filtered for public consumption. The portfolio site at `crypticsoul.dev` builds against this.
+12. `curl http://localhost:8003/api/portfolio/cv` returns Profile JSON filtered for public consumption. The portfolio site at `crypticsoul.dev` builds against this.
 
 ---
 
@@ -139,7 +139,7 @@ Spin up a NixOS VM with the `nix/module.nix` enabled (`naavik = true`), point at
 git clone [email protected]:crizzy9/naavik.git fresh-test && cd fresh-test
 cp .env.example .env  # edit SECRET_KEY + ANTHROPIC_API_KEY
 docker compose up -d
-# Visit http://localhost:8000 — should load without manual setup
+# Visit http://localhost:8003 — should load without manual setup
 ```
 
 If a fresh clone + `.env` edit doesn't bring up a working app in < 2 minutes, the self-hosted onboarding is broken.
@@ -197,7 +197,7 @@ Each implementation prompt includes a "STOP and post a question" instruction for
 
 Naavik v1.0 (post-Phase-6) means:
 
-- A self-hosted user clones the repo, edits `.env`, runs `docker compose up -d`, lands at `localhost:8000`, signs up, uploads a resume, and is auto-applying to relevant jobs by end-of-day.
+- A self-hosted user clones the repo, edits `.env`, runs `docker compose up -d`, lands at `localhost:8003`, signs up, uploads a resume, and is auto-applying to relevant jobs by end-of-day.
 - A NixOS user adds the flake input, enables the module, sets SOPS secrets, and the same flow works behind their Traefik reverse proxy.
 - A cloud-tier user pays $15/mo, brings their own Anthropic key, and gets the identical product.
 - The portfolio site at `crypticsoul.dev` reflects the Profile state without manual sync.

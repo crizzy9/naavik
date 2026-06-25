@@ -46,7 +46,10 @@ async def lifespan(app: FastAPI):
     (dev-only edge cases), the app still serves; jobs are no-ops.
     """
     if app_settings.debug:
-        log.info("dev server up at http://localhost:8000 — visit /signup to create your account")
+        log.info(
+            "dev server up at http://localhost:%s — visit /signup to create your account",
+            app_settings.port,
+        )
 
     try:
         from scheduler import shutdown as shutdown_scheduler
@@ -77,7 +80,7 @@ app = FastAPI(
     # Plan 0.7.0.48 Wave 2 (2026-05-25): pass through `app_settings.debug` so
     # `request.app.debug` resolves correctly. Auth cookie code reads this attr
     # to decide `Secure=True/False`; when omitted, `request.app.debug` is always
-    # False, so dev (http://localhost:8000) gets Secure cookies that the browser
+    # False, so local dev over plain HTTP gets Secure cookies that the browser
     # refuses to send → infinite redirect to /login on every authed request.
     debug=app_settings.debug,
 )

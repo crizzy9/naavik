@@ -32,7 +32,7 @@ apps:
     naavik:
       enable: true
       subdomain: "jobs"           # → jobs.crypticsoul.dev
-      port: 8000
+      port: 8003
       settings:
         llm_provider: "anthropic" # or "openai" or "ollama"
         auto_apply: false
@@ -65,7 +65,7 @@ cp .env.example .env
 # One command — Postgres + auto-migrate + app, all wired
 docker compose up -d
 
-# Open http://localhost:8000
+# Open http://localhost:8003
 ```
 
 - Migrations run automatically on first start.
@@ -97,7 +97,7 @@ The repo is Nix-first. One command boots Postgres (with pgvector), runs migratio
 nix run .#dev
 ```
 
-Per-project Postgres data lives in `./.naavik/db/` (gitignored). Ctrl-C tears down cleanly. Open <http://localhost:8000>.
+Per-project Postgres data lives in `./.naavik/db/` (gitignored). Ctrl-C tears down cleanly. Open <http://localhost:8003>.
 
 For an interactive dev shell (uv, ruff, typst, postgresql-client on PATH):
 
@@ -113,7 +113,7 @@ Plan 83 (0.7.0.36, 2026-05-21) replaced the auto-seeded dev user + `~/.naavik/de
 
 ```bash
 nix run .#dev                                   # orchestrator: Postgres + alembic + FastAPI
-# Open http://localhost:8000 — redirects to /login.
+# Open http://localhost:8003 — redirects to /login.
 # Click "Create account" → enter email + 12+ char password (letter + digit).
 # Onboarding flow uploads your resume + extracts profile.
 ```

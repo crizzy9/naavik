@@ -571,7 +571,7 @@ async def require_authed_session(
     #   API (`/api/v1/*`)             → bare 401 (SDK consumers want 401)
     #   HTMX UI (HX-Request)          → 401 + `HX-Redirect: /login`
     #   Browser top-nav (neither)     → 307 + `Location: /login`
-    # The 307 path is what makes `http://localhost:8000/` from a cookieless
+    # The 307 path is what makes `http://localhost:8003/` from a cookieless
     # browser land on `/login` instead of a JSON error page.
     is_htmx = request.headers.get("hx-request", "").lower() == "true"
     is_api = request.url.path.startswith("/api/v1/")

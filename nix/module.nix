@@ -3,7 +3,7 @@ let
   cfg = settings.servicesConfig.apps.tools.naavik or {};
   enable = cfg.enable or false;
   domain = "${cfg.subdomain or "jobs"}.${settings.servicesConfig.domain or "domainname.net"}";
-  port = cfg.port or 8000;
+  port = cfg.port or 8003;
   storage = settings.servicesConfig.storage or {};
   dataDir = "${storage.appdata or "/data/appdata"}/naavik";
   naavikPkg = pkgs.callPackage ./package.nix {};

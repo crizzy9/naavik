@@ -3,7 +3,7 @@
 Plan 75 / 0.3.3.22 originally added `HX-Redirect` for HTMX UI requests; plan
 0.7.0.39 (2026-05-21) widened the dep to also redirect browser top-nav
 (non-HTMX, non-API) requests with a 307 + `Location` header. Without the
-307, a fresh browser visit to `http://localhost:8000/` (no cookies) returned
+307, a fresh browser visit to `http://localhost:8003/` (no cookies) returned
 a JSON 401 error page instead of redirecting to `/login`.
 
 The matrix this file pins:
@@ -75,7 +75,7 @@ def test_api_request_401_stays_bare(client: TestClient):
 def test_browser_nav_request_redirects_to_login(client: TestClient):
     """Plain browser GET (no HX-Request header) on a gated UI route → 307 +
     Location: /login. This is the bug 0.7.0.39 fixed: prior behavior was a
-    JSON 401 error page on `http://localhost:8000/` from a cookieless tab.
+    JSON 401 error page on `http://localhost:8003/` from a cookieless tab.
     """
     r = client.get("/discover", cookies={}, follow_redirects=False)
     assert r.status_code == 307, f"expected 307, got {r.status_code}: {r.text[:200]}"
