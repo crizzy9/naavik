@@ -3,7 +3,7 @@
 Each test constructs Settings() with explicit kwargs to isolate from the
 ambient process env (which under `nix develop` has NAAVIK_DEBUG=1 set,
 and tests run with whatever .env supplies). _env_isolated() further clears
-NAAVIK_DEBUG / SECRET_KEY so the validator sees only the kwargs.
+NAAVIK_DEBUG / SECRET_KEY / PORT so the validator sees only the kwargs.
 
 NB: Settings does NOT set populate_by_name=True — the alias `NAAVIK_DEBUG`
 is the only env-var key honored for Settings.debug. The bypass-case test
@@ -28,7 +28,7 @@ pytestmark = pytest.mark.uses_sample_data_shims
 @contextmanager
 def _env_isolated():
     """Strip env vars that pydantic-settings would otherwise read."""
-    keys = ("NAAVIK_DEBUG", "SECRET_KEY")
+    keys = ("NAAVIK_DEBUG", "SECRET_KEY", "PORT")
     saved = {k: os.environ.pop(k, None) for k in keys}
     try:
         yield
@@ -61,6 +61,13 @@ def test_valid_secret_key_passes_when_not_debug():
         s = Settings(secret_key=strong, debug=False)
     assert s.secret_key == strong
     assert s.debug is False
+
+
+def test_default_server_port_avoids_common_8000_collision():
+    strong = "x" * 48
+    with _env_isolated():
+        s = Settings(secret_key=strong, debug=False)
+    assert s.port == 8003
 
 
 def test_default_secret_key_allowed_in_debug():

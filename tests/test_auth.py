@@ -259,11 +259,11 @@ def test_signup_rejects_short_password() -> None:
     client = _signup_client()
     r = client.post(
         "/api/v1/auth/signup",
-        data={"email": "[email protected]", "password": "short"},
+        data={"email": "[email protected]", "password": "abc"},
     )
     assert r.status_code == 422
-    # Plan 18 (PC.6): the 8-char rule tightened to 12 + complexity.
-    assert "at least 12 characters" in r.text
+    # Plan 0.7.0.48 Wave 2: min-length lowered 12 → 8 per owner directive.
+    assert "at least 8 characters" in r.text
     assert "naavik_session" not in r.cookies
 
 
@@ -279,6 +279,100 @@ def test_signup_rejects_invalid_email_shape() -> None:
     assert "valid email" in r.text
 
 
+def test_signup_succeeds_when_user_exists() -> None:
+    """Plan 0.7.0.48 Wave 1+2 (2026-05-24/25): no signup gate, no admin
+    differentiation. Second signup succeeds; every user has `is_admin=True`
+    by default (admin concept deprecated — every user owns their own data).
+    The pre-Wave-1 behavior was 403; the pre-Wave-2 behavior minted
+    `is_admin=False` for non-first users.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.auth import router as api_auth_router
+    from db.session import get_session
+
+    added_users: list = []
+    next_id = [1]
+
+    class _StubSession:
+        """Stub AsyncSession for the signup path.
+
+        Wave 2 dropped the `select(func.count())` probe (admin concept
+        deprecated). The only `exec` call now is `get_user_by_email`'s
+        `select(User).where(email == ...)`; we always return None so the
+        endpoint proceeds with user creation.
+        """
+
+        async def exec(self, _stmt):
+            class _Result:
+                def one_or_none(self):
+                    return None
+
+                def first(self):
+                    return None
+
+                def scalar_one_or_none(self):
+                    return None
+
+            return _Result()
+
+        def add(self, obj):
+            # Assign an id if it's a User row (mimicks autoincrement on flush).
+            if type(obj).__name__ == "User" and getattr(obj, "id", None) is None:
+                obj.id = next_id[0]
+                next_id[0] += 1
+            added_users.append(obj)
+
+        async def flush(self):
+            return None
+
+        async def commit(self):
+            return None
+
+        async def refresh(self, _obj):
+            return None
+
+        async def rollback(self):
+            return None
+
+    async def _override_session():
+        yield _StubSession()
+
+    app = FastAPI()
+    app.include_router(api_auth_router)
+    app.dependency_overrides[get_session] = _override_session
+    client = TestClient(app)
+
+    # User 1 — first signup.
+    r1 = client.post(
+        "/api/v1/auth/signup",
+        data={"email": "admin@local.test", "password": "AdminPass1234"},
+    )
+    assert r1.status_code == 204, f"first signup expected 204, got {r1.status_code}: {r1.text}"
+    assert r1.headers.get("hx-redirect") == "/onboarding"
+
+    user1 = next(u for u in added_users if type(u).__name__ == "User")
+    # Wave 2: admin concept deprecated; every user defaults `is_admin=True`.
+    assert user1.is_admin is True, "user must default is_admin=True post-Wave-2"
+
+    # User 2 — second signup, would have been 403 pre-Wave-1.
+    r2 = client.post(
+        "/api/v1/auth/signup",
+        data={"email": "second@local.test", "password": "SecondUser1234"},
+    )
+    assert r2.status_code == 204, (
+        f"second signup expected 204 (was 403 pre-plan-0.7.0.48), got {r2.status_code}: {r2.text}"
+    )
+    assert r2.headers.get("hx-redirect") == "/onboarding"
+
+    users = [u for u in added_users if type(u).__name__ == "User"]
+    assert len(users) == 2, f"expected 2 users added, got {len(users)}"
+    # Wave 2: every user (not just the first) defaults `is_admin=True`.
+    assert users[1].is_admin is True, "subsequent signups also default is_admin=True post-Wave-2"
+    assert users[1].email == "second@local.test"
+
+
 def test_signup_password_round_trips_via_real_bcrypt() -> None:
     """Whatever is stored MUST be a real bcrypt hash that verify_password accepts."""
     raw = "hunter2hunter2"
@@ -289,6 +383,95 @@ def test_signup_password_round_trips_via_real_bcrypt() -> None:
     # Sample-data fixture must NOT carry a placeholder bcrypt anywhere — that
     # value used to short-circuit verify_password to True even on miss.
     assert "placeholder.hash.for.dev.password" not in hashed
+
+
+def test_signup_does_not_clear_failed_login_bucket() -> None:
+    """Plan 0.7.0.48 hacker F2 (2026-06-25): signup MUST NOT clear the
+    failed-LOGIN brute-force rate-limit bucket for the caller's IP.
+
+    Pre-fix: `post_signup` called `record_login_attempt(ip, success=True)`
+    on the success path, which wiped the failure deque for the IP. With
+    open signup (post-Wave-1 / 0.7.0.48), an attacker could plant 4 failed
+    logins, register a throwaway account to reset the bucket, plant 4 more
+    failed logins, and so on — bypassing the 5-attempts/15-min defense.
+
+    Post-fix: signup does not interact with the login-attempt bucket.
+    Regression asserts a planted 4-failure deque survives an interleaved
+    successful signup from the same IP.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.auth import router as api_auth_router
+    from db.session import get_session
+    from services.auth import is_rate_limited, reset_rate_limit
+
+    attacker_ip = "203.0.113.42"
+    reset_rate_limit()
+
+    # Plant 4 failed logins — one below the 5-attempt threshold.
+    for _ in range(4):
+        record_login_attempt(attacker_ip, success=False)
+    assert is_rate_limited(attacker_ip) is False
+
+    # Reuse the stub-session pattern from test_signup_succeeds_when_user_exists.
+    next_id = [1]
+
+    class _StubSession:
+        async def exec(self, _stmt):
+            class _Result:
+                def one_or_none(self):
+                    return None
+
+                def first(self):
+                    return None
+
+                def scalar_one_or_none(self):
+                    return None
+
+            return _Result()
+
+        def add(self, obj):
+            if type(obj).__name__ == "User" and getattr(obj, "id", None) is None:
+                obj.id = next_id[0]
+                next_id[0] += 1
+
+        async def flush(self):
+            return None
+
+        async def commit(self):
+            return None
+
+        async def refresh(self, _obj):
+            return None
+
+        async def rollback(self):
+            return None
+
+    async def _override_session():
+        yield _StubSession()
+
+    app = FastAPI()
+    app.include_router(api_auth_router)
+    app.dependency_overrides[get_session] = _override_session
+    client = TestClient(app)
+
+    # Successful signup from the SAME IP as the planted failures.
+    r = client.post(
+        "/api/v1/auth/signup",
+        data={"email": "throwaway@local.test", "password": "ResetMe123"},
+        headers={"X-Forwarded-For": attacker_ip},
+    )
+    assert r.status_code == 204, f"signup expected 204, got {r.status_code}: {r.text}"
+
+    # Bucket survived: one more failed login tips it over the threshold.
+    record_login_attempt(attacker_ip, success=False)
+    assert is_rate_limited(attacker_ip) is True, (
+        "post-fix: signup MUST NOT clear the failed-login bucket; pre-fix this "
+        "assertion failed because record_login_attempt(success=True) wiped the deque"
+    )
+
+    reset_rate_limit()
 
 
 # ── Plan 18 (PC.6) — password complexity validator ──────────────────────
@@ -304,9 +487,10 @@ def test_validate_password_complexity_passes_strong() -> None:
 def test_validate_password_complexity_fails_too_short() -> None:
     from services.auth import validate_password_complexity
 
-    msg = validate_password_complexity("abc123")
+    # Plan 0.7.0.48 Wave 2 (2026-05-25): min-length lowered 12 → 8.
+    msg = validate_password_complexity("abc1")
     assert msg is not None
-    assert "12" in msg
+    assert "8" in msg
 
 
 def test_validate_password_complexity_fails_no_digit() -> None:
@@ -338,8 +522,9 @@ def test_hash_password_with_complexity_check_rejects_weak() -> None:
     from services.auth import hash_password_with_complexity_check
 
     with pytest.raises(ValueError) as exc:
-        hash_password_with_complexity_check("short")
-    assert "12" in str(exc.value)
+        hash_password_with_complexity_check("a1")
+    # Plan 0.7.0.48 Wave 2 (2026-05-25): min-length lowered 12 → 8.
+    assert "8" in str(exc.value)
 
 
 def test_hash_password_with_complexity_check_accepts_strong() -> None:

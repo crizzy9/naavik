@@ -12,7 +12,7 @@ Usage:
     # Then run the capture script (single screen or full matrix):
     uv run python tests/visual/capture.py
     uv run python tests/visual/capture.py --screen=login
-    uv run python tests/visual/capture.py --base-url=http://127.0.0.1:8000
+    uv run python tests/visual/capture.py --base-url=http://127.0.0.1:8003
 
 This script is intentionally NOT picked up by `uv run pytest` — it's a manual
 visual-QA tool. CI-side diff lives in a follow-up plan.
@@ -125,7 +125,7 @@ def capture(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--base-url", default="http://127.0.0.1:8000", help="Where the dev server is listening."
+        "--base-url", default="http://127.0.0.1:8003", help="Where the dev server is listening."
     )
     parser.add_argument(
         "--screen",

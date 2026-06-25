@@ -8,6 +8,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from api import applications as api_applications
@@ -45,7 +46,10 @@ async def lifespan(app: FastAPI):
     (dev-only edge cases), the app still serves; jobs are no-ops.
     """
     if app_settings.debug:
-        log.info("dev server up at http://localhost:8000 — visit /signup to create your account")
+        log.info(
+            "dev server up at http://localhost:%s — visit /signup to create your account",
+            app_settings.port,
+        )
 
     try:
         from scheduler import shutdown as shutdown_scheduler
@@ -73,6 +77,12 @@ app = FastAPI(
     description="Self-hosted-first career automation platform",
     version="0.1.0",
     lifespan=lifespan,
+    # Plan 0.7.0.48 Wave 2 (2026-05-25): pass through `app_settings.debug` so
+    # `request.app.debug` resolves correctly. Auth cookie code reads this attr
+    # to decide `Secure=True/False`; when omitted, `request.app.debug` is always
+    # False, so local dev over plain HTTP gets Secure cookies that the browser
+    # refuses to send → infinite redirect to /login on every authed request.
+    debug=app_settings.debug,
 )
 
 app.mount("/static", StaticFiles(directory="src/ui/static"), name="static")
@@ -102,6 +112,11 @@ app.include_router(setup_help.router)
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("src/ui/static/favicon.svg", media_type="image/svg+xml")
 
 
 def main():

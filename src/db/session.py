@@ -2,9 +2,9 @@
 
 Uses `NullPool` so each connection lives only for its scope — important
 when (a) tests use pytest-asyncio with new event loops per test and (b)
-the dev server may be restarted while connections are open. Phase 1
-single-user MVP doesn't need a pool; revisit if connection-overhead
-becomes measurable in load tests.
+the dev server may be restarted while connections are open. Self-hosted
+deployments don't need a pool; revisit if connection-overhead becomes
+measurable at multi-user scale.
 """
 
 from __future__ import annotations

@@ -5,27 +5,30 @@ Wave 4 of plan 10 § B.3 moves the JSON `/api/v1/auth/*` handlers to
 here for `/api/v1/auth/login`, `/api/v1/auth/logout`, `/api/v1/auth/me`,
 `/api/v1/auth/csrf` are deleted; the page handlers below stay.
 
-`/api/v1/extraction/*` and `/api/v1/profile/from-extraction` remain stubs
-until Wave 6 — they need the extraction service which is Phase 1 work but
-not on Wave 4's critical path.
+Plan 0.7.0.48 Wave 2 (2026-05-25): the SSE-extraction stubs + the
+`post_profile_from_extraction` fake-session bridge are deleted.
+`post_extraction_upload` now receives a real PDF, persists it, extracts
+text via `pdfplumber`, and returns a confirmation partial that links to
+`/profile/edit`. Onboarding collapses from 3 steps to 1.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, Response
-from fastapi.responses import HTMLResponse, StreamingResponse
-from sqlalchemy import func
-from sqlmodel import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
+from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
+from config import settings as app_settings
 from db.session import get_session
-from models import Settings, User
-from services.auth import get_current_user
-from ui.auth_stub import FAKE_SESSION_VALUE, SESSION_COOKIE
+from models import User
+from services import profile_service
+from services.auth import get_current_user, require_password_complete
 from ui.templates_setup import templates
 
 log = logging.getLogger(__name__)
@@ -33,58 +36,26 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# Max upload size enforced server-side (browser file-picker can't truly cap).
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Page handlers
 # ─────────────────────────────────────────────────────────────────────────
-
-
-async def _compute_signup_disabled(session: AsyncSession) -> bool:
-    """`True` iff the User table is non-empty AND multi-user signup is off.
-
-    Mirrors the gate that `POST /api/v1/auth/signup` enforces (see
-    `src/api/auth.py:post_signup`) so the form is suppressed BEFORE the
-    operator hits Submit. Scalar selects sidestep the live-worker
-    ORM-mapping quirk noted in plan 10b's deviations (B6 cleanup).
-
-    Returns `False` on any error so the form still renders — failing
-    closed would lock out a fresh-install operator on a transient DB
-    glitch, which is worse than showing a form that may 403 later.
-    """
-    try:
-        count_row = (await session.exec(select(func.count()).select_from(User))).one()
-        if hasattr(count_row, "_mapping") or isinstance(count_row, tuple):
-            # SQLAlchemy Row → first column.
-            existing_count = int(count_row[0])
-        else:
-            existing_count = int(count_row)
-        if existing_count == 0:
-            return False
-        allow_multi_scalar = await session.exec(
-            select(Settings.allow_multiple_users).order_by(Settings.user_id).limit(1)
-        )
-        allow_multi = bool(allow_multi_scalar.one_or_none())
-        return not allow_multi
-    except Exception as exc:  # noqa: BLE001
-        log.debug("signup_disabled probe failed: %s — falling through to form", exc)
-        return False
 
 
 @router.get("/login", response_class=HTMLResponse, name="login")
 async def get_login(
     request: Request,
     mode: Annotated[str | None, Query(pattern="^(signin|signup)$")] = None,
-    session: AsyncSession = Depends(get_session),
 ):
     """Login page. `?mode=signup` swaps the form into account-creation mode
-    (plan 10b item 4 — replaces the dead `?create=1` link).
-
-    Plan 10c (10c.2b, 2026-05-11): compute `signup_disabled` server-side so
-    the signup form is replaced by an explanatory banner when this is a
-    seeded single-user instance — instead of letting the operator submit
-    a form that comes back 403 with no on-page explanation.
+    (plan 10b item 4 — replaces the dead `?create=1` link). Open signup is
+    the default per plan 0.7.0.48 — no server-side gate suppresses the
+    form anymore.
     """
     resolved_mode = mode or "signin"
-    signup_disabled = await _compute_signup_disabled(session)
     return templates.TemplateResponse(
         request,
         "pages/login.html",
@@ -92,20 +63,22 @@ async def get_login(
             "active_sidebar": None,
             "active_template_path": "/login",
             "mode": resolved_mode,
-            "signup_disabled": signup_disabled,
         },
     )
 
 
 @router.get("/onboarding", response_class=HTMLResponse, name="onboarding")
-async def get_onboarding(request: Request, step: Annotated[int, Query(ge=1, le=3)] = 1):
+async def get_onboarding(request: Request):
+    """Single-step onboarding: upload a resume PDF, then hand off to
+    `/profile/edit`. Plan 0.7.0.48 Wave 2 (2026-05-25) collapses the prior
+    3-step SSE stub flow.
+    """
     return templates.TemplateResponse(
         request,
         "pages/onboarding.html",
         {
             "active_sidebar": None,
             "active_template_path": "/onboarding",
-            "current_step": step,
         },
     )
 
@@ -138,137 +111,102 @@ async def get_change_password(
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# /api/v1/extraction — Onboarding step-2 stubs (Wave 6 makes these real)
+# /api/v1/extraction/upload — resume PDF receive + text extract
 # ─────────────────────────────────────────────────────────────────────────
 
 
 @router.post("/api/v1/extraction/upload", name="extraction_upload")
 async def post_extraction_upload(
     request: Request,
-    fail: Annotated[str | None, Query()] = None,
+    resume: UploadFile,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_password_complete),
+    _csrf: None = Depends(require_csrf),
 ):
-    """Stub PDF upload — returns the Step-2 (extracting) partial so HTMX can
-    swap it into `#onboarding-step-content` (per the dropzone wiring).
+    """Receive a resume PDF, persist it under `<data_dir>/uploads/<user_id>/`,
+    extract plaintext via `pdfplumber`, persist the text on `Profile.raw_resume_text`,
+    heuristically populate empty identity fields (full_name / email / phone),
+    and return a confirmation partial.
+
+    Plan 0.7.0.48 Wave 3 fold-in (2026-05-25): Wave 2 dropped the extracted
+    text on the floor. Now we persist + heuristically backfill empty profile
+    identity fields (regex only — no LLM call per owner directive). Operator
+    hand-edits are never overwritten.
+
+    Plan 0.7.0.48 Wave 2 hacker MED fold-in (2026-05-25): `require_csrf`
+    enforces double-submit on this state-changing route. The dropzone form
+    inherits the global `hx-headers='{"X-CSRF-Token": ...}'` from
+    `base.html`, so the dependency fires cleanly on HTMX-driven uploads;
+    direct curl callers need to send both the `naavik_csrf` cookie + the
+    `X-CSRF-Token` header (issued at signup/login).
     """
-    if fail:
-        return HTMLResponse(
-            content=(
-                '<div class="p-4 rounded-lg bg-rose-500/10 border border-rose-500/30 '
-                'text-rose-200 text-sm">Upload failed. Try a different file.</div>'
-            ),
-            status_code=422,
+    if resume.content_type not in {"application/pdf", "application/x-pdf"}:
+        raise HTTPException(status_code=422, detail="Only PDF uploads are supported.")
+
+    payload = await resume.read()
+    if len(payload) == 0:
+        raise HTTPException(status_code=422, detail="Uploaded file is empty.")
+    if len(payload) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB cap.",
         )
+
+    upload_dir = Path(app_settings.data_dir) / "uploads" / str(user.id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
+    safe_name = Path(resume.filename or "resume.pdf").name
+    target = upload_dir / f"{ts}.pdf"
+    target.write_bytes(payload)
+
+    # pdfplumber raw extract — pure Python, no system deps. Failures
+    # surface to the user as a friendly 422 (not 500) since the user can
+    # try a different PDF.
+    import pdfplumber
+
+    try:
+        with pdfplumber.open(target) as pdf:
+            chunks: list[str] = []
+            for page in pdf.pages:
+                text = page.extract_text() or ""
+                if text:
+                    chunks.append(text)
+            extracted = "\n".join(chunks)
+    except Exception as exc:  # noqa: BLE001 — bubble pdfplumber failures
+        log.warning("pdfplumber extract failed for %s: %s", target, exc)
+        raise HTTPException(
+            status_code=422,
+            detail="Couldn't read that PDF. Try a different file.",
+        ) from exc
+
+    # Best-effort persistence: the PDF is already on disk regardless.
+    # `set_raw_resume_text` flushes the TX (per service-layer convention);
+    # this route owns the commit (mirrors `src/api/profile.py:put_profile_bulk`
+    # + every other state-changing handler in the codebase). Without this
+    # commit the TX rolls back at request end + `raw_resume_text` never
+    # persists. (Plan 0.7.0.48 W3-followup fix — owner manual QA round 3
+    # surfaced raw_resume_text NULL post-upload despite the service call
+    # firing cleanly.)
+    try:
+        await profile_service.set_raw_resume_text(session, user.id, extracted)
+        await session.commit()
+    except Exception as exc:  # noqa: BLE001 — persistence is best-effort
+        log.warning("set_raw_resume_text failed user=%s: %s", user.id, exc)
+        await session.rollback()
+
+    log.info(
+        "extraction upload user=%s file=%s bytes=%d chars=%d",
+        user.id,
+        safe_name,
+        len(payload),
+        len(extracted),
+    )
+
     return templates.TemplateResponse(
         request,
-        "pages/_onboarding_step_extracting.html",
-        {"extraction_id": "fake-1"},
+        "pages/_onboarding_step_uploaded.html",
+        {
+            "chars": len(extracted),
+            "filename": safe_name,
+        },
     )
-
-
-@router.get("/api/v1/extraction/{extraction_id}/stream", name="extraction_stream")
-async def get_extraction_stream(extraction_id: str):
-    """SSE — 5 progress, 6 field, 1 done, 1 stepReady events over ~6s.
-
-    `stepReady` carries an OOB swap whose `hx-trigger="load delay:200ms"`
-    auto-progresses the page to Step 3.
-    """
-
-    fields = [
-        ("extracted-field-row-name", "NAME", "Shyam Padia", 0.99),
-        ("extracted-field-row-title", "TITLE", "Senior Software Engineer · Intuit", 0.96),
-        ("extracted-field-row-location", "LOCATION", "San Francisco, CA", 0.92),
-        ("extracted-field-row-experience", "EXPERIENCE", "8 years · 4 roles", 0.88),
-        ("extracted-field-row-skills", "SKILLS", "Python, ML, distributed systems", 0.85),
-        ("extracted-field-row-education", "EDUCATION", "MS CS Northeastern · BE Mumbai", 0.93),
-    ]
-
-    async def event_gen():
-        for pct in (15, 40, 60, 80, 95):
-            yield (
-                'event: progress\ndata: <div id="extraction-progress" '
-                'hx-swap-oob="outerHTML">'
-                f'<div class="text-xs font-mono uppercase tracking-wide text-slate-400">{pct}%</div>'
-                "</div>\n\n"
-            )
-            await asyncio.sleep(0.4)
-        for fid, label, value, conf in fields:
-            html = (
-                f'<div id="{fid}" hx-swap-oob="outerHTML" '
-                'class="flex items-baseline gap-3 py-1.5 border-b border-slate-800/50">'
-                f'<span class="font-mono text-[11px] uppercase tracking-wide text-slate-500 w-20 shrink-0">{label}</span>'
-                f'<span class="text-sm flex-1 text-slate-200">{value}</span>'
-                f'<span class="font-mono text-xs text-emerald-400 ml-auto tabular-nums">{conf:.2f}</span>'
-                "</div>"
-            )
-            yield f"event: field\ndata: {html}\n\n"
-            await asyncio.sleep(0.4)
-        yield (
-            'event: done\ndata: <div id="extraction-status" hx-swap-oob="outerHTML" '
-            'class="inline-flex items-center gap-2 text-sm text-emerald-300 font-medium">'
-            '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-            'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'
-            '<polyline points="20 6 9 17 4 12"/></svg>'
-            "Extracted 6 of 6 fields."
-            "</div>\n\n"
-        )
-        yield (
-            'event: stepReady\ndata: <div id="extraction-trigger" hx-swap-oob="outerHTML" '
-            'hx-get="/_fragments/onboarding/step/3" hx-target="#onboarding-step-content" '
-            'hx-trigger="load delay:200ms">progressing…</div>\n\n'
-        )
-
-    return StreamingResponse(event_gen(), media_type="text/event-stream")
-
-
-@router.post("/api/v1/profile/from-extraction", name="profile_from_extraction")
-async def post_profile_from_extraction(
-    request: Request,
-    session: AsyncSession = Depends(get_session),
-):
-    """Stub — flag the profile committed and redirect / via HX-Redirect.
-
-    Plan 42 (0.2.0.04 / PC.6b, 2026-05-20): no-existing-user precondition.
-    The endpoint sets `naavik_session=FAKE_SESSION_VALUE`, which would
-    REPLACE a flagged operator's real-JWT cookie and let every
-    `require_authed_session`-gated route take the fake-session pass-through
-    branch — silently demoting auth posture from real-JWT-flagged to
-    fake-session-unflagged. Count probe: any existing User → 409 + HTML
-    error card pointing back to /login. Bootstrap path (count==0) still
-    works for fresh installs.
-
-    On DB error, let the exception propagate — silently demoting to fake-
-    session on a transient hiccup is worse than a clear 500 (plan § Risk 2).
-
-    Wave 6 wires this to `services/profile_service.commit_extraction`.
-    """
-    count_row = (await session.exec(select(func.count()).select_from(User))).one()
-    if hasattr(count_row, "_mapping") or isinstance(count_row, tuple):
-        existing_count = int(count_row[0])
-    else:
-        existing_count = int(count_row)
-    if existing_count > 0:
-        return HTMLResponse(
-            content=(
-                '<div id="onboarding-step-content" '
-                'class="p-4 rounded-lg bg-rose-500/10 border border-rose-500/30 '
-                'text-rose-200 text-sm space-y-2">'
-                '<div class="font-medium">Account already exists.</div>'
-                '<div class="text-rose-200/80">'
-                "Onboarding is for fresh installs only. "
-                '<a href="/login" class="underline hover:text-rose-100">Sign in instead</a>.'
-                "</div>"
-                "</div>"
-            ),
-            status_code=409,
-        )
-
-    response = Response(status_code=204)
-    response.headers["HX-Redirect"] = "/"
-    response.set_cookie(
-        SESSION_COOKIE,
-        FAKE_SESSION_VALUE,
-        httponly=True,
-        samesite="lax",
-        path="/",
-    )
-    return response

@@ -72,7 +72,9 @@ _login_attempts: dict[str, deque[datetime]] = {}
 
 # ── Password complexity (plan 18 / PC.6) ─────────────────────────────────
 
-PASSWORD_MIN_LENGTH = 12
+# Plan 0.7.0.48 Wave 2 (2026-05-25): 12 → 8 chars. 8 is the standard
+# self-hosted-app baseline; 12 was over-tuned for the original cloud framing.
+PASSWORD_MIN_LENGTH = 8
 
 
 def validate_password_complexity(plain: str) -> str | None:
@@ -254,12 +256,24 @@ async def issue_jwt_async(
 ) -> str:
     """Issue a JWT signed with the tenant's ACTIVE signing key.
 
-    Falls back to `issue_jwt` (sync, env-legacy HS256) when no ACTIVE key
-    exists for the tenant — keeps the test harness + fresh-install path
-    working before alembic 0014 has run.
+    Falls back to `issue_jwt` (sync, env-legacy HS256) when:
+      - no ACTIVE key exists for the tenant (fresh-install / test-harness
+        before alembic 0014 has run), OR
+      - the ACTIVE key's `kid` is `env-legacy` (plan 0.7.0.48 Wave 2 fix:
+        symmetry with `verify_jwt_async` which delegates `env-legacy` kid
+        to sync `verify_jwt`). Without this branch, the issuer signed with
+        the DB row's material — which migration 0014 plants as
+        `os.environ.get("SECRET_KEY") or secrets.token_urlsafe(32)`. When
+        `SECRET_KEY` is unset (dev default), the migration plants a random
+        URL-safe-32 key, but the sync verifier always reads
+        `app_settings.secret_key` (`"change-me-in-production"` by default
+        in dev) → `InvalidSignatureError` on every authed request →
+        "Session expired" 307 → login loop. With this fix the env-legacy
+        DB row is informational only; the env material is the single
+        source of truth for both issue + verify on the env-legacy path.
     """
     key = await _get_active_signing_key(session, tenant_id=tenant_id)
-    if key is None:
+    if key is None or key.kid == ENV_LEGACY_KID:
         return issue_jwt(user_id, keep_signed_in=keep_signed_in)
     ttl = JWT_TTL_KEEP_SIGNED_IN if keep_signed_in else JWT_TTL_DEFAULT
     now = datetime.now(UTC)
@@ -557,7 +571,7 @@ async def require_authed_session(
     #   API (`/api/v1/*`)             → bare 401 (SDK consumers want 401)
     #   HTMX UI (HX-Request)          → 401 + `HX-Redirect: /login`
     #   Browser top-nav (neither)     → 307 + `Location: /login`
-    # The 307 path is what makes `http://localhost:8000/` from a cookieless
+    # The 307 path is what makes `http://localhost:8003/` from a cookieless
     # browser land on `/login` instead of a JSON error page.
     is_htmx = request.headers.get("hx-request", "").lower() == "true"
     is_api = request.url.path.startswith("/api/v1/")

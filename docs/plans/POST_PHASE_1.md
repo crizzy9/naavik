@@ -33,7 +33,7 @@ After plan 10 Wave 6 ships, the deliverable line in `ROADMAP.md` § Phase 1 is s
 Concretely, **end-to-end smoke after Phase 1**:
 
 1. `nix run .#dev` boots Postgres + alembic + FastAPI in one terminal.
-2. Visit `http://localhost:8000/login`. **Plan 83 (0.7.0.36, 2026-05-21)**: no auto-seed — click "Create account" to sign up + onboard with your real resume.
+2. Visit `http://localhost:8003/login`. **Plan 83 (0.7.0.36, 2026-05-21)**: no auto-seed — click "Create account" to sign up + onboard with your real resume.
 3. Land on Overview. Real KPIs from seeded `Application` rows. Email signal feed shows seeded `EmailThread` rows. Pipeline strip shows 5 stages.
 4. Visit `/profile/edit`. Edit a bullet via the modal. Autosave indicator cycles `saving → saved`. Tag picker toggles. Drag a bullet to reorder — Sortable.js fires the reorder API; bullet order persists across reload.
 5. Visit `/discover`. The seeded queue is sorted by score. Skip / Save / Auto-apply work via keyboard (←/↑/→). Auto-apply right-swipe creates a DRAFT; the queue advances.
@@ -43,7 +43,7 @@ Concretely, **end-to-end smoke after Phase 1**:
 9. Visit `/outreach`. Pick an application. The recommended-move card shows a real AI draft. Click "Send via LinkedIn" — stubbed in MVP (real LinkedIn is Phase 5).
 10. Visit `/settings`. Switch LLM provider. Test connection — real API call, real round-trip latency. Cost cards show this-month aggregates from `ApiUsage`.
 11. Visit `/_design/components` (toggle `Settings.debug=True` first via SQL or settings tab). All 85 components render in a single fixture page.
-12. `curl http://localhost:8000/api/portfolio/cv` returns Profile JSON filtered for public consumption. The portfolio site at `crypticsoul.dev` builds against this.
+12. `curl http://localhost:8003/api/portfolio/cv` returns Profile JSON filtered for public consumption. The portfolio site at `crypticsoul.dev` builds against this.
 
 ---
 
@@ -139,7 +139,7 @@ Spin up a NixOS VM with the `nix/module.nix` enabled (`naavik = true`), point at
 git clone [email protected]:crizzy9/naavik.git fresh-test && cd fresh-test
 cp .env.example .env  # edit SECRET_KEY + ANTHROPIC_API_KEY
 docker compose up -d
-# Visit http://localhost:8000 — should load without manual setup
+# Visit http://localhost:8003 — should load without manual setup
 ```
 
 If a fresh clone + `.env` edit doesn't bring up a working app in < 2 minutes, the self-hosted onboarding is broken.
@@ -177,6 +177,8 @@ These are operational concerns, not discrete tasks. Watch them as you ship Phase
 5. **Portfolio site dependency.** `crypticsoul.dev`'s `cv.astro` build-time fetches `/api/portfolio/cv`. Any contract change to that endpoint must coordinate with the portfolio repo (separate codebase). Currently zero versioning — Phase 2+ adds `?version=v1` (tracked in ROADMAP § Phase 1 deferred).
 6. **Multi-user readiness.** Every entity already has `user_id`; the multi-tenant cloud tier is unblocked at the model layer. But cron jobs assume single-user (`user_id=1`) — the `applications.auto_apply` cron, `tracking.sync_gmail`, etc. all need a `for user in users` loop wrapping their existing logic. Convert to a ROADMAP task when the cloud tier ships multi-tenant.
 7. **Backups.** ~~`~/.naavik/data/snapshots/` daily SQL gzip — but no off-site backup story yet.~~ **Documented in `docs/DEPLOYMENT.md` § Backups + disaster recovery via plan 55 / 0.2.6.09** (canonical artifact set, daily snapshot Phase 1 status + Phase 6 plan, restic / borg / s3 sync off-site recipes, 5-step recovery walkthrough). Self-hosters retain off-site rotation responsibility; the doc lowers friction. (The encrypted vault was deleted in plan 26; secrets live in `.env`.)
+
+   **DATA_DIR layout addition (plan 89 / 0.7.0.48 Wave 2, 2026-05-25):** resume-extraction uploads now persist at `${DATA_DIR}/uploads/<user_id>/<utc-ts>.pdf`. The extracted text lives on `Profile.raw_resume_text` (DB-backed); the source PDF is operator-retained for re-extract. Gitignored. Not strictly a backup target since the parsed payload is in the DB, but operators who want to preserve original PDFs should snapshot the directory alongside `${DATA_DIR}/data/snapshots/`.
 8. **Visual regression as PR gate (CI-side).** Depends on the Pre-Phase-2 paper cut PC.3 landing first (local capture must work on NixOS before CI can run it). Once the local baseline is committed AND snapshots stabilize across 2-3 Phase 2-6 plans, wire a Playwright + pixelmatch (or Percy / similar) diff step into CI: capture per-PR snapshots, compare against `tests/visual/screenshots/` baseline, fail on > 1 % per-screen pixel delta. Convert to a ROADMAP task when PC.3 ships and snapshots stabilize.
 9. **Scheduler jobstore is JSON-encoded, not pickle.** Plan 48 / `0.2.0.10b` replaced APScheduler's `SQLAlchemyJobStore` with `src/scheduler/json_jobstore.py:NaavikJsonJobStore`, closing the pickle-RCE-on-DB-compromise vector. A func-ref allowlist (`FUNC_REF_ALLOWLIST`) is enforced on every load — adding a new scheduled job requires appending the `module:qualname` ref there. `tests/test_json_jobstore.py::test_allowlist_matches_register_all` enforces parity at CI time. Migration 0009 rewrote existing `apscheduler_jobs.job_state` BYTEA rows in place.
 
@@ -197,7 +199,7 @@ Each implementation prompt includes a "STOP and post a question" instruction for
 
 Naavik v1.0 (post-Phase-6) means:
 
-- A self-hosted user clones the repo, edits `.env`, runs `docker compose up -d`, lands at `localhost:8000`, signs up, uploads a resume, and is auto-applying to relevant jobs by end-of-day.
+- A self-hosted user clones the repo, edits `.env`, runs `docker compose up -d`, lands at `localhost:8003`, signs up, uploads a resume, and is auto-applying to relevant jobs by end-of-day.
 - A NixOS user adds the flake input, enables the module, sets SOPS secrets, and the same flow works behind their Traefik reverse proxy.
 - A cloud-tier user pays $15/mo, brings their own Anthropic key, and gets the identical product.
 - The portfolio site at `crypticsoul.dev` reflects the Profile state without manual sync.

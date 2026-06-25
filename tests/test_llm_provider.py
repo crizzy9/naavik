@@ -159,17 +159,43 @@ def test_factory_fallback(env_keys) -> None:
     assert fallback.provider_id == "ollama"
 
 
-def test_factory_anthropic_missing_env_key_raises(monkeypatch) -> None:
-    """Plan 26: factory no longer falls back to vault; empty env -> empty key -> error."""
+def test_factory_anthropic_missing_env_key_falls_back_to_env_resolved(monkeypatch) -> None:
+    """0.7.0.48 fold-in: preferred provider lacks env key → factory falls back
+    to env-resolved active provider (precedence ANTHROPIC > OPENAI > OLLAMA).
+    Replaces the old "raise on empty env key" path that produced silent
+    `auth_required` for fresh users whose `Settings.llm_provider` defaulted to
+    ANTHROPIC but who'd only set `OPENAI_API_KEY` in `.env`.
+    """
+    from config import settings as app_settings
+    from llm import get_provider
+    from llm.openai import OpenAIProvider
+
+    monkeypatch.setattr(app_settings, "anthropic_api_key", None)
+    monkeypatch.setattr(app_settings, "openai_api_key", "sk-openai-fallback")
+    settings = Settings(user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="gpt-4o")
+    provider = get_provider(settings)
+    assert isinstance(provider, OpenAIProvider)
+
+
+def test_factory_raises_when_nothing_configured(monkeypatch) -> None:
+    """0.7.0.48 fold-in: when NO provider has env keys, factory raises
+    `auth_required` with operator-actionable guidance. Ollama is normally
+    always env-configured (default `OLLAMA_BASE_URL`), so this test must
+    explicitly None it out alongside the cloud keys.
+    """
     from config import settings as app_settings
     from llm import get_provider
 
     monkeypatch.setattr(app_settings, "anthropic_api_key", None)
+    monkeypatch.setattr(app_settings, "openai_api_key", None)
+    monkeypatch.setattr(app_settings, "ollama_base_url", None)
     settings = Settings(
         user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="claude-3.5-sonnet-20250219"
     )
-    with pytest.raises(LLMProviderError):
+    with pytest.raises(LLMProviderError) as exc_info:
         get_provider(settings)
+    assert exc_info.value.kind == "auth_required"
+    assert ".env" in str(exc_info.value)
 
 
 # ── tracked_call ───────────────────────────────────────────────────────

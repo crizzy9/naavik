@@ -602,24 +602,18 @@ def test_modal_add_by_url(client):
 
 
 def test_onboarding_step_fragment(client):
+    """Plan 0.7.0.48 Wave 2 (2026-05-25): onboarding collapsed to single
+    upload step. Step 1 still works; steps 2 + 3 are gone (404).
+    """
     r1 = client.get("/_fragments/onboarding/step/1")
     assert r1.status_code == 200
     r2 = client.get("/_fragments/onboarding/step/2")
-    assert r2.status_code == 200
+    assert r2.status_code == 404
     r3 = client.get("/_fragments/onboarding/step/3")
-    assert r3.status_code == 200
+    assert r3.status_code == 404
 
 
-def test_extraction_upload_returns_step2(client):
-    r = client.post(
-        "/api/v1/extraction/upload", files={"resume": ("cv.pdf", b"%PDF", "application/pdf")}
-    )
-    assert r.status_code == 200
-    assert "Reading your resume" in r.text
-
-
-def test_extraction_upload_fail(client):
-    r = client.post(
-        "/api/v1/extraction/upload?fail=1", files={"resume": ("cv.pdf", b"%PDF", "application/pdf")}
-    )
-    assert r.status_code == 422
+# Plan 0.7.0.48 Wave 2 (2026-05-25): `/api/v1/extraction/upload` is no longer
+# a stub — it now requires real-JWT auth + a parseable PDF. Happy-path coverage
+# lives in `tests/test_extraction_upload.py`. The legacy stub-shape tests
+# (`Reading your resume` SSE handoff + `?fail=1` synthetic 422) are deleted.

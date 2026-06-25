@@ -20,22 +20,112 @@
   whichever provider has its env key set wins (precedence ANTHROPIC >
   OPENAI > OLLAMA, resolved by `env_secrets.resolve_active_llm_provider`).
   The env-presence card section below remains canonical.
+
+  0.7.0.48 fold-in: added preference-vs-active mismatch banner +
+  "Configure via .env" instructional row. Mismatch fires when the user's
+  saved `Settings.llm_provider` preference lacks an env key but a different
+  provider IS env-configured — the factory now falls back to env-resolved
+  active (so calls still work), but the UI surfaces the divergence so the
+  operator can either update `.env` or change the model dropdown.
 #}
+{# Pre-compute mismatch — `saved_provider_id` is the persisted preference
+   (drives the hidden form field on save); `provider_id` is what the model
+   dropdown renders for. They diverge when the saved preference's env key is
+   absent but a different provider IS env-configured — model dropdown follows
+   the active provider so the operator sees models for the provider LLM calls
+   will actually use, and the mismatch banner explains it. `unconfigured`
+   fires when nothing is set anywhere. #}
+{% set saved_provider_id = saved_provider_id | default(provider_id) %}
+{% set _pref_has_env = env_indicators[saved_provider_id] if saved_provider_id in env_indicators else False %}
+{% set _mismatch = (active_provider is not none) and (saved_provider_id != active_provider) and (not _pref_has_env) %}
+{% set _unconfigured = (active_provider is none) %}
 <div id="llm-form" class="flex flex-col gap-6 max-w-5xl">
   <form
-    hx-put="/api/v1/settings/llm"
-    hx-target="#llm-form"
-    hx-swap="outerHTML"
-    hx-disabled-elt="find button[type=submit]"
+    id="{{ save_form_id }}"
+    hx-put="{{ active_save_endpoint }}"
+    hx-target="#settings-save-result"
+    hx-swap="innerHTML"
     class="flex flex-col gap-6">
+
+    {# How-it-works instructional row — surfaces the env-var workflow up front
+       so the operator doesn't expect the UI to accept API keys. #}
+    <section data-llm-howto
+             class="bg-slate-950/60 border border-slate-800 rounded-lg p-5">
+      <div class="flex items-start gap-3">
+        <i data-lucide="info" class="h-5 w-5 text-indigo-300 mt-0.5 shrink-0" stroke-width="1.5"></i>
+        <div class="flex-1">
+          <h3 class="text-sm font-medium text-slate-100">How LLM providers work</h3>
+          <p class="mt-1 text-xs text-slate-400 leading-relaxed">
+            API keys are configured via environment variables in
+            <code class="font-mono text-slate-300">.env</code>, not through this UI
+            (vault deprecated in 0.2.0.01). Set
+            <code class="font-mono text-slate-300">ANTHROPIC_API_KEY</code>,
+            <code class="font-mono text-slate-300">OPENAI_API_KEY</code>, or
+            <code class="font-mono text-slate-300">OLLAMA_BASE_URL</code>, then
+            <strong class="text-slate-200 font-medium">restart Naavik</strong> to pick up the change.
+            Precedence is <code class="font-mono text-slate-300">ANTHROPIC &gt; OPENAI &gt; OLLAMA</code>
+            when multiple are set. The model dropdown below is the only operator-mutable
+            preference on this tab.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    {% if _unconfigured %}
+      {# No provider configured anywhere — LLM-dependent features will skip. #}
+      <section data-llm-warning="unconfigured"
+               class="bg-amber-500/5 border border-amber-500/30 rounded-lg p-5">
+        <div class="flex items-start gap-3">
+          <i data-lucide="alert-triangle" class="h-5 w-5 text-amber-300 mt-0.5 shrink-0" stroke-width="1.5"></i>
+          <div class="flex-1">
+            <h3 class="text-sm font-medium text-amber-100">No LLM provider configured</h3>
+            <p class="mt-1 text-xs text-amber-200/80 leading-relaxed">
+              Set at least one of <code class="font-mono text-amber-100">ANTHROPIC_API_KEY</code>,
+              <code class="font-mono text-amber-100">OPENAI_API_KEY</code>, or
+              <code class="font-mono text-amber-100">OLLAMA_BASE_URL</code> in
+              <code class="font-mono text-amber-100">.env</code> and restart.
+              Without one, resume tailoring, cover-letter drafting, and scoring will
+              skip silently.
+            </p>
+          </div>
+        </div>
+      </section>
+    {% elif _mismatch %}
+      {# Preference / active divergence — factory falls back to active env. #}
+      {% set _pref_name = providers | selectattr("id", "equalto", saved_provider_id) | map(attribute="name") | first %}
+      {% set _active_name = providers | selectattr("id", "equalto", active_provider) | map(attribute="name") | first %}
+      {% set _pref_env_var = providers | selectattr("id", "equalto", saved_provider_id) | map(attribute="env_var") | first %}
+      <section data-llm-warning="mismatch"
+               data-pref-provider="{{ saved_provider_id }}"
+               data-active-provider="{{ active_provider }}"
+               class="bg-amber-500/5 border border-amber-500/30 rounded-lg p-5">
+        <div class="flex items-start gap-3">
+          <i data-lucide="alert-triangle" class="h-5 w-5 text-amber-300 mt-0.5 shrink-0" stroke-width="1.5"></i>
+          <div class="flex-1">
+            <h3 class="text-sm font-medium text-amber-100">
+              Preference / environment mismatch
+            </h3>
+            <p class="mt-1 text-xs text-amber-200/80 leading-relaxed">
+              Your saved preference is <strong class="text-amber-100">{{ _pref_name or provider_id }}</strong>,
+              but <code class="font-mono text-amber-100">{{ _pref_env_var }}</code> is not set in
+              <code class="font-mono text-amber-100">.env</code>. LLM calls fall back to
+              <strong class="text-amber-100">{{ _active_name or active_provider }}</strong>
+              (env-resolved). Either set the missing env var and restart, or change the
+              preference below to match the active provider.
+            </p>
+          </div>
+        </div>
+      </section>
+    {% endif %}
 
     <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
       <header class="flex items-baseline justify-between mb-4 gap-3">
         <div>
-          <h2 class="text-base font-medium text-slate-50">API key (configured via environment)</h2>
+          <h2 class="text-base font-medium text-slate-50">Environment variable presence</h2>
           <p class="text-xs text-slate-400 mt-0.5">
-            API keys live in <code class="font-mono text-slate-300">.env</code>
-            (gitignored, <code class="font-mono">chmod 0600</code>). Edit + restart to rotate.
+            Current state of each provider's env var. Edit
+            <code class="font-mono text-slate-300">.env</code> (gitignored,
+            <code class="font-mono">chmod 0600</code>) and restart to rotate.
             See <a href="https://github.com/crizzy9/naavik#configuration"
                    class="text-indigo-300 hover:text-indigo-200 underline"
                    target="_blank" rel="noopener">README · Configuration</a>.
@@ -63,15 +153,17 @@
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {% for p in providers %}
           {% set _configured = env_indicators[p.id] %}
+          {% set _is_active = (active_provider == p.id) %}
           <div data-env-indicator="{{ p.id }}"
                data-configured="{{ 'true' if _configured else 'false' }}"
+               data-is-active="{{ 'true' if _is_active else 'false' }}"
                class="rounded-lg border {{ 'border-emerald-500/30 bg-emerald-500/5' if _configured else 'border-slate-800 bg-slate-950/40' }} p-4">
             <div class="flex items-center justify-between gap-2">
               <span class="text-sm font-medium text-slate-100">{{ p.name }}</span>
               {% if _configured %}
-                <span class="inline-flex items-center gap-1 text-xs text-emerald-300">
+                <span class="inline-flex items-center gap-1 text-xs {{ 'text-indigo-300' if _is_active else 'text-emerald-300' }}">
                   <i data-lucide="check-circle-2" class="h-4 w-4" stroke-width="1.5"></i>
-                  configured
+                  {{ 'active' if _is_active else 'configured' }}
                 </span>
               {% else %}
                 <span class="inline-flex items-center gap-1 text-xs text-slate-500">
@@ -137,24 +229,5 @@
     {% with settings=settings, env_indicators=env_indicators %}
       {% include "components/_settings_semantic_match.html" %}
     {% endwith %}
-
-    <div class="flex items-center gap-3">
-      <button type="submit"
-              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:opacity-50 disabled:cursor-not-allowed">
-        <span class="htmx-show-loading hidden">{% include "components/spinner.html" %}</span>
-        <span class="htmx-hide-loading">Save changes</span>
-      </button>
-      {% if save_status == "saved" %}
-        <span data-llm-save-status="saved" class="inline-flex items-center gap-1.5 text-sm text-emerald-300">
-          <i data-lucide="check" class="h-4 w-4" stroke-width="1.75"></i>
-          Saved
-        </span>
-      {% elif save_status == "error" %}
-        <span data-llm-save-status="error" class="inline-flex items-center gap-1.5 text-sm text-rose-300">
-          <i data-lucide="alert-triangle" class="h-4 w-4" stroke-width="1.75"></i>
-          Save failed — try again.
-        </span>
-      {% endif %}
-    </div>
   </form>
 </div>

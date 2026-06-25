@@ -4,6 +4,12 @@
     settings : Settings singleton
 #}
 <div class="flex flex-col gap-6 max-w-3xl">
+  <form id="{{ save_form_id }}"
+        hx-put="{{ active_save_endpoint }}"
+        hx-target="#settings-save-result"
+        hx-swap="innerHTML"
+        hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+        class="flex flex-col gap-6">
   <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
     <header class="flex items-baseline justify-between gap-3 mb-4">
       <div>
@@ -13,9 +19,6 @@
       <label class="relative inline-flex items-center cursor-pointer shrink-0">
         <input type="checkbox" name="auto_apply_enabled"
                {% if settings.auto_apply_enabled %}checked{% endif %}
-               hx-put="/api/v1/settings/auto-apply"
-               hx-trigger="change"
-               hx-swap="none"
                class="sr-only peer">
         <span class="w-11 h-6 bg-slate-700 rounded-full peer-checked:bg-indigo-500 transition relative
                      after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5
@@ -36,9 +39,6 @@
       <label class="relative inline-flex items-center cursor-pointer shrink-0">
         <input type="checkbox" name="auto_apply_immediate_dispatch"
                {% if settings.auto_apply_immediate_dispatch %}checked{% endif %}
-               hx-put="/api/v1/settings/auto-apply"
-               hx-trigger="change"
-               hx-swap="none"
                class="sr-only peer">
         <span class="w-11 h-6 bg-slate-700 rounded-full peer-checked:bg-indigo-500 transition relative
                      after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5
@@ -80,9 +80,6 @@
       <label class="relative inline-flex items-center cursor-pointer shrink-0">
         <input type="checkbox" name="auto_apply_dry_run"
                {% if settings.auto_apply_dry_run %}checked{% endif %}
-               hx-put="/api/v1/settings/auto-apply"
-               hx-trigger="change"
-               hx-swap="none"
                class="sr-only peer">
         <span class="w-11 h-6 bg-slate-700 rounded-full peer-checked:bg-amber-500 transition relative
                      after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5
@@ -90,24 +87,26 @@
       </label>
     </div>
 
-    {# Plan 78 § D.4 (0.4.0.14) — global drain queue button. Flips every
-       queued DRAFT back to SAVED in one shot. CSRF gated by the form. #}
-    <div class="mt-5 pt-4 border-t border-slate-800">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <div class="text-sm text-slate-100">Drain auto-apply queue</div>
-          <div class="text-xs text-slate-500">Move every queued DRAFT back to SAVED. Doesn't delete any drafts; just stops the cron from submitting them.</div>
-        </div>
-        <form hx-post="/api/v1/settings/auto-apply/drain-queue"
-              hx-confirm="Drain every queued DRAFT back to SAVED? Drafts are preserved; you can re-queue them from Saved."
-              hx-swap="none">
-          <button type="submit"
-                  class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-mono uppercase tracking-wide bg-rose-500/15 text-rose-200 border border-rose-500/30 hover:bg-rose-500/20 transition">
-            <i data-lucide="square-stop" class="h-3.5 w-3.5" stroke-width="1.5"></i>
-            Drain queue
-          </button>
-        </form>
+  </section>
+
+  {# Plan 78 § D.4 (0.4.0.14) — global drain queue button. Flips every
+     queued DRAFT back to SAVED in one shot. Lives in its own section so
+     the destructive action isn't nested inside the common save form. #}
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <div class="text-sm text-slate-100">Drain auto-apply queue</div>
+        <div class="text-xs text-slate-500">Move every queued DRAFT back to SAVED. Doesn't delete any drafts; just stops the cron from submitting them.</div>
       </div>
+      <button type="button"
+              hx-post="/api/v1/settings/auto-apply/drain-queue"
+              hx-confirm="Drain every queued DRAFT back to SAVED? Drafts are preserved; you can re-queue them from Saved."
+              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+              hx-swap="none"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-mono uppercase tracking-wide bg-rose-500/15 text-rose-200 border border-rose-500/30 hover:bg-rose-500/20 transition">
+        <i data-lucide="square-stop" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        Drain queue
+      </button>
     </div>
   </section>
 
@@ -119,35 +118,31 @@
       <h2 class="text-base font-medium text-slate-50">Per-board daily caps</h2>
       <p class="text-xs text-slate-400 mt-0.5">Tighter cap per ATS / job board. Blank = no per-board limit. Prevents account bans by spreading submissions.</p>
     </header>
-    <form hx-put="/api/v1/settings/auto-apply"
-          hx-trigger="change from:input"
-          hx-swap="none">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {% for board, label in [
-          ("greenhouse", "Greenhouse"),
-          ("lever", "Lever"),
-          ("ashby", "Ashby"),
-          ("workday", "Workday"),
-          ("linkedin", "LinkedIn"),
-          ("indeed", "Indeed"),
-          ("company_direct", "Company"),
-          ("manual", "Manual"),
-        ] %}
-          <div>
-            {% with label=label | upper, for_id="aa-cap-" ~ board, hint="" %}
-              {% include "components/field_label.html" %}
-            {% endwith %}
-            {% with name=board ~ "_cap",
-                    id="aa-cap-" ~ board,
-                    type="number",
-                    value=(settings.auto_apply_per_board_daily_caps.get(board) or ""),
-                    mono=true %}
-              {% include "components/input.html" %}
-            {% endwith %}
-          </div>
-        {% endfor %}
-      </div>
-    </form>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {% for board, label in [
+        ("greenhouse", "Greenhouse"),
+        ("lever", "Lever"),
+        ("ashby", "Ashby"),
+        ("workday", "Workday"),
+        ("linkedin", "LinkedIn"),
+        ("indeed", "Indeed"),
+        ("company_direct", "Company"),
+        ("manual", "Manual"),
+      ] %}
+        <div>
+          {% with label=label | upper, for_id="aa-cap-" ~ board, hint="" %}
+            {% include "components/field_label.html" %}
+          {% endwith %}
+          {% with name=board ~ "_cap",
+                  id="aa-cap-" ~ board,
+                  type="number",
+                  value=(settings.auto_apply_per_board_daily_caps.get(board) or ""),
+                  mono=true %}
+            {% include "components/input.html" %}
+          {% endwith %}
+        </div>
+      {% endfor %}
+    </div>
   </section>
 
   <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
@@ -162,9 +157,6 @@
       <label class="relative inline-flex items-center cursor-pointer">
         <input type="checkbox" name="eager_review_generation"
                {% if settings.eager_review_generation %}checked{% endif %}
-               hx-put="/api/v1/settings/auto-apply"
-               hx-trigger="change"
-               hx-swap="none"
                class="sr-only peer">
         <span class="w-11 h-6 bg-slate-700 rounded-full peer-checked:bg-indigo-500 transition relative
                      after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5
@@ -183,4 +175,5 @@
       {% endwith %}
     </div>
   </section>
+  </form>
 </div>

@@ -15,16 +15,107 @@ from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Reques
 from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
 from db.session import get_session
 from models import User
 from services import profile_service
 from services.auth import require_authed_session
+from ui.routes.profile import _effective_user_id
 from ui.templates_setup import templates
 
 router = APIRouter()
 
 
-# ── Per-field PUT (autosave) ────────────────────────────────────────────
+# ── Bulk PUT (Save changes) ─────────────────────────────────────────────
+
+
+@router.put("/api/v1/profile", name="api_profile_put_bulk")
+async def put_profile_bulk(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> HTMLResponse:
+    """Bulk save the profile editor form.
+
+    Walks the posted FormData, routes each field through the appropriate
+    service (`update_field` for identity / summary / etc., `update_application_questions`
+    for the EEO bag), and returns an HTML fragment swapped into
+    `#profile-edit-save-result` on the edit page (0.7.0.48 fold-in for owner
+    bug #4 — replaces the misleading static autosave indicator with an
+    explicit Save button).
+    """
+    form = await request.form()
+    eeo_fields = {
+        "work_authorization",
+        "visa_sponsorship_needed",
+        "willing_to_relocate",
+        "notice_period_days",
+        "salary_expectation_usd",
+        "earliest_start",
+        "veteran_status",
+        "disability_status",
+        "race_ethnicity",
+        "gender_identity",
+    }
+    eeo_payload: dict[str, Any] = {}
+    saved_fields: list[str] = []
+    failed: list[tuple[str, str]] = []
+    user_id = _effective_user_id(_user)
+
+    for name, value in form.multi_items():
+        if name in eeo_fields:
+            # Empty form values → NULL. Several EEO columns are typed
+            # INTEGER / ENUM (notice_period_days, salary_expectation_usd,
+            # work_authorization, visa_sponsorship_needed, …); asyncpg
+            # raises `DataError: 'str' object cannot be interpreted as an
+            # integer` if `''` reaches the encoder. Coerce at the boundary
+            # so the operator can save a profile with EEO fields blank.
+            # (Plan 0.7.0.48 W4 fix — owner-reported 500 on profile save.)
+            eeo_payload[name] = value if value != "" else None
+            continue
+        if name in profile_service.ALLOWED_PROFILE_FIELDS:
+            try:
+                await profile_service.update_field(
+                    session,
+                    user_id=user_id,
+                    field=name,
+                    value=value,
+                )
+                saved_fields.append(name)
+            except (LookupError, ValueError) as exc:
+                failed.append((name, str(exc)))
+        # Unknown names (e.g. `title_<id>`, `start_<id>`, `end_<id>` per-experience
+        # editors) are intentionally ignored at the bulk endpoint — experience edits
+        # have dedicated routes scoped by id; the bulk save covers Profile fields.
+
+    if eeo_payload:
+        try:
+            await profile_service.update_application_questions(
+                session,
+                user_id=user_id,
+                payload=eeo_payload,
+            )
+            saved_fields.extend(sorted(eeo_payload.keys()))
+        except LookupError as exc:
+            failed.append(("application_questions", str(exc)))
+
+    if failed:
+        await session.rollback()
+        msg = "; ".join(f"{name}: {err}" for name, err in failed)
+        return HTMLResponse(
+            f'<span class="text-rose-300">Save failed — {msg}</span>',
+            status_code=422,
+        )
+
+    await session.commit()
+    return HTMLResponse(
+        f'<span class="text-emerald-300">Saved · {len(saved_fields)} field'
+        f"{'s' if len(saved_fields) != 1 else ''}</span>"
+    )
+
+
+# ── Per-field PUT (legacy autosave — retained for non-profile-edit consumers) ──
 
 
 @router.put("/api/v1/profile/{field}", name="api_profile_put_field")
@@ -51,10 +142,9 @@ async def put_field(
     raw_value = form.get("value")
 
     try:
-        # Single-user MVP: user_id=1.
         await profile_service.update_field(
             session,
-            user_id=1,
+            user_id=_effective_user_id(_user),
             field=field,
             value=raw_value,
         )
@@ -81,7 +171,7 @@ async def put_application_questions(
     try:
         await profile_service.update_application_questions(
             session,
-            user_id=1,
+            user_id=_effective_user_id(_user),
             payload=payload,
         )
         await session.commit()

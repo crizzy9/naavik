@@ -161,15 +161,10 @@ async def post_signup(
     keep_signed_in: Annotated[str | None, Form()] = None,
     session: AsyncSession = Depends(get_session),
 ):
-    """First-user bootstrap + multi-user signup (gated by Settings.allow_multiple_users).
-
-    On a fresh DB (no User row) any signup succeeds and the new account is
-    flagged `is_admin=True`. Once the first user exists, subsequent signups
-    return 403 unless the admin opted into multi-user via Settings.
+    """Open signup. Every user owns their own data — no admin concept (plan
+    0.7.0.48 Wave 2 supersedes 10b/10c/0.7.0.45/0.7.0.47). Operators who need
+    to lock down signups gate externally via firewall / reverse proxy / OIDC.
     """
-    from sqlalchemy import func
-    from sqlmodel import select
-
     ip = get_client_ip(request)
     if is_rate_limited(ip):
         return _login_error_card(
@@ -189,49 +184,16 @@ async def post_signup(
     if "@" not in norm_email or "." not in norm_email.split("@", 1)[-1]:
         return _login_error_card("Enter a valid email address.", 422)
 
-    # Single-user MVP guard: if any User exists, signup is gated by
-    # Settings.allow_multiple_users on the existing instance Settings row.
-    # `session.exec(select(func.count()))` under SQLModel returns a Row, not
-    # the bare int — unwrap explicitly so the > 0 comparison works.
-    count_row = (await session.exec(select(func.count()).select_from(User))).one()
-    if hasattr(count_row, "_mapping"):
-        # SQLAlchemy Row → first column.
-        existing_count = int(count_row[0])
-    elif isinstance(count_row, tuple):
-        existing_count = int(count_row[0])
-    else:
-        existing_count = int(count_row)
-
-    if existing_count > 0:
-        # Query the single boolean column directly. Loading the full Settings
-        # row via `select(Settings)` and reading the attribute hit a SQLAlchemy
-        # "_key_not_found" KeyError on `allow_multiple_users` under the live
-        # FastAPI worker (cached compiled SELECT did not pick up the freshly
-        # migrated column). Scalar select sidesteps the cache + ORM mapping.
-        allow_multi_scalar = await session.exec(
-            select(Settings.allow_multiple_users).order_by(Settings.user_id).limit(1)
-        )
-        allow_multi = bool(allow_multi_scalar.one_or_none())
-        if not allow_multi:
-            record_login_attempt(ip, success=False)
-            return _login_error_card(
-                "Sign-ups are disabled on this instance (single-user MVP). "
-                "Sign in with the existing account instead.",
-                status.HTTP_403_FORBIDDEN,
-            )
-
     if await get_user_by_email(session, norm_email) is not None:
         return _login_error_card(
             "Email already registered. Sign in instead.",
             status.HTTP_400_BAD_REQUEST,
         )
 
-    is_first_user = existing_count == 0
     user = User(
         email=norm_email,
         password_hash=hash_password_with_complexity_check(password),
         is_active=True,
-        is_admin=is_first_user,
     )
     session.add(user)
     await session.flush()
@@ -239,10 +201,16 @@ async def post_signup(
     # Default Settings + skeleton Profile so the rest of the UI doesn't trip
     # over a missing per-user singleton on the next page load.
     session.add(Settings(user_id=user.id))
+    # Plan 0.7.0.48 Wave 2 hacker LOW fold-in (2026-05-25): default
+    # `full_name` to empty string instead of the email-local-part. The
+    # local part leaks operator-PII to the public-no-auth
+    # `/api/portfolio/cv` endpoint until the user replaces it via
+    # `/profile/edit`. Empty default surfaces an obvious "fill me in"
+    # prompt + carries no PII.
     session.add(
         Profile(
             user_id=user.id,
-            full_name=norm_email.split("@", 1)[0],
+            full_name="",
             headline="",
             email=norm_email,
         )
@@ -250,7 +218,13 @@ async def post_signup(
     user.last_login_at = _now()
     await session.commit()
 
-    record_login_attempt(ip, success=True)
+    # Plan 0.7.0.48 hacker F2 (2026-06-25): do NOT call
+    # `record_login_attempt(ip, success=True)` from signup. Signup is open
+    # since Wave 1 — calling the login-success recorder here clears the
+    # failed-LOGIN brute-force bucket, letting an attacker reset the
+    # 5-attempts/15-min defense by registering a throwaway account between
+    # password-guessing batches. Signup creates a user, it doesn't
+    # authenticate one — the rate-limit bucket only tracks login attempts.
 
     secure = not request.app.debug if hasattr(request.app, "debug") else True
     jwt_value = await issue_jwt_async(session, user_id=user.id, keep_signed_in=bool(keep_signed_in))

@@ -13,16 +13,24 @@
       <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Edit profile</h1>
     </div>
     <div class="flex items-center gap-2 shrink-0 flex-wrap">
-      {% with state="saved", relative_time="just now" %}
-        {% include "components/autosave_indicator.html" %}
-      {% endwith %}
+      <span id="profile-edit-save-result"
+            class="text-xs text-slate-500"
+            aria-live="polite"
+            data-testid="profile-edit-save-result"></span>
+      <button type="submit"
+              form="profile-edit-form"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              data-testid="profile-edit-save">
+        <i data-lucide="check" class="h-4 w-4" stroke-width="1.5"></i>
+        Save changes
+      </button>
       <a href="/profile" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm transition">
         <i data-lucide="eye" class="h-4 w-4" stroke-width="1.5"></i>
         Preview
       </a>
       <button type="button"
               class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 text-sm transition"
-              hx-get="/_modal/confirm?title=Discard+unsaved+edits%3F&message=Per-field+autosave+keeps+your+work+up-to-date.+Discard+returns+to+the+last+manual+save+point.&action=/profile&label=Discard&tone=warning&method=get"
+              hx-get="/_modal/confirm?title=Discard+unsaved+edits%3F&message=Discard+returns+to+the+last+saved+version.&action=/profile&label=Discard&tone=warning&method=get"
               hx-target="#modal-region"
               hx-swap="innerHTML">
         <i data-lucide="undo" class="h-4 w-4" stroke-width="1.5"></i>
@@ -33,13 +41,20 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-6 lg:gap-8">
     <div class="flex flex-col gap-6 min-w-0">
-      {# Identity card #}
+      <form id="profile-edit-form"
+            hx-put="/api/v1/profile"
+            hx-target="#profile-edit-save-result"
+            hx-swap="innerHTML"
+            hx-disabled-elt="find button[type=submit]"
+            class="flex flex-col gap-6">
+      {# Identity card — autosave_enabled=false: fields submit via the parent
+         #profile-edit-form on Save (0.7.0.48 fold-in for bug #4). #}
       {% set _identity_body %}
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {% with label="FULL NAME", name="full_name", value=profile.full_name %}{% include "components/editor_field.html" %}{% endwith %}
-          {% with label="HEADLINE", name="headline", value=profile.headline %}{% include "components/editor_field.html" %}{% endwith %}
-          {% with label="CURRENT COMPANY", name="current_company", value=profile.current_company %}{% include "components/editor_field.html" %}{% endwith %}
-          {% with label="LOCATION", name="location", value=profile.location %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="FULL NAME", name="full_name", value=profile.full_name, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="HEADLINE", name="headline", value=profile.headline, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="CURRENT COMPANY", name="current_company", value=profile.current_company, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="LOCATION", name="location", value=profile.location, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
         </div>
       {% endset %}
       {% with title="Identity", body=_identity_body %}
@@ -48,7 +63,7 @@
 
       {# Summary #}
       {% set _summary_body %}
-        {% with label="SUMMARY", name="summary_full", type="textarea", value=profile.summary_full %}
+        {% with label="SUMMARY", name="summary_full", type="textarea", value=profile.summary_full, autosave_enabled=false %}
           {% include "components/editor_field.html" %}
         {% endwith %}
       {% endset %}
@@ -72,9 +87,9 @@
         {% endset %}
         {% set _exp_body %}
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {% with label="TITLE", name="title_" ~ exp.model.id, value=exp.display.title %}{% include "components/editor_field.html" %}{% endwith %}
-            {% with label="START", name="start_" ~ exp.model.id, value=exp.model.start_date.strftime("%Y-%m-%d"), type="date" %}{% include "components/editor_field.html" %}{% endwith %}
-            {% with label="END", name="end_" ~ exp.model.id, value=(exp.model.end_date.strftime("%Y-%m-%d") if exp.model.end_date else ""), placeholder="Present", type="date" %}{% include "components/editor_field.html" %}{% endwith %}
+            {% with label="TITLE", name="title_" ~ exp.model.id, value=exp.display.title, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+            {% with label="START", name="start_" ~ exp.model.id, value=exp.model.start_date.strftime("%Y-%m-%d"), type="date", autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+            {% with label="END", name="end_" ~ exp.model.id, value=(exp.model.end_date.strftime("%Y-%m-%d") if exp.model.end_date else ""), placeholder="Present", type="date", autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
           </div>
           <div class="mt-5">
             <div class="flex items-baseline justify-between mb-2 gap-3">
@@ -107,10 +122,65 @@
         {% endwith %}
       {% endfor %}
 
-      {# Application questions #}
-      {% with profile=profile %}
+      {# Application questions — autosave_enabled=false: fields submit via the
+         parent #profile-edit-form on Save (0.7.0.48 fold-in for bug #4). #}
+      {% with profile=profile, autosave_enabled=false %}
         {% include "components/application_qs_form.html" %}
       {% endwith %}
+      </form>
+
+      {# Raw resume text — source-of-truth for what the parser saw.
+         Sibling of #profile-edit-form (not nested) because it carries its own
+         <form hx-post="/api/v1/extraction/upload"> and HTML forbids nested forms. #}
+      <details class="bg-slate-900 border border-slate-800 rounded-lg p-5 group">
+        <summary class="flex items-center justify-between gap-3 cursor-pointer text-sm font-medium text-slate-100 list-none">
+          <span class="flex items-center gap-2">
+            <i data-lucide="file-text" class="h-4 w-4 text-slate-400" stroke-width="1.5"></i>
+            Raw resume text (parsed source)
+            {% if profile.raw_resume_text %}
+              <span class="text-xs text-slate-500 font-mono">· {{ profile.raw_resume_text | length }} chars</span>
+            {% else %}
+              <span class="text-xs text-slate-500">· none uploaded yet</span>
+            {% endif %}
+          </span>
+          <i data-lucide="chevron-down" class="h-4 w-4 text-slate-500 group-open:rotate-180 transition" stroke-width="1.5"></i>
+        </summary>
+        <div class="mt-4 flex flex-col gap-4">
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Updated when you upload a resume PDF. Edit the profile fields above — this is read-only source-of-truth showing what the heuristic parser saw.
+          </p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <label for="resume-replace-input"
+                   class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium cursor-pointer transition">
+              <i data-lucide="upload" class="h-4 w-4" stroke-width="1.5"></i>
+              Replace resume
+            </label>
+            <span class="text-xs text-slate-500">PDF only · max 10 MB</span>
+          </div>
+          <form
+            hx-post="/api/v1/extraction/upload"
+            hx-encoding="multipart/form-data"
+            hx-target="#resume-replace-result"
+            hx-swap="innerHTML"
+            hx-trigger="change from:#resume-replace-input">
+            <input id="resume-replace-input" name="resume" type="file" accept="application/pdf" class="sr-only">
+          </form>
+          <div id="resume-replace-result"></div>
+          {% if profile.raw_resume_text %}
+            {# Plan 0.7.0.48 W3 hacker LOW fold-in (2026-05-25): truncate
+               unbounded raw_resume_text render at 32 KB so an adversarial
+               PDF can't slow a single-page render to a crawl (self-DoS).
+               The `max-h-96 overflow-auto` already scroll-bounds the
+               visible area; this caps the bytes the browser parses. #}
+            {% set _resume_display_cap = 32 * 1024 %}
+            <pre class="bg-slate-950 border border-slate-800 rounded p-4 text-xs text-slate-300 font-mono whitespace-pre-wrap max-h-96 overflow-auto">{{ profile.raw_resume_text[:_resume_display_cap] }}{% if profile.raw_resume_text | length > _resume_display_cap %}
+
+… (truncated · upload smaller resume to see more){% endif %}</pre>
+          {% else %}
+            <div class="text-xs text-slate-500 italic">Upload a resume from /onboarding (or the button above) to populate.</div>
+          {% endif %}
+        </div>
+      </details>
     </div>
 
     {# Sticky right rail #}

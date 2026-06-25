@@ -144,7 +144,7 @@ nix develop          # or via direnv
 
 # Inside `nix develop`:
 uv sync
-uv run fastapi dev src/main.py
+uv run fastapi dev src/main.py --port 8003
 uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "message"
 uv run ruff check .
@@ -172,7 +172,7 @@ from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": 1440, "height": 900})
-    page.goto("http://localhost:8000/")
+    page.goto("http://localhost:8003/")
     page.screenshot(path="screenshot.png")
     browser.close()
 ```
@@ -327,7 +327,7 @@ nix develop
 uv sync
 
 # Run dev server
-uv run fastapi dev src/main.py
+uv run fastapi dev src/main.py --port 8003
 
 # Database
 uv run alembic upgrade head                   # Run migrations

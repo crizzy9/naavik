@@ -134,7 +134,7 @@ cp .env.example .env
 # One command — Postgres + auto-migrate + app, all wired
 docker compose up -d
 
-# Open http://localhost:8000
+# Open http://localhost:8003
 ```
 
 Migrations run automatically on first start. State persists in named volumes (`naavik-db-data`, `naavik-data`).
@@ -161,7 +161,7 @@ The repo is **Nix-first**. One command boots Postgres (with pgvector), runs migr
 nix run .#dev
 ```
 
-That's it. Per-project Postgres data lives in `./.naavik/db/` (gitignored). Ctrl-C tears down cleanly. Open <http://localhost:8000>.
+That's it. Per-project Postgres data lives in `./.naavik/db/` (gitignored). Ctrl-C tears down cleanly. Open <http://localhost:8003>.
 
 For an interactive dev shell (uv, ruff, typst, postgresql-client on PATH):
 
@@ -175,9 +175,9 @@ nix develop          # or set up direnv to load automatically
 
 `nix run .#dev` is the happy path — orchestrator handles Postgres, migrations, and FastAPI in one terminal. **Naavik does not auto-seed any user** (plan 83, 0.7.0.36, 2026-05-21). First-time setup is signup-driven:
 
-1. Open <http://localhost:8000>. You land on `/login`.
+1. Open <http://localhost:8003>. You land on `/login`.
 2. Click **Create account** (or visit `/login?mode=signup` directly).
-3. Enter your email + a password of **at least 12 characters with a letter and a digit**, then submit.
+3. Enter your email + a password of **at least 8 characters with a letter and a digit**, then submit.
 4. You land on the onboarding flow — upload your resume, AI extracts your profile, you edit + save.
 5. Once on Overview: set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` / `OLLAMA_BASE_URL`) in `.env` (`chmod 0600 .env`), restart the server. Visit `/settings/llm-provider` to confirm the green env-presence chip + pick your provider as Active.
 
@@ -209,17 +209,17 @@ This reads `uv.lock` and creates `.venv/` with Python 3.12 and every pinned dep.
 **2 · Run the dev server**
 
 ```bash
-uv run fastapi dev
+uv run fastapi dev --port 8003
 ```
 
-Open <http://localhost:8000>. Auto-reload is on — edits to `src/ui/templates/**/*.html`, `src/ui/static/**`, and `src/**/*.py` reload automatically. (The repo-root `app.py` is a two-line re-export of `src/main:app` so `fastapi dev` auto-discovers the app object — see plan 10a / PC.2.)
+Open <http://localhost:8003>. Auto-reload is on — edits to `src/ui/templates/**/*.html`, `src/ui/static/**`, and `src/**/*.py` reload automatically. (The repo-root `app.py` is a two-line re-export of `src/main:app` so `fastapi dev` auto-discovers the app object — see plan 10a / PC.2.)
 
 To enable `/_design/components` (the component fixture page):
 
 ```bash
 # Plan 10 § B Wave 4: gate is now persisted Settings.debug. The legacy env-var
 # fallback below still works for the no-DB / static path.
-NAAVIK_DEBUG=1 uv run fastapi dev
+NAAVIK_DEBUG=1 uv run fastapi dev --port 8003
 ```
 
 With the DB live, set `Settings.debug = True` for `user_id=1` instead — the env var is the legacy path.
@@ -378,7 +378,7 @@ Each scraper is configured through a mix of env vars (company watchlists, RSShub
 4. **For LinkedIn / Indeed:** set keywords + location via `PUT /api/v1/settings/sources` (writable UI editor lands as a follow-up row). Example payload:
    ```bash
    curl -b cookies.txt -H "X-CSRF-Token: $(jq -r .csrf cookies.txt)" \
-        -X PUT http://localhost:8000/api/v1/settings/sources \
+        -X PUT http://localhost:8003/api/v1/settings/sources \
         -H "Content-Type: application/json" \
         -d '{"linkedin_keywords":["staff engineer"],"linkedin_location":"Remote"}'
    ```
@@ -446,7 +446,7 @@ After configuring `.env` + per-user keywords (§ Configuration · Scraper source
    curl -b cookies.txt \
         -H "X-CSRF-Token: $(jq -r .csrf cookies.txt)" \
         -X POST \
-        http://localhost:8000/api/v1/scheduler/jobs/scraping.linkedin/run
+        http://localhost:8003/api/v1/scheduler/jobs/scraping.linkedin/run
    ```
 3. **Check `/discover`** for new jobs. Empty queue with sources marked "configured" + last-run `SUCCESS` means the source returned zero matching listings — try broader keywords or add more companies.
 4. **Check the Sources panel** for last-run state. Status chips: `SUCCESS` (emerald), `PARTIAL` (amber — some listings failed extraction), `FAILED` (rose — top-level scrape error; the consecutive-failure counter is incrementing, Discord admin alert fires at 3), `TIMED_OUT` (rose), `running…` (indigo). The Discover queue surfaces jobs across all sources; the per-source counter lives only on the Sources panel.

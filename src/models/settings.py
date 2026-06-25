@@ -193,11 +193,11 @@ class Settings(SQLModel, table=True):
     # Deployment
     deployment_mode: DeploymentMode = Field(default=DeploymentMode.SELF_HOSTED)
 
-    # Plan 10b (item 4, 2026-05-03): single-user signup gate.
-    # When False (default), POST /api/v1/auth/signup returns 403 once any
-    # User row exists — keeps a self-hosted instance from accidentally
-    # turning into a multi-tenant SaaS. Multi-user proper lands in Phase 2+.
-    allow_multiple_users: bool = Field(default=False)
+    # Plan 0.7.0.48 (2026-05-24): deprecated — field retained for schema
+    # compatibility but no longer read by code. Multi-user signup is the
+    # default; first user becomes admin. Drop via alembic migration in
+    # 0.7.0.49 follow-up.
+    allow_multiple_users: bool = Field(default=True)
 
     # Misc
     debug: bool = Field(default=False)

@@ -30,7 +30,7 @@
         # Plan 10a (PC.1, 2026-05-02): coreutils added so `setsid` is in PATH —
         # used to detach migrate / app from the orchestrator's controlling TTY,
         # otherwise fastapi-cli's `/dev/tty` open + read triggers SIGTTIN and
-        # the process wedges in `T` state without ever binding `:8000`.
+        # the process wedges in `T` state without ever binding the dev app port.
         devTools = with pkgs; [uv py typst coreutils];
         devPath = pkgs.lib.makeBinPath devTools;
       in {
@@ -154,6 +154,10 @@
               # and the dev first-boot log line. Production stacks (docker
               # compose / NixOS module) leave it unset.
               export NAAVIK_DEBUG=1
+              # Default local FastAPI to 8003 so the repo does not collide with
+              # other common FastAPI/Honcho-style services on 8000. Preserve an
+              # operator-supplied PORT override when present.
+              export PORT="''${PORT:-8003}"
               # Force line-buffered stdout. Without this, when fastapi/alembic
               # stdout is a pipe (not a TTY), Python block-buffers up to 4-8 KB
               # before flushing. That made the FastAPI banner + uvicorn "started"
@@ -181,7 +185,7 @@
             # (the actual wedge cure). The trade-off is that SIGTERM to
             # `setsid -w` doesn't propagate to its detached child session —
             # process-compose's normal cleanShutdown leaves uvicorn workers
-            # orphaned and bound to :8000. Override `shutdown.command` to
+            # orphaned and bound to the dev app port. Override `shutdown.command` to
             # pkill by command-line pattern so the orphans get swept too.
             # Patterns are tight enough (the fastapi cmdline + the project's
             # venv path in multiprocessing-spawn workers / alembic) to avoid
@@ -250,23 +254,23 @@
             # No readiness_probe by design: nothing depends on app being healthy
             # (it's the leaf of the chain), so the probe was purely cosmetic.
             # The probe used to fire at t=2s before fastapi finished binding
-            # `:8000` (cold-start takes 4-7s), logging an alarming
+            # the dev app port (default :8003; cold-start takes 4-7s), logging an alarming
             # `connection refused` line every run. Without the probe, app is
             # marked "running" once the process is alive — verify it's actually
-            # serving by hitting <http://localhost:8000> in a browser.
+            # serving by hitting <http://localhost:8003> in a browser.
             # Plan 10a (PC.1, 2026-05-02 — revised): `setsid -w` is the actual
             # cure for the user-reported wedge. fastapi-cli opens `/dev/tty`
             # for terminal-detection (Rich / Click), and when process-compose
             # runs the child in a background process group of an interactive
             # TTY (the user's foreground `nix run .#dev`), reading /dev/tty
-            # raises SIGTTIN and stops the process in `T` state — `:8000`
+            # raises SIGTTIN and stops the process in `T` state — the dev app port
             # never binds and no [app] log line ever appears. setsid creates
             # a new session with no controlling TTY → /dev/tty open returns
             # ENXIO → fastapi-cli takes its headless code path → starts cleanly.
             app = {
               command = ''
                 ${devEnv}
-                exec setsid -w uv run --no-sync fastapi dev src/main.py < /dev/null
+                exec setsid -w uv run --no-sync fastapi dev src/main.py --port "$PORT" < /dev/null
               '';
               depends_on."migrate".condition = "process_completed_successfully";
               shutdown = setsidShutdown;

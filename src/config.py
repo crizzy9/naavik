@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     # Server
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 8003
 
     # Scraper config — plan 33 / 0.2.0.07. All optional; cron skips a source
     # silently when its company-list is unset. CSV parsed by pydantic-settings

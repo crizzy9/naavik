@@ -1,0 +1,18 @@
+{# Onboarding · Upload confirmation — swap target of /api/v1/extraction/upload. #}
+<div>
+  <h1 class="text-xl font-semibold text-slate-50 tracking-tight">Got it — resume uploaded</h1>
+  <p class="mt-1.5 text-sm text-slate-400 leading-relaxed">
+    Extracted <span class="font-mono text-slate-200">{{ chars }}</span> characters from
+    <span class="font-mono text-slate-200">{{ filename }}</span>.
+  </p>
+  <p class="mt-3 text-xs text-slate-500 leading-relaxed">
+    We auto-filled any empty name / email / phone fields from your resume. The full extracted text is saved to your profile under "Raw resume text (parsed source)" — review and fill in everything else manually on the next page.
+  </p>
+  <div class="mt-6 flex items-center justify-end gap-3">
+    <a href="/profile/edit"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+      Continue to your profile
+      <i data-lucide="arrow-right" class="h-4 w-4" stroke-width="1.5"></i>
+    </a>
+  </div>
+</div>

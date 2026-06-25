@@ -180,7 +180,7 @@ Canonical reference: `docs/design/SCRAPER_BASE.md` (plan 29 / `0.2.0.06`).
 - CSRF: double-submit token via `/csrf` endpoint. Every POST route reads `X-CSRF-Token` header (HTMX `hx-headers` carries it).
 - Brute-force rate limit: 5 attempts / 15 min / IP. Applied to `/login` AND `/signup`.
 - bcrypt cost: 12 (production), 4 (tests via `NAAVIK_BCRYPT_COST=4`).
-- **Multi-user gate:** new signups blocked when a user exists AND `Settings.allow_multiple_users=False` (plan 10b).
+- **Open signup:** first signup becomes admin (`is_admin=True`); subsequent signups are regular users (`is_admin=False`). No gate (plan 0.7.0.48). Operators who need to lock down signups gate externally via firewall / reverse-proxy / OIDC, or wait on a future `Settings.allow_signups` admin toggle (`0.7.0.50` follow-up).
 
 ### 4.2 Secret handling
 

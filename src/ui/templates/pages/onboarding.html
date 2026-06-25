@@ -16,20 +16,14 @@
         setup
       </span>
     </div>
-    {% with current_step=current_step %}
-      {% include "components/step_indicator.html" %}
-    {% endwith %}
   </header>
 
-  {# Plan 09a · Issue 10.b — min-h only on desktop; mobile sizes to content. #}
+  {# Plan 0.7.0.48 Wave 2 (2026-05-25): onboarding collapsed from 3 stub steps
+     (upload → extracting SSE → review) to a single upload step that hands off
+     to /profile/edit. The dropzone form's HTMX swap replaces this section's
+     innerHTML with the uploaded-confirmation partial. #}
   <section id="onboarding-step-content" class="bg-slate-900 border border-slate-800 rounded-xl p-5 lg:p-7 lg:min-h-[520px]">
-    {% if current_step == 1 %}
-      {% include "pages/_onboarding_step_upload.html" %}
-    {% elif current_step == 2 %}
-      {% include "pages/_onboarding_step_extracting.html" %}
-    {% else %}
-      {% include "pages/_onboarding_step_review.html" %}
-    {% endif %}
+    {% include "pages/_onboarding_step_upload.html" %}
   </section>
 </div>
 {% endblock %}

@@ -37,7 +37,7 @@ Something is broken. Ask in this order:
 **Symptom:** orchestrator boots Postgres, alembic completes, then either hangs or prints nothing for the FastAPI app.
 
 **Root causes seen in production:**
-- **TTY / SIGTTIN** (plan 10a). fastapi-cli's worker opens `/dev/tty`; process-compose-spawned background process groups receive `SIGTTIN`, never bind `:8000`. Fixed by `exec setsid -w uv run --no-sync ... < /dev/null` in `flake.nix` + `coreutils` in devTools.
+- **TTY / SIGTTIN** (plan 10a). fastapi-cli's worker opens `/dev/tty`; process-compose-spawned background process groups receive `SIGTTIN`, never bind the dev app port (default `:8003`). Fixed by `exec setsid -w uv run --no-sync ... < /dev/null` in `flake.nix` + `coreutils` in devTools.
 - **alembic async wedge** (suspected, not actual). `migrations/env.py` using async engine + psycopg in the same process. Mitigation: `migrations/env.py` switched to sync psycopg.
 - **PYTHONPATH leak from outer shell.** Mitigation: `unset PYTHONPATH` in the orchestrator preamble.
 
@@ -49,7 +49,7 @@ nix run .#dev
 # Expect:
 #   [migrate] (alembic upgrade head completes)
 #   [app] INFO:     Application startup complete.
-#   [app] dev server up at http://localhost:8000 — visit /signup to create your account
+#   [app] dev server up at http://localhost:8003 — visit /signup to create your account
 ```
 
 ### 2.2 `greenlet_spawn has not been called` / `libstdc++.so.6: cannot open shared object file`
@@ -203,12 +203,12 @@ grep -r "<run-id>" .claude/agents/ .claude/commands/  # confirm prompts referenc
 ```bash
 # Canonical — visit /signup on first boot:
 nix run .#dev
-# Open http://localhost:8000 → click "Create account" → fill form.
+# Open http://localhost:8003 → click "Create account" → fill form.
 
 # Manual without the orchestrator — set NAAVIK_DEBUG so SECRET_KEY validator
 # accepts a missing .env:
 export NAAVIK_DEBUG=1
-uv run fastapi dev src/main.py
+uv run fastapi dev src/main.py --port 8003
 # Then sign up at /login?mode=signup.
 
 # Destructive — drop the dev DB so you can sign up from scratch.
@@ -218,8 +218,8 @@ nix run .#dev
 
 **Verify:**
 - `/setup-help` renders the user_count row as `fresh` (when 0 users) or `users present` (when ≥ 1).
-- The orchestrator scrollback shows `dev server up at http://localhost:8000 — visit /signup to create your account` once the app finishes booting.
-- `curl -s 127.0.0.1:8000/login | grep -iE 'create.account'` returns the signup link.
+- The orchestrator scrollback shows `dev server up at http://localhost:8003 — visit /signup to create your account` once the app finishes booting.
+- `curl -s 127.0.0.1:8003/login | grep -iE 'create.account'` returns the signup link.
 
 ### 2.13 `FATAL: data directory "..." has invalid permissions` on `nix run .#dev`
 
@@ -286,7 +286,7 @@ GROUP BY provider, model
 ORDER BY total_cost DESC;
 ```
 
-Expected for healthy production (single user, semi-active day): < 50 calls, < $1 spend, > 90% ok-rate. Spike → investigate the calling service.
+Expected for a healthy semi-active day, per active user: < 50 calls, < $1 spend, > 90% ok-rate. Spike → investigate the calling service.
 
 ### 3.3 Inspect DRAFT lifecycle
 
@@ -436,7 +436,7 @@ From `docs/plans/POST_PHASE_1.md` § Cross-cutting concerns.
 ```sql
 -- 1. Cost in last 24h
 SELECT SUM(cost_usd) FROM api_usage WHERE occurred_at >= now() - interval '24 hours';
--- Healthy: < $1 single-user, < $5 multi-user (when applicable).
+-- Healthy: < $1 per active user / day; scale linearly with active users.
 
 -- 2. Failure rate in last 24h
 SELECT

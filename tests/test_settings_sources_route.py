@@ -257,18 +257,24 @@ def test_get_xss_payload_in_raw_meta_escaped(
     assert "<img src=x onerror=alert(1)>" not in body
 
 
-def test_htmx_swap_returns_partial_not_full_page(client: TestClient, auth_cookies):
-    """HX-Request: true → fragment without base layout chrome."""
+def test_sources_under_hx_request_returns_full_page(client: TestClient, auth_cookies):
+    """0.7.0.48 fold-in (bug #3): /settings/sources must return the full
+    base.html shell (sidebar + chrome) even with `HX-Request: true`. The
+    partial-on-HX-Request branch was dead code (no template caller fetches
+    /settings/sources via hx-get) and incompatible with the body-level
+    `hx-boost="true"` — boosted clicks set HX-Request: true and a partial
+    response strips the sidebar.
+    """
     r = client.get(
         "/settings/sources",
         cookies=auth_cookies,
-        headers={"HX-Request": "true"},
+        headers={"HX-Request": "true", "HX-Boosted": "true"},
     )
     assert r.status_code == 200
     body = r.text
-    # Page chrome absent — fragment shape.
-    assert "<html" not in body.lower()
-    assert "<body" not in body.lower()
+    assert "<html" in body.lower(), "settings tab must return full HTML chrome under hx-boost"
+    assert "<body" in body.lower(), "settings tab must return full HTML chrome under hx-boost"
+    assert 'id="sidebar-drawer"' in body, "sidebar must survive boosted nav"
     # Panel content still renders.
     assert 'data-source-row="linkedin"' in body
 

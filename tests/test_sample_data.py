@@ -264,7 +264,9 @@ def test_stuck_queue_coverage() -> None:
 
 
 def test_owner_only_user_id() -> None:
-    """N.10: every row is `user_id=1` (single-user MVP)."""
+    """N.10: every row is `user_id=1` (dev sample data convention; production
+    multi-user uses real user IDs).
+    """
     for table in (
         sd.JOBS,
         sd.APPLICATIONS,

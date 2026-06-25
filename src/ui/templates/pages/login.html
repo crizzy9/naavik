@@ -1,13 +1,6 @@
 {% extends "components/auth_shell.html" %}
 {% set mode = mode | default("signin") %}
-{% set _requested_signup = (mode == "signup") %}
-{% set signup_disabled = signup_disabled | default(false) %}
-{# Plan 0.7.0.45 (2026-05-22): if signup is disabled, force `is_signup = false`
-   for the entire template — the heading, form-action, button label, and
-   alt-mode CTA all read this flag. `_requested_signup` is preserved so the
-   banner block can tell whether to render (true only when the user
-   intentionally hit `?mode=signup`). #}
-{% set is_signup = _requested_signup and not signup_disabled %}
+{% set is_signup = (mode == "signup") %}
 {% block title %}{% if is_signup %}Create account{% else %}Sign in{% endif %} — Naavik{% endblock %}
 
 {% block caller %}
@@ -28,26 +21,6 @@
   {% else %}
     <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Welcome back</h1>
     <p class="mt-1.5 text-sm text-slate-400">Sign in to your Naavik instance.</p>
-  {% endif %}
-
-  {# Plan 10c (10c.2b, 2026-05-11) + Plan 0.7.0.45 (2026-05-22).
-
-     The banner fires when the operator hit `?mode=signup` ON a single-user
-     instance that already has an account. We display the banner explaining
-     why signup is disabled, then render the SIGNIN form below (controlled
-     by the top-of-template `is_signup` rewrite — `_requested_signup and
-     not signup_disabled` collapses to False here). The original
-     "banner-only, no form" UX was a dead-end. #}
-  {% if _requested_signup and signup_disabled %}
-    <div data-signup-disabled-banner="true" class="mt-6 rounded-lg bg-amber-500/10 border border-amber-500/30 p-4">
-      <div class="flex gap-3 items-start">
-        <i data-lucide="lock" class="h-5 w-5 text-amber-300 shrink-0" stroke-width="1.5"></i>
-        <div class="flex-1 min-w-0">
-          <h3 class="text-sm font-medium text-amber-100">This instance already has an account.</h3>
-          <p class="text-xs text-amber-200/80 mt-1">Sign-ups are disabled on a single-user instance. Use the form below to sign in, or contact your admin to enable multi-user (Settings · Deployment).</p>
-        </div>
-      </div>
-    </div>
   {% endif %}
 
     <form
@@ -73,7 +46,7 @@
           {% include "components/input.html" %}
         {% endwith %}
         {% if is_signup %}
-          <p class="mt-1.5 text-xs text-slate-500">At least 12 characters, with a letter and a digit.</p>
+          <p class="mt-1.5 text-xs text-slate-500">At least 8 characters, with a letter and a digit.</p>
         {% endif %}
       </div>
 
@@ -91,15 +64,13 @@
 
       {# Plan 10c (10c.2a, 2026-05-11): prominent alternate-mode CTA below
          the submit button. Lifted out of the footer so the operator finds
-         it before scanning past the SSO info-card. Plan 0.7.0.45 — hide the
-         "First time? Create account" link when signup_disabled, since
-         clicking it would just bounce them back to this same banner. #}
+         it before scanning past the SSO info-card. #}
       {% if is_signup %}
         <p data-auth-mode-toggle="signin" class="mt-1 text-center text-sm text-slate-400">
           Already have an account?
           <a href="/login" class="text-indigo-300 hover:text-indigo-200 font-medium transition">Sign in</a>
         </p>
-      {% elif not signup_disabled %}
+      {% else %}
         <p data-auth-mode-toggle="signup" class="mt-1 text-center text-sm text-slate-400">
           First time?
           <a href="/login?mode=signup" class="text-indigo-300 hover:text-indigo-200 font-medium transition">Create account</a>

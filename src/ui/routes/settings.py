@@ -46,6 +46,23 @@ _TAB_TEMPLATES: dict[str, str] = {
 _VALID_TABS = set(_TAB_TEMPLATES.keys())
 
 
+# 0.7.0.48 W4 — common Save button. Each writable tab maps to the canonical
+# bulk-PUT endpoint the shared header button submits to via the form= attr.
+# `None` hides the button (read-only tabs OR tabs whose only mutation is a
+# dedicated sub-action like "Rotate JWT key").
+_SAVE_ENDPOINT_FOR_TAB: dict[str, str | None] = {
+    "account": "/api/v1/settings/account",
+    "llm-provider": "/api/v1/settings/llm",
+    "generation": "/api/v1/settings/generation",
+    "notifications": "/api/v1/settings/notifications",
+    "auto-apply": "/api/v1/settings/auto-apply",
+    "sources": None,
+    "submissions": None,
+    "security": None,
+    "deployment": None,
+}
+
+
 _PROVIDERS_DISPLAY = [
     {
         "id": "anthropic",
@@ -186,12 +203,26 @@ async def _ctx_for_tab(
     settings = await settings_service.get_or_create(session, user_id=user_id)
     cost_summary = await llm_tracker.usage_summary(session, user_id=user_id, days=30)
     profile = await profile_service.get_profile(session, user_id)
-    provider_id = settings.llm_provider.value if settings else "anthropic"
+    saved_provider_id = settings.llm_provider.value if settings else "anthropic"
+    env_indicators = env_secrets.env_indicators_for_llm_tab()
+    active_provider = env_secrets.resolve_active_llm_provider()
+    # 0.7.0.48 fold-in: when the saved preference's env key is absent but
+    # a different provider IS env-configured, the factory falls back to the
+    # env-resolved active. Mirror that in the model dropdown so the operator
+    # sees the model catalog for the provider that LLM calls will actually
+    # use — otherwise the dropdown lists e.g. Anthropic models while calls
+    # route through OpenAI, which is the same surface confusion the mismatch
+    # banner warns about. `saved_provider_id` is preserved for the mismatch
+    # banner detection in the template.
+    pref_has_env = env_indicators.get(saved_provider_id, False)
+    provider_id = saved_provider_id if pref_has_env or active_provider is None else active_provider
     deployment_info = await _deployment_render_info(settings)
 
     ctx: dict[str, object] = {
         "current_tab": tab,
         "tab_template": _TAB_TEMPLATES[tab],
+        "active_save_endpoint": _SAVE_ENDPOINT_FOR_TAB.get(tab),
+        "save_form_id": "settings-active-form",
         "settings": settings,
         "profile": profile,
         "providers": _PROVIDERS_DISPLAY,
@@ -200,14 +231,19 @@ async def _ctx_for_tab(
         # resolves model + env-indicator state from these. The model fragment
         # endpoint below builds the same context for HTMX swaps.
         "provider_id": provider_id,
+        "saved_provider_id": saved_provider_id,
         "model_options": _llm_model_options_for(provider_id),
-        "selected_model": settings.llm_model or _llm_default_model_for(provider_id),
-        "env_indicators": env_secrets.env_indicators_for_llm_tab(),
+        "selected_model": (
+            settings.llm_model
+            if settings and provider_id == saved_provider_id
+            else _llm_default_model_for(provider_id)
+        ),
+        "env_indicators": env_indicators,
         "notify_env_indicators": env_secrets.env_indicators_for_notifications_tab(),
         # Plan 70 (0.3.3.13): single env-resolved active-provider label.
         # Replaces the deleted "Active provider" radio surface — no UI
         # mutation; precedence ANTHROPIC > OPENAI > OLLAMA.
-        "active_provider": env_secrets.resolve_active_llm_provider(),
+        "active_provider": active_provider,
         "save_status": None,
         "deployment": deployment_info,
         "log_lines": _LOG_LINES_SEED,
@@ -670,8 +706,6 @@ async def get_settings_sources(
     canonical entry; tests override via `app.dependency_overrides`.
     """
     ctx = await _ctx_for_tab(request, "sources", session=session, user_id=_effective_user_id(_user))
-    if request.headers.get("HX-Request") == "true":
-        return templates.TemplateResponse(request, "pages/_settings_sources.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 
@@ -691,8 +725,6 @@ async def get_settings_submissions(
     ctx = await _ctx_for_tab(
         request, "submissions", session=session, user_id=_effective_user_id(_user)
     )
-    if request.headers.get("HX-Request") == "true":
-        return templates.TemplateResponse(request, "pages/_settings_submissions.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 
@@ -718,8 +750,6 @@ async def get_settings_llm_provider(
     ctx = await _ctx_for_tab(
         request, "llm-provider", session=session, user_id=_effective_user_id(_user)
     )
-    if request.headers.get("HX-Request") == "true":
-        return templates.TemplateResponse(request, "pages/_settings_llm.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 
@@ -739,8 +769,6 @@ async def get_settings_generation(
     ctx = await _ctx_for_tab(
         request, "generation", session=session, user_id=_effective_user_id(_user)
     )
-    if request.headers.get("HX-Request") == "true":
-        return templates.TemplateResponse(request, "pages/_settings_generation.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 
@@ -760,8 +788,6 @@ async def get_settings_security(
     ctx = await _ctx_for_tab(
         request, "security", session=session, user_id=_effective_user_id(_user)
     )
-    if request.headers.get("HX-Request") == "true":
-        return templates.TemplateResponse(request, "pages/_settings_security.html", ctx)
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 

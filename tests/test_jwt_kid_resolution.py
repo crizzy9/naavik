@@ -100,6 +100,67 @@ async def test_verify_jwt_async_env_legacy_kid_falls_back_to_legacy(_session) ->
     assert result[0] == 42
 
 
+async def test_issue_jwt_async_env_legacy_db_row_uses_env_material(_session) -> None:
+    """Regression for plan 0.7.0.48 Wave 2 fix — login-loop bug.
+
+    Setup: alembic 0014 plants the env-legacy `tenant_signing_key` row with
+    `os.environ.get("SECRET_KEY") or secrets.token_urlsafe(32)`. When the
+    `SECRET_KEY` env var is unset (dev default), the migration plants
+    RANDOM 32-byte URL-safe material — different from `app_settings.secret_key`
+    (`"change-me-in-production"` default).
+
+    Pre-fix: `issue_jwt_async` signed JWT with the DB row's random material;
+    `verify_jwt_async` saw `kid='env-legacy'` and delegated to sync
+    `verify_jwt` which uses `app_settings.secret_key` → InvalidSignatureError
+    → "Session expired" 307 on every authed request → login loop.
+
+    Post-fix: `issue_jwt_async` checks `key.kid == ENV_LEGACY_KID` and falls
+    through to sync `issue_jwt` (env material). Both issue + verify now use
+    `app_settings.secret_key` symmetrically. The env-legacy DB row is
+    informational only — its material is never used for signing.
+    """
+    # Plant an env-legacy ACTIVE row with INTENTIONALLY-DIFFERENT material
+    # than app_settings.secret_key — mimics the fresh-install path where
+    # migration 0014 generates random material because SECRET_KEY env unset.
+    different_material = "intentionally-different-key-material-from-env-default-xyz123"
+    assert different_material != app_settings.secret_key, (
+        "test fixture mistake — material must differ from env to exercise the bug"
+    )
+    _session.add(
+        TenantSigningKey(
+            tenant_id=1,
+            kid=ENV_LEGACY_KID,
+            algorithm=SigningAlgorithm.HS256,
+            status=TenantSigningKeyStatus.ACTIVE,
+            public_key_pem=None,
+            private_key_pem=different_material,
+        )
+    )
+    await _session.commit()
+
+    # Issue + verify roundtrip MUST succeed (would fail pre-fix with
+    # InvalidSignatureError because issuer used DB material, verifier
+    # delegated env-legacy kid to sync verify_jwt which uses env material).
+    token = await issue_jwt_async(_session, user_id=42, tenant_id=1)
+    result = await verify_jwt_async(_session, token, tenant_id=1)
+    assert result is not None, (
+        "issue + verify roundtrip failed — login-loop regression. "
+        "issue_jwt_async must bypass env-legacy DB row (sync path uses env "
+        "material) to stay symmetric with verify_jwt_async's env-legacy "
+        "delegate to sync verify_jwt."
+    )
+    assert result[0] == 42
+    # Confirm the JWT was signed with env material via the sync path — the
+    # token must decode against app_settings.secret_key (the verifier's key),
+    # NOT the planted different_material (the DB row's key).
+    decoded_with_env = pyjwt.decode(token, app_settings.secret_key, algorithms=[JWT_ALGORITHM])
+    assert decoded_with_env["sub"] == "42"
+    # And conversely, decoding with the DB row's material MUST fail (proving
+    # the issuer didn't use the DB material).
+    with pytest.raises(pyjwt.InvalidSignatureError):
+        pyjwt.decode(token, different_material, algorithms=[JWT_ALGORITHM])
+
+
 def test_verify_jwt_sync_rejects_foreign_kid() -> None:
     """Sync legacy verifier must reject `kid` values it can't verify against
     SECRET_KEY — those tokens belong to the async path."""

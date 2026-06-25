@@ -60,7 +60,13 @@ def _patch_db_dependencies(monkeypatch):
     """Plan 54 / 0.2.5.03: `/settings/llm-provider` now `Depends(get_session)` to
     drive the daily cost-cap widget. Stub the session + cost-tracker so the
     existing assertions remain DB-free.
+
+    Plan 0.7.0.48 W4 (2026-05-26): `put_llm` + `put_notifications` now
+    enforce `require_csrf` (defense-in-depth fold-in per round-5 reviewer
+    pair). Override the CSRF dep here so the existing surface-shape tests
+    don't have to craft a double-submit token roundtrip per request.
     """
+    from api.auth import require_csrf
     from db.session import get_session
     from main import app
     from services import llm_tracker
@@ -68,10 +74,15 @@ def _patch_db_dependencies(monkeypatch):
     async def _fake_today_cost(session, *, user_id):
         return 0.0
 
+    def _csrf_pass() -> None:
+        return None
+
     monkeypatch.setattr(llm_tracker, "today_cost_usd", _fake_today_cost)
     app.dependency_overrides[get_session] = _fake_get_session
+    app.dependency_overrides[require_csrf] = _csrf_pass
     yield
     app.dependency_overrides.pop(get_session, None)
+    app.dependency_overrides.pop(require_csrf, None)
 
 
 # ── Fragment endpoints — provider-aware swaps ────────────────────────────
@@ -136,7 +147,15 @@ def test_llm_tab_renders_form_wrap(client: TestClient, auth_cookies):
     assert r.status_code == 200
     body = r.text
     assert 'hx-put="/api/v1/settings/llm"' in body
-    assert 'hx-swap="outerHTML"' in body
+    # 0.7.0.48 W4 — common Save button posts to /api/v1/settings/llm via the
+    # `form="settings-active-form"` attr; LLM form targets the shared
+    # `#settings-save-result` aria-live region instead of swapping the
+    # whole partial. The outerHTML/llm-form swap target is gone.
+    assert 'id="settings-active-form"' in body
+    assert 'hx-target="#settings-save-result"' in body
+    assert 'hx-swap="innerHTML"' in body
+    # Common Save button rendered in page header (gated by ctx).
+    assert 'data-testid="settings-save"' in body
     # Plan 70 (0.3.3.13): "Active provider" radio surface deleted; the
     # `/_fragments/settings/llm/model-options?provider=...` fragment is
     # no longer wired via radio change. Endpoint remains usable; the LLM
@@ -233,9 +252,9 @@ def test_put_llm_form_round_trip_persists_provider(client: TestClient, auth_cook
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert r.status_code == 200
-    # HTMX path returns rendered HTML, not JSON
-    assert "<form" in r.text
-    assert "hx-put=" in r.text
+    # 0.7.0.48 W4 — HTMX path returns the `#settings-save-result` fragment.
+    assert "text-emerald-300" in r.text
+    assert "Saved" in r.text
 
     # Confirm the change persisted via the JSON GET
     r2 = client.get("/api/v1/settings/llm", cookies=auth_cookies)
@@ -258,3 +277,48 @@ def test_put_llm_form_round_trip_persists_provider(client: TestClient, auth_cook
         cookies=auth_cookies,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
+
+
+# ── W4 fold-in regression (2026-05-26) ────────────────────────────────────
+
+
+def test_put_llm_form_no_live_db_does_not_500(client: TestClient, auth_cookies, monkeypatch):
+    """Regression for owner-reported 500 on settings/llm save (PR #212 W4).
+
+    Pre-fix: `src/api/settings.py:put_llm` called
+    `_ctx_for_tab(request, "llm-provider")` without the required
+    keyword-only `session=` + `user_id=` args. Every form-shape PUT
+    500'd with `TypeError: _ctx_for_tab() missing 1 required
+    keyword-only argument: 'session'`.
+
+    Post-fix: kwargs threaded through. The form PUT path returns the
+    rendered `_settings_llm.html` partial (200) instead of a 500.
+
+    Tested with monkey-patched settings_service so we don't need
+    NAAVIK_LIVE_DB. Exercises the same code path the live-DB
+    round-trip test does, minus the persistence assertion.
+    """
+    from services import settings_service
+
+    async def _stub_update_llm(session, **kwargs):
+        from db import sample_data as sd
+
+        return sd.SETTINGS
+
+    monkeypatch.setattr(settings_service, "update_llm", _stub_update_llm)
+
+    r = client.put(
+        "/api/v1/settings/llm",
+        data={"llm_provider": "ollama", "llm_model": "llama3.1:8b"},
+        cookies=auth_cookies,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r.status_code == 200, f"expected 200, got {r.status_code}: {r.text[:500]}"
+    # 0.7.0.48 W4 — form-path returns the tiny `#settings-save-result`
+    # fragment, not the full re-rendered partial. The fragment carries
+    # the emerald-300 saved class so the aria-live region updates inline.
+    assert "text-emerald-300" in r.text
+    assert "Saved" in r.text
+    # Verify we're NOT re-rendering the whole partial (sentinel).
+    assert "<form" not in r.text
+    assert "<aside" not in r.text

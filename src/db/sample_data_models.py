@@ -66,7 +66,8 @@ class User(_Base):
     email: str
     password_hash: str
     is_active: bool = True
-    is_admin: bool = False
+    # Plan 0.7.0.48 Wave 2 (2026-05-25): default True; admin concept deprecated.
+    is_admin: bool = True
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None = None
@@ -507,9 +508,11 @@ class Settings(_Base):
 
     deployment_mode: DeploymentMode = DeploymentMode.SELF_HOSTED
 
-    # Plan 10b (item 4, 2026-05-03): single-user signup gate. Mirrors the
-    # `Settings.allow_multiple_users` SQLModel column.
-    allow_multiple_users: bool = False
+    # Plan 0.7.0.48 (2026-05-24): deprecated — field retained for schema
+    # compatibility but no longer read by code. Mirrors the SQLModel
+    # `Settings.allow_multiple_users` column; drop via alembic migration
+    # in 0.7.0.49 follow-up.
+    allow_multiple_users: bool = True
 
     debug: bool = False
 

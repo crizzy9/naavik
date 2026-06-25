@@ -7,6 +7,7 @@ extract_resume_to_profile + AI tag inference + AppEvent emission for `profile_up
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -219,6 +220,79 @@ async def update_field(
     from services.embedding_service import maybe_refresh_profile_embedding
 
     await maybe_refresh_profile_embedding(session, user_id=user_id)
+    return profile
+
+
+# Plan 0.7.0.48 W3 hacker HIGH fold-in (2026-05-25): bounded quantifiers
+# on email/phone regexes + 32 KB input truncation defense-in-depth. The
+# previous unbounded `[\w.+-]+@[\w-]+\.[\w.-]+` showed catastrophic
+# backtracking on adversarial PDF text (measured: 20 KB alpha → 0.8 s;
+# 100 KB → 19.6 s, blocking the async event loop in C). Combined with
+# the now-open signup, any unauth visitor could DoS the instance via a
+# crafted PDF upload. Bounds match RFC 5321 local-part (64) + domain
+# label (63 per label, 253 total) + TLD (63). Phone capped per E.164
+# practical limit (15 digits + ~10 separators).
+_HEURISTIC_INPUT_CAP = 32 * 1024  # 32 KB — defense-in-depth truncation
+_EMAIL_RE = re.compile(r"[\w.+-]{1,64}@[\w-]{1,255}\.[\w.-]{1,255}")
+_PHONE_RE = re.compile(r"(\+?\d[\d\s\-().]{8,30}\d)")
+_NAME_ALLOWED_RE = re.compile(r"^[A-Za-z][A-Za-z\s\-'.]{0,59}$")
+
+
+def parse_resume_heuristics(text: str) -> dict[str, str]:
+    """Pure regex extract of email / phone / name from raw resume text.
+
+    Returns a dict with keys present only when a candidate was found. The
+    caller decides whether to populate (we never overwrite operator edits
+    in `set_raw_resume_text`).
+
+    Input is truncated to `_HEURISTIC_INPUT_CAP` before any regex runs —
+    defense in depth on top of the bounded quantifiers above. A real
+    resume's first-page email/name/phone sits well within 32 KB.
+    """
+    out: dict[str, str] = {}
+    if not text:
+        return out
+    if len(text) > _HEURISTIC_INPUT_CAP:
+        text = text[:_HEURISTIC_INPUT_CAP]
+    if m := _EMAIL_RE.search(text):
+        out["email"] = m.group(0)
+    if m := _PHONE_RE.search(text):
+        out["phone"] = m.group(1).strip()
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or len(line) > 60:
+            continue
+        if "@" in line or any(ch.isdigit() for ch in line):
+            continue
+        if _NAME_ALLOWED_RE.match(line):
+            out["full_name"] = line
+            break
+    return out
+
+
+async def set_raw_resume_text(
+    session: AsyncSession,
+    user_id: int,
+    text: str,
+) -> Profile | None:
+    """Persist `text` as `Profile.raw_resume_text` + heuristically populate
+    empty identity fields (full_name, email, phone) from regex matches.
+
+    Won't overwrite operator hand-edits — only fills fields that are
+    currently falsy. Returns the updated Profile, or None when the user has
+    no Profile row yet (best-effort; caller can ignore).
+    """
+    profile = await get_profile(session, user_id)
+    if profile is None:
+        return None
+    profile.raw_resume_text = text
+    parsed = parse_resume_heuristics(text)
+    for field in ("full_name", "email", "phone"):
+        if parsed.get(field) and not getattr(profile, field, None):
+            setattr(profile, field, parsed[field])
+    profile.updated_at = datetime.now(UTC)
+    session.add(profile)
+    await session.flush()
     return profile
 
 

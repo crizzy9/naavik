@@ -6,6 +6,10 @@
     accept       : MIME types (default: "application/pdf")
     max_size_mb  : advisory cap (default: 10)
     upload_url   : HTMX POST target (default: "/api/v1/extraction/upload")
+    target       : HTMX swap target selector (default: "#onboarding-step-content")
+    input_id     : DOM id of the file input (default: "dropzone-input"); also
+                   used as a unique progress-bar id so the partial can render
+                   twice on the same page without `id` collisions.
 
   Drag-drop wiring lives inline using `hx-on:` attributes — no <script> tags
   inside this partial.
@@ -13,16 +17,20 @@
 {% set accept = accept | default("application/pdf") %}
 {% set max_size_mb = max_size_mb | default(10) %}
 {% set upload_url = upload_url | default("/api/v1/extraction/upload") %}
+{% set target = target | default("#onboarding-step-content") %}
+{% set input_id = input_id | default("dropzone-input") %}
+{% set progress_id = input_id ~ "-progress" %}
 
 <form
   class="dropzone-form"
   hx-post="{{ upload_url }}"
   hx-encoding="multipart/form-data"
-  hx-target="#onboarding-step-content"
+  hx-target="{{ target }}"
   hx-swap="innerHTML"
-  hx-indicator="#upload-progress">
+  hx-trigger="change from:#{{ input_id }}"
+  hx-indicator="#{{ progress_id }}">
 
-  <label for="dropzone-input"
+  <label for="{{ input_id }}"
          class="dropzone-target h-96 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center gap-4 hover:border-indigo-500/50 transition cursor-pointer focus-within:ring-2 focus-within:ring-indigo-500/40"
          hx-on:dragover="event.preventDefault(); this.classList.add('border-indigo-500/70','bg-indigo-500/5');"
          hx-on:dragleave="this.classList.remove('border-indigo-500/70','bg-indigo-500/5');"
@@ -34,7 +42,7 @@
       Browse files
     </span>
     <div class="text-xs text-slate-500">PDF only · max {{ max_size_mb }} MB</div>
-    <input id="dropzone-input" name="resume" type="file" accept="{{ accept }}" class="sr-only" required>
+    <input id="{{ input_id }}" name="resume" type="file" accept="{{ accept }}" class="sr-only" required>
   </label>
 
   <div class="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
@@ -43,7 +51,7 @@
   </div>
 
   <progress
-    id="upload-progress"
+    id="{{ progress_id }}"
     class="htmx-indicator htmx-progress mt-4 hidden htmx-show-loading"
     value="0"
     max="100"></progress>

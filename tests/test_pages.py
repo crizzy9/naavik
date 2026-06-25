@@ -49,8 +49,20 @@ _PAGES = [
     (
         "profile_edit",
         "/profile/edit",
-        ["Edit profile", "data-sortable", "application-qs", "bullet-list-1"],
-        [],
+        [
+            "Edit profile",
+            "data-sortable",
+            "application-qs",
+            "bullet-list-1",
+            # 0.7.0.48 fold-in for owner bug #4: explicit Save button replaces
+            # the misleading static "Auto-saved · just now" indicator.
+            'data-testid="profile-edit-save"',
+            'id="profile-edit-form"',
+            'hx-put="/api/v1/profile"',
+        ],
+        # The static "Auto-saved · just now" indicator was a lie — it rendered
+        # the same string regardless of whether anything had saved. Gone.
+        ["Auto-saved · just now", "Auto-saved"],
     ),
     (
         "discover",
@@ -174,8 +186,31 @@ def test_settings_all_seven_tabs(client: TestClient, auth_cookies, monkeypatch):
     monkeypatch.setattr(job_service, "list_recent_scrape_runs", _fake_recent_runs)
     monkeypatch.setattr(application_service, "aggregate_submission_failures", _fake_failures)
     monkeypatch.setattr(llm_tracker, "today_cost_usd", _fake_today_cost)
+
+    # 0.7.0.48 fold-in — extending the loop to cover `security` (skipped pre-fix)
+    # tripped _NoopSession not having `.exec`. Stub the security panel builder
+    # so the route renders to base.html w/ sidebar without hitting the DB.
+    from ui.routes import settings as settings_routes
+
+    async def _fake_security_view(session, *, user_id):
+        return {
+            "active_key": None,
+            "retiring_keys": [],
+            "retired_count": 0,
+            "rotation_days": 90,
+            "rotation_grace_days": 7,
+        }
+
+    monkeypatch.setattr(settings_routes, "_build_security_view", _fake_security_view)
     app.dependency_overrides[get_session] = _fake_get_session
     try:
+        # 0.7.0.48 fold-in (bug #3): every settings tab MUST return the full
+        # base.html shell (sidebar included) even under HX-Request, because
+        # `hx-boost="true"` on <body> sends every boosted nav with that header
+        # and HTMX needs a full body in the response to do its swap. Five
+        # routes (sources/submissions/llm-provider/generation/security) used
+        # to return a partial when HX-Request: true — that stripped the sidebar
+        # on click.
         for tab in (
             "llm-provider",
             "deployment",
@@ -184,11 +219,46 @@ def test_settings_all_seven_tabs(client: TestClient, auth_cookies, monkeypatch):
             "auto-apply",
             "sources",
             "submissions",
+            "generation",
+            "security",
         ):
-            r = client.get(f"/settings/{tab}", cookies=auth_cookies)
-            assert r.status_code == 200, f"/settings/{tab}: HTTP {r.status_code}"
+            for headers in ({}, {"HX-Request": "true", "HX-Boosted": "true"}):
+                r = client.get(f"/settings/{tab}", cookies=auth_cookies, headers=headers)
+                assert r.status_code == 200, (
+                    f"/settings/{tab} headers={headers}: HTTP {r.status_code}"
+                )
+                body = r.text
+                assert 'id="sidebar-drawer"' in body, (
+                    f"/settings/{tab} headers={headers}: sidebar drawer missing — "
+                    "hx-boost click would strip the sidebar"
+                )
+                assert "Naavik" in body, f"/settings/{tab} headers={headers}: lockup missing"
     finally:
         app.dependency_overrides.pop(get_session, None)
+
+
+def test_tracking_list_fragment_is_partial_not_full_page(client: TestClient, auth_cookies):
+    """0.7.0.48 fold-in (bug #6): /_fragments/tracking/list MUST return the
+    list partial only — NOT a full base.html page. view_toggle.html points
+    HTMX at /_fragments/tracking/<view> precisely so the swap into
+    `#tracking-main` doesn't inject a duplicate sidebar inside the existing
+    layout. If this fragment regressed to extending base.html, the toggle
+    would render a second sidebar nested in the page.
+    """
+    for view in ("board", "list"):
+        r = client.get(f"/_fragments/tracking/{view}", cookies=auth_cookies)
+        assert r.status_code == 200, f"/_fragments/tracking/{view}: HTTP {r.status_code}"
+        body = r.text
+        assert 'id="sidebar-drawer"' not in body, (
+            f"/_fragments/tracking/{view}: sidebar drawer must NOT appear in the "
+            "fragment response — it would render a duplicate sidebar when swapped "
+            "into #tracking-main"
+        )
+        # Sanity check that the fragment IS returning the expected payload.
+        if view == "list":
+            assert "Company" in body, "list fragment missing list-table header"
+        else:
+            assert "data-column" in body, "board fragment missing column markers"
 
 
 def test_settings_unknown_tab_returns_404(client: TestClient, auth_cookies):
@@ -244,7 +314,7 @@ def test_login_invalid_mode_rejected(client: TestClient):
     assert r.status_code == 422
 
 
-# ── Plan 10c (10c.2) — signup CTA promotion + signup_disabled gate ───────
+# ── Plan 10c (10c.2a) + 0.7.0.48 — signup CTA promotion ─────────────────
 
 
 def test_login_signin_has_prominent_signup_link(client: TestClient):
@@ -276,53 +346,14 @@ def test_login_signin_has_prominent_signup_link(client: TestClient):
     assert "/login?mode=signup" not in footer_html
 
 
-def test_login_signup_mode_renders_form_on_fresh_db(client: TestClient, monkeypatch):
-    """On a fresh DB (no users), `/login?mode=signup` renders the signup form.
-
-    Plan 10c (10c.2b, 2026-05-11): server-side `signup_disabled` is False
-    when the User table is empty, so the form renders normally.
-    """
-    from ui.routes import auth as auth_routes
-
-    async def _gate_false(_session):
-        return False
-
-    monkeypatch.setattr(auth_routes, "_compute_signup_disabled", _gate_false)
-
+def test_login_signup_mode_renders_form(client: TestClient):
+    """`/login?mode=signup` renders the signup form unconditionally (plan 0.7.0.48)."""
     r = client.get("/login?mode=signup")
     assert r.status_code == 200
     body = r.text
     assert 'hx-post="/api/v1/auth/signup"' in body
     assert "Create your account" in body
     assert 'data-signup-disabled-banner="true"' not in body
-
-
-def test_login_signup_mode_renders_banner_on_seeded_db(client: TestClient, monkeypatch):
-    """When `signup_disabled` is True (seeded single-user DB),
-    `/login?mode=signup` renders an explanatory banner instead of the
-    form so the operator doesn't submit a request that comes back 403.
-
-    Plan 10c (10c.2b, 2026-05-11).
-    """
-    from ui.routes import auth as auth_routes
-
-    async def _gate_true(_session):
-        return True
-
-    monkeypatch.setattr(auth_routes, "_compute_signup_disabled", _gate_true)
-
-    r = client.get("/login?mode=signup")
-    assert r.status_code == 200
-    body = r.text
-
-    assert 'data-signup-disabled-banner="true"' in body
-    assert "This instance already has an account." in body
-    assert "Settings · Deployment" in body
-    # Form is suppressed.
-    assert 'hx-post="/api/v1/auth/signup"' not in body
-    # Lucide lock icon, stroke width 1.5 (DESIGN.md § Iconography).
-    assert 'data-lucide="lock"' in body
-    assert 'stroke-width="1.5"' in body
 
 
 # ── Plan 18 (PC.6) — /auth/change-password page ─────────────────────────
@@ -497,3 +528,39 @@ def test_settings_notifications_tab_renders_env_indicators_not_inputs(
     assert 'data-channel="telegram"' in body
     assert "DISCORD_WEBHOOK_URL" in body
     assert "TELEGRAM_BOT_TOKEN" in body
+
+
+# ── 0.7.0.48 fold-in (owner bugs #7 + #8): sign out + favicon ──────────
+
+
+def test_sidebar_has_signout_button(client: TestClient, auth_cookies):
+    """Owner bug #7 — Sign out affordance lives in the sidebar bottom block,
+    wired to POST /api/v1/auth/logout. No CSRF wiring needed (the logout
+    endpoint is intentionally permissive — it just clears the cookies).
+    """
+    body = client.get("/", cookies=auth_cookies).text
+    assert 'data-testid="sidebar-signout"' in body, (
+        "Owner bug #7: sidebar must render a Sign out affordance"
+    )
+    assert 'hx-post="/api/v1/auth/logout"' in body, (
+        "Sign out button must POST to the logout endpoint"
+    )
+    assert 'data-lucide="log-out"' in body
+
+
+def test_base_html_links_favicon(client: TestClient, auth_cookies):
+    """Owner bug #8 — `<link rel="icon">` must point at /static/favicon.svg
+    on every authed page so the browser stops 404'ing /favicon.ico fallback.
+    """
+    body = client.get("/", cookies=auth_cookies).text
+    assert '<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">' in body
+
+
+def test_favicon_ico_route_returns_svg(client: TestClient):
+    """Owner bug #8 — /favicon.ico legacy browser request returns the SVG
+    so we don't generate a 404 every page load.
+    """
+    r = client.get("/favicon.ico")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/svg+xml"
+    assert r.text.startswith("<svg")
