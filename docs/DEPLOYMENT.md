@@ -195,6 +195,7 @@ Self-hoster's responsibility. Naavik ships the snapshot cron and documents the r
 | DB dump (`pg_dump -Fc`) | `${DATA_DIR}/data/snapshots/` (Phase 6+); manual `pg_dump` today | Daily | Full Job / Application / Profile / Bullet state |
 | Daily marker | `${DATA_DIR}/data/snapshots/snapshot-YYYY-MM-DD.marker` | Daily 02:00 UTC (cron) | Cron-liveness proof; not a backup itself — see `src/scheduler/jobs.py:115` |
 | Generated PDFs | `${DATA_DIR}/data/pdfs/` | Per-application | Re-generable from profile + Typst templates if lost |
+| Resume uploads | `${DATA_DIR}/uploads/<user_id>/<utc-ts>.pdf` | Per onboarding/resume-replace upload (plan 89 / 0.7.0.48 Wave 2) | Operator-supplied source PDFs the extractor parsed. Not strictly a backup target — extracted text persists on `Profile.raw_resume_text` — but operator may want to retain for re-extract; gitignored. |
 
 The encrypted vault (`~/.naavik/secrets.enc` + `~/.naavik/key.bin`) **no longer exists** — it was deleted in plan 26 / 0.2.0.01 (vault deprecation). The only secret-of-record is `.env`.
 
