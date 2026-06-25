@@ -23,6 +23,8 @@ from .application import (
 )
 from .contact import Contact, ContactApplicationLink, OutreachMessage
 from .email import EmailThread
+from .email_account import EmailAccount
+from .email_message import EmailMessage
 from .enums import (
     AppEventKind,
     ApplicationBoard,
@@ -34,6 +36,8 @@ from .enums import (
     DeploymentMode,
     DisabilityStatus,
     DocsState,
+    EmailAccountProvider,
+    EmailAccountStatus,
     EmailClassification,
     Gender,
     GeneratedDocumentKind,
@@ -55,6 +59,7 @@ from .enums import (
     StatusChangeTrigger,
     Tag,
     TenantSigningKeyStatus,
+    UnclassifiedReason,
     VeteranStatus,
     VisaRestriction,
     VisaSponsorship,
@@ -96,6 +101,8 @@ __all__ = [
     "ContactApplicationLink",
     "OutreachMessage",
     "EmailThread",
+    "EmailAccount",
+    "EmailMessage",
     "AppEvent",
     "ApiUsage",
     "RevokedJwt",
@@ -121,6 +128,8 @@ __all__ = [
     "DeploymentMode",
     "DisabilityStatus",
     "DocsState",
+    "EmailAccountProvider",
+    "EmailAccountStatus",
     "EmailClassification",
     "Gender",
     "GeneratedDocumentKind",
@@ -142,6 +151,7 @@ __all__ = [
     "StatusChangeTrigger",
     "Tag",
     "TenantSigningKeyStatus",
+    "UnclassifiedReason",
     "VeteranStatus",
     "VisaRestriction",
     "VisaSponsorship",

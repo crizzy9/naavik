@@ -331,6 +331,40 @@ async def embed_pending_profiles() -> None:
     )
 
 
+async def sync_emails() -> None:
+    """`tracking.sync_emails` — every 10min (plan 90 / 0.5.0.01).
+
+    Fan-out per `EmailAccount`. Best-effort — per-account failures bump
+    `connection_failure_count` + flip status; no exception propagates.
+    """
+    from services.email_sync import sync_all_accounts
+
+    async with async_session() as session:
+        result = await sync_all_accounts(session)
+        await session.commit()
+    log.info(
+        "sync_emails accounts=%d fetched=%d new=%d failed=%d",
+        result.accounts,
+        result.fetched,
+        result.new,
+        result.failed,
+    )
+
+
+async def classify_emails() -> None:
+    """`tracking.classify_emails` — every 10min offset +2min (plan 90 / 0.5.0.02).
+
+    Picks unclassified EmailMessage rows. Graceful no-LLM degrade marks rows
+    `unclassified_reason=NO_PROVIDER_CONFIGURED` so they retry post-LLM-config.
+    """
+    from services.email_classifier import classify_unprocessed
+
+    async with async_session() as session:
+        n = await classify_unprocessed(session, limit=200)
+        await session.commit()
+    log.info("classify_emails classified=%d", n)
+
+
 # ── Registration ──────────────────────────────────────────────────────
 
 
@@ -466,6 +500,30 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         coalesce=True,
     )
 
+    # Plan 90 (0.5.0.01 + 0.5.0.02): email sync + classify crons.
+    # 10-min sync; classify cron also runs every 10min but offset +2min so it
+    # picks up DB-flushed messages from the prior sync tick. No trigger
+    # chaining — two independent APScheduler jobs.
+    scheduler.add_job(
+        sync_emails,
+        IntervalTrigger(minutes=10),
+        id="tracking.sync_emails",
+        name="tracking.sync_emails",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        classify_emails,
+        IntervalTrigger(minutes=10),
+        id="tracking.classify_emails",
+        name="tracking.classify_emails",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(UTC) + timedelta(minutes=2),
+    )
+
     # Phase 2 plan 35 (0.2.0.10): six per-source scraping crons.
     from . import scraping
 
@@ -479,6 +537,7 @@ def registered_job_ids(scheduler: AsyncIOScheduler) -> list[str]:
 __all__ = [
     "aggregate_costs",
     "auto_apply",
+    "classify_emails",
     "cleanup_revoked_jwts",
     "cleanup_stale_docs",
     "cleanup_stale_drafts",
@@ -493,4 +552,5 @@ __all__ = [
     "score_aggregate_daily",
     "score_pending",
     "score_recompute_stale",
+    "sync_emails",
 ]

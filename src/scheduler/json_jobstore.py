@@ -66,6 +66,9 @@ FUNC_REF_ALLOWLIST: frozenset[str] = frozenset(
         # Plan 62 (0.2.7.07): RETIRING signing-key sweep.
         "scheduler.jobs:expire_retiring_signing_keys",
         "scheduler.jobs:refresh_oauth_tokens",
+        # Plan 90 (0.5.0.01 + 0.5.0.02): email sync + classify crons.
+        "scheduler.jobs:sync_emails",
+        "scheduler.jobs:classify_emails",
         # src/scheduler/scraping.py
         "scheduler.scraping:scrape_linkedin",
         "scheduler.scraping:scrape_workday",

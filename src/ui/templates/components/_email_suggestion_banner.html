@@ -1,0 +1,50 @@
+{#
+  _email_suggestion_banner.html — pending email-classification suggestion (plan 90 / 0.5.0.03).
+
+  Renders on Application detail when a pending EmailMessage carries a
+  non-resolved `suggested_status`. Owner clicks Apply (→ flips status with
+  trigger=AUTO_FROM_EMAIL) or Dismiss (→ marks resolved).
+
+  Args (via Jinja `with`):
+    application : models.Application
+    message     : models.EmailMessage  (suggested_status not None, neither
+                                        suggestion_applied_at nor
+                                        suggestion_dismissed_at set)
+#}
+{% if message and message.suggested_status and not message.suggestion_applied_at and not message.suggestion_dismissed_at %}
+<aside data-suggestion-message-id="{{ message.id }}"
+       class="rounded-xl bg-indigo-950/40 border border-indigo-700/40 p-4 flex items-center justify-between gap-4">
+  <div class="flex items-start gap-3 min-w-0">
+    <i data-lucide="mail-check" class="h-5 w-5 text-indigo-300 shrink-0 mt-0.5" stroke-width="1.5"></i>
+    <div class="min-w-0">
+      <p class="text-sm font-medium text-indigo-100">
+        Suggested: flip to <strong>{{ message.suggested_status.value }}</strong>
+        (from {{ application.status.value }})
+      </p>
+      <p class="mt-0.5 text-xs text-indigo-200/80 truncate">
+        Based on {{ message.classification.value if message.classification else 'email' }} from
+        {{ message.sender_email }} · &ldquo;{{ message.subject[:80] }}&rdquo;
+      </p>
+    </div>
+  </div>
+  <div class="flex items-center gap-2 shrink-0">
+    <button type="button"
+            hx-post="/api/v1/applications/{{ application.id }}/email-suggestion/{{ message.id }}/apply"
+            hx-headers='{"X-CSRF-Token": "{{ csrf_token|default('') }}"}'
+            hx-swap="outerHTML"
+            hx-target="closest aside"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium">
+      <i data-lucide="check" class="h-4 w-4" stroke-width="1.5"></i>
+      Apply
+    </button>
+    <button type="button"
+            hx-post="/api/v1/applications/{{ application.id }}/email-suggestion/{{ message.id }}/dismiss"
+            hx-headers='{"X-CSRF-Token": "{{ csrf_token|default('') }}"}'
+            hx-swap="outerHTML"
+            hx-target="closest aside"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 hover:bg-slate-800 text-sm text-slate-300">
+      Dismiss
+    </button>
+  </div>
+</aside>
+{% endif %}

@@ -118,7 +118,7 @@ src/
 - Scrapers conform to `ScraperBase` (see `docs/design/SCRAPER_BASE.md`). Scraper code never touches the DB; `services/scraper_service.py` does.
 - Background jobs are registered in `scheduler/jobs.py` and call services. Job functions stay thin.
 - Integrations isolate auth state + RPC. Service code consumes integration methods, never raw SDK objects.
-- **The DB stores no secret material.** Encrypted refresh tokens, ATS credentials, IMAP passwords, LinkedIn cookies — all live in `~/.naavik/secrets.enc` via `services/vault.py`. DB-side `ATSCredential` rows hold metadata only (`has_credential`, `login_status`, `last_login_at`). See § L.1 + DATA_MODEL.md § H.
+- **The DB stores no plaintext secret material.** DB-side `ATSCredential` rows hold metadata only (`has_credential`, `login_status`, `last_login_at`). The one secret that lives in the DB is the **IMAP app-password**, stored Fernet-encrypted (keyed off `SECRET_KEY`) in the `email_account.imap_password` column via `services/email_credentials.py` — column-level encryption, NOT the vault (see EMAIL_MONITORING.md § D). See § L.1 + DATA_MODEL.md § H.
 
 ---
 
@@ -390,7 +390,7 @@ Services own all business logic. Routes parse → call service → return respon
 | `notifications` | `services/notifications.py` | Discord webhook, Telegram bot, in-app toast dispatch |
 | `portfolio_sync` | `services/portfolio_sync.py` | Public profile API filtering; Netlify rebuild webhook |
 | `llm_tracker` | `services/llm_tracker.py` | Wrap every LLM call: log tokens, dollars, latency to `ApiUsage` |
-| `vault` | `services/vault.py` | Read/write encrypted secrets at `~/.naavik/secrets.enc` (AES-256-GCM). Master key from `SECRET_KEY` env. Single source for API keys, OAuth refresh tokens, IMAP passwords, ATS cookies |
+| `vault` | `services/vault.py` | Read/write encrypted secrets at `~/.naavik/secrets.enc` (AES-256-GCM). Master key from `SECRET_KEY` env. Single source for API keys, OAuth refresh tokens, ATS cookies. (IMAP passwords are Fernet-encrypted in the `email_account` DB column via `services/email_credentials.py`, NOT the vault — EMAIL_MONITORING.md § D.) |
 | `ats_credentials` | `services/ats_credentials.py` | `ATSCredential` row CRUD; resolves credential metadata for UI; dispatches to `vault.get(board=...)` for actual secret material |
 
 ### H.2 Service patterns
@@ -401,7 +401,7 @@ Services own all business logic. Routes parse → call service → return respon
 - **Typed exceptions.** `services/exceptions.py` defines `NaavikError` base + per-domain subclasses (`AuthError`, `ScrapingError`, `LLMProviderError`, `ATSError`, `VaultError`). Global handler maps to HTTP status.
 - **Event emission.** Any state change emits `AppEvent` (per DATA_MODEL.md `AppEventKind`). Single source for Tracking + Outreach timelines.
 - **Idempotency.** Background-job-callable services accept an idempotency key; re-running same op = no-op.
-- **Vault boundary.** Any service that touches a secret (API key, OAuth token, ATS cookie, IMAP password) reads via `vault.get(scope, key)` — never directly from filesystem or env. Same write path: `vault.set(scope, key, value)`.
+- **Vault boundary.** Any service that touches a secret (API key, OAuth token, ATS cookie) reads via `vault.get(scope, key)` — never directly from filesystem or env. Same write path: `vault.set(scope, key, value)`. (The IMAP app-password is the exception: Fernet-encrypted in the `email_account` DB column via `services/email_credentials.py` — EMAIL_MONITORING.md § D.)
 
 ### H.3 Cross-service flows (examples)
 
@@ -862,21 +862,11 @@ class ATSAdapter(ABC):
 
 ## L · External integrations
 
-### L.1 Email (Gmail + Outlook)
+### L.1 Email (IMAP monitoring)
 
-**Gmail OAuth flow:**
+The earlier vault-based Gmail-OAuth sketch here is **obsolete** (vault sunset, plan 26). Email monitoring shipped as an IMAP-only foundation (plan 90 / `0.5.0.01`): per-user inbox connection, the app-password stored as a **Fernet ciphertext column** (no vault, no `.enc` file), LLM-graceful-degrade classification, and human-confirm status suggestions. Gmail API + push webhooks are a post-foundation follow-up (`0.5.0.01.1`).
 
-1. User clicks "Connect Gmail" on Settings · Notifications or Tracking integrations bar.
-2. `GET /api/v1/integrations/gmail/connect` → redirects to Google's OAuth consent with scopes `gmail.readonly` + `gmail.metadata`.
-3. Callback at `/api/v1/integrations/gmail/callback`:
-   - Exchange code for refresh + access tokens.
-   - `vault.set(scope="integrations", key="gmail.refresh_token", value=<encrypted>)` — refresh token persisted to `~/.naavik/secrets.enc`.
-   - DB-side `Integration` row holds metadata only: `(provider, account_email, last_sync_at, status)`.
-4. `tracking.sync_gmail` cron pulls new messages every 10min. Token refresh via `admin.refresh_oauth_tokens` every 6h.
-
-**IMAP fallback** for non-Gmail/Outlook providers: manual setup on Settings · Notifications (host, port, username, password). Password stored via `vault.set(scope="integrations", key="imap.<account>.password", ...)`. Sync mechanism identical.
-
-**Outlook OAuth** identical pattern (Phase 5).
+**Canonical design: [`EMAIL_MONITORING.md`](EMAIL_MONITORING.md).**
 
 ### L.2 LinkedIn
 
@@ -1091,7 +1081,7 @@ The full `Settings` model shape is canonical in DATA_MODEL.md § L. Cross-refere
 | `portfolio_webhook_url` | `services/portfolio_sync.py` | Netlify rebuild trigger |
 | `debug` | `/_design/components` route gate | |
 
-**Secret material is NOT on Settings.** Every secret (LLM API keys, OAuth refresh tokens, IMAP passwords, Discord webhook URL, Telegram bot token, ATS cookies, LinkedIn session) lives in `~/.naavik/secrets.enc` via `services/vault.py`. Settings stores at most a fingerprint (`llm_api_key_fingerprint: sha256:...`) so the UI can show "key set" without holding the key.
+**Secret material is NOT on Settings.** Every secret (LLM API keys, OAuth refresh tokens, Discord webhook URL, Telegram bot token, ATS cookies, LinkedIn session) lives in `~/.naavik/secrets.enc` via `services/vault.py`. Settings stores at most a fingerprint (`llm_api_key_fingerprint: sha256:...`) so the UI can show "key set" without holding the key. (The IMAP app-password is stored Fernet-encrypted on the `email_account` row, not on Settings — EMAIL_MONITORING.md § D.)
 
 ---
 

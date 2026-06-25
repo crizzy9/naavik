@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from .enums import (
     AppEventKind,
+    ApplicationStatus,
     EmailClassification,
     GeneratedDocumentKind,
     OutreachIntent,
@@ -128,6 +129,19 @@ class AutoApplyVisaBlockedPayload(BaseModel):
     message: str | None = None
 
 
+class EmailStatusSuggestedPayload(BaseModel):
+    """Plan 90 / 0.5.0.03 — human-confirm email→status suggestion."""
+
+    kind: Literal[AppEventKind.EMAIL_STATUS_SUGGESTED] = AppEventKind.EMAIL_STATUS_SUGGESTED
+    message_id: int
+    classification: EmailClassification
+    current_status: ApplicationStatus
+    suggested_status: ApplicationStatus
+    reason: str | None = None
+    applied: bool = False
+    dismissed: bool = False
+
+
 AppEventPayload = Annotated[
     StatusChangePayload
     | DocsGeneratedPayload
@@ -142,7 +156,8 @@ AppEventPayload = Annotated[
     | InterviewScheduledPayload
     | AutoApplyDryRunPayload
     | AutoApplyDrainedPayload
-    | AutoApplyVisaBlockedPayload,
+    | AutoApplyVisaBlockedPayload
+    | EmailStatusSuggestedPayload,
     Field(discriminator="kind"),
 ]
 
@@ -162,6 +177,7 @@ _PAYLOAD_BY_KIND: dict[AppEventKind, type[BaseModel]] = {
     AppEventKind.AUTO_APPLY_DRY_RUN: AutoApplyDryRunPayload,
     AppEventKind.AUTO_APPLY_DRAINED: AutoApplyDrainedPayload,
     AppEventKind.AUTO_APPLY_VISA_BLOCKED: AutoApplyVisaBlockedPayload,
+    AppEventKind.EMAIL_STATUS_SUGGESTED: EmailStatusSuggestedPayload,
 }
 
 
