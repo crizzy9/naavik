@@ -202,6 +202,8 @@ class AppEventKind(StrEnum):
     AUTO_APPLY_VISA_BLOCKED = "auto_apply_visa_blocked"
     # Plan 79 / 0.4.0.11 — retry-failed-application re-queue audit trail.
     AUTO_APPLY_QUEUED = "auto_apply_queued"
+    # Plan 90 / 0.5.0.03 — human-confirm email→status suggestion seam.
+    EMAIL_STATUS_SUGGESTED = "email_status_suggested"
 
 
 class StatusChangeTrigger(StrEnum):
@@ -247,6 +249,28 @@ class EmailClassification(StrEnum):
     ASSESSMENT = "assessment"
     FOLLOW_UP = "follow_up"
     OTHER = "other"
+
+
+# Plan 90 / 0.5.0 — IMAP inbox connection state.
+class EmailAccountProvider(StrEnum):
+    IMAP = "imap"
+    # Reserved for follow-up plans (0.5.0.01.1 Gmail API, 0.5.0.01.3 Outlook).
+    GMAIL = "gmail"
+    OUTLOOK = "outlook"
+
+
+class EmailAccountStatus(StrEnum):
+    OK = "ok"
+    AUTH_REQUIRED = "auth_required"
+    RATE_LIMITED = "rate_limited"
+    DISABLED = "disabled"
+
+
+class UnclassifiedReason(StrEnum):
+    NO_PROVIDER_CONFIGURED = "no_provider_configured"
+    LLM_FAILED = "llm_failed"
+    RATE_LIMITED = "rate_limited"
+    COST_CAP_EXHAUSTED = "cost_cap_exhausted"
 
 
 class ScreenerQuestionType(StrEnum):

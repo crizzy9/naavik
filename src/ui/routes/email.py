@@ -1,4 +1,9 @@
-"""Email thread JSON endpoints (BACKEND.md § D.5)."""
+"""Email thread JSON endpoints (BACKEND.md § D.5) + email-suggestion seam.
+
+Plan 90 (0.5.0.03) adds the human-confirm apply/dismiss routes onto
+`/api/v1/applications/{id}/...`. Mounting them here (vs `api/applications.py`)
+keeps the email surfaces co-located.
+"""
 
 from __future__ import annotations
 
@@ -7,10 +12,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
 from db.session import get_session
 from models import User
 from models.enums import EmailClassification
-from services import email_service
+from services import application_service, email_service
 from services.auth import require_authed_session
 
 router = APIRouter()
@@ -65,11 +71,108 @@ async def post_email_thread_draft_reply(
     if t is None or t.user_id != _effective_user_id(user):
         raise HTTPException(status_code=404, detail="Thread not found")
     intent = (payload or {}).get("intent", "follow_up")
+    # Plan 90 / 0.5.0.06 — graceful no-LLM degrade via the dedicated draft
+    # prompt. JSON-only response; auto-send wire deferred to 0.5.0.06b.
+    from sqlmodel import select as _select
+
+    from llm import LLMProviderError, get_provider
+    from llm.prompts.draft_email_response import draft_email_response
+    from models import Settings
+
+    settings = (
+        await session.exec(_select(Settings).where(Settings.user_id == _effective_user_id(user)))
+    ).one_or_none()
+    fallback = {
+        "thread_id": thread_id,
+        "intent": intent,
+        "subject": f"Re: {t.subject}" if t.subject else "Re:",
+        "body": (
+            "Thanks for the note — I'll get back to you shortly with a fuller "
+            "reply once I have a moment to read this carefully."
+        ),
+        "model": None,
+        "llm_configured": False,
+    }
+    if settings is None:
+        return fallback
+    try:
+        provider = get_provider(settings)
+    except LLMProviderError as exc:
+        if exc.kind == "auth_required":
+            return fallback
+        raise
+    try:
+        drafted = await draft_email_response(
+            provider,
+            session=session,
+            user_id=_effective_user_id(user),
+            subject=t.subject,
+            sender=(t.messages[0].get("sender") if t.messages else None) or "the recipient",
+            recent_snippet=(t.messages[0].get("snippet") if t.messages else None) or "",
+            intent=intent,
+        )
+    except Exception:  # noqa: BLE001
+        return fallback
     return {
         "thread_id": thread_id,
         "intent": intent,
-        "body": (
-            "Thanks for the follow-up — I'm available next week any afternoon "
-            "PT to chat further. Let me know what works on your end."
-        ),
+        "subject": drafted.subject,
+        "body": drafted.body,
+        "model": getattr(provider, "model", None) or getattr(provider, "model_name", None),
+        "llm_configured": True,
     }
+
+
+# ── Email-suggestion apply/dismiss seam (plan 90 / 0.5.0.03) ────────────
+
+
+@router.post(
+    "/api/v1/applications/{app_id}/email-suggestion/{message_id}/apply",
+    name="application_apply_email_suggestion",
+)
+async def apply_email_suggestion(
+    app_id: int,
+    message_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    try:
+        app = await application_service.apply_email_suggestion(
+            session,
+            application_id=app_id,
+            message_id=message_id,
+            user_id=_effective_user_id(user),
+        )
+    except application_service.ApplicationServiceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    return {
+        "application_id": app.id,
+        "status": app.status.value,
+        "closed_reason": app.closed_reason.value if app.closed_reason else None,
+    }
+
+
+@router.post(
+    "/api/v1/applications/{app_id}/email-suggestion/{message_id}/dismiss",
+    name="application_dismiss_email_suggestion",
+)
+async def dismiss_email_suggestion(
+    app_id: int,
+    message_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    try:
+        await application_service.dismiss_email_suggestion(
+            session,
+            application_id=app_id,
+            message_id=message_id,
+            user_id=_effective_user_id(user),
+        )
+    except application_service.ApplicationServiceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    return {"status": "dismissed", "message_id": message_id}

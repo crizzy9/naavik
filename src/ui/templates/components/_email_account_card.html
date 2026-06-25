@@ -1,0 +1,68 @@
+{#
+  _email_account_card.html — connected IMAP account row (plan 90 / 0.5.0.01).
+
+  Args (via Jinja `with`):
+    account : models.EmailAccount
+#}
+<article data-account-id="{{ account.id }}"
+         class="flex items-center justify-between gap-4 rounded-xl bg-slate-900 border border-slate-800 px-4 py-3">
+  <div class="flex items-center gap-3 min-w-0">
+    <span class="h-9 w-9 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0">
+      <i data-lucide="mail" class="h-4 w-4 text-indigo-300" stroke-width="1.5"></i>
+    </span>
+    <div class="min-w-0 flex flex-col">
+      <p class="text-sm font-medium text-slate-100 truncate">{{ account.account_email }}</p>
+      <p class="text-xs text-slate-500 truncate">
+        {{ account.imap_host }}:{{ account.imap_port }} ·
+        {% if account.last_sync_at %}
+          synced {{ account.last_sync_at.strftime('%Y-%m-%d %H:%M UTC') }}
+        {% else %}
+          not yet synced
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-2 shrink-0">
+    {% if account.status.value == 'ok' %}
+      <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-950/40 text-emerald-300 text-xs">
+        <i data-lucide="check-circle" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        OK
+      </span>
+    {% elif account.status.value == 'auth_required' %}
+      <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-950/40 text-amber-300 text-xs">
+        <i data-lucide="alert-circle" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        Auth required
+      </span>
+    {% elif account.status.value == 'rate_limited' %}
+      <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-950/40 text-orange-300 text-xs">
+        <i data-lucide="timer" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        Rate-limited
+      </span>
+    {% else %}
+      <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-950 text-slate-400 text-xs">
+        {{ account.status.value }}
+      </span>
+    {% endif %}
+
+    <button type="button"
+            hx-post="/api/v1/integrations/email/{{ account.id }}/sync-now"
+            hx-headers='{"X-CSRF-Token": "{{ csrf_token|default('') }}"}'
+            hx-swap="none"
+            class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-950 border border-slate-800 hover:bg-slate-800 text-xs text-slate-300">
+      <i data-lucide="refresh-cw" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      Sync now
+    </button>
+
+    <button type="button"
+            hx-delete="/api/v1/integrations/email/{{ account.id }}"
+            hx-headers='{"X-CSRF-Token": "{{ csrf_token|default('') }}"}'
+            hx-confirm="Disconnect {{ account.account_email }}?"
+            hx-swap="outerHTML"
+            hx-target="closest article"
+            class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-950 border border-slate-800 hover:bg-rose-950/40 text-xs text-rose-300">
+      <i data-lucide="x" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      Disconnect
+    </button>
+  </div>
+</article>

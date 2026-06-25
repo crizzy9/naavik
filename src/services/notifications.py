@@ -361,6 +361,74 @@ async def notify_auto_apply_failed(
     )
 
 
+async def notify_priority_email(
+    *,
+    settings: Settings,
+    application: Application,
+    classification: str,
+    http_client: httpx.AsyncClient | None = None,
+) -> None:
+    """Fan a classified email out to Discord + Telegram + in-app toast.
+
+    Plan 90 / 0.5.0.04. Dispatches by classification onto the existing
+    `EVENT_INTERVIEW_SCHEDULED` / `EVENT_OFFER_RECEIVED` / `EVENT_REJECTION`
+    surfaces — no new templates, no new toggle keys. `Settings.notifications_enabled`
+    per-event flags continue to honor mute state (REJECTION defaults off).
+    """
+    from models.enums import EmailClassification
+
+    # classifier passes the StrEnum value; normalize either str or enum.
+    if isinstance(classification, EmailClassification):
+        cls = classification
+    else:
+        try:
+            cls = EmailClassification(str(classification).lower())
+        except ValueError:
+            return
+
+    if cls in (EmailClassification.INTERVIEW_REQUEST, EmailClassification.ASSESSMENT):
+        event = EVENT_INTERVIEW_SCHEDULED
+        toast_kind = "info"
+        toast_title = "Interview request"
+    elif cls == EmailClassification.OFFER:
+        event = EVENT_OFFER_RECEIVED
+        toast_kind = "success"
+        toast_title = "Offer received"
+    elif cls == EmailClassification.REJECTION:
+        event = EVENT_REJECTION
+        toast_kind = "warning"
+        toast_title = "Rejection received"
+    else:
+        # FOLLOW_UP / OTHER — informational toast only.
+        await push_toast(
+            "info",
+            "Email classified",
+            f"{cls.value} · {application.company}",
+        )
+        return
+
+    await asyncio.gather(
+        send_discord(
+            settings=settings,
+            event=event,
+            application=application,
+            http_client=http_client,
+        ),
+        send_telegram(
+            settings=settings,
+            event=event,
+            application=application,
+            http_client=http_client,
+        ),
+        push_toast(
+            toast_kind,
+            toast_title,
+            f"{application.role} @ {application.company}",
+        ),
+        return_exceptions=True,
+    )
+
+
 async def notify_admin_error(
     *, settings: Settings, message: str, http_client: httpx.AsyncClient | None = None
 ) -> None:

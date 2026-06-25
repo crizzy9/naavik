@@ -1109,8 +1109,14 @@ async def update_status(
     *,
     closed_reason: ClosedReason | None = None,
     notes: str | None = None,
+    trigger: StatusChangeTrigger = StatusChangeTrigger.MANUAL,
 ) -> Application:
-    """Manual user-driven status flip.
+    """User-driven (or email-confirmed) status flip.
+
+    Plan 90 / 0.5.0.03 added the `trigger` kwarg so email-suggestion flows can
+    record `AUTO_FROM_EMAIL` in the AppEvent payload while reusing the same
+    transition + validation path. Default stays MANUAL so existing call sites
+    are unchanged.
 
     Forward transitions are enforced; a backwards transition is allowed but
     logged as `MANUAL_OVERRIDE` AppEvent so audit history is preserved.
@@ -1154,13 +1160,104 @@ async def update_status(
         payload={
             "from": current.value,
             "to": new_status.value,
-            "trigger": StatusChangeTrigger.MANUAL.value,
+            "trigger": trigger.value,
             "is_forward": is_forward,
             "notes": notes,
         },
     )
     await session.flush()
     return application
+
+
+# ── Email-suggestion human-confirm seam (plan 90 / 0.5.0.03) ────────────
+
+
+async def apply_email_suggestion(
+    session: AsyncSession,
+    *,
+    application_id: int,
+    message_id: int,
+    user_id: int,
+) -> Application:
+    """Apply the pending email-classification suggestion onto the Application.
+
+    IDOR-guarded — verifies the suggesting EmailMessage belongs to `user_id`
+    AND targets `application_id`. Raises ApplicationServiceError on any
+    mismatch (mapped to 404 by the route handler).
+    """
+    from models import EmailMessage
+
+    msg = (
+        await session.exec(
+            select(EmailMessage).where(
+                EmailMessage.id == message_id,
+                EmailMessage.user_id == user_id,
+                EmailMessage.application_id == application_id,
+            )
+        )
+    ).one_or_none()
+    if msg is None:
+        raise ApplicationServiceError("suggestion not found")
+    if msg.suggested_status is None:
+        raise ValidationError(
+            "no pending suggestion",
+            code="suggestion_missing",
+        )
+    if msg.suggestion_applied_at is not None or msg.suggestion_dismissed_at is not None:
+        raise ValidationError(
+            "suggestion already resolved",
+            code="suggestion_already_resolved",
+        )
+
+    suggested = msg.suggested_status
+    closed_reason: ClosedReason | None = None
+    if suggested == ApplicationStatus.CLOSED:
+        closed_reason = ClosedReason.REJECTED_BY_THEM
+
+    application = await update_status(
+        session,
+        application_id,
+        suggested,
+        closed_reason=closed_reason,
+        trigger=StatusChangeTrigger.AUTO_FROM_EMAIL,
+    )
+
+    now = datetime.now(UTC)
+    msg.suggestion_applied_at = now
+    session.add(msg)
+    await session.flush()
+    return application
+
+
+async def dismiss_email_suggestion(
+    session: AsyncSession,
+    *,
+    application_id: int,
+    message_id: int,
+    user_id: int,
+) -> None:
+    """Mark a pending email suggestion as dismissed by the operator."""
+    from models import EmailMessage
+
+    msg = (
+        await session.exec(
+            select(EmailMessage).where(
+                EmailMessage.id == message_id,
+                EmailMessage.user_id == user_id,
+                EmailMessage.application_id == application_id,
+            )
+        )
+    ).one_or_none()
+    if msg is None:
+        raise ApplicationServiceError("suggestion not found")
+    if msg.suggestion_applied_at is not None or msg.suggestion_dismissed_at is not None:
+        raise ValidationError(
+            "suggestion already resolved",
+            code="suggestion_already_resolved",
+        )
+    msg.suggestion_dismissed_at = datetime.now(UTC)
+    session.add(msg)
+    await session.flush()
 
 
 # ── Computed state — referral + outreach ────────────────────────────────

@@ -257,6 +257,26 @@ ls -ld ./.naavik/db
 
 **If it recurs after the auto-strip:** check whether some other tool is re-applying ACLs (sync utility, file-manager-set permission, NFS server policy). The auto-strip runs every boot, so it self-heals — but if the source of the ACL keeps adding it back, you'll see the strip in the preHook output every time.
 
+### 2.14 EmailAccount stuck in `AUTH_REQUIRED` (plan 90 / 0.5.0.01)
+
+**Symptom:** `/integrations/email` shows your IMAP account chip as "Auth required" and the `tracking.sync_emails` cron logs `failed=1` every 10 minutes.
+
+**Root cause:** `email_sync.sync_account` flipped the account to `AUTH_REQUIRED` after an `imaplib.IMAP4.error` (typically wrong password, revoked app-password, or provider-side throttling). The cron skips accounts in this state until you re-paste the credential.
+
+**Recovery:** Generate a fresh provider app-password (Gmail: Security -> App passwords; Outlook: account.live.com -> Security -> App passwords; Fastmail: Settings -> Privacy & Security -> App Passwords) and re-submit the Connect IMAP form at `/integrations/email`. The route does a one-shot `test_imap_connection` before persisting, so a successful save guarantees the next cron tick will pick up new mail.
+
+**Trust posture (DO NOT skip — sets correct operator expectations):** the IMAP password lives in plaintext in the `email_account.imap_password` Postgres column on this self-hosted instance. The `services/email_credentials.py` interface is the swap point for column-level encryption; the default ships plaintext per manager directive (plan 90 § A.2 manager override). `pg_dump` of your DB contains the password — same as Profile + Settings JSONB data. Use a provider-issued app-password (never your main account password) and rotate / disable in the provider's UI when you stop using Naavik.
+
+### 2.15 Gmail IMAP rate-limit hit (15 connections / IP / day)
+
+**Symptom:** `email_sync` succeeds initially, then starts logging `imaplib.IMAP4.error: ... too many simultaneous connections` and the account flips to `RATE_LIMITED`.
+
+**Root cause:** Gmail caps IMAP at 15 simultaneous connections per IP per day. Naavik's 10-minute sync interval = 144 connections/day from one IP, which is well over Gmail's cap.
+
+**Workaround (manual, until env-driven cadence lands):** Edit `src/scheduler/jobs.py` and change `IntervalTrigger(minutes=10)` on the `tracking.sync_emails` `add_job` call to `minutes=30` or `60`, then restart. The `EMAIL_SYNC_INTERVAL_MINUTES` env slot in `.env.example` is a PLANNED hook for this — not yet wired. Tracked as a 0.5.0.01.x follow-up.
+
+**Permanent fix:** IMAP IDLE-mode (one long-lived connection per account) is filed as `0.5.0.01.2` follow-up; until then, lengthening the interval is the recommended path for Gmail-hosted operators.
+
 ---
 
 ## 3. Diagnostic recipes
