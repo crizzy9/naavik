@@ -47,14 +47,17 @@ def env() -> Environment:
 # ── M1: action bar template wiring ───────────────────────────────────
 
 
-def test_action_bar_review_apply_points_at_apply_preview_by_job(env: Environment):
-    """Review & apply button hx-get target is `/_fragments/apply/preview/by-job/<id>`."""
+def test_action_bar_review_apply_opens_job_workspace_inline(env: Environment):
+    """P3 — Review & apply opens THAT job's review workspace directly:
+    `GET /_fragments/discover/expanded/<id>` swapped into `#discover-main`
+    (SCREENS.md § 7 wiring). The plan-77 preview-card detour (which left
+    the user on the queue) is gone."""
     html = env.get_template("components/discover_action_bar.html").render(job_id=42)
-    assert 'hx-get="/_fragments/apply/preview/by-job/42"' in html, html
-    assert 'hx-target="#apply-preview-slot"' in html
-    # Old workspace-expand wiring is gone.
-    assert "/_fragments/discover/expanded/" not in html
-    assert "#discover-main" not in html
+    assert 'hx-get="/_fragments/discover/expanded/42"' in html, html
+    assert 'hx-target="#discover-main"' in html
+    # Old preview-card wiring is gone.
+    assert "/_fragments/apply/preview/by-job/" not in html
+    assert "#apply-preview-slot" not in html
 
 
 def test_discover_queue_mount_point_present(env: Environment):

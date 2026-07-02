@@ -14,14 +14,15 @@
     {% include "components/swipe_action_btn.html" %}{% endwith %}
   {% with icon="bookmark", label="Save", tone="save", action_url="/api/v1/discover/" ~ job_id ~ "/save", button_id="discover-save-btn" %}
     {% include "components/swipe_action_btn.html" %}{% endwith %}
-  {# Plan 77 · 0.4.0.03 — Review & apply now mounts the apply-preview card
-     (plan 75 / 0.3.3.08 two-step) into #apply-preview-slot. Direct-link target
-     /discover/{id} is unchanged. The `by-job` route get-or-creates a DRAFT
-     Application from the job_id so callers don't need an application id. #}
+  {# Review & apply opens THIS job's review workspace inline, per
+     SCREENS.md § 7 (interaction wiring): GET /_fragments/discover/expanded/:id
+     swapped into #discover-main, with a "Back to queue" header. The prior
+     plan-77 wiring mounted only a small confirm card into #apply-preview-slot,
+     leaving the user on the queue — the "dumped back to Up next" bug. #}
   {% with icon="sparkles", label="Review & apply", tone="review",
           action_method="get",
-          action_url="/_fragments/apply/preview/by-job/" ~ job_id,
-          hx_target="#apply-preview-slot",
+          action_url="/_fragments/discover/expanded/" ~ job_id,
+          hx_target="#discover-main",
           hx_swap="innerHTML",
           button_id="discover-review-btn" %}
     {% include "components/swipe_action_btn.html" %}{% endwith %}

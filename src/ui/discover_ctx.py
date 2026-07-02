@@ -108,9 +108,11 @@ def swipe_card_dict(j: SQLJob, *, warm_intro_label: str | None = None) -> dict[s
         "role": j.role,
         "team": j.team,
         "score": int(round(j.score * 100)),
-        # "Never scored" = the scorer never persisted a breakdown. A real
-        # 0.0 (visa-zeroed / below tag floor) is a score, not "unscored".
-        "unscored": not mb.get("scored_at"),
+        # "Never scored" = the scorer never persisted a breakdown (no
+        # scored_at) AND the score is still the 0.0 default. A real 0.0
+        # (visa-zeroed / below tag floor) carries scored_at; legacy rows
+        # with a nonzero score but pre-T7 breakdowns are scored too.
+        "unscored": not mb.get("scored_at") and j.score == 0.0,
         "location": location,
         "salary_range": _salary_range(j),
         "work_mode": work_mode,

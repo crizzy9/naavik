@@ -23,25 +23,15 @@ def auth_cookies() -> dict[str, str]:
 # ---- 10.a · Discover review mobile tabs ---------------------------------
 
 
-def test_discover_review_has_mobile_tabs(client: TestClient, auth_cookies) -> None:
+def test_discover_review_rows_stack_without_mobile_tabs(client: TestClient, auth_cookies) -> None:
+    """P3 layout overhaul: the workspace is row-oriented full-width — rows
+    simply stack on mobile, so the tab-switcher (and its hidden panes) is
+    gone entirely (SCREENS.md § 8, updated 2026-07-02)."""
     body = client.get("/discover/101", cookies=auth_cookies).text
-    assert "data-review-tabs" in body
-    assert 'data-review-tab-trigger="jd"' in body
-    assert 'data-review-tab-trigger="resume"' in body
-    assert 'data-review-tab-trigger="cover"' in body
-    assert 'data-review-tab-pane="jd"' in body
-    assert 'data-review-tab-pane="resume"' in body
-    assert 'data-review-tab-pane="cover"' in body
-
-
-def test_discover_review_resume_pane_hidden_on_mobile(client: TestClient, auth_cookies) -> None:
-    """Middle + right columns ship `hidden lg:flex` so they collapse on mobile."""
-    body = client.get("/discover/101", cookies=auth_cookies).text
-    # Resume pane wrapper must carry `hidden lg:flex`
-    assert 'data-review-tab-pane="resume"' in body
-    snippet_idx = body.find('data-review-tab-pane="resume"')
-    snippet = body[snippet_idx : snippet_idx + 200]
-    assert "hidden lg:flex" in snippet
+    assert "data-review-tabs" not in body
+    assert "data-review-tab-pane" not in body
+    assert 'id="review-workspace"' in body
+    assert 'data-testid="tailored-resume-section"' in body
 
 
 # ---- 10.b · Onboarding min-h gated to lg+ -------------------------------

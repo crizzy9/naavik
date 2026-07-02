@@ -636,6 +636,101 @@ async def put_cover_section(
     return {"section": section, "text": text}
 
 
+@router.post("/_fragments/apply/generate/{application_id}", name="apply_generate_fragment")
+async def fragment_generate_bundle(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+    _rate_limit: None = Depends(check_generate_bundle_rate_limit),
+):
+    """Generate the full tailored bundle and re-render the review workspace.
+
+    Backs the 'Generate tailored documents' / 'Regen' buttons in the
+    tailored-resume section (P3 — the buttons used to be inert). Runs
+    `bundle_generator.generate_bundle` synchronously (the button shows an
+    hx-indicator while this runs) and returns the re-rendered
+    `#review-workspace` subtree so selection ledger, counts, cover letter,
+    and screeners all reflect the real generated bundle.
+    """
+    import json as _json
+
+    from llm.base import LLMProviderError
+    from services.bundle_generator import generate_bundle
+
+    user_id = _effective_user_id(user)
+    application = await application_service.get_application(session, application_id)
+    if (
+        application is None
+        or application.user_id != user_id
+        or getattr(application, "deleted_at", None) is not None
+    ):
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    settings = await settings_service.get_or_create(session, user_id=user_id)
+    toast: dict | None = None
+    try:
+        bundle = await generate_bundle(session, application, settings=settings)
+        await session.commit()
+        if bundle.degraded:
+            toast = {
+                "tone": "warning",
+                "text": f"Generated with degradations ({bundle.degraded_reason}).",
+            }
+        else:
+            toast = {"tone": "success", "text": "Tailored documents generated."}
+    except LLMProviderError:
+        await session.rollback()
+        toast = {
+            "tone": "danger",
+            "text": (
+                "No LLM provider configured — set ANTHROPIC_API_KEY / OPENAI_API_KEY "
+                "or OLLAMA_BASE_URL in .env and restart."
+            ),
+        }
+    except ValueError as exc:
+        await session.rollback()
+        toast = {"tone": "danger", "text": f"Generation failed: {exc}"}
+
+    job = None
+    if application.job_id:
+        job = await job_service.get_job(session, application.job_id)
+    if job is None:
+        raise HTTPException(status_code=409, detail="Application has no job attached")
+
+    ctx = await drctx.build_review_ctx(
+        session, user_id=user_id, job=job, application=application, eager=False
+    )
+    response = templates.TemplateResponse(request, "pages/_discover_review_workspace.html", ctx)
+    if toast is not None:
+        response.headers["HX-Trigger"] = _json.dumps({"showToast": toast})
+    return response
+
+
+@router.get("/api/v1/applications/{application_id}/resume.pdf", name="apply_resume_pdf")
+async def get_resume_pdf(
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Serve the latest generated resume PDF for preview (IDOR-guarded)."""
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+
+    user_id = _effective_user_id(user)
+    application = await application_service.get_application(session, application_id)
+    if application is None or application.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    docs = await application_service.latest_documents(session, application_id)
+    resume = next((d for d in docs if str(d.kind.value) == "resume"), None)
+    if resume is None or not resume.path or not Path(resume.path).is_file():
+        raise HTTPException(status_code=404, detail="No generated resume PDF yet")
+    return FileResponse(resume.path, media_type="application/pdf")
+
+
 @router.post(
     "/api/v1/applications/{application_id}/cover-letter/generate", name="apply_cover_generate"
 )

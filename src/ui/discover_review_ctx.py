@@ -79,33 +79,31 @@ async def tailored_bullet_groups(
     user_id: int,
     application: Application | None = None,
 ) -> list[dict[str, object]]:
-    """Group bullets by experience for the middle column.
+    """Group bullets by experience for the tailored-resume section.
 
-    The first 7 are 'selected for this resume'; the rest 'excluded with reason'.
-    When `application` is supplied and its `generation_trace` carries a
-    `bullet_selection_log`, each row picks up a `rationale` dict so the
-    template can render the inline ledger (plan 72 § Surface 2).
+    Selection state comes ONLY from the real generation trace
+    (`generation_trace.bullet_selection_log`, written by bundle_generator).
+    Before generation there is no selection to show — the template renders
+    the honest "nothing generated yet" empty state instead (the prior
+    hardcoded 'first 7 bullets selected' + fake chips are gone).
     """
     experiences = await profile_service.list_experiences(session, user_id)
     rationale_index = _rationale_index_from_trace(application)
     out = []
-    selected_count = 7
-    seen = 0
     for e in experiences:
         bullets = await profile_service.get_bullets_for_experience(session, e.id)
         rows = []
         for b in bullets:
-            seen += 1
-            is_selected = seen <= selected_count
-            chips = ["jd", "personalization", "scale"] if is_selected else ["older role"]
+            rationale = rationale_index.get(b.id)
+            is_selected = bool(rationale and rationale.get("selected"))
             rows.append(
                 {
                     "id": b.id,
                     "selected": is_selected,
-                    "trimmed_line": b.text if not is_selected else _trim(b.text),
-                    "chips": chips,
+                    "trimmed_line": _trim(b.text) if is_selected else b.text,
+                    "chips": [],
                     "tags": _bullet_tags(b),
-                    "rationale": rationale_index.get(b.id),
+                    "rationale": rationale,
                 }
             )
         out.append(
@@ -189,6 +187,24 @@ async def build_review_ctx(
     if application and application.submission_artifacts:
         failure = application.submission_artifacts.get("last_failure")
 
+    groups = (
+        await tailored_bullet_groups(session, user_id=user_id, application=application)
+        if application
+        else []
+    )
+    # Honest generation state for the tailored-resume section: "generated"
+    # means a real bullet_selection_log exists (bundle_generator ran).
+    rationale_index = _rationale_index_from_trace(application)
+    docs_generated = bool(rationale_index)
+    all_rows = [r for g in groups for r in g["rows"]]
+    selected_count = sum(1 for r in all_rows if r["selected"])
+
+    resume_pdf_url = None
+    if application is not None:
+        docs = await application_service.latest_documents(session, application.id)
+        if any(getattr(d, "kind", None) and str(d.kind.value) == "resume" for d in docs):
+            resume_pdf_url = f"/api/v1/applications/{application.id}/resume.pdf"
+
     return {
         "job": {
             "id": job.id,
@@ -216,11 +232,11 @@ async def build_review_ctx(
         else None,
         "eager": eager,
         "warm_intro": warm_intro,
-        "tailored_bullet_groups": (
-            await tailored_bullet_groups(session, user_id=user_id, application=application)
-            if application
-            else []
-        ),
+        "tailored_bullet_groups": groups,
+        "docs_generated": docs_generated,
+        "selected_bullet_count": selected_count,
+        "total_bullet_count": len(all_rows),
+        "resume_pdf_url": resume_pdf_url,
         "cover_sections": sections,
         "cover_generated": cover_generated,
         "screener_answers": screener_views,

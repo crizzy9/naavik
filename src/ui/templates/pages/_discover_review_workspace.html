@@ -6,11 +6,16 @@
     "Back to queue" header and swaps it into `#discover-main` per
     plan 09a · Issue 8D.
 
+  Layout: row-oriented, full-width (P3 overhaul — replaces the cramped
+  3-column grid; SCREENS.md § 8 updated). Row 1: job context (what they
+  want + match). Row 2: tailored resume. Row 3: cover letter + screeners.
+
   Args (forwarded from the parent template):
-    job, application, failure, warm_intro,
+    job, application, failure, warm_intro, docs_generated,
+    selected_bullet_count, total_bullet_count, resume_pdf_url,
     cover_sections, screener_answers, unreviewed_count, cost_estimate_usd
 #}
-<div class="flex flex-col min-h-screen" data-active-tab="cover-letter">
+<div id="review-workspace" class="flex flex-col min-h-screen">
   {% with job=job, application=application %}
     {% include "components/apply_topbar.html" %}
   {% endwith %}
@@ -50,63 +55,50 @@
       </div>
     </div>
   {% else %}
-    {# 3-column workspace #}
-    {# Plan 09a · Issue 10.a — mobile tab nav. Below lg, only one column visible at a time. #}
-    <nav class="lg:hidden flex border-b border-slate-800 px-6 sticky top-0 z-10 bg-slate-950"
-         role="tablist" aria-label="Review sections" data-review-tabs>
-      <button type="button" data-review-tab-trigger="jd" role="tab" aria-selected="true"
-              class="flex-1 px-3 py-3 text-sm font-medium border-b-2 border-indigo-500 text-slate-50 transition">
-        Job
-      </button>
-      <button type="button" data-review-tab-trigger="resume" role="tab" aria-selected="false"
-              class="flex-1 px-3 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-100 transition">
-        Resume
-      </button>
-      <button type="button" data-review-tab-trigger="cover" role="tab" aria-selected="false"
-              class="flex-1 px-3 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-100 transition">
-        Cover · Screeners
-      </button>
-    </nav>
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 px-6 lg:px-8 py-6 flex-1">
-      {# LEFT — JD + match + warm intro #}
-      <aside data-review-tab-pane="jd" class="flex flex-col gap-4 min-w-0">
+    {# ── Row-oriented, full-width workspace ─────────────────────────── #}
+    <div class="flex flex-col gap-6 px-6 lg:px-8 py-6 flex-1 w-full">
+
+      {# Row 1 — job context: what they want + match, side by side on md+ #}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <section class="bg-slate-900 border border-slate-800 rounded-lg p-5">
           <header class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-3">WHAT THEY WANT</header>
           <ul class="flex flex-col gap-1.5 text-sm text-slate-200 leading-relaxed">
             {% for b in job.jd_bullets %}
               <li class="flex gap-2"><span class="text-slate-500 shrink-0" aria-hidden="true">•</span><span>{{ b }}</span></li>
+            {% else %}
+              <li class="text-slate-500 italic text-sm">No structured requirements extracted yet.</li>
             {% endfor %}
           </ul>
+          {% if warm_intro %}
+            <div class="mt-4">
+              {% with contact=warm_intro, referrals_this_year=4 %}
+                {% include "components/warm_intro_card.html" %}
+              {% endwith %}
+            </div>
+          {% endif %}
         </section>
 
         <section class="bg-slate-900 border border-slate-800 rounded-lg p-5">
-          {# Plan 72 § Surface 1 — score_card (Variant B) replaces the bare
-             match_breakdown include. `expanded=true` because this is the
-             dedicated review-page surface (more screen real estate). #}
+          {# Plan 72 § Surface 1 — score_card (Variant B). #}
           {% with score=job.score, match_breakdown=job.match_breakdown or {}, expanded=true %}
             {% include "components/score_card.html" %}
           {% endwith %}
         </section>
+      </div>
 
-        {% if warm_intro %}
-          {% with contact=warm_intro, referrals_this_year=4 %}
-            {% include "components/warm_intro_card.html" %}
-          {% endwith %}
-        {% endif %}
+      {# Row 1b — full JD, collapsible, full-width #}
+      <details class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="px-5 py-3 text-xs uppercase tracking-wide text-slate-400 font-medium cursor-pointer hover:bg-slate-800/50 transition">
+          JOB DESCRIPTION
+        </summary>
+        <div class="px-5 py-4 text-sm text-slate-300 leading-relaxed whitespace-pre-line">
+          {{ job.description }}
+        </div>
+      </details>
 
-        <details class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-          <summary class="px-5 py-3 text-xs uppercase tracking-wide text-slate-400 font-medium cursor-pointer hover:bg-slate-800/50 transition">
-            JOB DESCRIPTION
-          </summary>
-          <div class="px-5 py-4 text-sm text-slate-300 leading-relaxed whitespace-pre-line">
-            {{ job.description }}
-          </div>
-        </details>
-      </aside>
-
-      {# MIDDLE — tailored resume #}
-      <section data-review-tab-pane="resume" class="hidden lg:flex flex-col bg-slate-900 border border-slate-800 rounded-lg p-0 min-w-0">
-        <header class="flex items-baseline justify-between gap-2 px-5 py-3 border-b border-slate-800">
+      {# Row 2 — tailored resume, full-width #}
+      <section class="flex flex-col bg-slate-900 border border-slate-800 rounded-lg p-0 min-w-0" data-testid="tailored-resume-section">
+        <header class="flex items-center justify-between gap-2 px-5 py-3 border-b border-slate-800 flex-wrap">
           <div class="flex items-baseline gap-2">
             <h2 class="text-base font-medium text-slate-50">Tailored resume</h2>
             {% with qualifier="auto-fits 1pg" %}
@@ -114,24 +106,65 @@
             {% endwith %}
           </div>
           <div class="flex items-center gap-1">
-            <button type="button" class="text-xs text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-800">
+            <span id="apply-generate-indicator" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-indigo-300 px-2">
+              <span class="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+              Generating — LLM + Typst, can take ~30s…
+            </span>
+            {% if docs_generated %}
+            <button type="button"
+                    class="text-xs text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-800"
+                    hx-post="/_fragments/apply/generate/{{ application.id }}"
+                    hx-target="#review-workspace"
+                    hx-swap="outerHTML"
+                    hx-indicator="#apply-generate-indicator"
+                    hx-disabled-elt="this"
+                    data-testid="tailored-regen-btn">
               <i data-lucide="refresh-cw" class="h-3.5 w-3.5 inline" stroke-width="1.5"></i> Regen
             </button>
-            <button type="button" class="text-xs text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-800">
+            {% endif %}
+            {% if resume_pdf_url %}
+            <a href="{{ resume_pdf_url }}" target="_blank" rel="noopener"
+               class="text-xs text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-800"
+               data-testid="tailored-preview-pdf">
               <i data-lucide="file-text" class="h-3.5 w-3.5 inline" stroke-width="1.5"></i> Preview PDF
-            </button>
+            </a>
+            {% endif %}
           </div>
         </header>
+        {% if docs_generated %}
         <p class="px-5 pt-3 text-xs text-slate-500 font-mono">
-          7 of 14 bullets selected · est. 1 page · all metrics preserved
+          {{ selected_bullet_count }} of {{ total_bullet_count }} bullets selected · AI-trimmed to fit 1 page
         </p>
         <div class="px-3 py-3">
           {% include "pages/_apply_tailored_bullets.html" with context %}
         </div>
+        {% else %}
+        {# Honest empty state — nothing has been generated for this job yet. #}
+        <div class="flex flex-col items-center text-center gap-3 px-6 py-10">
+          <div class="h-10 w-10 rounded-xl bg-slate-800 flex items-center justify-center">
+            <i data-lucide="file-x-2" class="h-5 w-5 text-slate-500" stroke-width="1.5"></i>
+          </div>
+          <p class="text-sm text-slate-300 max-w-md">
+            No tailored resume yet. Generate one — Naavik selects the most relevant
+            bullets for this JD, trims them to fit one page, and compiles the PDF.
+          </p>
+          <button type="button"
+                  class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  hx-post="/_fragments/apply/generate/{{ application.id }}"
+                  hx-target="#review-workspace"
+                  hx-swap="outerHTML"
+                  hx-indicator="#apply-generate-indicator"
+                  hx-disabled-elt="this"
+                  data-testid="tailored-generate-btn">
+            <i data-lucide="sparkles" class="h-4 w-4" stroke-width="1.5"></i>
+            Generate tailored documents
+          </button>
+        </div>
+        {% endif %}
       </section>
 
-      {# RIGHT — cover letter + screeners #}
-      <section data-review-tab-pane="cover" class="hidden lg:flex bg-slate-900 border border-slate-800 rounded-lg p-0 min-w-0 flex-col">
+      {# Row 3 — cover letter + screeners, full-width #}
+      <section class="flex bg-slate-900 border border-slate-800 rounded-lg p-0 min-w-0 flex-col">
         <header class="flex items-baseline justify-between gap-2 px-5 py-3 border-b border-slate-800">
           <div class="flex items-baseline gap-2">
             <h2 class="text-base font-medium text-slate-50">Cover letter</h2>
@@ -144,7 +177,8 @@
                   hx-post="/api/v1/applications/{{ application.id }}/cover-letter/generate"
                   hx-target="#apply-cover-letter-text"
                   hx-swap="innerHTML"
-                  hx-indicator="#apply-cover-regen">
+                  hx-indicator="#apply-cover-regen"
+                  hx-disabled-elt="this">
             <i data-lucide="refresh-cw" class="h-3.5 w-3.5 inline" stroke-width="1.5"></i> Regen
           </button>
         </header>
@@ -166,6 +200,8 @@
               {% with answer=s %}
                 {% include "components/screener_question_card.html" %}
               {% endwith %}
+            {% else %}
+              <p class="text-xs text-slate-500 italic px-1">No screener questions for this application.</p>
             {% endfor %}
           </div>
         </div>
@@ -180,39 +216,3 @@
     {% endwith %}
   {% endif %}
 </div>
-
-{# Plan 09a · Issue 10.a — mobile tab switcher for the 3-column workspace. #}
-<script>
-  (function () {
-    var tabs = document.querySelector('[data-review-tabs]');
-    if (!tabs) return;
-    var triggers = tabs.querySelectorAll('[data-review-tab-trigger]');
-    var panes = document.querySelectorAll('[data-review-tab-pane]');
-    function activate(name) {
-      triggers.forEach(function (t) {
-        var on = t.getAttribute('data-review-tab-trigger') === name;
-        t.setAttribute('aria-selected', on ? 'true' : 'false');
-        t.classList.toggle('border-indigo-500', on);
-        t.classList.toggle('text-slate-50', on);
-        t.classList.toggle('border-transparent', !on);
-        t.classList.toggle('text-slate-400', !on);
-      });
-      panes.forEach(function (p) {
-        var on = p.getAttribute('data-review-tab-pane') === name;
-        if (on) {
-          p.classList.remove('hidden');
-        } else if (window.matchMedia('(max-width: 1023px)').matches) {
-          p.classList.add('hidden');
-        }
-      });
-    }
-    triggers.forEach(function (t) {
-      t.addEventListener('click', function () {
-        activate(t.getAttribute('data-review-tab-trigger'));
-      });
-    });
-    if (window.matchMedia('(max-width: 1023px)').matches) {
-      activate('jd');
-    }
-  })();
-</script>

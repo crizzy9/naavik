@@ -426,14 +426,14 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
   1. The full page at `/discover/:id` (extends `base.html` — sidebar visible, link-shareable).
   2. An inline-expand fragment at `/_fragments/discover/expanded/:id` (no chrome, swapped into `#discover-main` on the Discover page so the active swipe card "expands" in-place without losing queue context). Includes a "← Back to queue" button that swaps `#discover-main` back via `/_fragments/discover/queue`.
   - The default click path from the swipe action bar uses surface (2). Keyboard `↵` and the Review & apply button both go through it. The full page (1) is reachable via the "open as full page →" link inside the inline fragment, browser back, or direct URL.
-- **Layout:** Top context bar + 3-column workspace + sticky bottom action bar.
+- **Layout (updated 2026-07-02, P3 overhaul):** Top context bar + **row-oriented full-width workspace** + sticky bottom action bar. The prior 3-column grid was replaced — rows read comfortably at any width and the mobile tab-switcher is gone (rows just stack). Row 1: job context (WHAT THEY WANT + match card side-by-side on `md+`), Row 1b: collapsible full JD, Row 2: tailored resume (full-width), Row 3: cover letter + screeners (full-width).
 
 #### Top context bar
 - "← Back to queue" link
 - Center: company letter tile · "Senior ML Engineer · Atlas / Stripe · San Francisco · $240-290k + 0.05%"
 - Right: `match 0.86` (mono cyan) · 🔗 JD · Save · Skip
 
-#### Left column (1/3) — Job context
+#### Row 1 — Job context (was: left column)
 - `WHAT THEY WANT` bullet list
 - `MATCH BREAKDOWN` — 5 dimension bars
 - **WARM INTRO AVAILABLE** card (emerald-tinted, only when applicable):
@@ -441,9 +441,10 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
   - **Draft intro** CTA → opens Outreach pre-filled
 - `JOB DESCRIPTION` collapsible text panel
 
-#### Middle column (1/3) — Tailored resume
-- Tab header: **Tailored resume** (active) — `AI · auto-fits 1pg` cyan badge — Regen · Preview PDF on the right
-- Status row: "{n} of {N} bullets selected · est. 1 page · all metrics preserved"
+#### Row 2 — Tailored resume (was: middle column)
+- Header: **Tailored resume** — `AI · auto-fits 1pg` cyan badge — Regen · Preview PDF on the right (both wired: Regen → `POST /_fragments/apply/generate/{application_id}` re-rendering `#review-workspace`; Preview PDF → `GET /api/v1/applications/{id}/resume.pdf`, present only after a bundle exists)
+- **Pre-generation empty state (honest):** "No tailored resume yet" + **Generate tailored documents** button (same generate fragment endpoint, `hx-indicator` progress line "Generating — LLM + Typst…"). Bullet selection is shown ONLY from the real `generation_trace.bullet_selection_log` — no fabricated selection.
+- Status row (post-generation): "{n} of {N} bullets selected · AI-trimmed to fit 1 page" (real counts from the trace)
 - Per-role group:
   - Role header: "{Company} · {Title} · {Date — Date}"
   - Bullets:
@@ -451,7 +452,7 @@ Subtitle hint: `← skip · → auto-apply · ↑ save · tap / ⏎ review`
     - ☐ Excluded — text struck-through and muted, chips like `# duplicate signal`, `# trimmed`, `# older role`
 - Click bullet → opens **Bullet editor modal** with the *trimmed-for-this-JD* version pre-filled
 
-#### Right column (1/3) — Cover letter
+#### Row 3 — Cover letter + screeners (was: right column)
 - Tab header: **Cover letter** — `AI · enthusiastic` cyan badge — Regen on the right
 - Sections (each editable inline; click to enter edit mode, indigo ring on active):
   - `INTRO` — short hook
