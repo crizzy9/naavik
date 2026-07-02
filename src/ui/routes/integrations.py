@@ -30,6 +30,9 @@ async def get_integrations_email(
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
 ):
+    """The Integrations page — inbox (IMAP) + calendar (secret ICS URL)."""
+    from services import calendar_sync
+
     user_id = _effective_user_id(_user)
     accounts = (
         await session.exec(
@@ -45,6 +48,7 @@ async def get_integrations_email(
         {
             "active_sidebar": "tracking",
             "accounts": list(accounts),
+            "calendar_connection": await calendar_sync.get_connection(session, user_id),
         },
     )
 

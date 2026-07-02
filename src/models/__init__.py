@@ -21,6 +21,7 @@ from .application import (
     ATSCredential,
     GeneratedDocument,
 )
+from .calendar_event import CalendarConnection, CalendarEvent
 from .contact import Contact, ContactApplicationLink, OutreachMessage
 from .email import EmailThread
 from .email_account import EmailAccount
@@ -101,6 +102,8 @@ __all__ = [
     "ContactApplicationLink",
     "OutreachMessage",
     "EmailThread",
+    "CalendarConnection",
+    "CalendarEvent",
     "EmailAccount",
     "EmailMessage",
     "AppEvent",

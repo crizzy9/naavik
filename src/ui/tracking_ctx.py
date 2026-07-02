@@ -166,6 +166,15 @@ async def build_tracking_ctx(
     # shyam@gmail.com" card implied a connection that never existed.
     email_accounts = await email_service.list_accounts(session, user_id)
     primary_account = email_accounts[0] if email_accounts else None
+    # Item 11 — honest calendar state from the real CalendarConnection row;
+    # the Connect button used to point at the fake OAuth stub (which
+    # round-tripped back showing "not connected" forever).
+    from services import calendar_sync
+
+    calendar_connection = await calendar_sync.get_connection(session, user_id)
+    upcoming = (
+        await calendar_sync.upcoming_events(session, user_id=user_id) if calendar_connection else []
+    )
     integrations = [
         {
             "name": "Email (IMAP)",
@@ -179,15 +188,29 @@ async def build_tracking_ctx(
         {
             "name": "Calendar",
             "icon": "calendar",
-            "state": "not_connected",
-            "account": None,
-            "connect_url": "/api/v1/integrations/calendar/connect",
-            "disconnect_url": None,
-            "description": "auto-create events",
+            "state": "connected" if calendar_connection else "not_connected",
+            "account": calendar_connection.label if calendar_connection else None,
+            "connect_url": "/integrations/email#calendar",
+            "disconnect_url": "/integrations/email#calendar" if calendar_connection else None,
+            "description": (
+                f"{calendar_connection.event_count} events synced · read-only"
+                if calendar_connection
+                else "interviews on your board — read-only ICS"
+            ),
         },
     ]
 
     return {
+        "upcoming_events": [
+            {
+                "id": e.id,
+                "title": e.title or "(untitled event)",
+                "when_label": calendar_sync.format_event_when(e),
+                "location": e.location,
+                "application_id": e.matched_application_id,
+            }
+            for e in upcoming
+        ],
         "email_connected": primary_account is not None,
         "email_account_label": (primary_account.account_email if primary_account else None),
         "email_last_sync_label": (
@@ -357,6 +380,20 @@ async def build_application_detail_ctx(
         except Exception:  # noqa: BLE001 — defensive; chip optional
             score = None
 
+    # Item 11 — calendar events fuzzy-matched to this application.
+    from services import calendar_sync
+
+    calendar_events = [
+        {
+            "title": e.title or "(untitled event)",
+            "when_label": calendar_sync.format_event_when(e),
+            "location": e.location,
+        }
+        for e in await calendar_sync.events_for_application(
+            session, user_id=application.user_id, application_id=application.id
+        )
+    ]
+
     return {
         "application": {
             "id": application.id,
@@ -388,6 +425,8 @@ async def build_application_detail_ctx(
         "job_url": job_url,
         # Plan 86 / 0.4.5.08
         "bullets_used": bullets_used_rows,
+        # Item 11 (2026-07)
+        "calendar_events": calendar_events,
     }
 
 

@@ -105,6 +105,24 @@
       </section>
     {% endif %}
 
+    {# Item 11 — calendar events fuzzy-matched to this application (read-only). #}
+    {% if calendar_events %}
+      <section data-testid="detail-calendar-events">
+        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Upcoming interviews</div>
+        <ul class="flex flex-col gap-1.5">
+          {% for e in calendar_events %}
+            <li class="flex items-start gap-2 text-sm rounded-md bg-sky-500/5 ring-1 ring-sky-500/20 px-2.5 py-1.5">
+              <i data-lucide="calendar-days" class="h-4 w-4 text-sky-400 shrink-0 mt-0.5" stroke-width="1.5"></i>
+              <div class="min-w-0">
+                <div class="text-slate-200 truncate">{{ e.title }}</div>
+                <div class="text-xs text-slate-500 font-mono">{{ e.when_label }}{% if e.location %} · {{ e.location | truncate(48) }}{% endif %}</div>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
     {% if status_timeline %}
       <section data-testid="detail-status-timeline">
         <div class="flex items-baseline justify-between mb-2 gap-3">

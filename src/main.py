@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from api import applications as api_applications
 from api import auth as api_auth
 from api import geo as api_geo
+from api import integrations_calendar as api_integrations_calendar
 from api import integrations_email as api_integrations_email
 from api import portfolio as api_portfolio
 from api import profile as api_profile
@@ -99,6 +100,7 @@ app.include_router(api_scheduler.router)
 app.include_router(api_geo.router)
 app.include_router(api_portfolio.router)
 app.include_router(api_integrations_email.router)
+app.include_router(api_integrations_calendar.router)
 app.include_router(overview.router)
 app.include_router(profile.router)
 app.include_router(discover.router)

@@ -365,6 +365,40 @@ async def classify_emails() -> None:
     log.info("classify_emails classified=%d", n)
 
 
+async def sync_calendars() -> None:
+    """`tracking.sync_calendars` — every 45min (item 11, 2026-07).
+
+    Re-fetches every connected secret-ICS calendar. Per-connection failures
+    flip `status=fetch_failed` + record `last_error`; nothing propagates.
+    """
+    from sqlmodel import select as _select
+
+    from models import CalendarConnection
+    from services import calendar_sync
+
+    async with async_session() as session:
+        connections = (
+            await session.exec(
+                _select(CalendarConnection).where(CalendarConnection.deleted_at.is_(None))
+            )
+        ).all()
+        total = new = failed = 0
+        for connection in connections:
+            t, n = await calendar_sync.sync_connection(session, connection)
+            total += t
+            new += n
+            if connection.status != "ok":
+                failed += 1
+        await session.commit()
+    log.info(
+        "sync_calendars connections=%d events=%d new=%d failed=%d",
+        len(connections),
+        total,
+        new,
+        failed,
+    )
+
+
 # ── Registration ──────────────────────────────────────────────────────
 
 
@@ -522,6 +556,17 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         max_instances=1,
         coalesce=True,
         next_run_time=datetime.now(UTC) + timedelta(minutes=2),
+    )
+
+    # Item 11 (2026-07): read-only ICS calendar sync.
+    scheduler.add_job(
+        sync_calendars,
+        IntervalTrigger(minutes=45),
+        id="tracking.sync_calendars",
+        name="tracking.sync_calendars",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
 
     # Phase 2 plan 35 (0.2.0.10): six per-source scraping crons.

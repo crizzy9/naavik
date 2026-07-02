@@ -70,6 +70,31 @@
     {% endfor %}
   </section>
 
+  {# Upcoming calendar events (item 11) — renders only when the calendar is
+     connected AND events exist in the next 14 days; honest absence otherwise. #}
+  {% if upcoming_events %}
+  <section class="flex items-center gap-3 flex-wrap rounded-lg bg-slate-900 border border-slate-800 px-4 py-2.5" data-testid="upcoming-events-strip">
+    <span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500 font-mono shrink-0">
+      <i data-lucide="calendar-days" class="h-3.5 w-3.5 text-sky-400" stroke-width="1.5"></i>
+      Upcoming
+    </span>
+    {% for e in upcoming_events %}
+      {% if e.application_id %}
+        <a href="/tracking?application={{ e.application_id }}"
+           class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-sky-500/10 ring-1 ring-sky-500/30 text-xs text-sky-100 hover:bg-sky-500/20 max-w-72">
+          <span class="truncate">{{ e.title }}</span>
+          <span class="font-mono text-[10px] text-sky-300 shrink-0">{{ e.when_label }}</span>
+        </a>
+      {% else %}
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-slate-800/80 text-xs text-slate-300 max-w-72">
+          <span class="truncate">{{ e.title }}</span>
+          <span class="font-mono text-[10px] text-slate-500 shrink-0">{{ e.when_label }}</span>
+        </span>
+      {% endif %}
+    {% endfor %}
+  </section>
+  {% endif %}
+
   {# Needs followup banner #}
   {% if followup_count > 0 %}
     {% with count=followup_count, items=followup_items %}

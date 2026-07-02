@@ -349,3 +349,32 @@ protocol with no anti-scraping defense. Mitigations the foundation respects:
 
 See `docs/plans/archive/90-0.5.0-email-monitoring.md` for the full option
 matrices, risk table, and decision rationale.
+
+## K. Calendar — secret ICS URL (item 11, 2026-07-02 decision)
+
+Google retired password-based CalDAV, so the read-only calendar integration
+mirrors the Gmail one-screen pattern: the user pastes the calendar's
+**secret iCal address** (Google Calendar → Settings → your calendar →
+"Integrate calendar" → "Secret address in iCal format") on
+`/integrations/email#calendar`.
+
+- **Validation before save**: https-only + the scraper `url_guard` SSRF
+  posture (private/link-local/IMDS destinations rejected, DNS-fail =
+  fail-closed); the ICS body is fetched server-side and must start with
+  `BEGIN:VCALENDAR`. Redirect hops are re-checked against the guard.
+- **Storage**: the URL is Fernet-encrypted (`CalendarConnection.ics_url_encrypted`,
+  key = SHA-256(SECRET_KEY) — same trust posture as the IMAP app-password;
+  see § D). Decrypt failure flips `status=fetch_failed` with a re-paste hint.
+- **Sync**: `tracking.sync_calendars` cron every 45 min upserts a bounded
+  window (−7d … +60d) of `CalendarEvent` rows via a dependency-free VEVENT
+  parser (folded lines, UTC/floating/all-day starts; recurring events yield
+  their first instance only). Events leaving the window are pruned.
+- **Matching**: company-name containment against the user's non-DRAFT
+  applications (`matched_application_id`, read-only suggestion). Surfaces:
+  the "Upcoming" strip on Tracking + an "Upcoming interviews" section in
+  the application detail slide-over.
+- **Future OAuth follow-up**: event CREATION (e.g. auto-blocking prep time
+  before an interview) requires Google OAuth; deliberately out of scope for
+  the self-hosted-first ICS path. When it lands it should reuse the
+  `CalendarConnection` row with a `provider` discriminator rather than a
+  parallel table.
