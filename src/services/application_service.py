@@ -25,6 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -331,8 +332,27 @@ async def get_or_create_draft(
         created_at=now,
         updated_at=now,
     )
-    session.add(draft)
-    await session.flush()
+    try:
+        async with session.begin_nested():
+            session.add(draft)
+            await session.flush()
+    except IntegrityError:
+        # Lost the SELECT→INSERT race on ix_application_user_job_alive_unique
+        # (e.g. double-fired HTMX requests for the same card). The savepoint
+        # rollback discards our row; reuse the winner's live row instead of
+        # surfacing a UniqueViolation.
+        existing = await get_application_for_job(session, user_id=user_id, job_id=job_id)
+        if existing is None:
+            raise
+        if (
+            settings.eager_review_generation
+            and existing.status == ApplicationStatus.DRAFT
+            and existing.docs_state in {DocsState.NONE, DocsState.STALE}
+        ):
+            await _maybe_pre_generate(
+                session, existing, settings=settings, pre_generate_fn=pre_generate_fn
+            )
+        return existing
 
     await _emit_event(
         session,

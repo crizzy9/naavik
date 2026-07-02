@@ -50,12 +50,27 @@ class _FakeSession:
         self.deleted: list = []
         self.exec_queue: list = []
         self.flush_count = 0
+        self.flush_raises: list = []
 
     def add(self, obj):
         self.added.append(obj)
 
     async def flush(self):
         self.flush_count += 1
+        if self.flush_raises:
+            exc = self.flush_raises.pop(0)
+            if exc is not None:
+                raise exc
+
+    def begin_nested(self):
+        class _Savepoint:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        return _Savepoint()
 
     async def delete(self, obj):
         self.deleted.append(obj)
@@ -214,6 +229,70 @@ async def test_get_or_create_draft_returns_existing():
         session, user_id=1, job_id=100, settings=settings, pre_generate_fn=AsyncMock()
     )
     assert out is existing
+
+
+def _integrity_error():
+    from sqlalchemy.exc import IntegrityError
+
+    return IntegrityError(
+        "INSERT INTO application ...",
+        {},
+        Exception('duplicate key value violates "ix_application_user_job_alive_unique"'),
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_draft_unique_race_reuses_winner_row():
+    """Regression: two concurrent get_or_create_draft calls for the same
+    (user_id, job_id) both passed the SELECT check; the loser's INSERT hit
+    ix_application_user_job_alive_unique and crashed the request. The loser
+    must now reuse the winner's live row instead of raising."""
+    settings = _make_settings(eager_review_generation=False)
+    job = _make_job()
+    winner = _make_app()
+    session = _FakeSession()
+    # exec order: existing lookup (None) → job lookup → post-conflict re-lookup.
+    session.exec_queue = [_exec_one(None), _exec_one(job), _exec_one(winner)]
+    session.flush_raises = [_integrity_error()]
+    out = await get_or_create_draft(
+        session, user_id=1, job_id=100, settings=settings, pre_generate_fn=AsyncMock()
+    )
+    assert out is winner
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_draft_unique_race_eager_pre_generates_winner():
+    from models import DocsState
+
+    settings = _make_settings(eager_review_generation=True)
+    job = _make_job()
+    winner = _make_app(docs_state=DocsState.NONE)
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(None), _exec_one(job), _exec_one(winner)]
+    session.flush_raises = [_integrity_error()]
+    pre_gen = AsyncMock()
+    out = await get_or_create_draft(
+        session, user_id=1, job_id=100, settings=settings, pre_generate_fn=pre_gen
+    )
+    assert out is winner
+    pre_gen.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_draft_integrity_error_without_live_row_reraises():
+    """A conflict that is NOT explained by a live row (re-lookup empty) must
+    surface — swallowing it would hide real constraint bugs."""
+    from sqlalchemy.exc import IntegrityError
+
+    settings = _make_settings(eager_review_generation=False)
+    job = _make_job()
+    session = _FakeSession()
+    session.exec_queue = [_exec_one(None), _exec_one(job), _exec_one(None)]
+    session.flush_raises = [_integrity_error()]
+    with pytest.raises(IntegrityError):
+        await get_or_create_draft(
+            session, user_id=1, job_id=100, settings=settings, pre_generate_fn=AsyncMock()
+        )
 
 
 # ── validate_submittable ────────────────────────────────────────────
