@@ -378,6 +378,9 @@
   document.body.addEventListener('htmx:sendError', function () {
     showToast('danger', 'Network error — the app could not be reached.');
   });
+  document.body.addEventListener('htmx:timeout', function () {
+    showToast('danger', 'Request timed out — the server did not answer in time. Try again.');
+  });
 
   // ---------------------------------------------------------------- //
   // 8. Tracking list — bulk-action selection helpers (plan 80).      //

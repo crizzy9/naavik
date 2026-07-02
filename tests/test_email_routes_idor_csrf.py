@@ -323,3 +323,82 @@ async def test_sync_now_rate_limited_1_per_min(client_with_user_42):
     assert r1.status_code == 200, r1.text[:300]
     assert r2.status_code == 429, r2.text[:300]
     rate_limit.reset_all()
+
+
+# ── Items 3+4+8 (2026-07): visible feedback contracts ───────────────────
+
+
+async def test_delete_account_returns_200_swap_plus_toast(client_with_user_42):
+    """Disconnect must return 200 + empty body + a showToast HX-Trigger.
+
+    Regression: the route returned 204 — htmx does NOT swap 204 responses,
+    so the card stayed on screen and Disconnect looked dead even though the
+    row was soft-deleted.
+    """
+    import json as _json
+
+    from sqlmodel import select
+
+    from models import EmailAccount
+    from models.enums import EmailAccountProvider
+
+    client, user, maker = client_with_user_42
+
+    async with maker() as s:
+        s.add(
+            EmailAccount(
+                id=555,
+                user_id=user.id,
+                provider=EmailAccountProvider.IMAP,
+                account_email="mine@x.test",
+                imap_host="imap.example.com",
+                imap_username="mine@x.test",
+                imap_password="",
+            )
+        )
+        await s.commit()
+
+    r = client.delete("/api/v1/integrations/email/555")
+    assert r.status_code == 200, r.text[:200]
+    assert r.text == ""
+    trigger = _json.loads(r.headers["HX-Trigger"])
+    assert trigger["showToast"]["tone"] == "success"
+    assert "mine@x.test" in trigger["showToast"]["text"]
+
+    async with maker() as s:
+        row = (await s.exec(select(EmailAccount).where(EmailAccount.id == 555))).one()
+    assert row.deleted_at is not None
+
+
+async def test_connect_imap_htmx_failure_returns_visible_fragment(client_with_user_42):
+    """HTMX callers get the connection error as an HTML fragment (lands in
+    the hx-target-error slot) instead of a JSON 400 the page never shows."""
+    client, _, _maker = client_with_user_42
+
+    async def _fail_conn(*, host, port, username, password, client_factory=None):
+        return False, "login rejected by server"
+
+    with patch("services.email_sync.test_imap_connection", new=_fail_conn):
+        r = client.post(
+            "/api/v1/integrations/email/imap",
+            data={
+                "account_email": "u42@example.com",
+                "imap_host": "imap.example.com",
+                "imap_username": "u42@example.com",
+                "imap_password": "bad",
+            },
+            headers={"HX-Request": "true"},
+        )
+    assert r.status_code == 400
+    assert "login rejected by server" in r.text
+    assert r.text.strip().startswith("<div")
+
+
+async def test_integrations_page_wires_error_targets(client_with_user_42):
+    """The connect forms must declare hx-target-error so 4xx fragments are
+    visible (422s used to be silently discarded by htmx)."""
+    client, _, _maker = client_with_user_42
+    r = client.get("/integrations/email")
+    assert r.status_code == 200
+    assert 'hx-target-error="#connect-gmail-result"' in r.text
+    assert 'hx-target-error="#connect-imap-result"' in r.text

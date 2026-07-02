@@ -537,7 +537,13 @@ async def put_application_notes(
     application.notes = text or None
     session.add(application)
     await session.commit()
-    return Response(status_code=204)
+    # 204 renders nothing — the toast is the only save confirmation the
+    # slide-over textarea gives (items 3+4 universal feedback).
+    response = Response(status_code=204)
+    response.headers["HX-Trigger"] = json.dumps(
+        {"showToast": {"tone": "success", "text": "Notes saved."}}
+    )
+    return response
 
 
 # ─────────────────────────────────────────────────────────────────────────

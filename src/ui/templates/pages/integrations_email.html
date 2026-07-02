@@ -62,12 +62,19 @@
       </li>
     </ol>
 
+    {# hx-target-error: the connect route answers validation/connection
+       failures as 422 HTML fragments — without an error target htmx
+       discarded them and the user saw nothing (items 3+4+8). The success
+       reload waits 3.5s so the inline summary + toast are actually
+       readable before the page refreshes. #}
     <form id="connect-gmail-form"
           hx-post="/api/v1/integrations/email/gmail"
           hx-target="#connect-gmail-result"
+          hx-target-error="#connect-gmail-result"
           hx-swap="innerHTML"
           hx-disabled-elt="find button[type=submit]"
-          hx-on::after-request="if(event.detail.successful){setTimeout(() => window.location.reload(), 1800)}"
+          hx-indicator="#connect-gmail-indicator"
+          hx-on::after-request="if(event.detail.successful){setTimeout(() => window.location.reload(), 3500)}"
           class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <label class="flex flex-col gap-1.5">
         <span class="text-xs font-medium text-slate-400 uppercase tracking-wide">Gmail address</span>
@@ -82,7 +89,11 @@
                class="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/40"/>
       </label>
       <div class="sm:col-span-2 flex items-center justify-between gap-3">
-        <div id="connect-gmail-result" class="text-xs text-slate-400 min-w-0" data-testid="gmail-connect-result"></div>
+        <div id="connect-gmail-result" class="text-xs text-slate-400 min-w-0" data-testid="gmail-connect-result" aria-live="polite"></div>
+        <span id="connect-gmail-indicator" class="htmx-indicator shrink-0 inline-flex items-center gap-1.5 text-xs text-indigo-300">
+          <span class="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+          testing IMAP…
+        </span>
         <button type="submit"
                 class="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
           <i data-lucide="plug-zap" class="h-4 w-4" stroke-width="1.5"></i>
@@ -110,8 +121,10 @@
     <form id="connect-imap-form"
           hx-post="/api/v1/integrations/email/imap"
           hx-target="#connect-imap-result"
+          hx-target-error="#connect-imap-result"
           hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful){window.location.reload()}"
+          hx-disabled-elt="find button[type=submit]"
+          hx-on::after-request="if(event.detail.successful){setTimeout(() => window.location.reload(), 2500)}"
           class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <label class="flex flex-col gap-1.5">
         <span class="text-xs font-medium text-slate-400 uppercase tracking-wide">Account email</span>

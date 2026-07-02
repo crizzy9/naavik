@@ -16,7 +16,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlmodel import select
@@ -133,6 +133,7 @@ async def _upsert_imap_account(
 
 @router.post("/api/v1/integrations/email/imap", name="api_email_account_connect")
 async def connect_imap(
+    request: Request,
     account_email: Annotated[EmailStr, Form()],
     imap_host: Annotated[str, Form()],
     imap_username: Annotated[str, Form()],
@@ -142,7 +143,21 @@ async def connect_imap(
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
-) -> EmailAccountRead:
+):
+    is_htmx = request.headers.get("hx-request") == "true"
+
+    def _fail(message: str) -> HTMLResponse:
+        # HTMX callers get a visible inline fragment (hx-target-error slot);
+        # JSON callers keep the 400 detail shape.
+        if is_htmx:
+            from markupsafe import escape
+
+            return HTMLResponse(
+                f'<div class="text-sm text-rose-300">{escape(message)}</div>',
+                status_code=400,
+            )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
     user_id = _effective_user_id(_user)
 
     # SSRF guard: reject internal / disallowed-port targets before any
@@ -150,10 +165,7 @@ async def connect_imap(
     # at every connect + sync for DNS-rebind TOCTOU defense.
     host_ok, _reason = imap_host_guard.check_imap_host(imap_host, imap_port)
     if not host_ok:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=imap_host_guard.SAFE_ERROR_MESSAGE,
-        )
+        return _fail(imap_host_guard.SAFE_ERROR_MESSAGE)
 
     ok, err = await email_sync.test_imap_connection(
         host=imap_host,
@@ -162,10 +174,7 @@ async def connect_imap(
         password=imap_password,
     )
     if not ok:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=err or "Could not connect to the mail server.",
-        )
+        return _fail(err or "Could not connect to the mail server.")
 
     account = await _upsert_imap_account(
         session,
@@ -178,6 +187,25 @@ async def connect_imap(
         imap_use_tls=imap_use_tls,
     )
     await session.commit()
+    if is_htmx:
+        # The result div used to receive raw JSON text for a flash before the
+        # reload — return a readable fragment + toast instead.
+        import json as _json
+
+        response = HTMLResponse(
+            '<div class="text-sm text-emerald-300">'
+            f"Connected {account.account_email} — inbox tracking is live.</div>"
+        )
+        response.headers["HX-Trigger"] = _json.dumps(
+            {
+                "emailConnected": True,
+                "showToast": {
+                    "tone": "success",
+                    "text": f"IMAP connected — {account.account_email}.",
+                },
+            }
+        )
+        return response
     return EmailAccountRead.model_validate(account)
 
 
@@ -315,14 +343,23 @@ async def test_account(
 @router.delete(
     "/api/v1/integrations/email/{account_id}",
     name="api_email_account_delete",
-    status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_account(
     account_id: int,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
-) -> None:
+) -> HTMLResponse:
+    """Disconnect (soft-delete) an email account.
+
+    Item 8 (2026-07): this used to return 204 — and htmx does NOT swap
+    204 responses, so the card stayed on screen and Disconnect looked like
+    it "did nothing" even though the row was soft-deleted. 200 + empty body
+    swaps the card away (hx-swap="outerHTML" on `closest article`), and the
+    toast says what happened.
+    """
+    import json as _json
+
     user_id = _effective_user_id(_user)
     account = (
         await session.exec(
@@ -339,6 +376,16 @@ async def delete_account(
     account.updated_at = datetime.now(UTC)
     session.add(account)
     await session.commit()
+    response = HTMLResponse("")
+    response.headers["HX-Trigger"] = _json.dumps(
+        {
+            "showToast": {
+                "tone": "success",
+                "text": f"Disconnected {account.account_email} — inbox syncing stopped.",
+            }
+        }
+    )
+    return response
 
 
 @router.post(
@@ -347,11 +394,12 @@ async def delete_account(
 )
 async def sync_account_now(
     account_id: int,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
     _rl: None = Depends(check_email_sync_now_rate_limit),
-) -> dict[str, object]:
+):
     user_id = _effective_user_id(_user)
     account = (
         await session.exec(
@@ -366,10 +414,25 @@ async def sync_account_now(
         raise HTTPException(status_code=404, detail="Email account not found")
     result = await email_sync.sync_account(session, account)
     await session.commit()
-    return {
+    payload = {
         "account_id": result.account_id,
         "fetched": result.fetched,
         "new": result.new,
         "status": result.status.value,
         "errors": result.errors[:5],
     }
+    # HTMX callers use hx-swap="none" — a JSON body renders nothing, so the
+    # "Sync now" button was completely silent (item 3+4). Toast the summary.
+    if request.headers.get("hx-request") == "true":
+        import json as _json
+
+        tone = "success" if result.status.value == "ok" else "warning"
+        text = (
+            f"Synced {account.account_email}: {result.fetched} scanned, {result.new} new."
+            if tone == "success"
+            else f"Sync hit trouble ({result.status.value}) — {'; '.join(result.errors[:1]) or 'check credentials'}."
+        )
+        response = HTMLResponse("")
+        response.headers["HX-Trigger"] = _json.dumps({"showToast": {"tone": tone, "text": text}})
+        return response
+    return payload
