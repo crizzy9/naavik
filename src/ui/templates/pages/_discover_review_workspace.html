@@ -135,6 +135,10 @@
         </div>
         {% elif docs_generated %}
         <div class="px-5 py-3 flex flex-col gap-3">
+          {# Item 9 — bundle quality scorecard (chip → details). #}
+          {% with eval_scorecard=eval_scorecard %}
+            {% include "components/_eval_scorecard.html" %}
+          {% endwith %}
           {% if resume_pdf_url %}
           <iframe src="{{ resume_pdf_url }}#toolbar=0&navpanes=0"
                   title="Tailored resume PDF"

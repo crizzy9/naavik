@@ -1,0 +1,73 @@
+{#
+  _eval_scorecard.html — bundle quality chip + expandable details.
+
+  Args:
+    eval_scorecard : dict | none — generation_trace["eval_scorecard"]
+      {deterministic: {name: {passed, value, detail}}, deterministic_passed,
+       deterministic_total, trace_scores, judge}
+#}
+{% if eval_scorecard %}
+  {% set _sc = eval_scorecard %}
+  {% set _judge = _sc.judge %}
+  {% set _all_passed = _sc.deterministic_passed == _sc.deterministic_total %}
+  <details class="group" data-testid="eval-scorecard">
+    <summary class="inline-flex items-center gap-1.5 cursor-pointer select-none px-2 py-1 rounded text-xs font-mono
+                    {% if _all_passed %}bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/30
+                    {% else %}bg-amber-500/10 text-amber-200 ring-1 ring-amber-500/30{% endif %}"
+             title="Generation quality scorecard — click for details">
+      <i data-lucide="badge-check" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      quality {{ _sc.deterministic_passed }}/{{ _sc.deterministic_total }}
+      {% if _judge %}
+        · judge {{ "%.1f" | format(((_judge.ats_friendliness + _judge.jd_keyword_usage + _judge.honesty_vs_profile + _judge.tone) / 4) * 10) }}/10
+      {% endif %}
+    </summary>
+    <div class="mt-2 rounded-lg border border-slate-800 bg-slate-950/60 p-4 flex flex-col gap-3 text-xs">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+        {% for name, check in _sc.deterministic.items() %}
+          <div class="flex items-start gap-2" data-eval-check="{{ name }}">
+            {% if check.passed is none %}
+              <span class="h-3.5 w-3.5 shrink-0 mt-0.5 rounded-full border border-slate-600" title="not applicable"></span>
+            {% elif check.passed %}
+              <i data-lucide="check" class="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" stroke-width="2"></i>
+            {% else %}
+              <i data-lucide="x" class="h-3.5 w-3.5 text-rose-400 shrink-0 mt-0.5" stroke-width="2"></i>
+            {% endif %}
+            <span class="text-slate-300">
+              <span class="font-mono text-slate-200">{{ name.replace("_", " ") }}</span>
+              — {{ check.detail }}
+              {% if check.passed is sameas false and check.value %}
+                <span class="text-amber-300 font-mono">{{ check.value }}</span>
+              {% endif %}
+            </span>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/60 font-mono text-slate-400">
+        {% set _ts = _sc.trace_scores or {} %}
+        {% if _ts.parse_fidelity is not none %}<span>parse-fidelity {{ "%.2f" | format(_ts.parse_fidelity) }}</span>{% endif %}
+        {% if _ts.keyword_coverage is not none %}<span>jd-coverage {{ "%.2f" | format(_ts.keyword_coverage) }}</span>{% endif %}
+        {% if _ts.keyword_coverage_missing %}<span class="text-amber-300" title="JD must-haves not found in the top of the resume">missing: {{ _ts.keyword_coverage_missing | join(", ") }}</span>{% endif %}
+      </div>
+      {% if _judge %}
+        <div class="flex flex-col gap-1.5 pt-2 border-t border-slate-800/60">
+          <div class="flex flex-wrap gap-3 font-mono text-slate-300">
+            <span>ats {{ "%.2f" | format(_judge.ats_friendliness) }}</span>
+            <span>jd-usage {{ "%.2f" | format(_judge.jd_keyword_usage) }}</span>
+            <span class="{{ 'text-rose-300' if _judge.honesty_vs_profile < 0.7 else '' }}">honesty {{ "%.2f" | format(_judge.honesty_vs_profile) }}</span>
+            <span>tone {{ "%.2f" | format(_judge.tone) }}</span>
+          </div>
+          {% if _judge.violations %}
+            <div class="text-rose-300">
+              flagged: {% for v in _judge.violations %}<span class="italic">“{{ v }}”</span>{% if not loop.last %} · {% endif %}{% endfor %}
+            </div>
+          {% endif %}
+          {% if _judge.notes %}
+            <p class="text-slate-400 italic">{{ _judge.notes }}</p>
+          {% endif %}
+        </div>
+      {% else %}
+        <p class="text-slate-500 italic">LLM judge skipped (no provider or cost cap).</p>
+      {% endif %}
+    </div>
+  </details>
+{% endif %}

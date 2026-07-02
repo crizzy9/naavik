@@ -412,6 +412,13 @@ async def build_review_ctx(
         "total_bullet_count": len(all_rows),
         "application_id": application.id if application else None,
         "resume_page_count": resume_page_count,
+        # Item 9 — quality scorecard chip + details (written by
+        # bundle_generator stage 10).
+        "eval_scorecard": (getattr(application, "generation_trace", None) or {}).get(
+            "eval_scorecard"
+        )
+        if application
+        else None,
         "resume_pdf_url": resume_pdf_url,
         "cover_pdf_url": cover_pdf_url,
         "cover_sections": sections,

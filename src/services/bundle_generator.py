@@ -697,6 +697,24 @@ async def generate_bundle(
         }
         trace["stages_run"].append("ethics")
 
+    # Stage 10 — evaluation scorecard (item 9, 2026-07). Deterministic
+    # checks are free; the judge is ONE tracked call, skipped when no
+    # provider or the cost cap is exhausted. Never blocks the bundle.
+    if result.resume is not None:
+        from services import generation_eval
+
+        try:
+            run_judge = not await dg.is_cost_capped(session, user_id, settings)
+            scorecard = await generation_eval.evaluate_bundle(
+                session, application, settings=settings, run_judge=run_judge
+            )
+            if scorecard is not None:
+                trace["eval_scorecard"] = scorecard
+                trace["stages_run"].append("eval")
+        except Exception as exc:  # noqa: BLE001 — eval is observability, not gating
+            log.warning("bundle eval failed: %s", exc)
+            trace["stages_skipped"].append("eval")
+
     trace["generated_at"] = datetime.now(UTC).isoformat()
     result.generation_trace = trace
     await _persist_trace(session, application, trace)

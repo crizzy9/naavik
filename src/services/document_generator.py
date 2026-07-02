@@ -443,10 +443,13 @@ async def _tailor_summary(
 
 
 # One printed line in `onepage.typ` (10pt Liberation Sans, 0.3in margins,
-# ○ + 0.15in list indent) holds ~118 characters; 112 leaves headroom so a
-# refined bullet NEVER wraps. Calibrated by compiling the cv.tex-equivalent
-# payload and bisecting the wrap point.
+# ○ + 0.15in list indent) holds ~118 characters; the refine TARGET is 112
+# so a refined bullet has headroom and NEVER wraps. Calibrated by compiling
+# the cv.tex-equivalent payload and bisecting the wrap point. The eval
+# harness checks against the true line capacity, not the target — a
+# 115-char line renders fine and shouldn't be flagged.
 RESUME_BULLET_CHAR_BUDGET = 112
+RESUME_BULLET_LINE_CAPACITY = 118
 
 # JD excerpt cap for the per-bullet refine prompt — full JDs blow up the
 # token bill × ~20 bullets per generation.
