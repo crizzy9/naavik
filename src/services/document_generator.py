@@ -24,7 +24,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -40,6 +40,7 @@ from models import (
     Application,
     ApplicationScreenerAnswer,
     Bullet,
+    Certification,
     DocsState,
     Education,
     Experience,
@@ -183,7 +184,9 @@ class ProfileSnapshot:
     bullets_by_experience: dict[int, list[Bullet]]
     skills: list[Skill]
     education: list[Education]
-    projects: list[Project]
+    projects: list[Project]  # kind == "project" only
+    open_source: list[Project] = field(default_factory=list)  # kind == "open_source"
+    certifications: list[Certification] = field(default_factory=list)
 
 
 async def load_profile_snapshot(session: AsyncSession, user_id: int) -> ProfileSnapshot | None:
@@ -223,11 +226,18 @@ async def load_profile_snapshot(session: AsyncSession, user_id: int) -> ProfileS
             .order_by(Education.order_index)
         )
     ).all()
-    projects = (
+    all_projects = (
         await session.exec(
             select(Project)
             .where(Project.profile_id == profile.id, Project.deleted_at.is_(None))
             .order_by(Project.order_index)
+        )
+    ).all()
+    certifications = (
+        await session.exec(
+            select(Certification)
+            .where(Certification.profile_id == profile.id)
+            .order_by(Certification.order_index)
         )
     ).all()
     return ProfileSnapshot(
@@ -236,7 +246,9 @@ async def load_profile_snapshot(session: AsyncSession, user_id: int) -> ProfileS
         bullets_by_experience=bullets_by_exp,
         skills=skills,
         education=education,
-        projects=projects,
+        projects=[p for p in all_projects if getattr(p, "kind", "project") != "open_source"],
+        open_source=[p for p in all_projects if getattr(p, "kind", "project") == "open_source"],
+        certifications=certifications,
     )
 
 
@@ -622,7 +634,9 @@ async def _build_resume_data(
         )
     p = snap.profile
     headline = tailored_headline or (p.headline or None) or None
-    summary = tailored_summary or p.summary_short or None
+    # `summary_full` is the user-editable master (item 1); `summary_short`
+    # is the AI-condensed leftover kept only as a fallback.
+    summary = tailored_summary or p.summary_short or p.summary_full or None
     education_payload = []
     for e in snap.education:
         meta_parts = [e.degree]
@@ -635,17 +649,29 @@ async def _build_resume_data(
                 "dates": _date_range(e.start_date, e.end_date),
             }
         )
-    projects_payload = []
-    for pr in snap.projects:
-        link = getattr(pr, "link", None)
-        projects_payload.append(
-            {
-                "title": pr.title,
-                "date": _format_date(getattr(pr, "date", None)),
-                "text": (pr.text or None),
-                "link": (f"https://{_strip_scheme(link)}" if link else None),
-            }
-        )
+
+    def _project_payload(rows: list[Project]) -> list[dict]:
+        out = []
+        for pr in rows:
+            link = getattr(pr, "link", None)
+            out.append(
+                {
+                    "title": pr.title,
+                    "date": _format_date(getattr(pr, "date", None)),
+                    "text": (pr.text or None),
+                    "link": (f"https://{_strip_scheme(link)}" if link else None),
+                }
+            )
+        return out
+
+    certifications_payload = [
+        {
+            "title": c.title,
+            "issuer": c.issuer,
+            "date": _format_date(getattr(c, "date", None)),
+        }
+        for c in snap.certifications
+    ]
     return {
         "profile": {"full_name": p.full_name},
         "headline": headline if headline else None,
@@ -654,7 +680,9 @@ async def _build_resume_data(
         "experiences": experiences_payload,
         "education": education_payload,
         "skills": [{"category": s.category, "items": list(s.items)} for s in snap.skills],
-        "projects": projects_payload,
+        "projects": _project_payload(snap.projects),
+        "open_source": _project_payload(snap.open_source),
+        "certifications": certifications_payload,
     }
 
 
@@ -1191,9 +1219,9 @@ def question_fingerprint(question_text: str) -> str:
 
 def _auto_field_for_question(question_text: str) -> str | None:
     fp = question_fingerprint(question_text)
-    for keyword, field in _AUTO_FILL_FINGERPRINTS.items():
+    for keyword, field_name in _AUTO_FILL_FINGERPRINTS.items():
         if keyword in fp:
-            return field
+            return field_name
     return None
 
 

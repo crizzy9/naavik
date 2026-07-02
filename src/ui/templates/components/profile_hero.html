@@ -51,11 +51,15 @@
           <label for="hero-resume-input"
                  class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
             <i data-lucide="upload-cloud" class="h-4 w-4" stroke-width="1.5"></i>
-            Update resume
+            Upload resume
           </label>
+          {# Uploading is a first-time / full-reset action — the parse
+             REPLACES the parsed sections. hx-confirm fires after file pick,
+             before the upload request. #}
           <form
             hx-post="/api/v1/extraction/upload"
             hx-encoding="multipart/form-data"
+            hx-confirm="Uploading a resume re-parses your profile and REPLACES the parsed sections (experiences, bullets, education, skills, projects). Use it for first-time setup or a full reset — hand-edits to those sections will be overwritten. Continue?"
             hx-target="#hero-resume-result"
             hx-target-error="#hero-resume-result"
             hx-swap="innerHTML"

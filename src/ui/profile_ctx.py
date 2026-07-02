@@ -364,11 +364,14 @@ def education_dicts(educations: list[Education]) -> list[dict[str, object]]:
         dates, _ = _format_dates(e.start_date, e.end_date)
         out.append(
             {
+                "id": e.id,
                 "degree": e.degree,
                 "institution": e.institution,
                 "school": e.school,
                 "location": e.location,
                 "dates": dates,
+                "start_value": e.start_date.strftime("%Y-%m-%d") if e.start_date else "",
+                "end_value": e.end_date.strftime("%Y-%m-%d") if e.end_date else "",
                 "gpa": e.gpa,
             }
         )
@@ -378,25 +381,39 @@ def education_dicts(educations: list[Education]) -> list[dict[str, object]]:
 def project_dicts(projects: list[Project]) -> list[dict[str, object]]:
     return [
         {
+            "id": p.id,
+            "kind": getattr(p, "kind", "project"),
             "title": p.title,
             "text": p.text,
             "tags": _tag_values(p.tags),
+            "tags_csv": ", ".join(_tag_values(p.tags)),
             "link": p.link,
+            "date_value": p.date.strftime("%Y-%m-%d") if p.date else "",
         }
         for p in projects
     ]
 
 
 def skill_dicts(skills: list[Skill]) -> list[dict[str, object]]:
-    return [{"category": s.category, "items": s.items} for s in skills]
+    return [
+        {
+            "id": s.id,
+            "category": s.category,
+            "items": s.items,
+            "items_csv": ", ".join(s.items or []),
+        }
+        for s in skills
+    ]
 
 
 def certification_dicts(certs: list[Certification]) -> list[dict[str, object]]:
     return [
         {
+            "id": c.id,
             "title": c.title,
             "issuer": c.issuer,
             "date": c.date.strftime("%Y-%m-%d") if c.date else None,
+            "date_value": c.date.strftime("%Y-%m-%d") if c.date else "",
             "description": c.description,
         }
         for c in certs
@@ -410,5 +427,6 @@ PROFILE_ANCHORS = [
     {"id": "skills", "label": "Skills"},
     {"id": "education", "label": "Education"},
     {"id": "projects", "label": "Projects"},
+    {"id": "open-source", "label": "Open source"},
     {"id": "certifications", "label": "Certifications"},
 ]

@@ -1,0 +1,37 @@
+{#
+  project_edit_card.html — one project / open-source slot in the editor.
+
+  Args:
+    proj : dict from profile_ctx.project_dicts (id, kind, title, text,
+           link, tags_csv, date_value)
+
+  Field prefix is `proj_` for kind=project and `oss_` for kind=open_source
+  — both parse identically in the bulk PUT; the split keeps section adds
+  targeting the right list.
+#}
+{% set _prefix = "oss" if proj.kind == "open_source" else "proj" %}
+<section id="project-{{ proj.id }}" class="bg-slate-900 border border-slate-800 rounded-lg p-6 scroll-mt-6">
+  <div class="flex items-baseline justify-between mb-5 gap-3">
+    <div class="text-base font-medium text-slate-50 truncate">
+      {{ "Open source · " if proj.kind == "open_source" else "Project · " }}{{ proj.title }}
+    </div>
+    <button type="button"
+            class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
+            hx-get="/_modal/confirm?title=Remove+{{ 'contribution' if proj.kind == 'open_source' else 'project' }}%3F&message=Removes+%22{{ proj.title | urlencode }}%22+from+your+profile.&action=/api/v1/projects/{{ proj.id }}&label=Remove&tone=danger&method=delete"
+            hx-target="#modal-region"
+            hx-swap="innerHTML">
+      <i data-lucide="trash-2" class="h-3.5 w-3.5" stroke-width="1.5"></i>Remove
+    </button>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    {% with label="TITLE", name=_prefix ~ "_title_" ~ proj.id, value=proj.title, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+    {% with label="LINK", name=_prefix ~ "_link_" ~ proj.id, value=proj.link or "", autosave_enabled=false, placeholder="https://github.com/…" %}{% include "components/editor_field.html" %}{% endwith %}
+    {% with label="DATE", name=_prefix ~ "_date_" ~ proj.id, value=proj.date_value, type="date", autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+  </div>
+  <div class="mt-4">
+    {% with label="DESCRIPTION", name=_prefix ~ "_text_" ~ proj.id, type="textarea", value=proj.text, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+  </div>
+  <div class="mt-4">
+    {% with label="TAGS (COMMA-SEPARATED)", name=_prefix ~ "_tags_" ~ proj.id, value=proj.tags_csv, autosave_enabled=false, mono=true, placeholder="genai, backend" %}{% include "components/editor_field.html" %}{% endwith %}
+  </div>
+</section>

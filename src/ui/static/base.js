@@ -307,6 +307,18 @@
   });
 
   // ---------------------------------------------------------------- //
+  // HX-Trigger { removeElement: { selector } } → remove nodes.       //
+  // Lets 204 DELETE responses (fired from the generic confirm modal, //
+  // which has no swap target) drop the deleted entity's card from    //
+  // the page without a full reload.                                  //
+  // ---------------------------------------------------------------- //
+  document.body.addEventListener('removeElement', function (e) {
+    var sel = e.detail && e.detail.selector;
+    if (!sel) return;
+    document.querySelectorAll(sel).forEach(function (n) { n.remove(); });
+  });
+
+  // ---------------------------------------------------------------- //
   // 8a. Server-event toasts (P5 universal feedback).                 //
   // These HX-Trigger events used to fire into the void — no listener //
   // existed, so degraded bundles / retries / deletions were silent.  //

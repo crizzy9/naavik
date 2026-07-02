@@ -80,56 +80,125 @@
         {% include "components/editor_card.html" %}
       {% endwith %}
 
-      {# Per-experience cards #}
-      {% for exp in experiences %}
-        {% set _actions %}
-          <button type="button" class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800">
-            <i data-lucide="copy-plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>Duplicate
-          </button>
+      {# Per-experience cards — add/remove slots + always-editable fields.
+         Cards render via components/experience_edit_card.html (also returned
+         by POST /api/v1/experiences for the append-without-reload add). #}
+      <div id="experience" class="flex items-baseline justify-between gap-3 scroll-mt-6">
+        <h2 class="text-base font-medium text-slate-50">Experience</h2>
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                hx-post="/api/v1/experiences"
+                hx-target="#experience-edit-list"
+                hx-swap="beforeend"
+                data-testid="add-experience">
+          <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Add role
+        </button>
+      </div>
+      <div id="experience-edit-list" class="flex flex-col gap-6">
+        {% for exp in experiences %}
+          {% with exp=exp %}{% include "components/experience_edit_card.html" %}{% endwith %}
+        {% endfor %}
+      </div>
+
+      {# Education #}
+      <div id="education" class="flex items-baseline justify-between gap-3 scroll-mt-6">
+        <h2 class="text-base font-medium text-slate-50">Education</h2>
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                hx-post="/api/v1/educations"
+                hx-target="#education-edit-list"
+                hx-swap="beforeend"
+                data-testid="add-education">
+          <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Add education
+        </button>
+      </div>
+      <div id="education-edit-list" class="flex flex-col gap-6">
+        {% for edu in educations %}
+          {% with edu=edu %}{% include "components/education_edit_card.html" %}{% endwith %}
+        {% endfor %}
+      </div>
+
+      {# Skills #}
+      <section id="skills" class="bg-slate-900 border border-slate-800 rounded-lg p-6 scroll-mt-6">
+        <div class="flex items-baseline justify-between mb-5 gap-3">
+          <h2 class="text-base font-medium text-slate-50">Skills</h2>
           <button type="button"
-                  class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
-                  hx-get="/_modal/confirm?title=Remove+role%3F&message=Removes+%22{{ exp.display.title }}%22+at+{{ exp.display.company }}+and+all+its+bullets+from+your+profile.&action=/api/v1/experiences/{{ exp.model.id }}&label=Remove&tone=danger&method=delete"
-                  hx-target="#modal-region"
-                  hx-swap="innerHTML">
-            <i data-lucide="trash-2" class="h-3.5 w-3.5" stroke-width="1.5"></i>Remove
+                  class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+                  hx-post="/api/v1/skills"
+                  hx-target="#skill-edit-list"
+                  hx-swap="beforeend"
+                  data-testid="add-skill-group">
+            <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+            Add group
           </button>
-        {% endset %}
-        {% set _exp_body %}
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {% with label="TITLE", name="title_" ~ exp.model.id, value=exp.display.title, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
-            {% with label="START", name="start_" ~ exp.model.id, value=exp.model.start_date.strftime("%Y-%m-%d"), type="date", autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
-            {% with label="END", name="end_" ~ exp.model.id, value=(exp.model.end_date.strftime("%Y-%m-%d") if exp.model.end_date else ""), placeholder="Present", type="date", autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
-          </div>
-          <div class="mt-5">
-            <div class="flex items-baseline justify-between mb-2 gap-3">
-              <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Bullets · <span class="font-mono">{{ exp.bullets | length }}</span></div>
-              <button type="button"
-                      class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800"
-                      hx-post="/api/v1/bullets"
-                      hx-vals='{"experience_id": {{ exp.model.id }}}'
-                      hx-target="#bullet-list-{{ exp.model.id }}"
-                      hx-swap="beforeend">
-                <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
-                Add bullet
-              </button>
-            </div>
-            <div id="bullet-list-{{ exp.model.id }}"
-                 data-sortable="true"
-                 hx-post="/api/v1/bullets/reorder"
-                 hx-trigger="end"
-                 hx-vals='js:{"bullet_ids": [...this.querySelectorAll("[data-bullet-id]")].map(e => e.dataset.bulletId)}'
-                 class="flex flex-col gap-1">
-              {% for b in exp.bullets %}
-                {% with bullet=b %}{% include "components/bullet_edit_row.html" %}{% endwith %}
-              {% endfor %}
-            </div>
-          </div>
-        {% endset %}
-        {% with title="Experience · " ~ exp.display.company, anchor_id="experience-" ~ exp.model.id,
-                actions=_actions, body=_exp_body %}
-          {% include "components/editor_card.html" %}
-        {% endwith %}
-      {% endfor %}
+        </div>
+        <div id="skill-edit-list" class="flex flex-col gap-4">
+          {% for skill in skills %}
+            {% with skill=skill %}{% include "components/skill_edit_card.html" %}{% endwith %}
+          {% endfor %}
+        </div>
+      </section>
+
+      {# Projects #}
+      <div id="projects" class="flex items-baseline justify-between gap-3 scroll-mt-6">
+        <h2 class="text-base font-medium text-slate-50">Projects</h2>
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                hx-post="/api/v1/projects"
+                hx-vals='{"kind": "project"}'
+                hx-target="#project-edit-list"
+                hx-swap="beforeend"
+                data-testid="add-project">
+          <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Add project
+        </button>
+      </div>
+      <div id="project-edit-list" class="flex flex-col gap-6">
+        {% for proj in projects %}
+          {% with proj=proj %}{% include "components/project_edit_card.html" %}{% endwith %}
+        {% endfor %}
+      </div>
+
+      {# Open-source contributions #}
+      <div id="open-source" class="flex items-baseline justify-between gap-3 scroll-mt-6">
+        <h2 class="text-base font-medium text-slate-50">Open source</h2>
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                hx-post="/api/v1/projects"
+                hx-vals='{"kind": "open_source"}'
+                hx-target="#oss-edit-list"
+                hx-swap="beforeend"
+                data-testid="add-open-source">
+          <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Add contribution
+        </button>
+      </div>
+      <div id="oss-edit-list" class="flex flex-col gap-6">
+        {% for proj in open_source %}
+          {% with proj=proj %}{% include "components/project_edit_card.html" %}{% endwith %}
+        {% endfor %}
+      </div>
+
+      {# Certifications #}
+      <div id="certifications" class="flex items-baseline justify-between gap-3 scroll-mt-6">
+        <h2 class="text-base font-medium text-slate-50">Certifications</h2>
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                hx-post="/api/v1/certifications"
+                hx-target="#certification-edit-list"
+                hx-swap="beforeend"
+                data-testid="add-certification">
+          <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Add certification
+        </button>
+      </div>
+      <div id="certification-edit-list" class="flex flex-col gap-6">
+        {% for cert in certifications %}
+          {% with cert=cert %}{% include "components/certification_edit_card.html" %}{% endwith %}
+        {% endfor %}
+      </div>
 
       {# Application questions — autosave_enabled=false: fields submit via the
          parent #profile-edit-form on Save (0.7.0.48 fold-in for bug #4). #}

@@ -471,6 +471,331 @@ async def reorder_bullets(
     return await get_bullets_for_experience(session, experience_id)
 
 
+# ── Dossier child-entity CRUD (item 1, 2026-07) ─────────────────────────
+# Experiences / education / projects / skills / certifications used to be
+# parse-only (resume upload was the sole writer). The profile editor is now
+# fully self-serve: add/remove slots + per-field edits via the bulk PUT.
+# Soft-delete where the column exists (Experience / Project); hard-delete
+# for Education / Skill / Certification (no deleted_at column).
+
+
+async def _profile_or_raise(session: AsyncSession, user_id: int) -> Profile:
+    profile = await get_profile(session, user_id)
+    if profile is None:
+        raise LookupError(f"no profile for user_id={user_id}")
+    return profile
+
+
+def _owned_via_profile(model, entity_id_col):
+    """Build a `select(entity.id).join(Profile)` ownership probe statement."""
+
+    def _stmt(entity_id: int, user_id: int):
+        stmt = (
+            select(entity_id_col)
+            .join(Profile, Profile.id == model.profile_id)
+            .where(
+                entity_id_col == entity_id,
+                Profile.user_id == user_id,
+                Profile.deleted_at.is_(None),
+            )
+        )
+        if hasattr(model, "deleted_at"):
+            stmt = stmt.where(model.deleted_at.is_(None))
+        return stmt
+
+    return _stmt
+
+
+async def owns_education(session: AsyncSession, *, education_id: int, user_id: int) -> bool:
+    stmt = _owned_via_profile(Education, Education.id)(education_id, user_id)
+    return (await session.exec(stmt)).one_or_none() is not None
+
+
+async def owns_project(session: AsyncSession, *, project_id: int, user_id: int) -> bool:
+    stmt = _owned_via_profile(Project, Project.id)(project_id, user_id)
+    return (await session.exec(stmt)).one_or_none() is not None
+
+
+async def owns_skill(session: AsyncSession, *, skill_id: int, user_id: int) -> bool:
+    stmt = _owned_via_profile(Skill, Skill.id)(skill_id, user_id)
+    return (await session.exec(stmt)).one_or_none() is not None
+
+
+async def owns_certification(session: AsyncSession, *, certification_id: int, user_id: int) -> bool:
+    stmt = _owned_via_profile(Certification, Certification.id)(certification_id, user_id)
+    return (await session.exec(stmt)).one_or_none() is not None
+
+
+async def _next_order_index(session: AsyncSession, model, profile_id: int) -> int:
+    stmt = select(model).where(model.profile_id == profile_id)
+    rows = (await session.exec(stmt)).all()
+    return max((r.order_index for r in rows), default=-1) + 1
+
+
+async def add_experience(session: AsyncSession, user_id: int) -> Experience:
+    profile = await _profile_or_raise(session, user_id)
+    now = datetime.now(UTC)
+    exp = Experience(
+        profile_id=profile.id,
+        company="New company",
+        title="New role",
+        start_date=now,
+        order_index=await _next_order_index(session, Experience, profile.id),
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(exp)
+    await _emit_profile_updated(session, user_id, ["experience:add"])
+    await session.flush()
+    return exp
+
+
+async def update_experience(
+    session: AsyncSession,
+    experience_id: int,
+    *,
+    company: str | None = None,
+    title: str | None = None,
+    team: str | None = None,
+    location: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None | object = "__unset__",
+) -> Experience:
+    exp = await get_experience(session, experience_id)
+    if exp is None:
+        raise LookupError(f"experience {experience_id} not found")
+    if company is not None and company.strip():
+        exp.company = company.strip()
+    if title is not None and title.strip():
+        exp.title = title.strip()
+    if team is not None:
+        exp.team = team.strip() or None
+    if location is not None:
+        exp.location = location.strip() or None
+    if start_date is not None:
+        exp.start_date = start_date
+    if end_date != "__unset__":
+        exp.end_date = end_date
+    if exp.end_date is not None and exp.start_date is not None and exp.end_date <= exp.start_date:
+        raise ValueError("end date must be after start date")
+    exp.updated_at = datetime.now(UTC)
+    session.add(exp)
+    await session.flush()
+    return exp
+
+
+async def delete_experience(session: AsyncSession, experience_id: int) -> bool:
+    exp = await get_experience(session, experience_id)
+    if exp is None:
+        return False
+    now = datetime.now(UTC)
+    exp.deleted_at = now
+    exp.updated_at = now
+    session.add(exp)
+    await session.flush()
+    return True
+
+
+async def add_education(session: AsyncSession, user_id: int) -> Education:
+    profile = await _profile_or_raise(session, user_id)
+    now = datetime.now(UTC)
+    edu = Education(
+        profile_id=profile.id,
+        institution="New institution",
+        degree="Degree",
+        start_date=now,
+        order_index=await _next_order_index(session, Education, profile.id),
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(edu)
+    await _emit_profile_updated(session, user_id, ["education:add"])
+    await session.flush()
+    return edu
+
+
+async def update_education(
+    session: AsyncSession,
+    education_id: int,
+    **fields: Any,
+) -> Education:
+    edu = await session.get(Education, education_id)
+    if edu is None:
+        raise LookupError(f"education {education_id} not found")
+    for name in ("institution", "degree"):
+        if (v := fields.get(name)) is not None and str(v).strip():
+            setattr(edu, name, str(v).strip())
+    for name in ("school", "location", "gpa"):
+        if (v := fields.get(name)) is not None:
+            setattr(edu, name, str(v).strip() or None)
+    if (v := fields.get("start_date")) is not None:
+        edu.start_date = v
+    if "end_date" in fields:
+        edu.end_date = fields["end_date"]
+    edu.updated_at = datetime.now(UTC)
+    session.add(edu)
+    await session.flush()
+    return edu
+
+
+async def delete_education(session: AsyncSession, education_id: int) -> bool:
+    edu = await session.get(Education, education_id)
+    if edu is None:
+        return False
+    await session.delete(edu)
+    await session.flush()
+    return True
+
+
+async def add_project(session: AsyncSession, user_id: int, *, kind: str = "project") -> Project:
+    if kind not in {"project", "open_source"}:
+        raise ValueError(f"unknown project kind {kind!r}")
+    profile = await _profile_or_raise(session, user_id)
+    now = datetime.now(UTC)
+    proj = Project(
+        profile_id=profile.id,
+        kind=kind,
+        title="New contribution" if kind == "open_source" else "New project",
+        text="Describe what you built and its impact.",
+        order_index=await _next_order_index(session, Project, profile.id),
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(proj)
+    await _emit_profile_updated(session, user_id, [f"{kind}:add"])
+    await session.flush()
+    return proj
+
+
+async def update_project(
+    session: AsyncSession,
+    project_id: int,
+    **fields: Any,
+) -> Project:
+    proj = await session.get(Project, project_id)
+    if proj is None or proj.deleted_at is not None:
+        raise LookupError(f"project {project_id} not found")
+    if (v := fields.get("title")) is not None and str(v).strip():
+        proj.title = str(v).strip()
+    if (v := fields.get("text")) is not None and str(v).strip():
+        proj.text = str(v).strip()
+    if (v := fields.get("link")) is not None:
+        proj.link = str(v).strip() or None
+    if (v := fields.get("tags")) is not None:
+        proj.tags = list(v)
+    if "date" in fields:
+        proj.date = fields["date"]
+    proj.updated_at = datetime.now(UTC)
+    session.add(proj)
+    await session.flush()
+    return proj
+
+
+async def delete_project(session: AsyncSession, project_id: int) -> bool:
+    proj = await session.get(Project, project_id)
+    if proj is None or proj.deleted_at is not None:
+        return False
+    now = datetime.now(UTC)
+    proj.deleted_at = now
+    proj.updated_at = now
+    session.add(proj)
+    await session.flush()
+    return True
+
+
+async def add_skill(session: AsyncSession, user_id: int) -> Skill:
+    profile = await _profile_or_raise(session, user_id)
+    now = datetime.now(UTC)
+    skill = Skill(
+        profile_id=profile.id,
+        category="New category",
+        items=[],
+        order_index=await _next_order_index(session, Skill, profile.id),
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(skill)
+    await _emit_profile_updated(session, user_id, ["skill:add"])
+    await session.flush()
+    return skill
+
+
+async def update_skill(
+    session: AsyncSession,
+    skill_id: int,
+    *,
+    category: str | None = None,
+    items: list[str] | None = None,
+) -> Skill:
+    skill = await session.get(Skill, skill_id)
+    if skill is None:
+        raise LookupError(f"skill {skill_id} not found")
+    if category is not None and category.strip():
+        skill.category = category.strip()
+    if items is not None:
+        skill.items = [i.strip() for i in items if i.strip()]
+    skill.updated_at = datetime.now(UTC)
+    session.add(skill)
+    await session.flush()
+    return skill
+
+
+async def delete_skill(session: AsyncSession, skill_id: int) -> bool:
+    skill = await session.get(Skill, skill_id)
+    if skill is None:
+        return False
+    await session.delete(skill)
+    await session.flush()
+    return True
+
+
+async def add_certification(session: AsyncSession, user_id: int) -> Certification:
+    profile = await _profile_or_raise(session, user_id)
+    now = datetime.now(UTC)
+    cert = Certification(
+        profile_id=profile.id,
+        title="New certification",
+        issuer="Issuer",
+        order_index=await _next_order_index(session, Certification, profile.id),
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(cert)
+    await _emit_profile_updated(session, user_id, ["certification:add"])
+    await session.flush()
+    return cert
+
+
+async def update_certification(
+    session: AsyncSession,
+    certification_id: int,
+    **fields: Any,
+) -> Certification:
+    cert = await session.get(Certification, certification_id)
+    if cert is None:
+        raise LookupError(f"certification {certification_id} not found")
+    for name in ("title", "issuer"):
+        if (v := fields.get(name)) is not None and str(v).strip():
+            setattr(cert, name, str(v).strip())
+    if (v := fields.get("description")) is not None:
+        cert.description = str(v).strip() or None
+    if "date" in fields:
+        cert.date = fields["date"]
+    cert.updated_at = datetime.now(UTC)
+    session.add(cert)
+    await session.flush()
+    return cert
+
+
+async def delete_certification(session: AsyncSession, certification_id: int) -> bool:
+    cert = await session.get(Certification, certification_id)
+    if cert is None:
+        return False
+    await session.delete(cert)
+    await session.flush()
+    return True
+
+
 # ── Internal: AppEvent emission ──────────────────────────────────────────
 
 

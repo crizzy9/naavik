@@ -264,6 +264,11 @@ class Project(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     profile_id: int = Field(foreign_key="profile.id", ondelete="CASCADE", index=True)
 
+    # "project" | "open_source" — open-source contributions share the Project
+    # shape (title/text/link/tags) but render as their own dossier section and
+    # flow into the tailoring payload as a separate list.
+    kind: str = Field(default="project", max_length=20)
+
     title: str
     date: datetime | None = Field(
         default=None,

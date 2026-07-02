@@ -1,0 +1,69 @@
+{#
+  experience_edit_card.html — one experience slot in the profile editor.
+
+  Args:
+    exp : {model: Experience, display: dict, bullets: list[dict]}
+
+  Field names follow the `exp_<field>_<id>` convention parsed by the bulk
+  PUT (`api/profile.py:_collect_entity_edits`). The card id doubles as the
+  `removeElement` selector for the DELETE route.
+#}
+{% set _e = exp.model %}
+<section id="experience-{{ _e.id }}" class="bg-slate-900 border border-slate-800 rounded-lg p-6 scroll-mt-6">
+  <div class="flex items-baseline justify-between mb-5 gap-3">
+    <div class="min-w-0">
+      <div class="text-base font-medium text-slate-50 truncate">Experience · {{ exp.display.company }}</div>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <button type="button"
+              class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
+              hx-get="/_modal/confirm?title=Remove+role%3F&message=Removes+%22{{ exp.display.title | urlencode }}%22+at+{{ exp.display.company | urlencode }}+and+all+its+bullets+from+your+profile.&action=/api/v1/experiences/{{ _e.id }}&label=Remove&tone=danger&method=delete"
+              hx-target="#modal-region"
+              hx-swap="innerHTML">
+        <i data-lucide="trash-2" class="h-3.5 w-3.5" stroke-width="1.5"></i>Remove
+      </button>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    {% with label="COMPANY", name="exp_company_" ~ _e.id, value=_e.company, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+    {% with label="TITLE", name="exp_title_" ~ _e.id, value=_e.title, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+    {% with label="TEAM", name="exp_team_" ~ _e.id, value=_e.team or "", autosave_enabled=false, placeholder="e.g. Personalization" %}{% include "components/editor_field.html" %}{% endwith %}
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+    {% with label="LOCATION", name="exp_location_" ~ _e.id, value=_e.location or "", autosave_enabled=false, placeholder="e.g. Mountain View, CA" %}{% include "components/editor_field.html" %}{% endwith %}
+    {% with label="START", name="exp_start_" ~ _e.id, value=_e.start_date.strftime("%Y-%m-%d"), type="date", autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+    {% with label="END", name="exp_end_" ~ _e.id, value=(_e.end_date.strftime("%Y-%m-%d") if _e.end_date else ""), placeholder="Present", type="date", autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+  </div>
+
+  <div class="mt-5">
+    <div class="flex items-baseline justify-between mb-2 gap-3">
+      <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Bullets · <span class="font-mono">{{ exp.bullets | length }}</span></div>
+      <button type="button"
+              class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+              hx-post="/api/v1/bullets"
+              hx-vals='{"experience_id": {{ _e.id }}}'
+              hx-target="#bullet-list-{{ _e.id }}"
+              hx-swap="beforeend">
+        <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        Add bullet
+      </button>
+    </div>
+    {# The js: hx-vals must not reference `this` — htmx 2 evaluates js: vals
+       with `this` unbound, AND children inherit ancestor hx-vals during
+       value gathering (hx-disinherit is not consulted there). The old
+       `this.querySelectorAll` threw for every child request, which is why
+       the bullet pencil/trash "did nothing" — the exception killed the
+       request between htmx:confirm and configRequest. #}
+    <div id="bullet-list-{{ _e.id }}"
+         data-sortable="true"
+         hx-post="/api/v1/bullets/reorder"
+         hx-trigger="end"
+         hx-vals='js:{"experience_id": {{ _e.id }}, "bullet_ids": [...document.getElementById("bullet-list-{{ _e.id }}").querySelectorAll("[data-bullet-id]")].map(e => e.dataset.bulletId)}'
+         class="flex flex-col gap-1">
+      {% for b in exp.bullets %}
+        {% with bullet=b %}{% include "components/bullet_edit_row.html" %}{% endwith %}
+      {% endfor %}
+    </div>
+  </div>
+</section>

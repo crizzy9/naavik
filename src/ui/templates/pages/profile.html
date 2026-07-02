@@ -10,13 +10,19 @@
         {% include "components/profile_hero.html" %}
       {% endwith %}
 
-      {# Summary #}
+      {# Summary — single source of truth is `summary_full` (what the edit
+         form binds); `summary_short` survives only as the AI-condensed
+         fallback so pre-editor profiles don't render blank. #}
       <section id="summary" class="bg-slate-900 border border-slate-800 rounded-lg p-6 scroll-mt-6">
         <header class="flex items-baseline justify-between mb-3 gap-3">
           <h2 class="text-base font-medium text-slate-50">Summary</h2>
-          <button type="button" class="text-xs text-slate-400 hover:text-slate-100">Expand</button>
+          <a href="/profile/edit#summary" class="text-xs text-slate-400 hover:text-slate-100">Edit →</a>
         </header>
-        <p class="text-sm text-slate-200 leading-relaxed">{{ profile.summary_short }}</p>
+        {% if profile.summary_full or profile.summary_short %}
+          <p class="text-sm text-slate-200 leading-relaxed whitespace-pre-line">{{ profile.summary_full or profile.summary_short }}</p>
+        {% else %}
+          <p class="text-sm text-slate-500 italic">No summary yet — <a href="/profile/edit#summary" class="text-indigo-300 hover:text-indigo-200 not-italic">write one</a>.</p>
+        {% endif %}
       </section>
 
       {# Experience #}
@@ -115,11 +121,49 @@
         </div>
       </section>
 
+      {# Open-source contributions #}
+      <section id="open-source" class="scroll-mt-6">
+        <header class="flex items-baseline justify-between mb-3 gap-3">
+          <h2 class="text-base font-medium text-slate-50">Open source</h2>
+          <a href="/profile/edit#open-source" class="text-xs text-slate-400 hover:text-slate-100">Edit →</a>
+        </header>
+        {% if open_source %}
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for p in open_source %}
+              <article class="p-4 bg-slate-900 border border-slate-800 rounded-lg flex flex-col gap-2 min-w-0">
+                <header class="flex items-baseline justify-between gap-2">
+                  <h3 class="text-sm font-medium text-slate-100 truncate">{{ p.title }}</h3>
+                  {% if p.link %}
+                    <a href="{{ p.link }}" target="_blank" rel="noopener" hx-boost="false" class="text-xs text-slate-400 hover:text-slate-100 shrink-0">
+                      <i data-lucide="external-link" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+                    </a>
+                  {% endif %}
+                </header>
+                <p class="text-xs text-slate-300 leading-relaxed line-clamp-3">{{ p.text }}</p>
+                <div class="flex flex-wrap gap-1 mt-1">
+                  {% for t in p.tags %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">{{ t }}</span>
+                  {% endfor %}
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-sm text-slate-500 italic bg-slate-900 border border-slate-800 rounded-lg p-4">
+            No open-source contributions yet — <a href="/profile/edit#open-source" class="text-indigo-300 hover:text-indigo-200 not-italic">add one</a> and it flows into tailored resumes.
+          </p>
+        {% endif %}
+      </section>
+
       {# Certifications #}
       <section id="certifications" class="scroll-mt-6 bg-slate-900 border border-slate-800 rounded-lg p-6">
-        <header class="mb-3">
+        <header class="flex items-baseline justify-between mb-3 gap-3">
           <h2 class="text-base font-medium text-slate-50">Certifications</h2>
+          <a href="/profile/edit#certifications" class="text-xs text-slate-400 hover:text-slate-100">Edit →</a>
         </header>
+        {% if not certifications %}
+          <p class="text-sm text-slate-500 italic">No certifications yet — <a href="/profile/edit#certifications" class="text-indigo-300 hover:text-indigo-200 not-italic">add one</a>.</p>
+        {% endif %}
         <ul class="flex flex-col">
           {% for c in certifications %}
             <li class="flex items-start gap-3 py-2 border-b border-slate-800/50 last:border-0">

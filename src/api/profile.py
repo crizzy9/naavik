@@ -9,6 +9,9 @@ These mount under `/api/v1/profile` + `/api/v1/bullets`.
 
 from __future__ import annotations
 
+import json
+import re
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Request, Response
@@ -24,6 +27,130 @@ from ui.routes.profile import _effective_user_id
 from ui.templates_setup import templates
 
 router = APIRouter()
+
+
+# ── Dossier entity form-field parsing (item 1, 2026-07) ─────────────────
+# The profile editor posts per-entity fields as `<prefix>_<field>_<id>`
+# (e.g. `exp_company_12`, `edu_gpa_3`). The bulk PUT collects them per
+# entity row and routes through the profile_service CRUD with ownership
+# checks. Dates arrive as `YYYY-MM-DD` (or empty).
+
+_ENTITY_FIELD_RE = re.compile(
+    r"^(exp|edu|proj|oss|skill|cert)_"
+    r"(company|title|team|location|start|end|institution|school|degree|gpa|"
+    r"date|text|link|tags|category|items|issuer|description)_(\d+)$"
+)
+
+_DATE_FIELDS = {"start", "end", "date"}
+_CSV_FIELDS = {"tags", "items"}
+
+
+def _parse_form_date(value: str) -> datetime | None:
+    value = (value or "").strip()
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y-%m"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=UTC)
+        except ValueError:
+            continue
+    raise ValueError(f"bad date {value!r} — expected YYYY-MM-DD")
+
+
+def _collect_entity_edits(form_items) -> dict[tuple[str, int], dict[str, Any]]:
+    """Group `<prefix>_<field>_<id>` form fields into per-entity dicts."""
+    edits: dict[tuple[str, int], dict[str, Any]] = {}
+    for name, value in form_items:
+        m = _ENTITY_FIELD_RE.match(name)
+        if m is None:
+            continue
+        prefix, field, entity_id = m.group(1), m.group(2), int(m.group(3))
+        raw = str(value)
+        parsed: Any
+        if field in _DATE_FIELDS:
+            parsed = _parse_form_date(raw)  # raises ValueError — caller collects
+        elif field in _CSV_FIELDS:
+            parsed = [t.strip() for t in raw.split(",") if t.strip()]
+        else:
+            parsed = raw
+        edits.setdefault((prefix, entity_id), {})[field] = parsed
+    return edits
+
+
+async def _apply_entity_edit(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    prefix: str,
+    entity_id: int,
+    fields: dict[str, Any],
+) -> None:
+    """Route one entity's field dict through the service layer (IDOR-guarded)."""
+    if prefix == "exp":
+        if not await profile_service.owns_experience(
+            session, experience_id=entity_id, user_id=user_id
+        ):
+            raise LookupError("experience not found")
+        await profile_service.update_experience(
+            session,
+            entity_id,
+            company=fields.get("company"),
+            title=fields.get("title"),
+            team=fields.get("team"),
+            location=fields.get("location"),
+            start_date=fields.get("start"),
+            end_date=fields.get("end", "__unset__"),
+        )
+    elif prefix == "edu":
+        if not await profile_service.owns_education(
+            session, education_id=entity_id, user_id=user_id
+        ):
+            raise LookupError("education not found")
+        await profile_service.update_education(
+            session,
+            entity_id,
+            institution=fields.get("institution"),
+            school=fields.get("school"),
+            location=fields.get("location"),
+            degree=fields.get("degree"),
+            gpa=fields.get("gpa"),
+            **({"start_date": fields["start"]} if fields.get("start") else {}),
+            **({"end_date": fields["end"]} if "end" in fields else {}),
+        )
+    elif prefix in ("proj", "oss"):
+        if not await profile_service.owns_project(session, project_id=entity_id, user_id=user_id):
+            raise LookupError("project not found")
+        await profile_service.update_project(
+            session,
+            entity_id,
+            title=fields.get("title"),
+            text=fields.get("text"),
+            link=fields.get("link"),
+            tags=fields.get("tags"),
+            **({"date": fields["date"]} if "date" in fields else {}),
+        )
+    elif prefix == "skill":
+        if not await profile_service.owns_skill(session, skill_id=entity_id, user_id=user_id):
+            raise LookupError("skill group not found")
+        await profile_service.update_skill(
+            session,
+            entity_id,
+            category=fields.get("category"),
+            items=fields.get("items"),
+        )
+    elif prefix == "cert":
+        if not await profile_service.owns_certification(
+            session, certification_id=entity_id, user_id=user_id
+        ):
+            raise LookupError("certification not found")
+        await profile_service.update_certification(
+            session,
+            entity_id,
+            title=fields.get("title"),
+            issuer=fields.get("issuer"),
+            description=fields.get("description"),
+            **({"date": fields["date"]} if "date" in fields else {}),
+        )
 
 
 # ── Bulk PUT (Save changes) ─────────────────────────────────────────────
@@ -85,9 +212,23 @@ async def put_profile_bulk(
                 saved_fields.append(name)
             except (LookupError, ValueError) as exc:
                 failed.append((name, str(exc)))
-        # Unknown names (e.g. `title_<id>`, `start_<id>`, `end_<id>` per-experience
-        # editors) are intentionally ignored at the bulk endpoint — experience edits
-        # have dedicated routes scoped by id; the bulk save covers Profile fields.
+
+    # Per-entity dossier fields (`exp_company_<id>`, `edu_gpa_<id>`, …) —
+    # collected as one dict per entity row, then routed through the service
+    # CRUD with ownership checks.
+    try:
+        entity_edits = _collect_entity_edits(form.multi_items())
+    except ValueError as exc:
+        entity_edits = {}
+        failed.append(("dates", str(exc)))
+    for (prefix, entity_id), fields in entity_edits.items():
+        try:
+            await _apply_entity_edit(
+                session, user_id=user_id, prefix=prefix, entity_id=entity_id, fields=fields
+            )
+            saved_fields.append(f"{prefix}:{entity_id}")
+        except (LookupError, ValueError) as exc:
+            failed.append((f"{prefix}:{entity_id}", str(exc)))
 
     if eeo_payload:
         try:
@@ -198,6 +339,199 @@ async def put_search_prefs(
         "components/_search_prefs_editor.html",
         _search_prefs_ctx(profile),
     )
+
+
+# ── Dossier entity add/remove (item 1, 2026-07) ─────────────────────────
+# Add buttons hx-post here and append the returned editor-card fragment to
+# the section list — the parent #profile-edit-form picks the new fields up
+# on the next Save without losing unsaved edits elsewhere. Deletes return
+# 204 + a `removeElement` HX-Trigger handled in base.js.
+
+
+def _remove_element_response(selector: str, toast: str) -> Response:
+    response = Response(status_code=204)
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "removeElement": {"selector": selector},
+            "showToast": {"tone": "success", "text": toast},
+            "closeModal": True,
+        }
+    )
+    return response
+
+
+@router.post("/api/v1/experiences", name="api_experiences_post")
+async def post_experience(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> HTMLResponse:
+    from ui import profile_ctx as pctx
+
+    exp = await profile_service.add_experience(session, _effective_user_id(_user))
+    await session.commit()
+    return templates.TemplateResponse(
+        request,
+        "components/experience_edit_card.html",
+        {"exp": {"model": exp, "display": pctx.experience_dict(exp), "bullets": []}},
+    )
+
+
+@router.delete("/api/v1/experiences/{experience_id}", name="api_experiences_delete")
+async def delete_experience(
+    experience_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> Response:
+    if not await profile_service.owns_experience(
+        session, experience_id=experience_id, user_id=_effective_user_id(_user)
+    ):
+        raise HTTPException(status_code=404, detail="Experience not found")
+    await profile_service.delete_experience(session, experience_id)
+    await session.commit()
+    return _remove_element_response(f"#experience-{experience_id}", "Role removed.")
+
+
+@router.post("/api/v1/educations", name="api_educations_post")
+async def post_education(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> HTMLResponse:
+    from ui import profile_ctx as pctx
+
+    edu = await profile_service.add_education(session, _effective_user_id(_user))
+    await session.commit()
+    return templates.TemplateResponse(
+        request,
+        "components/education_edit_card.html",
+        {"edu": pctx.education_dicts([edu])[0]},
+    )
+
+
+@router.delete("/api/v1/educations/{education_id}", name="api_educations_delete")
+async def delete_education(
+    education_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> Response:
+    if not await profile_service.owns_education(
+        session, education_id=education_id, user_id=_effective_user_id(_user)
+    ):
+        raise HTTPException(status_code=404, detail="Education not found")
+    await profile_service.delete_education(session, education_id)
+    await session.commit()
+    return _remove_element_response(f"#education-{education_id}", "Education removed.")
+
+
+@router.post("/api/v1/projects", name="api_projects_post")
+async def post_project(
+    request: Request,
+    kind: Annotated[str, Form()] = "project",
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> HTMLResponse:
+    from ui import profile_ctx as pctx
+
+    try:
+        proj = await profile_service.add_project(session, _effective_user_id(_user), kind=kind)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return templates.TemplateResponse(
+        request,
+        "components/project_edit_card.html",
+        {"proj": pctx.project_dicts([proj])[0]},
+    )
+
+
+@router.delete("/api/v1/projects/{project_id}", name="api_projects_delete")
+async def delete_project(
+    project_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> Response:
+    if not await profile_service.owns_project(
+        session, project_id=project_id, user_id=_effective_user_id(_user)
+    ):
+        raise HTTPException(status_code=404, detail="Project not found")
+    await profile_service.delete_project(session, project_id)
+    await session.commit()
+    return _remove_element_response(f"#project-{project_id}", "Removed.")
+
+
+@router.post("/api/v1/skills", name="api_skills_post")
+async def post_skill(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> HTMLResponse:
+    from ui import profile_ctx as pctx
+
+    skill = await profile_service.add_skill(session, _effective_user_id(_user))
+    await session.commit()
+    return templates.TemplateResponse(
+        request,
+        "components/skill_edit_card.html",
+        {"skill": pctx.skill_dicts([skill])[0]},
+    )
+
+
+@router.delete("/api/v1/skills/{skill_id}", name="api_skills_delete")
+async def delete_skill(
+    skill_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> Response:
+    if not await profile_service.owns_skill(
+        session, skill_id=skill_id, user_id=_effective_user_id(_user)
+    ):
+        raise HTTPException(status_code=404, detail="Skill group not found")
+    await profile_service.delete_skill(session, skill_id)
+    await session.commit()
+    return _remove_element_response(f"#skill-{skill_id}", "Skill group removed.")
+
+
+@router.post("/api/v1/certifications", name="api_certifications_post")
+async def post_certification(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> HTMLResponse:
+    from ui import profile_ctx as pctx
+
+    cert = await profile_service.add_certification(session, _effective_user_id(_user))
+    await session.commit()
+    return templates.TemplateResponse(
+        request,
+        "components/certification_edit_card.html",
+        {"cert": pctx.certification_dicts([cert])[0]},
+    )
+
+
+@router.delete("/api/v1/certifications/{certification_id}", name="api_certifications_delete")
+async def delete_certification(
+    certification_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> Response:
+    if not await profile_service.owns_certification(
+        session, certification_id=certification_id, user_id=_effective_user_id(_user)
+    ):
+        raise HTTPException(status_code=404, detail="Certification not found")
+    await profile_service.delete_certification(session, certification_id)
+    await session.commit()
+    return _remove_element_response(f"#certification-{certification_id}", "Certification removed.")
 
 
 # ── Per-field PUT (legacy autosave — retained for non-profile-edit consumers) ──

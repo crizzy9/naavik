@@ -47,6 +47,7 @@ async def _build_profile_ctx(session: AsyncSession, user_id: int) -> dict[str, o
     # `profile.score_history` is the JSONB column (default {}); `score_trend`
     # is the top-3 families projection consumed by `profile_hero.html`.
     score_history = await profile_service.get_score_history(session, user_id)
+    all_projects = pctx.project_dicts(await profile_service.list_projects(session, user_id))
     return {
         "profile": profile,
         "hero": pctx.hero_dict(profile),
@@ -54,7 +55,8 @@ async def _build_profile_ctx(session: AsyncSession, user_id: int) -> dict[str, o
         "experiences": exp_view,
         "skills": pctx.skill_dicts(await profile_service.list_skills(session, user_id)),
         "educations": pctx.education_dicts(await profile_service.list_educations(session, user_id)),
-        "projects": pctx.project_dicts(await profile_service.list_projects(session, user_id)),
+        "projects": [p for p in all_projects if p["kind"] != "open_source"],
+        "open_source": [p for p in all_projects if p["kind"] == "open_source"],
         "certifications": pctx.certification_dicts(
             await profile_service.list_certifications(session, user_id)
         ),
