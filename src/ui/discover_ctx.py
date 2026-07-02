@@ -314,7 +314,29 @@ async def build_discover_ctx(
 
     auto_apply_views: list[dict[str, object]] = []
     for d in drafts:
-        auto_apply_views.append(up_next_dict(d))
+        v = up_next_dict(d)
+        d_app = await application_service.get_application_for_job(
+            session, user_id=user_id, job_id=d.id
+        )
+        v["phase"] = application_service.auto_apply_phase(d_app, d)
+        auto_apply_views.append(v)
+
+    # Jobs the pipeline prepared but can't submit itself (no adapter for the
+    # board, auto-apply off, dry-run, screeners need review, adapter wall) —
+    # they need YOU, and they must be loud about it.
+    ready_jobs = await job_service.list_jobs_by_queue_state(
+        session, user_id=user_id, state=JobQueueState.READY_TO_SUBMIT
+    )
+    ready_for_you: list[dict[str, object]] = []
+    for rj in ready_jobs:
+        v = up_next_dict(rj)
+        r_app = await application_service.get_application_for_job(
+            session, user_id=user_id, job_id=rj.id
+        )
+        v["phase"] = application_service.auto_apply_phase(r_app, rj)
+        v["application_id"] = r_app.id if r_app else None
+        v["jd_url"] = rj.url
+        ready_for_you.append(v)
 
     # Empty-state honesty: with no target titles configured nothing will
     # ever land in the queue — point the user at the profile prefs section
@@ -329,6 +351,7 @@ async def build_discover_ctx(
         "stuck_drafts": stuck_views,
         "saved_count": len(saved),
         "auto_apply_drafts": auto_apply_views,
+        "ready_for_you": ready_for_you,
         "stats": await stats_strip(session, user_id=user_id),
         "unswiped_count": len(queue),
         "filters": effective_filters,

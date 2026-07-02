@@ -87,6 +87,34 @@
       </section>
     {% endif %}
 
+    {% if ready_for_you %}
+      <section data-testid="ready-for-you-section">
+        <header class="flex items-baseline justify-between mb-2 px-1">
+          <span class="text-xs uppercase tracking-wide text-amber-300 font-medium">
+            Ready for you to submit · <span class="font-mono">{{ ready_for_you | length }}</span>
+          </span>
+        </header>
+        <div class="flex flex-col gap-2">
+          {% for j in ready_for_you %}
+            <div class="flex flex-col gap-1 p-2 rounded-lg border border-amber-500/30 bg-amber-500/5">
+              {% with job=j, phase=none %}
+                {% include "components/up_next_card.html" %}
+              {% endwith %}
+              <p class="px-1 text-[11px] text-amber-200/80 leading-snug">
+                {{ j.phase.reason if j.phase and j.phase.reason else "Documents are prepared — submit this one yourself." }}
+              </p>
+              <div class="flex items-center gap-2 px-1 pb-1">
+                <a href="/discover/{{ j.id }}" class="text-[11px] text-slate-300 hover:text-slate-100 underline underline-offset-2">Open documents</a>
+                {% if j.jd_url %}
+                  <a href="{{ j.jd_url }}" target="_blank" rel="noopener" hx-boost="false" class="text-[11px] text-slate-300 hover:text-slate-100 underline underline-offset-2">Open posting ↗</a>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
     {% if auto_apply_drafts %}
       <section>
         <header class="flex items-baseline justify-between mb-2 px-1">
@@ -96,7 +124,7 @@
         </header>
         <div class="flex flex-col gap-2">
           {% for j in auto_apply_drafts %}
-            {% with job=j %}
+            {% with job=j, phase=j.phase %}
               {% include "components/up_next_card.html" %}
             {% endwith %}
           {% endfor %}

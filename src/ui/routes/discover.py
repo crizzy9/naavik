@@ -210,26 +210,53 @@ async def post_auto_submit(
 ):
     """Right-swipe — flip Job → QUEUED_FOR_AUTO_APPLY + create DRAFT.
 
-    Plan 59 / 0.2.7.12: schedule a one-off `scheduler.jobs:auto_apply` via
-    APScheduler when `Settings.auto_apply_immediate_dispatch=True`.
+    Honest by construction: the toast says what will ACTUALLY happen given
+    the user's settings and the job's board (auto-submit vs prepared-for-you
+    handoff vs dry-run), and document generation starts immediately in the
+    background so the queue visibly moves.
     """
+    from models.enums import DocsState
+    from services import generation_dispatch
+    from services.ats import board_supports_auto_submit
+
     user_id = _effective_user_id(user)
-    try:
-        await job_service.set_queue_state(
-            session, job_id, user_id=user_id, state=JobQueueState.QUEUED_FOR_AUTO_APPLY
-        )
-    except PermissionError as exc:
-        raise HTTPException(status_code=404, detail="Job not found") from exc
+    job = await _job_or_404(session, job_id, user_id)
     settings = await settings_service.get_or_create(session, user_id=user_id)
-    await application_service.get_or_create_draft(
+    draft = await application_service.queue_auto_apply(
         session, user_id=user_id, job_id=job_id, settings=settings
     )
+    docs_missing = draft.docs_state in {DocsState.NONE, DocsState.STALE, DocsState.FAILED}
+    if docs_missing:
+        draft.docs_state = DocsState.GENERATING
     await session.commit()
+    if docs_missing:
+        generation_dispatch.spawn_generation(draft.id)
     await _maybe_dispatch_auto_apply_now(session, user_id=user_id)
+
+    board = getattr(job, "board", None)
+    if not board_supports_auto_submit(board):
+        board_label = board.value if board else "manual"
+        toast = (
+            f"Queued — {board_label} can't be auto-submitted. Documents are "
+            "being prepared; you'll get a ready-to-submit handoff."
+        )
+        tone = "info"
+    elif not getattr(settings, "auto_apply_enabled", False):
+        toast = (
+            "Queued — auto-apply is OFF in Settings, so documents will be "
+            "prepared for you to submit manually."
+        )
+        tone = "info"
+    elif getattr(settings, "auto_apply_dry_run", False):
+        toast = "Queued (dry-run) — documents will be prepared; no real submission will fire."
+        tone = "info"
+    else:
+        toast = "Queued — documents are being tailored and will be submitted automatically."
+        tone = "success"
     return _with_toast(
         await _next_card_response(request, session, user_id=user_id),
-        "success",
-        "Queued for auto-apply — documents will be tailored and submitted.",
+        tone,
+        toast,
     )
 
 

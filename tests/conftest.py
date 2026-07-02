@@ -440,6 +440,15 @@ def _patch_services_to_sample_data(request, monkeypatch):
             return existing
         return await sd._create_draft(user_id, job_id)
 
+    async def _queue_auto_apply(_session, *, user_id, job_id, settings=None):
+        draft = await _get_or_create_draft(
+            _session, user_id=user_id, job_id=job_id, settings=settings
+        )
+        job = next((j for j in sd.JOBS if j.id == job_id), None)
+        if job is not None:
+            job.queue_state = JobQueueState.QUEUED_FOR_AUTO_APPLY
+        return draft
+
     async def _record_draft_failure(_session, application_id, *, kind, message=""):
         return await sd._apply_failure_to_draft(application_id, kind, message)
 
@@ -492,6 +501,7 @@ def _patch_services_to_sample_data(request, monkeypatch):
     monkeypatch.setattr(application_service, "list_events_for", _list_events_for)
     monkeypatch.setattr(application_service, "create_manual", _create_manual)
     monkeypatch.setattr(application_service, "get_or_create_draft", _get_or_create_draft)
+    monkeypatch.setattr(application_service, "queue_auto_apply", _queue_auto_apply)
     monkeypatch.setattr(application_service, "record_draft_failure", _record_draft_failure)
     monkeypatch.setattr(application_service, "update_status", _update_status)
     monkeypatch.setattr(application_service, "record_screener_answer", _record_screener_answer)

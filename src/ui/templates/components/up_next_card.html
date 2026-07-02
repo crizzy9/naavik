@@ -75,6 +75,15 @@
       </button>
     {% endif %}
   {% endif %}
+  {% if phase %}
+    <span class="relative z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono uppercase tracking-wide shrink-0
+                 {{ 'text-cyan-300' if phase.phase in ('generating', 'docs_ready') else ('text-amber-200' if phase.phase == 'needs_you' else 'text-slate-300') }}"
+          {% if phase.reason %}title="{{ phase.reason }}"{% endif %}
+          data-testid="auto-apply-phase-chip">
+      {% if phase.phase == "generating" %}<span class="h-2 w-2 rounded-full border border-cyan-400 border-t-transparent animate-spin"></span>{% endif %}
+      {{ phase.label }}
+    </span>
+  {% endif %}
   {% if j.score is defined and j.score is not none %}
     <span class="relative z-10 shrink-0">{{ score_circle(score=j.score, size="compact") }}</span>
   {% endif %}

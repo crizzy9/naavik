@@ -43,8 +43,9 @@ class Settings(SQLModel, table=True):
     # Plan 59 (0.2.7.12): when True, right-swipe in Discover schedules a
     # transient `scheduler.jobs:auto_apply` one-off via APScheduler
     # `DateTrigger(now)` instead of waiting for the 5-min cron tick.
-    # Default False preserves the cron-only behavior.
-    auto_apply_immediate_dispatch: bool = Field(default=False)
+    # Default True (migration 0028) — a queued swipe should visibly start
+    # moving within seconds; the 5-min cron remains the fallback.
+    auto_apply_immediate_dispatch: bool = Field(default=True)
     # Plan 63 (0.2.7.10) § D.5 — dual-gate with `auto_apply_score_threshold`.
     # Adapter emits `SubmissionResult.confidence` (HTTP adapters always 1.0;
     # Generic emits LLM-form-fill confidence); below this threshold → revert

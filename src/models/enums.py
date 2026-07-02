@@ -57,6 +57,11 @@ class JobQueueState(StrEnum):
     SAVED = "saved"
     SKIPPED = "skipped"
     QUEUED_FOR_AUTO_APPLY = "queued_for_auto_apply"
+    # Documents are prepared but this job needs YOU to submit (no auto-submit
+    # adapter for the board, auto-apply disabled, dry-run, screeners need
+    # review, or the adapter hit a human-required wall like a CAPTCHA).
+    # The reason lives in `Application.submission_artifacts["auto_apply"]`.
+    READY_TO_SUBMIT = "ready_to_submit"
     APPLIED = "applied"
 
 

@@ -205,21 +205,21 @@ def _restore(app):
 
 def test_field_round_trips_through_settings_service():
     """`update_auto_apply(auto_apply_immediate_dispatch=...)` flushes the
-    field; field default on fresh Settings is False; flip back to False
-    persists (HTMX checkbox tri-state contract).
+    field; default on fresh Settings is True (migration 0028 — a queued
+    swipe should start moving within seconds); flips persist both ways.
     """
     from models import Settings
 
     s = Settings(user_id=1)
-    assert s.auto_apply_immediate_dispatch is False
+    assert s.auto_apply_immediate_dispatch is True
 
     # Simulate the service-layer field-set path (no DB required — the
     # update happens on the in-memory instance before flush).
-    s.auto_apply_immediate_dispatch = True
-    assert s.auto_apply_immediate_dispatch is True
-
     s.auto_apply_immediate_dispatch = False
     assert s.auto_apply_immediate_dispatch is False
+
+    s.auto_apply_immediate_dispatch = True
+    assert s.auto_apply_immediate_dispatch is True
 
 
 # ── Test 2: alembic 0011 round-trip ──────────────────────────────────────

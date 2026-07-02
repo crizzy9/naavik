@@ -24,6 +24,23 @@ from .base import (
     SubmissionResult,
 )
 
+# Boards with a REAL auto-submit path today. Workday / LinkedIn / Indeed /
+# Generic modules exist but return FAILURE_AUTH_REQUIRED stubs until their
+# per-adapter PRs land — queueing those boards for auto-apply would sit
+# forever, so the queue processor routes them to READY_TO_SUBMIT instead.
+SUPPORTED_AUTO_SUBMIT_BOARDS: frozenset[ApplicationBoard] = frozenset(
+    {
+        ApplicationBoard.GREENHOUSE,
+        ApplicationBoard.LEVER,
+        ApplicationBoard.ASHBY,
+    }
+)
+
+
+def board_supports_auto_submit(board: ApplicationBoard | None) -> bool:
+    """True when `board` has a working end-to-end submit adapter."""
+    return board is not None and board in SUPPORTED_AUTO_SUBMIT_BOARDS
+
 
 def dispatch(board: ApplicationBoard) -> ATSAdapter:
     """Return the adapter for `board`. Falls back to manual stub for MANUAL."""
@@ -85,9 +102,11 @@ class _ManualFallbackAdapter(ATSAdapter):
 
 __all__ = [
     "ALL_FAILURE_KINDS",
+    "SUPPORTED_AUTO_SUBMIT_BOARDS",
     "ATSAdapter",
     "ATSError",
     "ApplicationBundle",
+    "board_supports_auto_submit",
     "FAILURE_AUTH_REQUIRED",
     "FAILURE_CAPTCHA",
     "FAILURE_FIELD_MISMATCH",
