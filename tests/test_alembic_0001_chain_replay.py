@@ -115,20 +115,40 @@ def _alembic_upgrade_head(database_url: str) -> None:
 
 @pytest.fixture(scope="module")
 def _live_db_url() -> str:
-    url = os.environ.get("DATABASE_URL")
-    assert url, "NAAVIK_LIVE_DB=1 requires DATABASE_URL to be set"
+    """DESTRUCTIVE-test DB URL — never plain DATABASE_URL.
+
+    The chain-replay fixture below runs `DROP SCHEMA public CASCADE`. When
+    this read plain `DATABASE_URL`, the documented optional gate
+    (`NAAVIK_LIVE_DB=1 uv run pytest`) pointed it at the operator's live
+    dev database and WIPED IT (2026-07-02 incident — all users / jobs /
+    settings lost). Destructive replay is now opt-in via a dedicated env
+    var, with a name-based belt-and-suspenders check.
+    """
+    url = os.environ.get("NAAVIK_CHAIN_REPLAY_DB_URL")
+    if not url:
+        pytest.skip(
+            "chain-replay DROPS the target schema — set NAAVIK_CHAIN_REPLAY_DB_URL "
+            "to a THROWAWAY database (name must contain 'test' or 'replay') to enable"
+        )
+    db_name = url.rsplit("/", 1)[-1].split("?", 1)[0]
+    if "test" not in db_name and "replay" not in db_name:
+        pytest.fail(
+            f"refusing to chain-replay against {db_name!r}: the database name "
+            "must contain 'test' or 'replay' (the fixture DROPs the schema)"
+        )
     return url
 
 
 @pytest.fixture
 def chain_replayed_inspector(_live_db_url: str) -> sa.engine.reflection.Inspector:
-    """Reset the live test DB, apply 0001 → head, return an Inspector."""
+    """Reset the throwaway replay DB, apply 0001 → head, return an Inspector."""
     sync_url = _live_db_url.replace("+asyncpg", "+psycopg")
     engine = sa.create_engine(sync_url)
     with engine.begin() as conn:
         # Drop everything so the test is hermetic across runs.
         conn.execute(sa.text("DROP SCHEMA IF EXISTS public CASCADE"))
         conn.execute(sa.text("CREATE SCHEMA public"))
+        conn.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
     engine.dispose()
     _alembic_upgrade_head(_live_db_url)
     engine = sa.create_engine(sync_url)
