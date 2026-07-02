@@ -35,7 +35,7 @@ class Contact(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
 
     type: ContactType
     name: str
@@ -74,8 +74,8 @@ class ContactApplicationLink(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    application_id: int = Field(foreign_key="application.id", index=True)
-    contact_id: int = Field(foreign_key="contact.id", index=True)
+    application_id: int = Field(foreign_key="application.id", ondelete="CASCADE", index=True)
+    contact_id: int = Field(foreign_key="contact.id", ondelete="CASCADE", index=True)
 
     referral_state: ReferralState = Field(default=ReferralState.NONE)
     introduced_at: datetime | None = Field(
@@ -107,11 +107,12 @@ class OutreachMessage(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
-    contact_id: int = Field(foreign_key="contact.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    contact_id: int = Field(foreign_key="contact.id", ondelete="CASCADE", index=True)
     application_id: int | None = Field(
         default=None,
         foreign_key="application.id",
+        ondelete="SET NULL",
         index=True,
     )
 

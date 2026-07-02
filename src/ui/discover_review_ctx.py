@@ -15,30 +15,16 @@ COVER_LABELS = {
     "close": "CLOSE",
 }
 
-# Module-level mutable shim — stub edits persist for server-process lifetime.
-COVER_SECTION_TEXT: dict[str, str] = {
-    "intro": (
-        "I've spent the last five years owning ML personalization at Intuit, "
-        "and the constraint surface you're tackling at Stripe Atlas is exactly "
-        "the kind of problem I want to land on next."
-    ),
-    "body": (
-        "At Intuit I shipped a personalization platform from prototype to "
-        "production for 100M+ users, lifting homepage CTR by 23% and recovering "
-        "$4.2M in annual revenue based on lift-tested A/B reads. The work spanned "
-        "feature pipelines (Airflow), ranking models (PyTorch), and online "
-        "inference (Go) — and most importantly, the stand-up of an evaluation "
-        "harness that got adopted across three sister teams."
-    ),
-    "why_company": (
-        "Stripe Atlas is the rare team building developer infrastructure that "
-        "actually changes founder behavior. Investing in ranking + retrieval at "
-        "this stage is the bet I'd make myself."
-    ),
-    "close": (
-        "Happy to chat anytime — would love to hear how the team thinks about "
-        "platform investment vs shipping product surface area."
-    ),
+# Cover-letter section text is now sourced from the real generated document
+# (`application_service.get_latest_cover_sections`). The prior module-level
+# hardcoded Intuit/Stripe placeholder was removed — it rendered fake content
+# into every job's review workspace. `_EMPTY_COVER_SECTIONS` is the honest
+# empty state shown before generation runs.
+_EMPTY_COVER_SECTIONS: dict[str, str] = {
+    "intro": "",
+    "body": "",
+    "why_company": "",
+    "close": "",
 }
 
 
@@ -150,15 +136,25 @@ async def build_review_ctx(
     """Build the full Discover · review template context."""
     initial, color = _initial_color(job.company)
 
+    # Real cover-letter section text from the latest generated document; falls
+    # back to an honest empty state (no more hardcoded Intuit/Stripe copy).
+    cover_text = _EMPTY_COVER_SECTIONS
+    cover_generated = False
+    if application is not None:
+        fetched = await application_service.get_latest_cover_sections(session, application.id)
+        if fetched:
+            cover_text = {**_EMPTY_COVER_SECTIONS, **fetched}
+            cover_generated = any(v.strip() for v in fetched.values())
+
     sections = [
-        {"id": "intro", "label": COVER_LABELS["intro"], "text": COVER_SECTION_TEXT["intro"]},
-        {"id": "body", "label": COVER_LABELS["body"], "text": COVER_SECTION_TEXT["body"]},
+        {"id": "intro", "label": COVER_LABELS["intro"], "text": cover_text["intro"]},
+        {"id": "body", "label": COVER_LABELS["body"], "text": cover_text["body"]},
         {
             "id": "why_company",
             "label": COVER_LABELS["why_company"],
-            "text": COVER_SECTION_TEXT["why_company"],
+            "text": cover_text["why_company"],
         },
-        {"id": "close", "label": COVER_LABELS["close"], "text": COVER_SECTION_TEXT["close"]},
+        {"id": "close", "label": COVER_LABELS["close"], "text": cover_text["close"]},
     ]
 
     warm_intro = None
@@ -226,6 +222,7 @@ async def build_review_ctx(
             else []
         ),
         "cover_sections": sections,
+        "cover_generated": cover_generated,
         "screener_answers": screener_views,
         "unreviewed_count": unreviewed,
         "failure": failure,

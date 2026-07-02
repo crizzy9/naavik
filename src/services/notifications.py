@@ -78,6 +78,53 @@ async def stream_toasts() -> AsyncIterator[str]:
         yield f"event: toast\ndata: {json.dumps(payload)}\n\n"
 
 
+# ── Test message (Settings · Notifications "Test" button) ───────────────
+
+
+async def send_test_message(
+    *,
+    channel: str,
+    http_client: httpx.AsyncClient | None = None,
+) -> bool:
+    """Send a real "test" message to `channel` ("discord" | "telegram").
+
+    Returns True on a 2xx from the provider. Unlike the event emitters this
+    ignores per-event toggles (a manual test button should always fire) and
+    talks to the provider directly. Callers pre-check env presence and render
+    the outcome.
+    """
+    text = "✅ Naavik test notification — your channel is wired up correctly."
+    client = http_client or httpx.AsyncClient(timeout=10.0)
+    owns = http_client is None
+    try:
+        if channel == "discord":
+            url = _discord_url()
+            if not url:
+                return False
+            resp = await client.post(url, json={"content": text})
+        elif channel == "telegram":
+            token = _telegram_token()
+            chat = _telegram_chat_id()
+            if not token or not chat:
+                return False
+            resp = await client.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat, "text": text},
+            )
+        else:
+            return False
+        if resp.status_code >= 300:
+            log.warning("%s test message failed: %d %s", channel, resp.status_code, resp.text[:200])
+            return False
+        return True
+    except httpx.RequestError as exc:
+        log.warning("%s test message errored: %s", channel, exc)
+        return False
+    finally:
+        if owns:
+            await client.aclose()
+
+
 # ── Discord webhook ────────────────────────────────────────────────────
 
 

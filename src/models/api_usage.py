@@ -37,10 +37,11 @@ class ApiUsage(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
     application_id: int | None = Field(
         default=None,
         foreign_key="application.id",
+        ondelete="SET NULL",
         index=True,
     )
 

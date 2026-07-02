@@ -32,7 +32,7 @@ from .job_embedding import EMBEDDING_DIM  # shared 768d invariant
 class ProfileEmbedding(SQLModel, table=True):
     __tablename__ = "profile_embedding"
 
-    user_id: int = Field(primary_key=True, foreign_key="user.id")
+    user_id: int = Field(primary_key=True, foreign_key="user.id", ondelete="CASCADE")
 
     embedding: list[float] = Field(
         sa_column=Column(Vector(EMBEDDING_DIM), nullable=False),

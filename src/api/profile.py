@@ -194,6 +194,12 @@ async def post_bullet(
 ):
     if not experience_id:
         raise HTTPException(status_code=422, detail="experience_id is required")
+    user_id = _effective_user_id(_user)
+    if not await profile_service.owns_experience(
+        session, experience_id=experience_id, user_id=user_id
+    ):
+        # 404 (not 403) to avoid leaking existence of other users' experiences.
+        raise HTTPException(status_code=404, detail="Experience not found")
     bullet = await profile_service.add_bullet(
         session,
         experience_id=experience_id,
@@ -215,6 +221,10 @@ async def put_bullet(
 ):
     if fail:
         raise HTTPException(status_code=422, detail="Couldn't save bullet")
+    if not await profile_service.owns_bullet(
+        session, bullet_id=bullet_id, user_id=_effective_user_id(_user)
+    ):
+        raise HTTPException(status_code=404, detail="Bullet not found")
     try:
         bullet = await profile_service.update_bullet(session, bullet_id, text=text)
         await session.commit()
@@ -232,6 +242,10 @@ async def delete_bullet(
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
 ):
+    if not await profile_service.owns_bullet(
+        session, bullet_id=bullet_id, user_id=_effective_user_id(_user)
+    ):
+        raise HTTPException(status_code=404, detail="Bullet not found")
     deleted = await profile_service.delete_bullet(session, bullet_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Bullet not found")
@@ -246,14 +260,64 @@ async def post_bullet_rewrite(
     bullet_id: int,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
-    """Stub LLM rewrite — Wave 6 wires `prompts/auto_tag_bullets` + a rewrite prompt."""
+    """Rewrite a bullet with the configured LLM (tighten to one resume line,
+    preserving numbers + verbs).
+
+    Was a stub that appended a literal " (rewritten by AI)" — a fake-success
+    state. Now calls the real provider via the `trim_bullet` prompt through
+    `llm_tracker.tracked_call` (so ApiUsage is recorded). Returns a friendly
+    422 when no LLM provider is configured instead of pretending it worked.
+    The rewrite is NOT persisted — the client shows it as a suggested edit the
+    user accepts via the normal bullet PUT.
+    """
+    from llm import get_provider
+    from llm.base import LLMProviderError
+    from llm.prompts.trim_bullet import PROMPT as TRIM_PROMPT
+    from llm.prompts.trim_bullet import TrimmedBullet
+    from services import llm_tracker, settings_service
+
+    user_id = _effective_user_id(_user)
+    if not await profile_service.owns_bullet(session, bullet_id=bullet_id, user_id=user_id):
+        raise HTTPException(status_code=404, detail="Bullet not found")
     bullet = await profile_service.get_bullet(session, bullet_id)
     if bullet is None:
         raise HTTPException(status_code=404, detail="Bullet not found")
+
+    s = await settings_service.get_or_create(session, user_id=user_id)
+    try:
+        provider = get_provider(s)
+    except Exception as exc:  # noqa: BLE001 — surface config gaps as 422, not 500
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "No LLM provider configured. Set an API key (ANTHROPIC_API_KEY / "
+                "OPENAI_API_KEY) or OLLAMA_BASE_URL in .env and restart to enable "
+                "AI rewrite."
+            ),
+        ) from exc
+
+    rendered = TRIM_PROMPT.format(text=bullet.text, target_chars=160)
+    try:
+        result = await llm_tracker.tracked_call(
+            session=session,
+            user_id=user_id,
+            provider=provider,
+            method="structured",
+            prompt_name="trim_bullet",
+            prompt=rendered,
+            schema=TrimmedBullet,
+        )
+        await session.commit()
+    except LLMProviderError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=502, detail=f"LLM rewrite failed: {exc}") from exc
+
+    trimmed = TrimmedBullet.model_validate(result.value)
     return {
         "id": bullet.id,
-        "text": bullet.text + " (rewritten by AI)",
+        "text": trimmed.trimmed,
         "tags": list(bullet.tags or []),
         "edited": True,
     }
@@ -273,6 +337,10 @@ async def post_bullets_reorder(
     if not experience_id:
         # Need experience_id to scope; fall back to no-op.
         return Response(status_code=204)
+    if not await profile_service.owns_experience(
+        session, experience_id=int(experience_id), user_id=_effective_user_id(_user)
+    ):
+        raise HTTPException(status_code=404, detail="Experience not found")
     try:
         ids = [int(bid) for bid in bullet_ids]
     except (TypeError, ValueError) as exc:

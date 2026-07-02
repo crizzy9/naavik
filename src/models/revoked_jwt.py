@@ -22,7 +22,7 @@ class RevokedJwt(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     jti: str = Field(unique=True, index=True, max_length=64)
-    user_id: int = Field(foreign_key="user.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
     revoked_at: datetime = Field(
         default_factory=utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),

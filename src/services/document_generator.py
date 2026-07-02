@@ -872,6 +872,17 @@ async def generate_cover_letter(
     sota_meta = {
         k.removeprefix("_sota_"): v for k, v in letter_dict.items() if k.startswith("_sota_")
     }
+    # Persist the rendered section text so the Discover review workspace can
+    # display the ACTUAL generated cover letter (it previously fell back to a
+    # hardcoded Intuit/Stripe placeholder because the section text lived only
+    # inside the compiled PDF). Stored under `sections` in the same JSONB blob.
+    blob: dict[str, Any] = dict(sota_meta)
+    blob["sections"] = {
+        "intro": str(typst_letter.get("intro", "")),
+        "body": str(typst_letter.get("body", "")),
+        "why_company": str(typst_letter.get("why_company", "")),
+        "close": str(typst_letter.get("close", "")),
+    }
     doc = GeneratedDocument(
         application_id=application.id,
         kind=GeneratedDocumentKind.COVER_LETTER,
@@ -880,7 +891,7 @@ async def generate_cover_letter(
         page_count=compile_result.page_count,
         compiled_at=compile_result.compiled_at,
         model=settings.llm_model,
-        bullet_selection=sota_meta if sota_meta else None,
+        bullet_selection=blob,
     )
     session.add(doc)
     await session.flush()

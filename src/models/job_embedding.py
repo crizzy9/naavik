@@ -31,8 +31,8 @@ EMBEDDING_DIM = 768
 class JobEmbedding(SQLModel, table=True):
     __tablename__ = "job_embedding"
 
-    job_id: int = Field(primary_key=True, foreign_key="job.id")
-    user_id: int = Field(foreign_key="user.id", index=True)
+    job_id: int = Field(primary_key=True, foreign_key="job.id", ondelete="CASCADE")
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
 
     embedding: list[float] = Field(
         sa_column=Column(Vector(EMBEDDING_DIM), nullable=False),

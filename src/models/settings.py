@@ -29,7 +29,7 @@ from .enums import DeploymentMode, LLMProvider
 class Settings(SQLModel, table=True):
     __tablename__ = "settings"
 
-    user_id: int = Field(primary_key=True, foreign_key="user.id")
+    user_id: int = Field(primary_key=True, foreign_key="user.id", ondelete="CASCADE")
 
     # LLM
     llm_provider: LLMProvider = Field(default=LLMProvider.ANTHROPIC)

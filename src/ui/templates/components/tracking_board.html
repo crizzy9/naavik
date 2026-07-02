@@ -23,9 +23,15 @@
       <span class="font-mono tabular-nums">{{ closed_count | default(0) }}</span>
       closed (rejected · withdrawn · ghosted)
     </span>
+    {# Toggle swaps the board FRAGMENT (not the full page) into #tracking-main.
+       Was `hx-get="/tracking?..."` which returns the whole base.html shell and
+       nested a second sidebar/page inside the region — the owner-reported
+       "Show closed does nothing" bug. `hx-push-url` keeps the address bar in
+       sync so a refresh preserves the filter. #}
     <a href="/tracking?show_closed={{ '0' if show_closed else '1' }}"
-       hx-get="/tracking?show_closed={{ '0' if show_closed else '1' }}"
+       hx-get="/_fragments/tracking/board?show_closed={{ '0' if show_closed else '1' }}"
        hx-target="#tracking-main" hx-swap="innerHTML"
+       hx-push-url="/tracking?show_closed={{ '0' if show_closed else '1' }}"
        class="text-xs hover:text-slate-100 transition">
       {{ "Hide closed" if show_closed else "Show closed" }}
     </a>

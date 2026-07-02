@@ -105,6 +105,46 @@ async def get_bullet(session: AsyncSession, bullet_id: int) -> Bullet | None:
     return (await session.exec(stmt)).one_or_none()
 
 
+async def owns_bullet(session: AsyncSession, *, bullet_id: int, user_id: int) -> bool:
+    """True iff `bullet_id` belongs to `user_id` (bullet → experience → profile).
+
+    IDOR guard for the `/api/v1/bullets/*` mutation endpoints. Bullets carry
+    no direct `user_id`; ownership is resolved through the
+    Bullet → Experience → Profile chain.
+    """
+    stmt = (
+        select(Bullet.id)
+        .join(Experience, Experience.id == Bullet.experience_id)
+        .join(Profile, Profile.id == Experience.profile_id)
+        .where(
+            Bullet.id == bullet_id,
+            Bullet.deleted_at.is_(None),
+            Profile.user_id == user_id,
+            Profile.deleted_at.is_(None),
+        )
+    )
+    return (await session.exec(stmt)).one_or_none() is not None
+
+
+async def owns_experience(session: AsyncSession, *, experience_id: int, user_id: int) -> bool:
+    """True iff `experience_id` belongs to `user_id` (experience → profile).
+
+    IDOR guard for `POST /api/v1/bullets` (bullet creation targets an
+    experience the caller must own).
+    """
+    stmt = (
+        select(Experience.id)
+        .join(Profile, Profile.id == Experience.profile_id)
+        .where(
+            Experience.id == experience_id,
+            Experience.deleted_at.is_(None),
+            Profile.user_id == user_id,
+            Profile.deleted_at.is_(None),
+        )
+    )
+    return (await session.exec(stmt)).one_or_none() is not None
+
+
 # Plan 60 / 0.2.7.17 — list accessors used to live in `src/db/sample_data.py`.
 # Replacements consume an AsyncSession + user_id; each joins via Profile
 # (`Profile.user_id == user_id`) since the children carry `profile_id` rather

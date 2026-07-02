@@ -37,7 +37,7 @@ class ProfileAnswer(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
 
     question_fingerprint: str = Field(index=True, max_length=256)
     question_text_sample: str = Field(max_length=1024)
@@ -45,6 +45,7 @@ class ProfileAnswer(SQLModel, table=True):
 
     source_screener_answer_id: int = Field(
         foreign_key="application_screener_answer.id",
+        ondelete="CASCADE",
     )
 
     times_offered: int = Field(default=0)

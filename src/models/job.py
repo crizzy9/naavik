@@ -65,7 +65,7 @@ class Job(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
 
     source: JobSource
     board: ApplicationBoard
@@ -131,12 +131,14 @@ class Job(SQLModel, table=True):
     warm_intro_contact_id: int | None = Field(
         default=None,
         foreign_key="contact.id",
+        ondelete="SET NULL",
     )
     # FK to the JobScrapeRun row that most recently touched this Job.
     # NULL until the first scrape-run write lands (plan 27 § D.2).
     last_scrape_run_id: int | None = Field(
         default=None,
         foreign_key="job_scrape_run.id",
+        ondelete="SET NULL",
     )
     # Tier-3 fuzzy dedup link (plan 34 § D.3). Self-FK; ON DELETE SET NULL
     # so archiving the canonical Job re-surfaces shadowed rows in Discover.

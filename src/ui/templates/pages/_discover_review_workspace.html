@@ -142,16 +142,14 @@
           <button id="apply-cover-regen" type="button"
                   class="text-xs text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-800"
                   hx-post="/api/v1/applications/{{ application.id }}/cover-letter/generate"
-                  hx-swap="none">
+                  hx-target="#apply-cover-letter-text"
+                  hx-swap="innerHTML"
+                  hx-indicator="#apply-cover-regen">
             <i data-lucide="refresh-cw" class="h-3.5 w-3.5 inline" stroke-width="1.5"></i> Regen
           </button>
         </header>
         <div id="apply-cover-letter-text" class="flex flex-col gap-1 px-3 py-3">
-          {% for s in cover_sections %}
-            {% with application_id=application.id, section=s.id, label=s.label, text=s.text, mode="view" %}
-              {% include "components/cover_letter_section.html" %}
-            {% endwith %}
-          {% endfor %}
+          {% include "pages/_apply_cover_letter_text.html" with context %}
         </div>
 
         <div class="px-5 pt-2 pb-3 border-t border-slate-800/50">

@@ -16,16 +16,7 @@
     <span class="font-mono text-sm text-slate-300">v{{ version }}</span>
   </div>
   <div class="text-sm text-slate-400 flex-1 min-w-0 truncate">{{ meta }}</div>
-  <div class="flex items-center gap-2 shrink-0">
-    <button type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm font-medium transition">
-      <i data-lucide="refresh-ccw" class="h-4 w-4" stroke-width="1.5"></i>
-      Restart
-    </button>
-    {% if update_available_version %}
-      <button type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium transition">
-        <i data-lucide="download" class="h-4 w-4" stroke-width="1.5"></i>
-        Update v{{ update_available_version }}
-      </button>
-    {% endif %}
-  </div>
+  {# Restart / update are owned by the process supervisor (Docker / systemd),
+     not the app — the previous in-app buttons were non-functional stubs and
+     have been removed. See Settings · Deployment § Logs for the real commands. #}
 </div>

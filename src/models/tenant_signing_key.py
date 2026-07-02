@@ -38,7 +38,7 @@ class TenantSigningKey(SQLModel, table=True):
     __table_args__ = (Index("ix_tenant_signing_key_tenant_status", "tenant_id", "status"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    tenant_id: int = Field(foreign_key="tenant.id", nullable=False, index=True)
+    tenant_id: int = Field(foreign_key="tenant.id", ondelete="CASCADE", nullable=False, index=True)
     kid: str = Field(nullable=False, max_length=64, unique=True, index=True)
     algorithm: SigningAlgorithm
     status: TenantSigningKeyStatus = Field(default=TenantSigningKeyStatus.ACTIVE)

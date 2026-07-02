@@ -84,6 +84,13 @@ _TABLES_CREATED_LATER: frozenset[str] = frozenset(
         "tenant",  # 0014 plan 62
         "tenant_signing_key",  # 0014 plan 62
         "profile_embedding",  # 0017 plan 65
+        # 0024 plan 90 (0.5.0.01). Omitting these was a fresh-install blocker:
+        # 0001 created them from LIVE metadata, then 0024's `op.create_table`
+        # collided with "relation email_account already exists" and the chain
+        # halted at 0021. (email_thread is intentionally NOT here — it has no
+        # dedicated create migration, so 0001 owns its creation.)
+        "email_account",  # 0024 plan 90
+        "email_message",  # 0024 plan 90
     }
 )
 

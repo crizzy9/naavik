@@ -597,8 +597,19 @@ async def require_authed_session(
     if not naavik_session:
         _raise_unauthenticated("Not authenticated")
 
+    # SECURITY (production hardening): the plan-09 `fake-1` cookie is a dev-only
+    # bootstrap that maps every caller to the seeded owner (user_id=1). Honoring
+    # it in production is a full authentication bypass — any request carrying
+    # `Cookie: naavik_session=fake-1` gains owner access. Gate it behind
+    # `settings.debug` (NAAVIK_DEBUG=1), which is already documented as dev-only
+    # and loosens other guards (SECRET_KEY validator). Outside debug the fake
+    # value is treated as an invalid session and rejected like any other.
     if naavik_session == FAKE_SESSION_VALUE:
-        return None
+        from config import settings as _app_settings
+
+        if _app_settings.debug:
+            return None
+        _raise_unauthenticated("Not authenticated")
 
     result = await verify_jwt_async(session, naavik_session)
     if result is None:

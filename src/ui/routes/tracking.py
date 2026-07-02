@@ -89,15 +89,19 @@ async def fragment_board(
 @router.get("/_fragments/tracking/list", response_class=HTMLResponse, name="tracking_list_fragment")
 async def fragment_list(
     request: Request,
+    show_closed: Annotated[int, Query()] = 1,
     show_drafts: Annotated[int, Query()] = 0,
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
+    # Honor the caller's `show_closed` param (defaults to 1 — the list view
+    # historically showed everything). Previously this was hardcoded to True,
+    # so the list view ignored the toggle entirely.
     ctx = await tctx.build_tracking_ctx(
         session,
         user_id=_effective_user_id(user),
         view="list",
-        show_closed=True,
+        show_closed=bool(show_closed),
         show_drafts=bool(show_drafts),
     )
     return templates.TemplateResponse(request, "pages/_tracking_list.html", ctx)
@@ -644,19 +648,65 @@ async def get_application_bundle(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
-    """Stub bundle — returns a tiny ZIP placeholder so the link works end-to-end."""
+    """Download the REAL generated bundle for an application as a ZIP.
+
+    Was a stub that zipped placeholder ("%PDF-1.4\\n%placeholder") bytes. Now
+    reads the actual generated resume/cover-letter PDFs off disk and includes
+    the real screener answers. Returns 409 (not a fake ZIP) when nothing has
+    been generated yet, so the user gets an honest "generate first" signal.
+    """
     import io
+    import json as _json
     import zipfile
+    from pathlib import Path as _Path
 
     a = await application_service.get_application(session, application_id)
     if a is None or a.user_id != _effective_user_id(user):
         raise HTTPException(status_code=404, detail="Application not found")
+
+    docs = await application_service.latest_documents(session, application_id)
+    screeners = await application_service.list_screener_answers_for(session, application_id)
+
+    if not docs:
+        raise HTTPException(
+            status_code=409,
+            detail="No generated documents yet — generate the bundle first.",
+        )
+
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("metadata.json", f'{{"application_id": {application_id}}}')
-        zf.writestr("resume.pdf", "%PDF-1.4\n%placeholder\n")
-        zf.writestr("cover-letter.pdf", "%PDF-1.4\n%placeholder\n")
-        zf.writestr("screener-answers.json", "[]")
+    included = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "metadata.json",
+            _json.dumps(
+                {
+                    "application_id": application_id,
+                    "company": a.company,
+                    "role": a.role,
+                    "documents": [d.kind.value for d in docs],
+                },
+                indent=2,
+            ),
+        )
+        for d in docs:
+            path = _Path(d.path)
+            if path.exists() and path.is_file():
+                zf.write(path, arcname=f"{d.kind.value.lower()}.pdf")
+                included += 1
+        zf.writestr(
+            "screener-answers.json",
+            _json.dumps(
+                [{"question": s.question_text, "answer": s.answer} for s in screeners],
+                indent=2,
+            ),
+        )
+
+    if included == 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Generated document files are missing on disk — regenerate the bundle.",
+        )
+
     buf.seek(0)
     return Response(
         content=buf.read(),

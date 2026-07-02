@@ -333,10 +333,13 @@ def test_applications_manual_creates_row(client):
     assert r.headers.get("hx-redirect") == "/tracking"
 
 
-def test_applications_bundle_returns_zip(client):
+def test_applications_bundle_409_when_nothing_generated(client):
+    """Hardening pass: the bundle download now serves REAL generated PDFs (was
+    a stub that zipped "%PDF-1.4\\n%placeholder" bytes). With no generated
+    documents it returns an honest 409 rather than a fake ZIP."""
     r = client.get("/api/v1/applications/1/bundle")
-    assert r.status_code == 200
-    assert r.headers.get("content-type") == "application/zip"
+    assert r.status_code == 409
+    assert "generate" in r.text.lower()
 
 
 # ── Settings ─────────────────────────────────────────────────────────────
@@ -385,28 +388,38 @@ def _override_account_password_dep(*, flagged: bool):
     return app, lambda: app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_settings_account_password_ok(client):
-    """Plan 18 (PC.6) re-loop: the stub is gated by `require_password_complete`
-    — unflagged user still reaches the 200 happy-path response.
+def test_settings_account_password_wrong_current_returns_422(client):
+    """Hardening pass: the Settings · Account password change is now a REAL
+    mutation (was a stub that always returned "Password updated."). A wrong
+    current password is rejected with 422 before any DB write — no more
+    fake-success.
     """
     _app, restore = _override_account_password_dep(flagged=False)
     try:
-        r = client.put("/api/v1/settings/account/password", data={"current": "x", "new": "y"})
-    finally:
-        restore()
-    assert r.status_code == 200
-
-
-def test_settings_account_password_fail(client):
-    _app, restore = _override_account_password_dep(flagged=False)
-    try:
         r = client.put(
-            "/api/v1/settings/account/password?fail=1",
-            data={"current": "x", "new": "y"},
+            "/api/v1/settings/account/password",
+            data={"current": "definitely-wrong", "new": "N3w-Strong-Pw!"},
+            headers=_CSRF_HEADERS,
         )
     finally:
         restore()
     assert r.status_code == 422
+    assert "incorrect" in r.text.lower()
+    assert "Password updated" not in r.text
+
+
+def test_settings_account_password_requires_csrf(client):
+    """State-changing password route is CSRF-gated (double-submit)."""
+    _app, restore = _override_account_password_dep(flagged=False)
+    try:
+        r = client.put(
+            "/api/v1/settings/account/password",
+            data={"current": "x", "new": "y"},
+            headers={"X-CSRF-Token": "mismatched-token"},
+        )
+    finally:
+        restore()
+    assert r.status_code == 403
 
 
 def test_settings_account_password_redirects_flagged_user(client):
@@ -432,14 +445,24 @@ def test_settings_account_password_redirects_flagged_user(client):
     assert "Password updated" not in r.text
 
 
-def test_settings_deployment_restart_self_hosted_returns_202(client):
+def test_settings_deployment_restart_endpoint_removed(client):
+    """The fake in-app "Restart" endpoint (returned 202 without restarting)
+    was removed in the hardening pass — process lifecycle belongs to the
+    supervisor (Docker/systemd). The route no longer exists."""
     r = client.post("/api/v1/settings/deployment/restart")
-    assert r.status_code == 202
+    assert r.status_code == 404
 
 
-def test_settings_notifications_test_discord(client):
-    r = client.post("/api/v1/settings/notifications/test?channel=discord")
-    assert r.status_code == 200
+def test_settings_notifications_test_discord_reports_unconfigured(client):
+    """Notification test is now a REAL send (was a fake "Sent test message").
+    With no DISCORD_WEBHOOK_URL configured it honestly reports 422 rather than
+    pretending success."""
+    r = client.post(
+        "/api/v1/settings/notifications/test?channel=discord",
+        headers=_CSRF_HEADERS,
+    )
+    assert r.status_code == 422
+    assert "DISCORD_WEBHOOK_URL" in r.text
 
 
 # ── Integrations + email ─────────────────────────────────────────────────

@@ -9,15 +9,19 @@ an input. Deployment-tab context drops the vault-locked banner triplet.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import _set_session_cookies, require_csrf
+from config import settings as app_settings
 from db.session import get_session
 from models import JobScrapeRunRead, JobSource, User
 from services import (
+    account_service,
     application_service,
     env_secrets,
     job_service,
@@ -25,7 +29,17 @@ from services import (
     profile_service,
     settings_service,
 )
-from services.auth import require_authed_session, require_password_complete
+from services.auth import (
+    SESSION_COOKIE,
+    hash_password_with_complexity_check,
+    issue_csrf_token,
+    issue_jwt_async,
+    require_authed_session,
+    require_password_complete,
+    revoke_jwt,
+    verify_jwt_async,
+    verify_password,
+)
 from ui.templates_setup import templates
 
 router = APIRouter()
@@ -114,76 +128,88 @@ def _llm_default_model_for(provider_id: str) -> str:
     return options[0] if options else ""
 
 
-_LOG_LINES_SEED = [
-    {
-        "timestamp": "14:02:41",
-        "level": "INFO",
-        "message": "discover.fetch  · pulled 24 jobs from greenhouse · 312ms",
-    },
-    {
-        "timestamp": "14:02:41",
-        "level": "INFO",
-        "message": "discover.match  · scored 24 jobs · avg fit 71%",
-    },
-    {
-        "timestamp": "14:03:02",
-        "level": "INFO",
-        "message": "apply.submit    · zed industries / sr fullstack · ok · 4.2s",
-    },
-    {
-        "timestamp": "14:03:18",
-        "level": "INFO",
-        "message": "resume.tailor   · llm=claude-3.5-sonnet · 412ms · 1184 tok",
-    },
-    {
-        "timestamp": "14:03:18",
-        "level": "INFO",
-        "message": "cover.draft     · llm=claude-3.5-sonnet · 689ms · 2104 tok",
-    },
-    {
-        "timestamp": "14:04:55",
-        "level": "WARN",
-        "message": "tracking.imap   · gmail oauth token refreshing · 1 retry",
-    },
-    {
-        "timestamp": "14:05:14",
-        "level": "ERROR",
-        "message": "apply.submit    · vercel / sr designer · captcha required → moved to review queue",
-    },
-    {
-        "timestamp": "14:05:30",
-        "level": "INFO",
-        "message": "outreach.send   · 3 linkedin DMs queued · sending in 4m",
-    },
-    {
-        "timestamp": "14:05:48",
-        "level": "INFO",
-        "message": "db.snapshot     · ~/.naavik/data/snapshots/2026-04-29.sql.gz",
-    },
-]
+# Deployment-tab log tail was a hardcoded fake-activity seed (0.7.0-era stub).
+# Removed: self-hosters read real logs via `docker compose logs -f naavik`
+# (Docker) or `journalctl -u naavik -f` (NixOS). The template now links to
+# those instead of streaming a fabricated feed.
 
 
-# Plan 26 (0.2.0.01): SECRETS row replaced; CONFIG row now points at .env.
-_ON_DISK = [
-    {
-        "label": "DATA DIR",
-        "path": "~/.naavik/data",
-        "sub": "412 MB · 27 jobs · 14 applications",
-        "icon": "folder",
-    },
-    {
-        "label": "CONFIG",
-        "path": ".env",
-        "sub": "env-loaded · gitignored",
-        "icon": "file-cog",
-    },
-    {
-        "label": "SNAPSHOTS",
-        "path": "~/.naavik/snapshots/",
-        "sub": "8 daily · auto-prune at 30",
-        "icon": "archive",
-    },
-]
+def _dir_size_human(path: Path) -> str:
+    """Best-effort human-readable total size of `path` (empty string on error)."""
+    try:
+        total = float(sum(f.stat().st_size for f in path.glob("**/*") if f.is_file()))
+    except OSError:
+        return ""
+    for unit in ("B", "KB", "MB", "GB"):
+        if total < 1024 or unit == "GB":
+            return f"{total:.0f} {unit}"
+        total /= 1024
+    return ""
+
+
+async def _on_disk_view(session: AsyncSession | None, *, user_id: int) -> list[dict[str, object]]:
+    """Real on-disk footprint for the Deployment tab.
+
+    Replaces the hardcoded "412 MB · 27 jobs · 14 applications" fixture with
+    live counts (jobs + applications for the user) and the actual configured
+    data directory + its real size.
+    """
+    from pathlib import Path as _Path
+
+    data_dir = _Path(app_settings.data_dir)
+    job_count = app_count = 0
+    if session is not None:
+        # Graceful degrade: a session double without a live `.exec` (test
+        # NoopSession) falls back to zero counts rather than crashing the tab.
+        try:
+            from sqlmodel import func, select
+
+            from models import Application, Job
+
+            job_count = int(
+                (
+                    await session.exec(
+                        select(func.count(Job.id)).where(
+                            Job.user_id == user_id, Job.deleted_at.is_(None)
+                        )
+                    )
+                ).one()
+                or 0
+            )
+            app_count = int(
+                (
+                    await session.exec(
+                        select(func.count(Application.id)).where(
+                            Application.user_id == user_id, Application.deleted_at.is_(None)
+                        )
+                    )
+                ).one()
+                or 0
+            )
+        except Exception:  # noqa: BLE001 — degrade, never 500 the tab
+            job_count = app_count = 0
+
+    size_label = _dir_size_human(data_dir) if data_dir.exists() else "not created yet"
+    return [
+        {
+            "label": "DATA DIR",
+            "path": str(data_dir),
+            "sub": f"{size_label} · {job_count} jobs · {app_count} applications",
+            "icon": "folder",
+        },
+        {
+            "label": "CONFIG",
+            "path": ".env",
+            "sub": "env-loaded · gitignored",
+            "icon": "file-cog",
+        },
+        {
+            "label": "UPLOADS",
+            "path": str(data_dir / "uploads"),
+            "sub": "resume PDFs (per-user)",
+            "icon": "file-text",
+        },
+    ]
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -246,11 +272,12 @@ async def _ctx_for_tab(
         "active_provider": active_provider,
         "save_status": None,
         "deployment": deployment_info,
-        "log_lines": _LOG_LINES_SEED,
-        "on_disk": _ON_DISK,
         "active_sidebar": "settings",
         "active_template_path": "/settings/:tab" if tab != "llm-provider" else "/settings",
     }
+
+    if tab == "deployment":
+        ctx["on_disk"] = await _on_disk_view(session, user_id=user_id)
 
     if tab == "sources":
         ctx["sources_view"] = await _build_sources_view(session, user_id=user_id)
@@ -438,7 +465,6 @@ async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> 
     configured indicator via `env_secrets.scraper_source_configured`,
     (d) resolved rate-limit via `scraper.rate_limit.resolve_rate_limit`.
     """
-    from config import settings as app_settings
     from scraper.rate_limit import resolve_rate_limit
 
     if session is None:
@@ -664,19 +690,48 @@ async def _build_security_view(session: AsyncSession | None, *, user_id: int) ->
     }
 
 
+def _app_version() -> str:
+    """Resolve the real installed package version (falls back to pyproject)."""
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        try:
+            return version("naavik")
+        except PackageNotFoundError:
+            return "dev"
+    except Exception:  # noqa: BLE001
+        return "dev"
+
+
 async def _deployment_render_info(settings) -> dict[str, object]:
     """Build the `deployment` ctx dict consumed by `_settings_deployment.html`.
 
-    Plan 26 (0.2.0.01): vault status fields removed. The template no longer
-    renders the rose vault-locked banner.
+    Plan 26 (0.2.0.01): vault status fields removed.
+
+    Hardening pass: previously returned hardcoded uptime ("14d 6h"), a fake
+    "last restart Apr 14", and a fake "update available v0.4.3" that rendered a
+    non-functional Update button. Now reports only real, verifiable facts:
+    deployment mode, the actual package version, whether the scheduler is
+    running, and the configured data directory. No fake update prompt.
     """
     mode_value = settings.deployment_mode.value if settings else "self_hosted"
+    scheduler_running = False
+    try:
+        from scheduler import is_running as _sched_running
+
+        scheduler_running = bool(_sched_running())
+    except Exception:  # noqa: BLE001 — scheduler optional
+        scheduler_running = False
     return {
         "mode": "self-hosted" if mode_value == "self_hosted" else "cloud",
         "status": "active",
-        "version": "0.4.2",
-        "meta": "docker-compose · uptime 14d 6h · last restart Apr 14",
-        "update_available_version": "0.4.3",
+        "version": _app_version(),
+        "meta": (
+            f"{'scheduler running' if scheduler_running else 'scheduler stopped'}"
+            f" · data dir {app_settings.data_dir}"
+        ),
+        "update_available_version": None,
+        "scheduler_running": scheduler_running,
     }
 
 
@@ -891,15 +946,40 @@ async def put_notifications(
 async def post_notifications_test(
     request: Request,
     channel: Annotated[Literal["discord", "telegram"], Query()],
-    fail: Annotated[str | None, Query()] = None,
-    _user: User | None = Depends(require_authed_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
-    if fail:
+    """Send a REAL test message to the configured Discord/Telegram channel.
+
+    Was a stub that reported success without sending anything. Now dispatches
+    an actual message via `services.notifications` and reports the true
+    outcome — including an honest "not configured" message when the channel's
+    env var is unset.
+    """
+    from services import notifications
+
+    if channel == "discord" and not app_settings.discord_webhook_url:
         return HTMLResponse(
-            f'<span class="text-rose-300">Couldn\'t reach {channel}.</span>',
-            status_code=502,
+            '<span class="text-amber-300">DISCORD_WEBHOOK_URL not set in .env.</span>',
+            status_code=422,
         )
-    return HTMLResponse(f'<span class="text-emerald-300">Sent test {channel} message.</span>')
+    if channel == "telegram" and not (
+        app_settings.telegram_bot_token and app_settings.telegram_chat_id
+    ):
+        return HTMLResponse(
+            '<span class="text-amber-300">TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set '
+            "in .env.</span>",
+            status_code=422,
+        )
+
+    ok = await notifications.send_test_message(channel=channel)
+    if ok:
+        return HTMLResponse(f'<span class="text-emerald-300">Sent a test {channel} message.</span>')
+    return HTMLResponse(
+        f'<span class="text-rose-300">Couldn\'t reach {channel} — check the '
+        "webhook/token and Naavik logs.</span>",
+        status_code=502,
+    )
 
 
 @router.get("/api/v1/settings/deployment", name="settings_deployment_get")
@@ -908,51 +988,24 @@ async def get_deployment(
     user: User | None = Depends(require_authed_session),
 ):
     settings = await settings_service.get_or_create(session, user_id=_effective_user_id(user))
+    scheduler_running = False
+    try:
+        from scheduler import is_running as _sched_running
+
+        scheduler_running = bool(_sched_running())
+    except Exception:  # noqa: BLE001
+        scheduler_running = False
     return {
         "mode": settings.deployment_mode.value,
-        "version": "0.4.2",
-        "uptime_seconds": 14 * 86400 + 6 * 3600,
-        "scheduler_status": "running",
-        "data_dir": "~/.naavik/data",
+        "version": _app_version(),
+        "scheduler_status": "running" if scheduler_running else "stopped",
+        "data_dir": app_settings.data_dir,
     }
 
 
-@router.post("/api/v1/settings/deployment/restart", name="settings_deployment_restart")
-async def post_deployment_restart(
-    session: AsyncSession = Depends(get_session),
-    user: User | None = Depends(require_authed_session),
-):
-    settings = await settings_service.get_or_create(session, user_id=_effective_user_id(user))
-    if settings.deployment_mode.value == "cloud":
-        raise HTTPException(status_code=405, detail="Restart not allowed on cloud")
-    return Response(status_code=202)
-
-
-@router.get("/api/v1/settings/deployment/logs", name="settings_deployment_logs")
-async def get_deployment_logs():
-    """SSE stream — emits log lines on a 30s loop."""
-
-    async def gen():
-        i = 0
-        while i < 12:  # ~12 events then stop (clients reconnect)
-            ln = _LOG_LINES_SEED[i % len(_LOG_LINES_SEED)]
-            color = {
-                "INFO": "text-cyan-400",
-                "WARN": "text-amber-400",
-                "ERROR": "text-rose-400",
-            }.get(ln["level"], "text-slate-300")
-            html = (
-                '<div class="flex gap-3">'
-                f'<span class="text-slate-500 tabular-nums">{ln["timestamp"]}</span>'
-                f'<span class="{color} font-medium">{ln["level"]}</span>'
-                f'<span class="text-slate-300">{ln["message"]}</span>'
-                "</div>"
-            )
-            yield f"event: logline\ndata: {html}\n\n"
-            i += 1
-            await asyncio.sleep(0.5)
-
-    return StreamingResponse(gen(), media_type="text/event-stream")
+# The fake in-app "Restart" endpoint (returned 202 without restarting) and the
+# fabricated log-stream SSE endpoint were removed in the hardening pass. Process
+# lifecycle is owned by the supervisor (Docker / systemd); logs are read there.
 
 
 @router.get("/api/v1/settings/account", name="settings_account_get")
@@ -977,27 +1030,102 @@ async def put_account(
 @router.put("/api/v1/settings/account/password", name="settings_account_password")
 async def put_account_password(
     request: Request,
-    fail: Annotated[str | None, Query()] = None,
-    _user: User = Depends(require_password_complete),
+    user: User = Depends(require_password_complete),
+    session: AsyncSession = Depends(get_session),
+    naavik_session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    _csrf: None = Depends(require_csrf),
 ):
-    # Phase 1 stub: real password mutation happens via
-    # `POST /api/v1/auth/change-password` in `src/api/auth.py`. Gated with
-    # `require_password_complete` so a flagged user can't bypass the must-
-    # change flow + complexity check via the Settings · Account form.
-    if fail:
+    """Change the account password from Settings · Account.
+
+    Was a stub that always returned "Password updated." without touching the
+    DB (a fake-success state). Now performs the real mutation: re-verify the
+    current password, complexity-check the new one, rotate the bcrypt hash,
+    revoke the presenting JWT, and re-issue session + CSRF cookies. Returns an
+    inline `#account-password-result` fragment (kept on the Settings page)
+    rather than the login-card redirect the `/api/v1/auth/change-password`
+    endpoint emits.
+    """
+    form = await request.form()
+    current = str(form.get("current") or "")
+    new = str(form.get("new") or "")
+
+    if not current or not new:
         return HTMLResponse(
-            '<span class="text-rose-300">Current password incorrect.</span>',
+            '<span class="text-rose-300">Current and new passwords are required.</span>',
             status_code=422,
         )
-    return HTMLResponse('<span class="text-emerald-300">Password updated.</span>')
+    if not verify_password(current, user.password_hash):
+        return HTMLResponse(
+            '<span class="text-rose-300">Current password is incorrect.</span>',
+            status_code=422,
+        )
+    if new == current:
+        return HTMLResponse(
+            '<span class="text-rose-300">New password must differ from the current one.</span>',
+            status_code=422,
+        )
+    try:
+        new_hash = hash_password_with_complexity_check(new)
+    except ValueError as exc:
+        safe = str(exc).replace("<", "&lt;").replace(">", "&gt;")
+        return HTMLResponse(f'<span class="text-rose-300">{safe}</span>', status_code=422)
+
+    # Revoke the presenting JWT so the pre-rotation cookie can't be replayed.
+    if naavik_session:
+        result = await verify_jwt_async(session, naavik_session)
+        if result is not None:
+            old_user_id, old_jti, old_exp = result
+            await revoke_jwt(session, jti=old_jti, user_id=old_user_id, expires_at=old_exp)
+
+    user.password_hash = new_hash
+    user.must_change_password = False
+    session.add(user)
+    await session.commit()
+
+    secure = not request.app.debug if hasattr(request.app, "debug") else True
+    jwt_value = await issue_jwt_async(session, user_id=user.id, keep_signed_in=False)
+    csrf_value = issue_csrf_token()
+    response = HTMLResponse('<span class="text-emerald-300">Password updated.</span>')
+    _set_session_cookies(
+        response,
+        jwt_value=jwt_value,
+        csrf_value=csrf_value,
+        keep_signed_in=False,
+        secure=secure,
+    )
+    return response
 
 
 @router.post("/api/v1/settings/account/delete", name="settings_account_delete")
 async def post_account_delete(
     request: Request,
-    _user: User | None = Depends(require_authed_session),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_password_complete),
+    _csrf: None = Depends(require_csrf),
 ):
-    return Response(status_code=204)
+    """Permanently delete the account and every owned row.
+
+    Was a stub returning 204 without deleting anything (fake-success). Now
+    hard-deletes via `account_service.delete_user_account`, revokes the
+    presenting JWT, clears the session cookies, and redirects to /login.
+
+    Gated with `require_password_complete` (real JWT required) + CSRF — a
+    destructive, irreversible action must never run on the dev fake session.
+    """
+    deleted = await account_service.delete_user_account(session, user_id=user.id)
+    if not deleted:
+        await session.rollback()
+        raise HTTPException(status_code=404, detail="Account not found")
+    await session.commit()
+
+    # No explicit JWT revocation needed: the user row (and its revoked_jwt
+    # rows) are gone, so any replay of the old cookie fails the `get_user_by_id`
+    # lookup in `get_current_user` and is rejected with 401.
+    response = Response(status_code=204)
+    response.headers["HX-Redirect"] = "/login"
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    response.delete_cookie("naavik_csrf", path="/")
+    return response
 
 
 # ─────────────────────────────────────────────────────────────────────────

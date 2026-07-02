@@ -42,12 +42,22 @@ def upgrade() -> None:
     is_postgres = bind.dialect.name == "postgresql"
 
     if is_postgres:
+        # Fresh-install fix (2026-07-01): these three enums originally used
+        # `create_type=True`, which made a clean `alembic upgrade head` from an
+        # empty Postgres DB fail at this migration with
+        # `type "emailaccountprovider" already exists` — the ENUM's implicit
+        # before-create DDL and the table create both emitted `CREATE TYPE`,
+        # and the chain stopped at 0021 (a `docker compose up` blocker on a
+        # brand-new host). CI never caught it: the chain-replay test runs on
+        # SQLite where enums compile to TEXT. Fix: `create_type=False` on the
+        # column types + one idempotent `.create(..., checkfirst=True)` each,
+        # so re-runs and shared-metadata registration can't double-create.
         provider_type: object = postgresql.ENUM(
             "imap",
             "gmail",
             "outlook",
             name="emailaccountprovider",
-            create_type=True,
+            create_type=False,
         )
         status_type: object = postgresql.ENUM(
             "ok",
@@ -55,7 +65,7 @@ def upgrade() -> None:
             "rate_limited",
             "disabled",
             name="emailaccountstatus",
-            create_type=True,
+            create_type=False,
         )
         unclassified_reason_type: object = postgresql.ENUM(
             "no_provider_configured",
@@ -63,8 +73,10 @@ def upgrade() -> None:
             "rate_limited",
             "cost_cap_exhausted",
             name="unclassifiedreason",
-            create_type=True,
+            create_type=False,
         )
+        for _enum in (provider_type, status_type, unclassified_reason_type):
+            _enum.create(bind, checkfirst=True)
         classification_type: object = postgresql.ENUM(
             name="emailclassification",
             create_type=False,

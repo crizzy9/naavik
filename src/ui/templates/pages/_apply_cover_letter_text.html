@@ -1,0 +1,26 @@
+{#
+  _apply_cover_letter_text.html — inner content of #apply-cover-letter-text.
+
+  Args:
+    application      : dict (needs .id)
+    cover_sections   : list[{id, label, text}]
+    cover_generated  : bool — whether real cover text exists yet
+
+  Extracted so the "Regen" button can swap just this region after a real
+  cover-letter generation (was a fake SSE chunk stream).
+#}
+{% if cover_generated %}
+  {% for s in cover_sections %}
+    {% with application_id=application.id, section=s.id, label=s.label, text=s.text, mode="view" %}
+      {% include "components/cover_letter_section.html" %}
+    {% endwith %}
+  {% endfor %}
+{% else %}
+  <div class="px-2 py-6 text-center">
+    <p class="text-sm text-slate-400">No cover letter generated yet.</p>
+    <p class="mt-1 text-xs text-slate-500">
+      Click <span class="text-slate-300">Regen</span> to draft one with your configured LLM,
+      then edit any section inline.
+    </p>
+  </div>
+{% endif %}

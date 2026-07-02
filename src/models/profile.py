@@ -42,7 +42,7 @@ class Profile(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", unique=True, index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", unique=True, index=True)
 
     # Identity
     full_name: str
@@ -114,7 +114,7 @@ class Experience(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    profile_id: int = Field(foreign_key="profile.id", index=True)
+    profile_id: int = Field(foreign_key="profile.id", ondelete="CASCADE", index=True)
 
     company: str
     title: str
@@ -150,7 +150,7 @@ class Bullet(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    experience_id: int = Field(foreign_key="experience.id", index=True)
+    experience_id: int = Field(foreign_key="experience.id", ondelete="CASCADE", index=True)
     order_index: int = Field(default=0)
 
     text: str
@@ -185,7 +185,7 @@ class Skill(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    profile_id: int = Field(foreign_key="profile.id", index=True)
+    profile_id: int = Field(foreign_key="profile.id", ondelete="CASCADE", index=True)
 
     category: str
     items: list[str] = Field(
@@ -208,7 +208,7 @@ class Education(SQLModel, table=True):
     __tablename__ = "education"
 
     id: int | None = Field(default=None, primary_key=True)
-    profile_id: int = Field(foreign_key="profile.id", index=True)
+    profile_id: int = Field(foreign_key="profile.id", ondelete="CASCADE", index=True)
 
     institution: str
     school: str | None = None
@@ -241,7 +241,7 @@ class Project(SQLModel, table=True):
     __table_args__ = (Index("ix_project_tags_gin", "tags", postgresql_using="gin"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    profile_id: int = Field(foreign_key="profile.id", index=True)
+    profile_id: int = Field(foreign_key="profile.id", ondelete="CASCADE", index=True)
 
     title: str
     date: datetime | None = Field(
@@ -275,7 +275,7 @@ class Certification(SQLModel, table=True):
     __tablename__ = "certification"
 
     id: int | None = Field(default=None, primary_key=True)
-    profile_id: int = Field(foreign_key="profile.id", index=True)
+    profile_id: int = Field(foreign_key="profile.id", ondelete="CASCADE", index=True)
 
     title: str
     issuer: str

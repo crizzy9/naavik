@@ -39,7 +39,7 @@ class JobScrapeRun(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
 
     source: JobSource
     status: JobScrapeStatus

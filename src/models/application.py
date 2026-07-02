@@ -71,8 +71,8 @@ class Application(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
-    job_id: int | None = Field(default=None, foreign_key="job.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    job_id: int | None = Field(default=None, foreign_key="job.id", ondelete="SET NULL", index=True)
 
     # Denormalized identifying metadata (resilient to Job mutation)
     company: str
@@ -139,7 +139,7 @@ class GeneratedDocument(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    application_id: int = Field(foreign_key="application.id", index=True)
+    application_id: int = Field(foreign_key="application.id", ondelete="CASCADE", index=True)
 
     kind: GeneratedDocumentKind
     path: str
@@ -170,7 +170,7 @@ class ApplicationScreenerAnswer(SQLModel, table=True):
     __tablename__ = "application_screener_answer"
 
     id: int | None = Field(default=None, primary_key=True)
-    application_id: int = Field(foreign_key="application.id", index=True)
+    application_id: int = Field(foreign_key="application.id", ondelete="CASCADE", index=True)
 
     question_text: str
     question_fingerprint: str = Field(index=True)
@@ -205,7 +205,7 @@ class ATSCredential(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("user_id", "board", name="uq_ats_credential_user_board"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
     board: ApplicationBoard
 
     has_credential: bool = Field(default=False)

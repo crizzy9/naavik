@@ -39,7 +39,7 @@ class EmailAccount(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
 
     provider: EmailAccountProvider = Field(default=EmailAccountProvider.IMAP)
     account_email: str

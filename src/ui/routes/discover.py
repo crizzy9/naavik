@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -549,8 +548,13 @@ async def fragment_cover_section(
     application_id: int,
     section: str,
     mode: Annotated[str, Query()] = "view",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
 ):
-    text = drctx.COVER_SECTION_TEXT.get(section, "")
+    """Render one cover-letter section — text sourced from the real generated
+    document (was a process-global placeholder dict)."""
+    sections = await application_service.get_latest_cover_sections(session, application_id) or {}
+    text = sections.get(section, "")
     return templates.TemplateResponse(
         request,
         "components/cover_letter_section.html",
@@ -574,9 +578,25 @@ async def fragment_cover_section_save(
     application_id: int,
     section: str,
     text: Annotated[str, Form()] = "",
-    _user: User | None = Depends(require_authed_session),
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
-    drctx.COVER_SECTION_TEXT[section] = text
+    """Persist an edited cover-letter section to the DB (per-application,
+    IDOR-checked) — replaces the process-global dict write."""
+    ok = await application_service.update_cover_section(
+        session,
+        application_id=application_id,
+        user_id=_effective_user_id(user),
+        section=section,
+        text=text,
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=404,
+            detail="Generate a cover letter first, then edit its sections.",
+        )
+    await session.commit()
     return templates.TemplateResponse(
         request,
         "components/cover_letter_section.html",
@@ -598,10 +618,21 @@ async def put_cover_section(
     application_id: int,
     section: str,
     payload: Annotated[dict[str, Any], Body()],
-    _user: User | None = Depends(require_authed_session),
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     text = payload.get("text", "")
-    drctx.COVER_SECTION_TEXT[section] = text
+    ok = await application_service.update_cover_section(
+        session,
+        application_id=application_id,
+        user_id=_effective_user_id(user),
+        section=section,
+        text=text,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="No cover letter to edit yet.")
+    await session.commit()
     return {"section": section, "text": text}
 
 
@@ -609,28 +640,65 @@ async def put_cover_section(
     "/api/v1/applications/{application_id}/cover-letter/generate", name="apply_cover_generate"
 )
 async def post_cover_generate(
+    request: Request,
     application_id: int,
-    _user: User | None = Depends(require_authed_session),
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+    _rate_limit: None = Depends(check_generate_bundle_rate_limit),
 ):
-    """SSE stream — chunked cover-letter generation."""
+    """Really (re)generate the cover letter for `application_id` and return the
+    refreshed cover-text fragment.
 
-    sections = ["intro", "body", "why_company", "close"]
-    chunks_per = [3, 5, 4, 3]
+    Was a fake SSE stream that emitted "intro chunk 1…" placeholders without
+    calling the LLM. Now runs `bundle_generator.regenerate_cover_letter` and
+    re-renders the persisted section text. IDOR-checked; returns a friendly
+    422 when no LLM provider is configured.
+    """
+    from llm.base import LLMProviderError
+    from services.bundle_generator import regenerate_cover_letter
 
-    async def gen():
-        for i, sec in enumerate(sections):
-            for c in range(chunks_per[i]):
-                html = (
-                    f'<div sse-swap="chunk" hx-swap="beforeend" '
-                    f'class="text-sm text-slate-300 leading-relaxed">'
-                    f'<span class="text-slate-500">{sec}</span> chunk {c + 1}…'
-                    "</div>"
-                )
-                yield f"event: chunk\ndata: {html}\n\n"
-                await asyncio.sleep(0.3)
-        yield "event: done\ndata: <div>done</div>\n\n"
+    user_id = _effective_user_id(user)
+    application = await application_service.get_application(session, application_id)
+    if (
+        application is None
+        or application.user_id != user_id
+        or getattr(application, "deleted_at", None) is not None
+    ):
+        raise HTTPException(status_code=404, detail="Application not found")
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    settings = await settings_service.get_or_create(session, user_id=user_id)
+    try:
+        await regenerate_cover_letter(session, application, settings=settings)
+        await session.commit()
+    except LLMProviderError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "No LLM provider configured. Set ANTHROPIC_API_KEY / OPENAI_API_KEY "
+                "or OLLAMA_BASE_URL in .env and restart to generate a cover letter."
+            ),
+        ) from exc
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    fetched = await application_service.get_latest_cover_sections(session, application_id) or {}
+    cover_generated = any(str(v).strip() for v in fetched.values())
+    cover_sections = [
+        {"id": key, "label": drctx.COVER_LABELS.get(key, key.upper()), "text": fetched.get(key, "")}
+        for key in ("intro", "body", "why_company", "close")
+    ]
+    return templates.TemplateResponse(
+        request,
+        "pages/_apply_cover_letter_text.html",
+        {
+            "application": {"id": application_id},
+            "cover_sections": cover_sections,
+            "cover_generated": cover_generated,
+        },
+    )
 
 
 @router.put(

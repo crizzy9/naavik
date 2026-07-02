@@ -136,6 +136,111 @@ async def get_application(session: AsyncSession, application_id: int) -> Applica
     ).one_or_none()
 
 
+async def get_latest_cover_sections(
+    session: AsyncSession, application_id: int
+) -> dict[str, str] | None:
+    """Return the most recent generated cover-letter's section text, or None.
+
+    Reads the `sections` blob persisted on the latest error-free COVER_LETTER
+    `GeneratedDocument`. Powers the Discover review workspace so it shows the
+    real generated letter instead of a hardcoded placeholder. Returns None
+    when nothing has been generated yet (the caller renders an empty state).
+    """
+    doc = (
+        await session.exec(
+            select(GeneratedDocument)
+            .where(
+                GeneratedDocument.application_id == application_id,
+                GeneratedDocument.kind == GeneratedDocumentKind.COVER_LETTER,
+                GeneratedDocument.error.is_(None),
+            )
+            .order_by(GeneratedDocument.compiled_at.desc())
+            .limit(1)
+        )
+    ).one_or_none()
+    if doc is None or not doc.bullet_selection:
+        return None
+    sections = doc.bullet_selection.get("sections")
+    if not isinstance(sections, dict):
+        return None
+    return {k: str(v) for k, v in sections.items()}
+
+
+async def latest_documents(session: AsyncSession, application_id: int) -> list[GeneratedDocument]:
+    """Return the latest error-free GeneratedDocument per kind for an application.
+
+    Used by the bundle-download endpoint to zip the REAL generated PDFs
+    (resume + cover letter) instead of placeholder bytes.
+    """
+    docs = (
+        await session.exec(
+            select(GeneratedDocument)
+            .where(
+                GeneratedDocument.application_id == application_id,
+                GeneratedDocument.error.is_(None),
+            )
+            .order_by(GeneratedDocument.compiled_at.desc())
+        )
+    ).all()
+    seen: set = set()
+    latest: list[GeneratedDocument] = []
+    for d in docs:
+        if d.kind in seen:
+            continue
+        seen.add(d.kind)
+        latest.append(d)
+    return latest
+
+
+async def update_cover_section(
+    session: AsyncSession,
+    *,
+    application_id: int,
+    user_id: int,
+    section: str,
+    text: str,
+) -> bool:
+    """Persist an edited cover-letter `section` for `application_id`.
+
+    IDOR-checked (the application must belong to `user_id`). Writes onto the
+    latest error-free COVER_LETTER `GeneratedDocument`'s `sections` blob so
+    edits survive restarts and stay per-application/per-user. Returns False
+    when the app isn't owned or no cover document exists yet.
+
+    Replaces the previous process-global `discover_review_ctx.COVER_SECTION_TEXT`
+    dict, which lost edits on restart and leaked them across all users.
+    """
+    if section not in {"intro", "body", "why_company", "close"}:
+        return False
+    app = (
+        await session.exec(select(Application).where(Application.id == application_id))
+    ).one_or_none()
+    if app is None or app.user_id != user_id or getattr(app, "deleted_at", None) is not None:
+        return False
+    doc = (
+        await session.exec(
+            select(GeneratedDocument)
+            .where(
+                GeneratedDocument.application_id == application_id,
+                GeneratedDocument.kind == GeneratedDocumentKind.COVER_LETTER,
+                GeneratedDocument.error.is_(None),
+            )
+            .order_by(GeneratedDocument.compiled_at.desc())
+            .limit(1)
+        )
+    ).one_or_none()
+    if doc is None:
+        return False
+    blob = dict(doc.bullet_selection or {})
+    sections = dict(blob.get("sections") or {})
+    sections[section] = text
+    blob["sections"] = sections
+    doc.bullet_selection = blob
+    session.add(doc)
+    await session.flush()
+    return True
+
+
 async def get_application_for_job(
     session: AsyncSession, *, user_id: int, job_id: int
 ) -> Application | None:

@@ -27,7 +27,7 @@ from api.auth import require_csrf
 from config import settings as app_settings
 from db.session import get_session
 from models import User
-from services import profile_service
+from services import env_secrets, profile_service
 from services.auth import get_current_user, require_password_complete
 from ui.templates_setup import templates
 
@@ -194,12 +194,44 @@ async def post_extraction_upload(
         log.warning("set_raw_resume_text failed user=%s: %s", user.id, exc)
         await session.rollback()
 
+    # Structured parse: when an LLM provider is configured, run the full
+    # PDF → AI → Profile pipeline so the profile is populated with real
+    # experiences + bullets (not just identity fields). This is the fix for
+    # the long-standing "resume parse only filled the summary" bug — the
+    # `extract_to_profile` pipeline already existed but was never wired into
+    # the upload flow. When no provider is configured we fall back to the
+    # regex identity backfill below so onboarding still makes progress.
+    structured_ok = False
+    experiences_added = 0
+    try:
+        from services import extraction, settings_service
+
+        user_settings = await settings_service.get_or_create(session, user_id=user.id)
+        if env_secrets.resolve_active_llm_provider() is not None:
+            await extraction.extract_to_profile(
+                session,
+                user_id=user.id,
+                settings=user_settings,
+                pdf_path=target,
+            )
+            await session.commit()
+            structured_ok = True
+            experiences_added = len(await profile_service.list_experiences(session, user.id))
+    except extraction.ExtractionError as exc:
+        log.warning("structured resume parse failed user=%s: %s", user.id, exc)
+        await session.rollback()
+    except Exception as exc:  # noqa: BLE001 — never fail the upload on parse issues
+        log.warning("structured resume parse errored user=%s: %s", user.id, exc)
+        await session.rollback()
+
     log.info(
-        "extraction upload user=%s file=%s bytes=%d chars=%d",
+        "extraction upload user=%s file=%s bytes=%d chars=%d structured=%s experiences=%d",
         user.id,
         safe_name,
         len(payload),
         len(extracted),
+        structured_ok,
+        experiences_added,
     )
 
     return templates.TemplateResponse(
@@ -208,5 +240,7 @@ async def post_extraction_upload(
         {
             "chars": len(extracted),
             "filename": safe_name,
+            "structured": structured_ok,
+            "experiences_added": experiences_added,
         },
     )
