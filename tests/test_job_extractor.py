@@ -421,9 +421,11 @@ async def test_enrich_raw_job_preserves_scraper_identity() -> None:
 
 
 async def test_enrich_raw_job_integration_with_upsert_payload() -> None:
-    """The enriched RawJob.to_upsert_payload() carries scorer-required arrays
-    under raw_meta so job_service._create_payload can lift them onto Job
-    columns.
+    """The enriched RawJob.to_upsert_payload() promotes scorer-required
+    arrays to TOP-LEVEL Job-column keys. Regression: they used to stay
+    nested in raw_meta, which _create_payload never lifted — so every
+    scraped job landed with Job.tags == [] and scored 0.0 forever
+    (below the tag floor).
     """
     seed = _seed_raw_job(description_html=_load("greenhouse-sponsorship.html"))
     canned = _canned_extraction(
@@ -442,11 +444,20 @@ async def test_enrich_raw_job_integration_with_upsert_payload() -> None:
     assert payload["description"] == canned.description
     assert payload["remote_policy"] == RemotePolicy.HYBRID
     assert payload["visa_restrictions"] == VisaRestriction.SPONSORSHIP_AVAILABLE
-    # Scorer-required arrays land in raw_meta for _create_payload to lift
-    assert payload["raw_meta"]["skills_required"] == ["python", "fastapi", "postgresql"]
-    assert payload["raw_meta"]["criteria"] == ["9+ years experience", "Strong Python"]
-    assert payload["raw_meta"]["tags"] == ["backend", "platform", "genai"]
-    assert payload["raw_meta"]["description_extraction_model"] == "claude-3-5-sonnet-FAKE"
+    # Scorer-required arrays promoted to Job columns (not left in raw_meta)
+    assert payload["skills_required"] == ["python", "fastapi", "postgresql"]
+    assert payload["criteria"] == ["9+ years experience", "Strong Python"]
+    assert payload["tags"] == ["backend", "platform", "genai"]
+    assert payload["description_extraction_model"] == "claude-3-5-sonnet-FAKE"
+    for promoted in ("skills_required", "criteria", "tags", "description_extraction_model"):
+        assert promoted not in payload["raw_meta"]
+
+    # And _create_payload keeps them (end of the transport chain → Job(...)).
+    from services.job_service import _create_payload
+
+    create_kwargs = _create_payload(payload)
+    assert create_kwargs["tags"] == ["backend", "platform", "genai"]
+    assert create_kwargs["skills_required"] == ["python", "fastapi", "postgresql"]
 
 
 # ── _strip_boilerplate empty body path ───────────────────────────────

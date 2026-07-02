@@ -269,6 +269,13 @@ async def upsert_job(
     incoming_meta = raw.get("raw_meta") or {}
     if incoming_meta:
         existing.raw_meta = {**(existing.raw_meta or {}), **incoming_meta}
+    # Refresh scorer-critical extraction outputs when this scrape carries
+    # them — rows scraped before enrichment worked (or before the tags
+    # promotion fix) get their tags/skills/salary on the next re-scrape.
+    for key in ("tags", "skills_required", "criteria", "salary_min", "salary_max"):
+        value = raw.get(key)
+        if value:
+            setattr(existing, key, value)
     if scrape_run_id is not None:
         existing.last_scrape_run_id = scrape_run_id
     session.add(existing)

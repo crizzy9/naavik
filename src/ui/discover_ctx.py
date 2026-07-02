@@ -108,7 +108,9 @@ def swipe_card_dict(j: SQLJob, *, warm_intro_label: str | None = None) -> dict[s
         "role": j.role,
         "team": j.team,
         "score": int(round(j.score * 100)),
-        "unscored": j.score == 0.0,
+        # "Never scored" = the scorer never persisted a breakdown. A real
+        # 0.0 (visa-zeroed / below tag floor) is a score, not "unscored".
+        "unscored": not mb.get("scored_at"),
         "location": location,
         "salary_range": _salary_range(j),
         "work_mode": work_mode,

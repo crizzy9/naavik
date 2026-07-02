@@ -468,14 +468,19 @@ async def score_unscored_jobs(
 ) -> int:
     """`jobs.score_pending` cron entry (T10).
 
-    For each user with `Settings.semantic_match_enabled = True`, score
-    their `Job.score == 0.0 AND deleted_at IS NULL` rows up to batch_size
-    per invocation. Returns total jobs scored (sum across users).
+    For each user with a Profile, score their never-scored live jobs
+    (`match_breakdown` has no `scored_at` — i.e. `_persist_score` never
+    ran) up to batch_size per invocation. Returns total jobs scored.
+
+    `Settings.semantic_match_enabled` gates only the embedding/semantic
+    layer (inside `score_job_layered`), NOT scoring as a whole — the tag
+    and LLM-judge layers run for everyone. The old `Job.score == 0.0`
+    predicate also never converged: below-tag-floor jobs persist 0.0 and
+    were re-selected (and re-scored to 0.0) on every 15-minute tick.
 
     Returns 0 if no work — cron is idempotent.
     """
-    users_stmt = select(Settings).where(Settings.semantic_match_enabled.is_(True))
-    users = (await session.exec(users_stmt)).all()
+    users = (await session.exec(select(Settings))).all()
 
     total = 0
     for settings_row in users:
@@ -489,7 +494,7 @@ async def score_unscored_jobs(
             select(Job)
             .where(
                 Job.user_id == settings_row.user_id,
-                Job.score == 0.0,
+                Job.match_breakdown.op("->>")("scored_at").is_(None),
                 Job.deleted_at.is_(None),
             )
             .limit(batch_size)
@@ -536,8 +541,9 @@ async def rescore_stale_jobs(
         log.debug("rescore_stale_jobs skipped on non-postgres dialect")
         return 0
 
-    users_stmt = select(Settings).where(Settings.semantic_match_enabled.is_(True))
-    users = (await session.exec(users_stmt)).all()
+    # All users with a profile — semantic_match_enabled only gates the
+    # embedding layer inside score_job_layered, not scoring itself.
+    users = (await session.exec(select(Settings))).all()
 
     total = 0
     for settings_row in users:

@@ -484,6 +484,47 @@ async def test_score_unscored_jobs_skips_when_no_profile():
     assert n == 0
 
 
+@pytest.mark.asyncio
+async def test_score_unscored_jobs_scores_users_without_semantic_match():
+    """Regression: the cron used to select only users with
+    semantic_match_enabled=True (default False) — so a fresh install never
+    scored anything at all. The flag gates only the embedding layer; tag +
+    LLM-judge layers must run for everyone with a profile."""
+    settings = _settings_stub()
+    settings.user_id = 1
+    settings.semantic_match_enabled = False
+    profile = _profile_stub()
+    job = _job_stub(tags=["ai-ml"])
+    session = _mock_session(
+        [
+            MagicMock(all=lambda: [settings]),  # ALL settings rows, no flag filter
+            MagicMock(one_or_none=lambda: profile),
+            MagicMock(all=lambda: [job]),  # pending jobs
+            # score_job_layered internals: profile tags, profile embedding
+            MagicMock(all=lambda: [["ai-ml"]]),
+            MagicMock(one_or_none=lambda: None),
+        ]
+    )
+    n = await orchestrator.score_unscored_jobs(session)
+    assert n == 1
+
+
+def test_score_unscored_jobs_pending_predicate_is_scored_at_absence():
+    """The pending predicate must be 'never scored' (no scored_at in
+    match_breakdown), NOT Job.score == 0.0 — below-tag-floor jobs persist
+    score 0.0 and would be re-selected (and re-scored to 0.0) forever."""
+    import ast
+    import inspect
+    import textwrap
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(orchestrator.score_unscored_jobs)))
+    fn = tree.body[0]
+    fn.body = fn.body[1:]  # drop the docstring — assert against code only
+    code = ast.unparse(fn)
+    assert "scored_at" in code
+    assert "Job.score == 0.0" not in code
+
+
 # ── Backward-compat re-exports (T11) ─────────────────────────────────
 
 

@@ -88,6 +88,22 @@ class RawJob(BaseModel):
         if self.salary_raw is not None:
             raw_meta.setdefault("salary_raw", self.salary_raw)
 
+        # Scorer-required arrays + salary bounds + extraction attribution are
+        # merged into raw_meta by job_extractor; promote them to real Job
+        # columns here. Leaving them nested made every scraped job land with
+        # Job.tags == [] → tag overlap 0.0 → permanently below the tag floor.
+        promoted: dict[str, Any] = {}
+        for key in (
+            "tags",
+            "skills_required",
+            "criteria",
+            "salary_min",
+            "salary_max",
+            "description_extraction_model",
+        ):
+            if key in raw_meta:
+                promoted[key] = raw_meta.pop(key)
+
         payload: dict[str, Any] = {
             "board": self.board,
             "url": self.source_url,
@@ -101,6 +117,7 @@ class RawJob(BaseModel):
             "posted_at_text": self.posted_at_text,
             "raw_meta": raw_meta,
         }
+        payload.update(promoted)
         if self.remote_policy_hint is not None:
             payload["remote_policy"] = self.remote_policy_hint
         if self.visa_restriction_hint is not None:
