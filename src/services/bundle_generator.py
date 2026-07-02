@@ -692,8 +692,11 @@ async def generate_bundle(
         # Build the set of legitimate Bullet.id values for this user.
         from models import Bullet
 
+        # SQLModel's exec() yields scalars for single-column selects (and
+        # tuples on some legacy paths) — `row[0]` on an int crashed every
+        # real bundle generation at the ethics stage (live-verify find).
         bullet_ids = {
-            int(row[0])
+            int(row[0] if isinstance(row, tuple) else row)
             for row in (
                 await session.exec(
                     select(Bullet.id)

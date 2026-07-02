@@ -16,12 +16,16 @@
 {% set _w = {"sm": "max-w-[480px]", "md": "max-w-[640px]", "lg": "max-w-[720px]"} %}
 {% set _maxw = _w.get(size, _w["lg"]) %}
 
-{# Bottom-sheet at <md, centered card at >=md. #}
+{# Bottom-sheet at <md, centered card at >=md. The desktop branch must set
+   ALL insets: `md:*-auto` alone left a fixed-position dialog at its static
+   position — the END of the document, i.e. off-viewport below the fold on
+   long pages ("+ Add by URL shows no input" bug). `inset-0 + m-auto`
+   centers a fit-content dialog on both axes. #}
 {% if mobile_sheet %}
-  {% set _placement = "fixed left-0 right-0 bottom-0 mx-auto md:left-auto md:right-auto md:bottom-auto md:my-auto" %}
+  {% set _placement = "fixed left-0 right-0 bottom-0 mx-auto md:inset-0 md:m-auto md:h-fit" %}
   {% set _radius = "rounded-t-2xl rounded-b-none md:rounded-xl" %}
 {% else %}
-  {% set _placement = "mx-auto my-auto" %}
+  {% set _placement = "fixed inset-0 m-auto h-fit" %}
   {% set _radius = "rounded-xl" %}
 {% endif %}
 
