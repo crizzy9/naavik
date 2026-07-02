@@ -1,0 +1,158 @@
+{% from "components/_macros.html" import chip %}
+{#
+  match_panel.html — the single focal panel at the top of the review
+  workspace. Combines job identity (role @ company, location, salary,
+  source, posted age, remote policy) with the match analysis: a big score
+  ring on the left, and a three-column Requirements ↔ Strengths ↔ Gaps grid
+  that reads as one visual system (requirements carry ✓/○ coverage markers
+  computed against the scorer's strengths + matched tags).
+
+  Layout:
+    row 1: [score ring | identity header + chips]
+    row 2: [WHAT THEY WANT | YOUR STRENGTHS | GAPS]  (aligned 3-col grid)
+    row 3: provenance footer (scoring layers, judge model, scored-at)
+
+  Args:
+    job : dict from discover_review_ctx.build_review_ctx — id, company,
+          company_initial, company_color, role, team, location,
+          salary_range, jd_url, score, match_breakdown, requirements,
+          posted_label, board_label, remote_policy
+#}
+{% set _mb = job.match_breakdown or {} %}
+{% set _strengths = _mb.get("strengths") or [] %}
+{% set _gaps = _mb.get("gaps") or [] %}
+{% set _visa_concern = _mb.get("visa_concern", false) %}
+{% set _visa_note = _mb.get("visa_note") %}
+{% set _layers_run = _mb.get("layers_run") or [] %}
+{% set _layer_4_provider = _mb.get("layer_4_provider") %}
+{% set _layer_4_model = _mb.get("layer_4_model") %}
+{% set _judge_skipped = _mb.get("judge_skipped", false) %}
+{% set _scored_at = _mb.get("scored_at") %}
+<section class="bg-slate-900 border border-slate-800 rounded-lg" data-testid="match-panel">
+  {# ── Row 1: score + identity ─────────────────────────────────────── #}
+  <div class="flex items-center gap-6 px-6 pt-5 pb-4">
+    <div class="shrink-0 flex flex-col items-center gap-1.5">
+      {% with score=job.score, size="hero" %}
+        {% include "components/score_circle.html" %}
+      {% endwith %}
+      {% if _judge_skipped %}
+        {{ chip("layer-3 only", tone="amber") }}
+      {% elif _layer_4_provider %}
+        <span class="inline-flex items-center gap-1 text-[10px] font-mono text-cyan-300">
+          <span class="h-1.5 w-1.5 rounded-full bg-cyan-400" aria-hidden="true"></span>
+          llm-judged
+        </span>
+      {% endif %}
+    </div>
+    <div class="min-w-0 flex flex-col gap-1.5">
+      <div class="flex items-center gap-3 min-w-0">
+        {% with kind="company", text=job.company_initial | default(job.company[:1] | upper), size="md", color_override=job.company_color | default("bg-slate-700") %}
+          {% include "components/avatar.html" %}
+        {% endwith %}
+        <div class="min-w-0">
+          <h1 class="text-xl font-semibold text-slate-50 truncate leading-tight">{{ job.role }}</h1>
+          <p class="text-sm text-slate-400 truncate">
+            {{ job.company }}{% if job.team %} · {{ job.team }}{% endif %}
+          </p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 pt-0.5">
+        {% if job.location %}
+          <span class="inline-flex items-center gap-1"><i data-lucide="map-pin" class="h-3.5 w-3.5" stroke-width="1.5"></i>{{ job.location }}</span>
+        {% endif %}
+        {% if job.salary_range %}
+          <span class="inline-flex items-center gap-1 font-mono"><i data-lucide="banknote" class="h-3.5 w-3.5" stroke-width="1.5"></i>{{ job.salary_range }}{% if job.equity_pct %} + {{ job.equity_pct }}%{% endif %}</span>
+        {% endif %}
+        {% if job.remote_policy and job.remote_policy != "unknown" %}
+          {{ chip(job.remote_policy, tone="slate") }}
+        {% endif %}
+        {{ chip(job.board_label, tone="slate") }}
+        {% if job.posted_label %}
+          <span class="text-slate-500">posted {{ job.posted_label }}</span>
+        {% endif %}
+        {% if job.jd_url %}
+          <a href="{{ job.jd_url }}" target="_blank" rel="noopener" hx-boost="false"
+             class="inline-flex items-center gap-1 text-slate-400 hover:text-slate-100">
+            <i data-lucide="external-link" class="h-3.5 w-3.5" stroke-width="1.5"></i>original posting
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Row 2: Requirements ↔ Strengths ↔ Gaps ──────────────────────── #}
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-px bg-slate-800 border-t border-slate-800">
+    <div class="bg-slate-900 px-5 py-4">
+      <div class="text-[10px] uppercase tracking-wide text-slate-400 font-mono mb-2">WHAT THEY WANT</div>
+      {% if job.requirements %}
+        <ul class="flex flex-col gap-1.5 text-xs text-slate-200 leading-relaxed">
+          {% for r in job.requirements %}
+            <li class="flex gap-2">
+              {% if r.matched %}
+                <i data-lucide="check" class="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" stroke-width="2" aria-label="covered by your strengths"></i>
+              {% else %}
+                <span class="h-3.5 w-3.5 shrink-0 mt-0.5 rounded-full border border-slate-600" aria-label="not clearly covered"></span>
+              {% endif %}
+              <span>{{ r.text }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="mt-2 text-[10px] text-slate-500">✓ = covered by a strength below</p>
+      {% else %}
+        <p class="text-xs text-slate-500 italic">No structured requirements extracted yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="bg-slate-900 px-5 py-4">
+      <div class="text-[10px] uppercase tracking-wide text-emerald-300 font-mono mb-2">YOUR STRENGTHS</div>
+      {% if _strengths %}
+        <ul class="flex flex-col gap-1.5 text-xs text-slate-200 leading-relaxed">
+          {% for s in _strengths %}
+            <li class="flex gap-2">
+              <span class="text-emerald-400 shrink-0" aria-hidden="true">+</span>
+              <span>{{ s }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-xs text-slate-500 italic">no strengths surfaced</p>
+      {% endif %}
+    </div>
+
+    <div class="bg-slate-900 px-5 py-4">
+      <div class="text-[10px] uppercase tracking-wide text-amber-300 font-mono mb-2">WHAT'S MISSING</div>
+      {% if _gaps %}
+        <ul class="flex flex-col gap-1.5 text-xs text-slate-200 leading-relaxed">
+          {% for g in _gaps %}
+            <li class="flex gap-2">
+              <span class="text-amber-400 shrink-0" aria-hidden="true">−</span>
+              <span>{{ g }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-xs text-slate-500 italic">no gaps identified</p>
+      {% endif %}
+      {% if _visa_concern and _visa_note %}
+        <div class="mt-3 rounded-md bg-rose-500/5 ring-1 ring-rose-500/20 px-3 py-2">
+          <div class="text-[10px] uppercase tracking-wide text-rose-300 font-mono mb-1">VISA</div>
+          <p class="text-xs text-slate-200 leading-relaxed">{{ _visa_note }}</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Row 3: provenance footer ────────────────────────────────────── #}
+  {% if _layers_run or _layer_4_provider or _scored_at %}
+    <div class="flex flex-wrap items-center gap-2 px-6 py-2.5 border-t border-slate-800 text-[10px] font-mono text-slate-500">
+      <span class="uppercase tracking-wide">SCORED VIA</span>
+      {% for layer in _layers_run %}{{ chip(layer, tone="slate") }}{% endfor %}
+      {% if _layer_4_provider %}
+        {{ chip(_layer_4_provider ~ (" · " ~ _layer_4_model if _layer_4_model else ""), tone="cyan") }}
+      {% endif %}
+      {% if _scored_at %}
+        <span class="ml-auto">scored {{ _scored_at }}</span>
+      {% endif %}
+    </div>
+  {% endif %}
+</section>

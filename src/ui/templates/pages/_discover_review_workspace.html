@@ -64,33 +64,17 @@
     {# ── Row-oriented, full-width workspace ─────────────────────────── #}
     <div class="flex flex-col gap-6 px-6 lg:px-8 py-6 flex-1 w-full">
 
-      {# Row 1 — job context: what they want + match, side by side on md+ #}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <section class="bg-slate-900 border border-slate-800 rounded-lg p-5">
-          <header class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-3">WHAT THEY WANT</header>
-          <ul class="flex flex-col gap-1.5 text-sm text-slate-200 leading-relaxed">
-            {% for b in job.jd_bullets %}
-              <li class="flex gap-2"><span class="text-slate-500 shrink-0" aria-hidden="true">•</span><span>{{ b }}</span></li>
-            {% else %}
-              <li class="text-slate-500 italic text-sm">No structured requirements extracted yet.</li>
-            {% endfor %}
-          </ul>
-          {% if warm_intro %}
-            <div class="mt-4">
-              {% with contact=warm_intro, referrals_this_year=4 %}
-                {% include "components/warm_intro_card.html" %}
-              {% endwith %}
-            </div>
-          {% endif %}
-        </section>
+      {# Row 1 — the match panel: identity + score + Requirements ↔
+         Strengths ↔ Gaps in one full-width visual system. #}
+      {% with job=job %}
+        {% include "components/match_panel.html" %}
+      {% endwith %}
 
-        <section class="bg-slate-900 border border-slate-800 rounded-lg p-5">
-          {# Plan 72 § Surface 1 — score_card (Variant B). #}
-          {% with score=job.score, match_breakdown=job.match_breakdown or {}, expanded=true %}
-            {% include "components/score_card.html" %}
-          {% endwith %}
-        </section>
-      </div>
+      {% if warm_intro %}
+        {% with contact=warm_intro, referrals_this_year=4 %}
+          {% include "components/warm_intro_card.html" %}
+        {% endwith %}
+      {% endif %}
 
       {# Row 1b — full JD, collapsible, full-width #}
       <details class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">

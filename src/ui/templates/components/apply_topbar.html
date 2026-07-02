@@ -1,10 +1,13 @@
 {#
-  apply_topbar.html — top context bar on /discover/:id.
+  apply_topbar.html — slim nav bar on /discover/:id.
+
+  Identity (role @ company, chips) lives in the match panel below — this bar
+  is navigation + destructive actions only. The old inert Save/Skip buttons
+  are gone (they did nothing).
 
   Args:
-    job         : dict — id, company, company_initial, company_color, role, team,
-                  location, salary_range, equity_pct, jd_url, score
-    application : dict — DRAFT Application
+    job         : dict — id, company, role, jd_url
+    application : dict | none — DRAFT Application
 #}
 {% set j = job %}
 {% set a = application %}
@@ -13,30 +16,16 @@
     <i data-lucide="arrow-left" class="h-4 w-4" stroke-width="1.5"></i>
     Back to queue
   </a>
-  <div class="flex items-center gap-3 flex-1 min-w-0">
-    {% with kind="company", text=j.company_initial | default(j.company[:1] | upper), size="sm", color_override=j.company_color | default("bg-slate-700") %}
-      {% include "components/avatar.html" %}
-    {% endwith %}
-    <div class="text-sm text-slate-100 truncate">
-      <span class="font-medium">{{ j.role }}</span>
-      {% if j.team %} · <span class="text-slate-300">{{ j.team }}</span>{% endif %}
-      <span class="text-slate-500"> / {{ j.company }}</span>
-      {% if j.location %} · <span class="text-slate-400">{{ j.location }}</span>{% endif %}
-      {% if j.salary_range %} · <span class="font-mono text-slate-400">{{ j.salary_range }}</span>{% endif %}
-      {% if j.equity_pct %} <span class="font-mono text-slate-500">+ {{ j.equity_pct }}%</span>{% endif %}
-    </div>
-  </div>
+  <span class="text-sm text-slate-500 truncate flex-1 min-w-0">
+    {{ j.role }} <span class="text-slate-600">/</span> {{ j.company }}
+  </span>
   <div class="flex items-center gap-3 shrink-0">
-    {% if j.score is defined %}
-      <span class="font-mono text-xs text-cyan-300 tabular-nums">match {{ "%.2f" | format((j.score | float) / 100.0) }}</span>
-    {% endif %}
     {% if j.jd_url %}
       <a href="{{ j.jd_url }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-100" hx-boost="false">
         <i data-lucide="external-link" class="h-3.5 w-3.5" stroke-width="1.5"></i>JD
       </a>
     {% endif %}
-    <button type="button" class="text-xs text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-800">Save</button>
-    <button type="button" class="text-xs text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-800">Skip</button>
+    {% if a %}
     <button type="button"
             class="text-xs text-rose-400 hover:text-rose-300 px-2 py-1 rounded hover:bg-rose-500/10"
             hx-get="/_modal/confirm?title=Discard+draft%3F&message=The+generated+resume+%2B+cover+letter+bundle+will+be+removed.+You+can+regenerate+later.&action=/api/v1/applications/{{ a.id }}/discard&label=Discard&tone=danger&method=delete"
@@ -44,5 +33,6 @@
             hx-swap="innerHTML">
       Discard draft
     </button>
+    {% endif %}
   </div>
 </header>

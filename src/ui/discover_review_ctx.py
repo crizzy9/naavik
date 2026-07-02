@@ -131,6 +131,108 @@ def _trim(text: str, max_chars: int = 160) -> str:
     return head.rsplit(" ", 1)[0] + "…"
 
 
+_STOPWORDS = frozenset(
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "has",
+        "have",
+        "in",
+        "is",
+        "it",
+        "of",
+        "on",
+        "or",
+        "our",
+        "the",
+        "their",
+        "this",
+        "to",
+        "we",
+        "with",
+        "you",
+        "your",
+        "will",
+        "years",
+        "experience",
+        "strong",
+        "ability",
+        "work",
+        "working",
+        "knowledge",
+        "skills",
+        "team",
+        "plus",
+        "preferred",
+        "required",
+        "requirement",
+    ]
+)
+
+
+def _significant_tokens(text: str) -> set[str]:
+    out = set()
+    for raw in text.lower().replace("/", " ").replace(",", " ").split():
+        tok = raw.strip(".()+:;'\"-")
+        if len(tok) > 4 and tok.endswith("s") and not tok.endswith("ss"):
+            tok = tok[:-1]  # naive plural fold: platforms ↔ platform
+        if len(tok) >= 3 and tok not in _STOPWORDS:
+            out.add(tok)
+    return out
+
+
+def match_requirements(
+    criteria: list[str],
+    strengths: list[str],
+    matched_tags: list[str],
+) -> list[dict[str, object]]:
+    """Link JD requirements to scorer strengths for the match panel.
+
+    A requirement counts as covered when it shares ≥2 significant tokens
+    with any single strength line, or ≥1 token with the scorer's
+    matched_tags. Heuristic on purpose — it drives a ✓/○ marker, not a
+    decision.
+    """
+    strength_tokens = [_significant_tokens(s) for s in strengths]
+    tag_tokens = _significant_tokens(" ".join(matched_tags))
+    out: list[dict[str, object]] = []
+    for req in criteria:
+        req_tokens = _significant_tokens(req)
+        covered = bool(req_tokens & tag_tokens)
+        if not covered:
+            for st in strength_tokens:
+                if len(req_tokens & st) >= 2 or (len(req_tokens) == 1 and req_tokens & st):
+                    covered = True
+                    break
+        out.append({"text": req, "matched": covered})
+    return out
+
+
+def _relative_age(dt) -> str | None:
+    if dt is None:
+        return None
+    from datetime import UTC, datetime
+
+    ref = dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+    days = (datetime.now(UTC) - ref).days
+    if days <= 0:
+        return "today"
+    if days == 1:
+        return "1 day ago"
+    if days < 30:
+        return f"{days} days ago"
+    months = days // 30
+    return f"{months} mo ago" if months > 1 else "1 mo ago"
+
+
 async def build_review_ctx(
     session: AsyncSession,
     *,
@@ -220,6 +322,13 @@ async def build_review_ctx(
         if any(getattr(d, "kind", None) and str(d.kind.value) == "cover_letter" for d in docs):
             cover_pdf_url = f"/api/v1/applications/{application.id}/cover-letter.pdf"
 
+    breakdown = job.match_breakdown or {}
+    requirements = match_requirements(
+        list(job.criteria or [])[:8],
+        list(breakdown.get("strengths") or []),
+        list(breakdown.get("matched_tags") or []),
+    )
+
     return {
         "job": {
             "id": job.id,
@@ -236,8 +345,15 @@ async def build_review_ctx(
             "match_breakdown": job.match_breakdown,
             "match_overall": job.score,
             "jd_bullets": job.criteria[:5] if job.criteria else [],
+            "requirements": requirements,
+            "posted_label": _relative_age(
+                getattr(job, "posted_at", None) or getattr(job, "found_at", None)
+            ),
             "description": job.description,
             "board_label": (job.board.value if job.board else "manual"),
+            "remote_policy": (
+                job.remote_policy.value if getattr(job, "remote_policy", None) is not None else None
+            ),
         },
         "application": {
             "id": application.id if application else None,
