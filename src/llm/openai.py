@@ -6,6 +6,7 @@ $2.50/M input + $10/M output (2026-04 rate sheet).
 
 from __future__ import annotations
 
+import copy
 import json
 from collections.abc import AsyncIterator
 from typing import TypeVar
@@ -74,7 +75,7 @@ class OpenAIProvider(LLMProvider):
         )
 
     @staticmethod
-    def _to_strict_schema(node: object) -> None:
+    def _to_strict_schema(root: dict) -> None:
         """Make a Pydantic JSON schema OpenAI-strict, in place.
 
         `strict: true` json_schema mode requires every object to carry
@@ -83,17 +84,48 @@ class OpenAIProvider(LLMProvider):
         type, which Pydantic already emits for `X | None`). Without this
         the API rejects the request with `'additionalProperties' is
         required to be supplied and to be false`.
+
+        Strict mode also forbids `default` (anywhere) and `$ref` with
+        sibling keywords. Pydantic emits both for enum fields with
+        defaults — e.g. `remote_policy: RemotePolicy = RemotePolicy.UNKNOWN`
+        becomes `{"$ref": "#/$defs/RemotePolicy", "default": "unknown"}` —
+        which the API rejects with `$ref cannot have keywords {'default'}`.
+        We strip every `default` and inline any `$ref` that still carries
+        siblings (siblings win over the resolved target on key conflicts).
         """
-        if isinstance(node, dict):
-            if node.get("type") == "object" or "properties" in node:
-                props = node.get("properties", {})
-                node["additionalProperties"] = False
-                node["required"] = list(props.keys())
-            for value in node.values():
-                OpenAIProvider._to_strict_schema(value)
-        elif isinstance(node, list):
-            for value in node:
-                OpenAIProvider._to_strict_schema(value)
+        defs = root.get("$defs", {})
+
+        def _resolve(ref: str) -> dict | None:
+            name = ref.removeprefix("#/$defs/")
+            target = defs.get(name) if name != ref else None
+            return target if isinstance(target, dict) else None
+
+        def _walk(node: object) -> None:
+            if isinstance(node, dict):
+                node.pop("default", None)
+                ref = node.get("$ref")
+                if isinstance(ref, str) and len(node) > 1:
+                    target = _resolve(ref)
+                    siblings = {k: v for k, v in node.items() if k != "$ref"}
+                    node.clear()
+                    if target is not None:
+                        node.update(copy.deepcopy(target))
+                        node.update(siblings)
+                    else:
+                        # Unresolvable ref (non-$defs pointer): a bare $ref is
+                        # the only strict-legal form, so drop the siblings.
+                        node["$ref"] = ref
+                if node.get("type") == "object" or "properties" in node:
+                    props = node.get("properties", {})
+                    node["additionalProperties"] = False
+                    node["required"] = list(props.keys())
+                for value in node.values():
+                    _walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    _walk(value)
+
+        _walk(root)
 
     async def structured(
         self,
