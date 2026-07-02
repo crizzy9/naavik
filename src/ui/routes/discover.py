@@ -89,6 +89,42 @@ async def _job_or_404(session: AsyncSession, job_id: int, user_id: int):
     return job
 
 
+async def _ensure_draft_and_dispatch(
+    session: AsyncSession, *, user_id: int, job_id: int
+) -> tuple[object | None, bool]:
+    """Resolve the DRAFT for the review workspace without blocking on generation.
+
+    When `eager_review_generation` is on and the docs are NONE/STALE, mark
+    GENERATING, commit, and spawn the bundle in the background — the caller
+    renders instantly and the workspace polls until the state settles.
+
+    Returns `(application, eager)`.
+    """
+    from models.enums import DocsState
+    from services import generation_dispatch
+
+    settings = await settings_service.get_or_create(session, user_id=user_id)
+    eager = settings.eager_review_generation
+
+    app = await application_service.get_application_for_job(session, user_id=user_id, job_id=job_id)
+    if app is None and eager:
+        app = await application_service.get_or_create_draft(
+            session, user_id=user_id, job_id=job_id, settings=settings
+        )
+    if app is not None and eager and app.docs_state in {DocsState.NONE, DocsState.STALE}:
+        await generation_dispatch.mark_generating(session, app)
+        await session.commit()
+        generation_dispatch.spawn_generation(app.id)
+    elif app is not None and generation_dispatch.is_generation_stale(app):
+        # Orphaned by a restart — surface as failed so the retry CTA shows.
+        app.docs_state = DocsState.FAILED
+        session.add(app)
+        await session.commit()
+    else:
+        await session.commit()
+    return app, eager
+
+
 @router.get("/discover/{job_id}", response_class=HTMLResponse, name="discover_review")
 async def get_review(
     request: Request,
@@ -98,15 +134,7 @@ async def get_review(
 ):
     user_id = _effective_user_id(user)
     job = await _job_or_404(session, job_id, user_id)
-    settings = await settings_service.get_or_create(session, user_id=user_id)
-    eager = settings.eager_review_generation
-
-    app = await application_service.get_application_for_job(session, user_id=user_id, job_id=job_id)
-    if app is None and eager:
-        app = await application_service.get_or_create_draft(
-            session, user_id=user_id, job_id=job_id, settings=settings
-        )
-        await session.commit()
+    app, eager = await _ensure_draft_and_dispatch(session, user_id=user_id, job_id=job_id)
 
     ctx = await drctx.build_review_ctx(
         session, user_id=user_id, job=job, application=app, eager=eager
@@ -334,18 +362,86 @@ async def fragment_expanded(
     """Plan 09a · Issue 8D — return the review workspace as an inline fragment."""
     user_id = _effective_user_id(user)
     job = await _job_or_404(session, job_id, user_id)
-    settings = await settings_service.get_or_create(session, user_id=user_id)
-    eager = settings.eager_review_generation
-    app = await application_service.get_application_for_job(session, user_id=user_id, job_id=job_id)
-    if app is None and eager:
-        app = await application_service.get_or_create_draft(
-            session, user_id=user_id, job_id=job_id, settings=settings
-        )
-        await session.commit()
+    app, eager = await _ensure_draft_and_dispatch(session, user_id=user_id, job_id=job_id)
     ctx = await drctx.build_review_ctx(
         session, user_id=user_id, job=job, application=app, eager=eager
     )
     return templates.TemplateResponse(request, "pages/_discover_review_inline.html", ctx)
+
+
+@router.get(
+    "/_fragments/discover/workspace/{job_id}",
+    response_class=HTMLResponse,
+    name="discover_workspace_fragment",
+)
+async def fragment_workspace(
+    request: Request,
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Poll target while docs are GENERATING — re-renders `#review-workspace`.
+
+    Same granularity as the swap root (`hx-swap="outerHTML"` on
+    `#review-workspace`), so the fragment guard holds. Does NOT dispatch
+    generation — polling must be a pure read.
+    """
+    user_id = _effective_user_id(user)
+    job = await _job_or_404(session, job_id, user_id)
+    settings = await settings_service.get_or_create(session, user_id=user_id)
+    app = await application_service.get_application_for_job(session, user_id=user_id, job_id=job_id)
+
+    from services import generation_dispatch
+
+    if app is not None and generation_dispatch.is_generation_stale(app):
+        from models.enums import DocsState
+
+        app.docs_state = DocsState.FAILED
+        session.add(app)
+        await session.commit()
+
+    ctx = await drctx.build_review_ctx(
+        session,
+        user_id=user_id,
+        job=job,
+        application=app,
+        eager=settings.eager_review_generation,
+    )
+    return templates.TemplateResponse(request, "pages/_discover_review_workspace.html", ctx)
+
+
+@router.post(
+    "/_fragments/discover/tailor/{job_id}",
+    response_class=HTMLResponse,
+    name="discover_tailor_fragment",
+)
+async def fragment_tailor(
+    request: Request,
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+    _rate_limit: None = Depends(check_generate_bundle_rate_limit),
+):
+    """'Tailor for this job' CTA on the lazy workspace — create the DRAFT,
+    dispatch background generation, and return the workspace in GENERATING
+    state (the root then polls until docs settle)."""
+    from services import generation_dispatch
+
+    user_id = _effective_user_id(user)
+    job = await _job_or_404(session, job_id, user_id)
+    settings = await settings_service.get_or_create(session, user_id=user_id)
+    app = await application_service.get_or_create_draft(
+        session, user_id=user_id, job_id=job_id, settings=settings
+    )
+    await generation_dispatch.mark_generating(session, app)
+    await session.commit()
+    generation_dispatch.spawn_generation(app.id)
+
+    ctx = await drctx.build_review_ctx(
+        session, user_id=user_id, job=job, application=app, eager=False
+    )
+    return templates.TemplateResponse(request, "pages/_discover_review_workspace.html", ctx)
 
 
 @router.get(
@@ -765,19 +861,16 @@ async def fragment_generate_bundle(
     _csrf: None = Depends(require_csrf),
     _rate_limit: None = Depends(check_generate_bundle_rate_limit),
 ):
-    """Generate the full tailored bundle and re-render the review workspace.
+    """Kick off bundle generation and re-render the workspace in GENERATING state.
 
-    Backs the 'Generate tailored documents' / 'Regen' buttons in the
-    tailored-resume section (P3 — the buttons used to be inert). Runs
-    `bundle_generator.generate_bundle` synchronously (the button shows an
-    hx-indicator while this runs) and returns the re-rendered
-    `#review-workspace` subtree so selection ledger, counts, cover letter,
-    and screeners all reflect the real generated bundle.
+    Backs the 'Generate tailored documents' / 'Regen' buttons. Generation runs
+    in a background task (`services.generation_dispatch`) — the response
+    returns immediately with `docs_state=GENERATING` and the workspace polls
+    `/_fragments/discover/workspace/{job_id}` until docs settle to READY/FAILED.
     """
     import json as _json
 
-    from llm.base import LLMProviderError
-    from services.bundle_generator import generate_bundle
+    from services import generation_dispatch
 
     user_id = _effective_user_id(user)
     application = await application_service.get_application(session, application_id)
@@ -788,43 +881,27 @@ async def fragment_generate_bundle(
     ):
         raise HTTPException(status_code=404, detail="Application not found")
 
-    settings = await settings_service.get_or_create(session, user_id=user_id)
-    toast: dict | None = None
-    try:
-        bundle = await generate_bundle(session, application, settings=settings)
-        await session.commit()
-        if bundle.degraded:
-            toast = {
-                "tone": "warning",
-                "text": f"Generated with degradations ({bundle.degraded_reason}).",
-            }
-        else:
-            toast = {"tone": "success", "text": "Tailored documents generated."}
-    except LLMProviderError:
-        await session.rollback()
-        toast = {
-            "tone": "danger",
-            "text": (
-                "No LLM provider configured — set ANTHROPIC_API_KEY / OPENAI_API_KEY "
-                "or OLLAMA_BASE_URL in .env and restart."
-            ),
-        }
-    except ValueError as exc:
-        await session.rollback()
-        toast = {"tone": "danger", "text": f"Generation failed: {exc}"}
-
     job = None
     if application.job_id:
         job = await job_service.get_job(session, application.job_id)
     if job is None:
         raise HTTPException(status_code=409, detail="Application has no job attached")
 
+    await generation_dispatch.mark_generating(session, application)
+    await session.commit()
+    spawned = generation_dispatch.spawn_generation(application.id)
+    toast = {
+        "tone": "info",
+        "text": "Generating tailored documents — the workspace updates when they're ready.",
+    }
+    if not spawned:
+        toast = {"tone": "info", "text": "Generation already in progress."}
+
     ctx = await drctx.build_review_ctx(
         session, user_id=user_id, job=job, application=application, eager=False
     )
     response = templates.TemplateResponse(request, "pages/_discover_review_workspace.html", ctx)
-    if toast is not None:
-        response.headers["HX-Trigger"] = _json.dumps({"showToast": toast})
+    response.headers["HX-Trigger"] = _json.dumps({"showToast": toast})
     return response
 
 

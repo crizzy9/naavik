@@ -187,36 +187,23 @@ def test_forward_transition_rules():
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_draft_eager_calls_pre_generate():
+async def test_get_or_create_draft_never_generates_inline():
+    """A GET must never block on LLM + Typst — get_or_create_draft only
+    creates the row; generation is dispatched async by the route
+    (services.generation_dispatch). Eager mode included."""
     settings = _make_settings(eager_review_generation=True)
     job = _make_job()
     session = _FakeSession()
     # exec calls in order: existing app lookup (None), job lookup (job).
     session.exec_queue = [_exec_one(None), _exec_one(job)]
 
-    pre_gen = AsyncMock()
-    draft = await get_or_create_draft(
-        session, user_id=1, job_id=100, settings=settings, pre_generate_fn=pre_gen
-    )
-    from models import ApplicationStatus
+    draft = await get_or_create_draft(session, user_id=1, job_id=100, settings=settings)
+    from models import ApplicationStatus, DocsState
 
     assert draft.status == ApplicationStatus.DRAFT
     assert draft.user_id == 1
     assert draft.job_id == 100
-    pre_gen.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_get_or_create_draft_lazy_skips_pre_generate():
-    settings = _make_settings(eager_review_generation=False)
-    job = _make_job()
-    session = _FakeSession()
-    session.exec_queue = [_exec_one(None), _exec_one(job)]
-    pre_gen = AsyncMock()
-    await get_or_create_draft(
-        session, user_id=1, job_id=100, settings=settings, pre_generate_fn=pre_gen
-    )
-    pre_gen.assert_not_called()
+    assert draft.docs_state == DocsState.NONE
 
 
 @pytest.mark.asyncio
@@ -225,9 +212,7 @@ async def test_get_or_create_draft_returns_existing():
     existing = _make_app()
     session = _FakeSession()
     session.exec_queue = [_exec_one(existing)]
-    out = await get_or_create_draft(
-        session, user_id=1, job_id=100, settings=settings, pre_generate_fn=AsyncMock()
-    )
+    out = await get_or_create_draft(session, user_id=1, job_id=100, settings=settings)
     assert out is existing
 
 
@@ -254,14 +239,12 @@ async def test_get_or_create_draft_unique_race_reuses_winner_row():
     # exec order: existing lookup (None) → job lookup → post-conflict re-lookup.
     session.exec_queue = [_exec_one(None), _exec_one(job), _exec_one(winner)]
     session.flush_raises = [_integrity_error()]
-    out = await get_or_create_draft(
-        session, user_id=1, job_id=100, settings=settings, pre_generate_fn=AsyncMock()
-    )
+    out = await get_or_create_draft(session, user_id=1, job_id=100, settings=settings)
     assert out is winner
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_draft_unique_race_eager_pre_generates_winner():
+async def test_get_or_create_draft_unique_race_eager_reuses_winner_without_generation():
     from models import DocsState
 
     settings = _make_settings(eager_review_generation=True)
@@ -270,12 +253,9 @@ async def test_get_or_create_draft_unique_race_eager_pre_generates_winner():
     session = _FakeSession()
     session.exec_queue = [_exec_one(None), _exec_one(job), _exec_one(winner)]
     session.flush_raises = [_integrity_error()]
-    pre_gen = AsyncMock()
-    out = await get_or_create_draft(
-        session, user_id=1, job_id=100, settings=settings, pre_generate_fn=pre_gen
-    )
+    out = await get_or_create_draft(session, user_id=1, job_id=100, settings=settings)
     assert out is winner
-    pre_gen.assert_awaited_once()
+    assert winner.docs_state == DocsState.NONE
 
 
 @pytest.mark.asyncio
@@ -290,9 +270,7 @@ async def test_get_or_create_draft_integrity_error_without_live_row_reraises():
     session.exec_queue = [_exec_one(None), _exec_one(job), _exec_one(None)]
     session.flush_raises = [_integrity_error()]
     with pytest.raises(IntegrityError):
-        await get_or_create_draft(
-            session, user_id=1, job_id=100, settings=settings, pre_generate_fn=AsyncMock()
-        )
+        await get_or_create_draft(session, user_id=1, job_id=100, settings=settings)
 
 
 # ── validate_submittable ────────────────────────────────────────────

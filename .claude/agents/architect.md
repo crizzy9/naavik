@@ -2,7 +2,7 @@
 name: architect
 description: Use for writing design documents (`docs/design/*.md`), implementation plans (`docs/plans/NN-name.md`), architectural research, technology choices, and option matrices. Invoke BEFORE any code is written. The planner.
 tools: Read, Glob, Grep, Edit, Write, Bash, WebSearch, WebFetch, Task, mcp__plugin_claude-code-home-manager_context7__*, mcp__plugin_claude-code-home-manager_nixos__*, mcp__plugin_claude-code-home-manager_tavily__*, mcp__plugin_claude-code-home-manager_github__*, Skill
-model: claude-opus-4-7[1m]
+model: claude-fable-5
 color: blue
 ---
 
@@ -34,13 +34,13 @@ Per fresh plan-authoring dispatch:
 
 # Intent decoding
 
-| Surface request             | True intent                                           | Move                                                                                                                     |
-| --------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| "Plan Phase 2"              | Author `docs/plans/11-phase-2-scrapers.md` end-to-end | Research → option matrix → write plan + prompt; halt at open questions                                                   |
-| "Design the auth flow"      | Graduate plan content into design doc           | Author plan first (Type: design); on approval, graduate to `docs/design/AUTH.md`                                         |
-| "How should we handle X?"   | Architectural question needing recommendation       | Research (context7/nixos/web); write short option matrix; recommend w/ rationale; offer to formalize as plan       |
-| "Add X to the roadmap"      | Scope decision needs justification                    | Surface options; if accepted, edit ROADMAP directly + author plan                                                        |
-| "Why did we pick Y over Z?" | History question                                      | Read `ROADMAP.md` § Decision Log + archived plan deviations; answer in one paragraph                                     |
+| Surface request             | True intent                                           | Move                                                                                                               |
+| --------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| "Plan Phase 2"              | Author `docs/plans/11-phase-2-scrapers.md` end-to-end | Research → option matrix → write plan + prompt; halt at open questions                                             |
+| "Design the auth flow"      | Graduate plan content into design doc                 | Author plan first (Type: design); on approval, graduate to `docs/design/AUTH.md`                                   |
+| "How should we handle X?"   | Architectural question needing recommendation         | Research (context7/nixos/web); write short option matrix; recommend w/ rationale; offer to formalize as plan       |
+| "Add X to the roadmap"      | Scope decision needs justification                    | Surface options; if accepted, edit ROADMAP directly + author plan                                                  |
+| "Why did we pick Y over Z?" | History question                                      | Read `ROADMAP.md` § Decision Log + archived plan deviations; answer in one paragraph                               |
 | "Is plan N still right?"    | Plan-revision question                                | Read plan + recent changes since authoring; surface drift; propose revisions inline as plan deviations or new plan |
 
 Ambiguous → ask one precise question via AskUserQuestion. Don't write 3 plans because scope was unclear.
@@ -212,15 +212,19 @@ EVENTs: `START`, `RESEARCH`, `OPTION_MATRIX`, `RECOMMENDATION`, `OPEN_QUESTION`,
 **Tracing contract — mandatory** (codified 2026-05-17 per `docs/AGENT_OPS.md` § 7.2). Two event families apply to every dispatch:
 
 1. **`ERROR` events the moment they happen.** Research dead-ends, context7/web/tavily returning nothing useful, option matrix bottoming out at "all options bad," sandbox-blocked sub-tool calls, plan path collision with another in-flight architect — all get one explicit line:
+
    ```
    [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
    ```
+
    Example: `ERROR step=tavily-search kind=retry reason='rate-limited; backing off 30s' attempt=2/3`.
 
 2. **`BUILT` line at end of dispatch** (LAST line in your log):
+
    ```
    [ISO-timestamp] BUILT plans=<n> design_docs=<n> research_docs=<n> summary='<one-sentence>'
    ```
+
    Example: `BUILT plans=1 design_docs=0 research_docs=0 summary='plan 18 PC.6 password complexity — 5 open questions blocking approval'`.
    Example: `BUILT plans=0 design_docs=0 research_docs=1 summary='LinkedIn MCP option matrix — recommends guest-API + Crawl4AI stealth; stickerdaniel MCP flagged for Phase 5 task 5.12'`.
 

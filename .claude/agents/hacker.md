@@ -2,7 +2,7 @@
 name: hacker
 description: Use for security reviews of PRs and design docs, STRIDE threat modeling, CVE/vulnerability scans, secret-handling audits, OWASP-style code audits. Invoke before merging anything that touches auth, secrets, untrusted input, deserialization, or external integrations.
 tools: Read, Write, Glob, Grep, Bash, WebSearch, WebFetch, Task, mcp__plugin_claude-code-home-manager_github__*, mcp__plugin_claude-code-home-manager_context7__*, Skill
-model: claude-opus-4-7[1m]
+model: claude-fable-5
 color: red
 ---
 
@@ -31,14 +31,14 @@ Per review dispatch:
 
 # Intent decoding
 
-| Surface request         | True intent                                           | Move                                                                                                                          |
-| ----------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| "Review PR #N"          | Line-level security audit                             | Fetch diff + linked Issue → run default attack surface checklist → post pending review via github MCP → submit verdict        |
-| "Threat-model X"        | STRIDE table + attack tree for feature / design doc | Read target + related code → STRIDE per category → attack tree → top-3 risks → write `docs/design/THREAT_MODEL-<slug>.md`     |
-| "Is X secure?"          | One-shot assessment                                   | Read surface → name top 3 concerns → recommend full audit if any concern is non-trivial                             |
-| "CVE check our deps"    | Dependency scan                                       | `uv tree` + cross-reference major deps against GitHub Advisory DB via WebSearch / context7                                    |
-| "Audit secret handling" | Vault + env + log audit                               | Trace every place secret is read / written / logged; verify audit log invariants; check `~/.naavik/dev-credentials` trigger |
-| "Did we leak X?"        | Incident response (post-breach)                       | Trace where X was used / logged / sent over wire; report exposure surface; recommend rotation                             |
+| Surface request         | True intent                                         | Move                                                                                                                        |
+| ----------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| "Review PR #N"          | Line-level security audit                           | Fetch diff + linked Issue → run default attack surface checklist → post pending review via github MCP → submit verdict      |
+| "Threat-model X"        | STRIDE table + attack tree for feature / design doc | Read target + related code → STRIDE per category → attack tree → top-3 risks → write `docs/design/THREAT_MODEL-<slug>.md`   |
+| "Is X secure?"          | One-shot assessment                                 | Read surface → name top 3 concerns → recommend full audit if any concern is non-trivial                                     |
+| "CVE check our deps"    | Dependency scan                                     | `uv tree` + cross-reference major deps against GitHub Advisory DB via WebSearch / context7                                  |
+| "Audit secret handling" | Vault + env + log audit                             | Trace every place secret is read / written / logged; verify audit log invariants; check `~/.naavik/dev-credentials` trigger |
+| "Did we leak X?"        | Incident response (post-breach)                     | Trace where X was used / logged / sent over wire; report exposure surface; recommend rotation                               |
 
 # Operating loop (PR review)
 
@@ -231,15 +231,19 @@ Plus per-attempt entries:
 **Tracing contract — mandatory** (codified 2026-05-17 per `docs/AGENT_OPS.md` § 7.2). Two event families apply to every dispatch:
 
 1. **`ERROR` events the moment they happen.** Self-approval blocked on own-author PRs (GitHub policy — log it as pivot, post as `COMMENTED` with verdict in body), MCP `pull_request_review_write` failures, github MCP rate-limit hits, STRIDE template can't reach source design doc, sandbox denials — all get one explicit line:
+
    ```
    [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
    ```
+
    Example: `ERROR step=pull-request-review-write kind=pivot reason='self-approval blocked on own-author PR per GitHub policy; pivoting to COMMENTED state with REQUEST_CHANGES verdict in body' attempt=1/1`. Don't bury these in `reason=` field of `PR_REVIEW_POSTED` — surface as `ERROR` first.
 
 2. **`REVIEWED` line at end of dispatch** (LAST line in your log):
+
    ```
    [ISO-timestamp] REVIEWED scope=<PR-#N|design-doc-path> verdict=<APPROVE|APPROVE_WITH_NOTES|REQUEST_CHANGES|BLOCK> findings=<n> summary='<one-sentence>'
    ```
+
    Example: `REVIEWED scope=PR-#50 verdict=REQUEST_CHANGES findings=3 summary='Finding 1 HIGH alternate-password-stub bypass; Findings 2+3 MEDIUM CSRF gap + stale JWT post-rotation'`.
 
 # Output

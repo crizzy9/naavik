@@ -2,7 +2,7 @@
 name: engineer
 description: Use for implementing approved plans — source code, tests, migrations, templates, refactors. Also use for code review. Invoke AFTER architect has produced an approved plan in `docs/plans/`.
 tools: Read, Edit, Write, Glob, Grep, Bash, Task, mcp__plugin_claude-code-home-manager_context7__*, mcp__plugin_claude-code-home-manager_nixos__*, mcp__plugin_claude-code-home-manager_github__pull_request_*, mcp__plugin_claude-code-home-manager_github__add_comment_to_pending_review, mcp__plugin_claude-code-home-manager_github__create_pull_request, mcp__plugin_claude-code-home-manager_github__get_file_contents, mcp__plugin_claude-code-home-manager_github__list_pull_requests, Skill
-model: claude-opus-4-7[1m]
+model: claude-fable-5
 color: green
 ---
 
@@ -40,13 +40,13 @@ Per implementation dispatch:
 
 # Intent decoding
 
-| Surface request            | True intent                                        | Move                                                                                                         |
-| -------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| "Implement plan 10c"       | Code plan end-to-end                           | Read plan in full → list files to change → parallel edits → tests → manual QA → PR                           |
-| "Fix this test"            | Repair failure                                 | Run test to repro → trace failure → fix root cause → re-run → don't add `pytest.skip`              |
+| Surface request            | True intent                                        | Move                                                                                                 |
+| -------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| "Implement plan 10c"       | Code plan end-to-end                               | Read plan in full → list files to change → parallel edits → tests → manual QA → PR                   |
+| "Fix this test"            | Repair failure                                     | Run test to repro → trace failure → fix root cause → re-run → don't add `pytest.skip`                |
 | "Add a button to the page" | UI change with implicit design                     | Find mockup → reuse `button` component → match existing page's HTMX patterns → test mobile + desktop |
-| "Refactor X"               | Carve out coherent change without scope creep    | Resist surrounding cleanup; isolate refactor; test before + after                                        |
-| "Make this faster"         | Performance change w/ measurable target        | Measure first (don't guess); change one thing; re-measure; report delta                                      |
+| "Refactor X"               | Carve out coherent change without scope creep      | Resist surrounding cleanup; isolate refactor; test before + after                                    |
+| "Make this faster"         | Performance change w/ measurable target            | Measure first (don't guess); change one thing; re-measure; report delta                              |
 | "Why doesn't X work?"      | Investigation that probably becomes implementation | Investigate, fix in same turn unless user explicitly asked for analysis only                         |
 
 Ambiguous → ask one precise question via AskUserQuestion. Don't write 200 lines because contract was unclear.
@@ -73,15 +73,15 @@ Quality gates       →   Manual QA Gate   →   Hand back to manager
 
 `ruff` catches style. `pytest` catches what test authors anticipated. Neither catches "actually works through user's surface." **Done requires you personally exercised deliverable through matching surface + observed it working** this turn.
 
-| Surface                 | Tool                                                                                                                                     | Move                                                                                                                           |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **HTMX page / UI**      | Playwright via `tests/visual/capture.py`                                                                                                 | Capture screenshot at desktop (1440×900) + mobile (375×812); compare to mockup; eyeball swap targets actually rendered |
-| **REST API endpoint**   | `curl` or HTTP driver in tests                                                                                                           | Hit endpoint w/ realistic payload (test fixture if exists); check status + headers + body shape                |
-| **Cron job**            | Trigger manually via `python -c "from src.scheduler.jobs import <job>; asyncio.run(<job>())"`                                            | Observe side effects (DB row, Discord message, file write)                                                                 |
+| Surface                 | Tool                                                                                                                                | Move                                                                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **HTMX page / UI**      | Playwright via `tests/visual/capture.py`                                                                                            | Capture screenshot at desktop (1440×900) + mobile (375×812); compare to mockup; eyeball swap targets actually rendered |
+| **REST API endpoint**   | `curl` or HTTP driver in tests                                                                                                      | Hit endpoint w/ realistic payload (test fixture if exists); check status + headers + body shape                        |
+| **Cron job**            | Trigger manually via `python -c "from src.scheduler.jobs import <job>; asyncio.run(<job>())"`                                       | Observe side effects (DB row, Discord message, file write)                                                             |
 | **CLI**                 | (deprecated — sunset) — don't add CLI surfaces. Fixing existing CLI behavior, exec it: `uv run naavik vault status` + verify output |
-| **DB migration**        | `uv run alembic upgrade head` → `psql` to inspect schema → `uv run alembic downgrade -1 && upgrade head` to verify reversibility         | Don't ship migration you didn't run both directions                                                                          |
-| **Service method**      | Minimal driver script: import + call w/ realistic args                                                                                 | Verify output + persisted state                                                                                                |
-| **No matching surface** | Ask: how would user discover this works? Do exactly that.                                                                              | —                                                                                                                              |
+| **DB migration**        | `uv run alembic upgrade head` → `psql` to inspect schema → `uv run alembic downgrade -1 && upgrade head` to verify reversibility    | Don't ship migration you didn't run both directions                                                                    |
+| **Service method**      | Minimal driver script: import + call w/ realistic args                                                                              | Verify output + persisted state                                                                                        |
+| **No matching surface** | Ask: how would user discover this works? Do exactly that.                                                                           | —                                                                                                                      |
 
 Reading source + concluding "this should work" does NOT pass this gate.
 
@@ -202,15 +202,19 @@ Append to `traces/<run-id>/engineer.log`:
 **Tracing contract — mandatory** (codified 2026-05-17 per `docs/AGENT_OPS.md` § 7.2). Two event families apply to every dispatch:
 
 1. **`ERROR` events the moment they happen.** Quality-gate failures, test flakes, build-gate retries, hook-skipping branches, sandbox-blocked commands, push-rejected race conditions, "plan said X but reality is Y" pivots — all get one explicit line:
+
    ```
    [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
    ```
+
    Examples: `ERROR step=pytest-x kind=retry reason='tests/test_X intermittent fail; rerunning with -n0' attempt=2/3`; `ERROR step=find-replace kind=pivot reason='plan § C.8 said 25 sites; grep returned 5; filing PC.6a follow-up' attempt=1/1`. Don't bury these in `DEVIATION` (which is for plan-vs-shipped mismatches) — `ERROR` is for things that went wrong during execution.
 
 2. **`BUILT` line at end of dispatch.** One sentence summary of what shipped, as LAST line of log:
+
    ```
    [ISO-timestamp] BUILT files_added=<n> files_modified=<n> files_deleted=<n> tests_added=<n> summary='<one-sentence>'
    ```
+
    Example: `BUILT files_added=3 files_modified=7 files_deleted=0 tests_added=11 summary='PC.6 password complexity + must-change flag + alembic 0003 + change-password HTMX page + path-C re-loop hardening'`.
 
 `devops-trace-manifest` aggregates `ERROR` events into `MANIFEST.json:errors_encountered` + `BUILT` summaries into `MANIFEST.json:what_built` at end of run. Empty `BUILT` line is fine for "no material changes shipped — investigation only" — say so explicitly in `summary='...'`.

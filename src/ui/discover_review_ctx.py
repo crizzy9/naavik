@@ -89,9 +89,17 @@ async def tailored_bullet_groups(
     """
     experiences = await profile_service.list_experiences(session, user_id)
     rationale_index = _rationale_index_from_trace(application)
+    # One batched query for all bullets — the per-experience loop was an N+1
+    # on every workspace render.
+    all_bullets = await profile_service.list_all_bullets(session, user_id)
+    bullets_by_exp: dict[int, list] = {}
+    for b in all_bullets:
+        bullets_by_exp.setdefault(b.experience_id, []).append(b)
+    for bs in bullets_by_exp.values():
+        bs.sort(key=lambda b: b.order_index)
     out = []
     for e in experiences:
-        bullets = await profile_service.get_bullets_for_experience(session, e.id)
+        bullets = bullets_by_exp.get(e.id, [])
         rows = []
         for b in bullets:
             rationale = rationale_index.get(b.id)
@@ -184,8 +192,12 @@ async def build_review_ctx(
             )
 
     failure = None
+    generation_error = None
     if application and application.submission_artifacts:
         failure = application.submission_artifacts.get("last_failure")
+        gen_err = application.submission_artifacts.get("generation_error")
+        if isinstance(gen_err, dict):
+            generation_error = gen_err.get("message")
 
     groups = (
         await tailored_bullet_groups(session, user_id=user_id, application=application)
@@ -242,5 +254,6 @@ async def build_review_ctx(
         "screener_answers": screener_views,
         "unreviewed_count": unreviewed,
         "failure": failure,
+        "generation_error": generation_error,
         "cost_estimate_usd": 0.07,
     }

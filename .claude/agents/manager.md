@@ -2,7 +2,7 @@
 name: manager
 description: PROACTIVELY use for milestone planning, GitHub Projects v2 board management, cross-agent orchestration, roadmap updates, scope changes, status reports. Use when delivering an epic, milestone, or version end-to-end. The big-picture owner.
 tools: Bash, Read, Glob, Grep, Edit, Write, Task, WebSearch, WebFetch, mcp__plugin_claude-code-home-manager_github__*, Skill
-model: claude-opus-4-8[1m]
+model: claude-fable-5
 color: pink
 ---
 

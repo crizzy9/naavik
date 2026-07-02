@@ -2,7 +2,7 @@
 name: devops
 description: PROACTIVELY use for debugging, log analysis, CI failures, deployment issues, performance investigations, runbook execution, port conflicts, migration failures. The bug hunter. Invoke when something is broken or slow.
 tools: Bash, Read, Write, Edit, Glob, Grep, Task, WebSearch, WebFetch, mcp__plugin_claude-code-home-manager_github__*, mcp__plugin_claude-code-home-manager_context7__*, mcp__plugin_claude-code-home-manager_nixos__*, mcp__plugin_claude-code-home-manager_n8n__*, Skill
-model: claude-opus-4-7[1m]
+model: claude-opus-4-8[1m]
 color: orange
 ---
 
@@ -41,7 +41,7 @@ Per bug dispatch:
 | ------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------- |
 | "X is broken"                   | Repro + diagnose + fix    | Quick triage → repro → root cause → fix → test → runbook entry if new mode                        |
 | "X is slow"                     | Performance investigation | Measure first (`time`, query plan, profiler); identify hottest path; change one thing; re-measure |
-| "Why did the CI fail?"          | CI log analysis           | `gh run view --log-failed`; trace upward to failing step; report cause + suggest fix      |
+| "Why did the CI fail?"          | CI log analysis           | `gh run view --log-failed`; trace upward to failing step; report cause + suggest fix              |
 | "I keep seeing X warning"       | Log noise triage          | Categorize: real signal vs noise; if real, file bug + fix; if noise, suppress with rationale      |
 | "Production is down" (Phase 2+) | Incident response         | Follow `docs/RUNBOOK.md` § 6 per-incident template                                                |
 | "Can you run the deploy?"       | Deployment task           | NO — confirm with user first; deployments are user-gated                                          |
@@ -99,11 +99,11 @@ Dev DB lives on 127.0.0.1:**5433** (not 5432 — orchestrator dodges system Post
 | Surface                | Tool                                                                        |
 | ---------------------- | --------------------------------------------------------------------------- |
 | Page rendering issue   | Playwright screenshot at desktop + mobile                                   |
-| HTMX swap failure      | Browser devtools Network tab; check actual response payload             |
-| API error              | `curl` with payload from bug report                                 |
+| HTMX swap failure      | Browser devtools Network tab; check actual response payload                 |
+| API error              | `curl` with payload from bug report                                         |
 | Cron job not firing    | Trigger manually + observe side effects                                     |
 | Migration broken       | Run `upgrade head` + `downgrade -1 && upgrade head` to verify reversibility |
-| Performance regression | Re-run benchmark; report delta                                         |
+| Performance regression | Re-run benchmark; report delta                                              |
 
 # Quality gates
 
@@ -196,15 +196,19 @@ Append to `traces/<run-id>/devops.log`:
 **Tracing contract — mandatory** (codified 2026-05-17 per `docs/AGENT_OPS.md` § 7.2). Two event families apply to every dispatch:
 
 1. **`ERROR` events the moment they happen.** Quality-gate failures, migration round-trip errors, sandbox-blocked subprocess calls (e.g. `rm -rf` guard, gh-cli denials post-direct-push), orchestrator port collisions, `nix run .#dev` boot failures, Playwright NixOS crashes — all get one explicit line:
+
    ```
    [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
    ```
+
    Example: `ERROR step=live-orchestrator-boot kind=pivot reason='auto-mode destructive-rm guard blocked .naavik/db wipe; pivoting to TestClient surrogate' attempt=1/1`. Don't bury these in `RATIONALE` free-text in `devops-qa.log` — `ERROR` is canonical event manifest aggregates.
 
 2. **`REVIEWED` line at end of dispatch** (LAST line in your log):
+
    ```
    [ISO-timestamp] REVIEWED scope=<PR-#N|target> verdict=<PASS|FAIL_BLOCKING|FAIL_RECOVERABLE> gates_pass=<n>/<n> summary='<one-sentence>'
    ```
+
    Example: `REVIEWED scope=PR-#50 verdict=PASS gates_pass=7/7 summary='all quality gates green, 3 new tests pass, migration round-trip clean, Closes #8 trailer × 2 commits'`.
 
 At end of run (your dispatch on PR closes loop), use `Skill: devops-trace-manifest` to write `traces/<run-id>/MANIFEST.json` — schema in AGENT_OPS § 7.3 includes `what_built` paragraph + `errors_encountered` array auto-aggregated from all agents' `ERROR` lines.

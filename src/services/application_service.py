@@ -287,24 +287,16 @@ async def get_or_create_draft(
     user_id: int,
     job_id: int,
     settings: Settings,
-    pre_generate_fn=None,
 ) -> Application:
     """Used by `GET /discover/{job_id}`. Creates a DRAFT row if none exists.
 
-    Pre-generation gated on `settings.eager_review_generation`. The call is
-    routed through `pre_generate_fn` (defaults to
-    `document_generator.pre_generate`). Tests can pass a stub.
+    Never generates documents inline — a GET must not block on LLM + Typst
+    (~13s on the dev box). Callers that want eager generation dispatch it
+    asynchronously via `services.generation_dispatch` after committing.
     """
+    del settings  # signature kept uniform; generation moved out of this path
     existing = await get_application_for_job(session, user_id=user_id, job_id=job_id)
     if existing is not None:
-        if (
-            settings.eager_review_generation
-            and existing.status == ApplicationStatus.DRAFT
-            and existing.docs_state in {DocsState.NONE, DocsState.STALE}
-        ):
-            await _maybe_pre_generate(
-                session, existing, settings=settings, pre_generate_fn=pre_generate_fn
-            )
         return existing
 
     job = (await session.exec(select(Job).where(Job.id == job_id))).one_or_none()
@@ -344,14 +336,6 @@ async def get_or_create_draft(
         existing = await get_application_for_job(session, user_id=user_id, job_id=job_id)
         if existing is None:
             raise
-        if (
-            settings.eager_review_generation
-            and existing.status == ApplicationStatus.DRAFT
-            and existing.docs_state in {DocsState.NONE, DocsState.STALE}
-        ):
-            await _maybe_pre_generate(
-                session, existing, settings=settings, pre_generate_fn=pre_generate_fn
-            )
         return existing
 
     await _emit_event(
@@ -365,28 +349,7 @@ async def get_or_create_draft(
             "trigger": StatusChangeTrigger.DRAFT_CREATION.value,
         },
     )
-
-    if settings.eager_review_generation:
-        await _maybe_pre_generate(
-            session, draft, settings=settings, pre_generate_fn=pre_generate_fn
-        )
     return draft
-
-
-async def _maybe_pre_generate(
-    session: AsyncSession,
-    application: Application,
-    *,
-    settings: Settings,
-    pre_generate_fn=None,
-) -> None:
-    """Invoke the document_generator pre_generate hook with safe fallback."""
-    if pre_generate_fn is None:
-        from services.document_generator import pre_generate as pre_generate_fn  # noqa: PLR0915
-    try:
-        await pre_generate_fn(session, application, settings=settings)
-    except Exception as exc:  # noqa: BLE001 — caller may not want to crash on generation failures
-        log.warning("pre_generate failed for application %s: %s", application.id, exc)
 
 
 async def queue_auto_apply(
@@ -395,7 +358,6 @@ async def queue_auto_apply(
     user_id: int,
     job_id: int,
     settings: Settings,
-    pre_generate_fn=None,
 ) -> Application:
     """Right-swipe: create DRAFT (if missing) + flip Job.queue_state."""
     draft = await get_or_create_draft(
@@ -403,7 +365,6 @@ async def queue_auto_apply(
         user_id=user_id,
         job_id=job_id,
         settings=settings,
-        pre_generate_fn=pre_generate_fn,
     )
     job = (await session.exec(select(Job).where(Job.id == job_id))).one_or_none()
     if job is not None:

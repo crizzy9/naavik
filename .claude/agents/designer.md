@@ -2,7 +2,7 @@
 name: designer
 description: Use for UI/UX work — designing screens per `DESIGN.md` tokens, creating HTML/CSS prototypes, exporting mockups to `docs/design/mockups/`, reviewing visual quality of shipped pages. Invoke for any new screen, component, or visual polish pass.
 tools: Read, Edit, Write, Glob, Grep, Bash, Task, Skill, WebSearch, WebFetch
-model: claude-opus-4-7[1m]
+model: claude-opus-4-8[1m]
 color: yellow
 ---
 
@@ -37,14 +37,14 @@ Per UI dispatch, IN THIS ORDER:
 
 # Intent decoding
 
-| Surface request                 | True intent                     | Move                                                                                                                        |
-| ------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| "Design the X screen"           | Mockup + componentization notes | Route to skill (huashu / frontend-design) → mockup → componentization handoff                                               |
-| "Polish the Y page"             | Critique + targeted fixes       | Skill: `impeccable` or `ui-ux-pro-max` → identify top 3 issues → propose fixes → apply                                      |
-| "Build a hero for Z"            | New visual block                | Skill: `frontend-design` → 2-3 variants → user picks → componentize                                                         |
+| Surface request                 | True intent                     | Move                                                                                                                    |
+| ------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| "Design the X screen"           | Mockup + componentization notes | Route to skill (huashu / frontend-design) → mockup → componentization handoff                                           |
+| "Polish the Y page"             | Critique + targeted fixes       | Skill: `impeccable` or `ui-ux-pro-max` → identify top 3 issues → propose fixes → apply                                  |
+| "Build a hero for Z"            | New visual block                | Skill: `frontend-design` → 2-3 variants → user picks → componentize                                                     |
 | "Audit accessibility"           | A11y pass                       | Skill: `impeccable` → run accessibility checklist (`docs/design/WORKFLOW.md` § Accessibility checklist) → propose fixes |
 | "Make this feel less like SaaS" | Voice/tone fix                  | Read DESIGN.md § voice → identify SaaS-flavored copy → propose alternatives reading like dev tool                       |
-| "Match the mockup"              | Implementation gap-close        | Open mockup + current page → diff visually → propose specific fixes                                                         |
+| "Match the mockup"              | Implementation gap-close        | Open mockup + current page → diff visually → propose specific fixes                                                     |
 
 Ambiguous → ask one precise question via AskUserQuestion. Don't produce 5 mockups because spec was unclear.
 
@@ -177,14 +177,17 @@ Append to `traces/<run-id>/designer.log`:
 **Tracing contract — mandatory** (codified 2026-05-17 per `docs/AGENT_OPS.md` § 7.2). Two event families apply to every dispatch:
 
 1. **`ERROR` events the moment they happen.** Claude Design skill failures, Playwright capture aborts, mockup export size/format mismatches, COMPONENTS.md catalog says "no fit" (forcing NEW_VARIANT), source design doc missing — all get one explicit line:
+
    ```
    [ISO-timestamp] ERROR step=<what-failed> kind=<retry|skip|halt|pivot> reason=<one-line> attempt=<n>/<max>
    ```
 
 2. **`BUILT` line at end of dispatch** (LAST line in your log):
+
    ```
    [ISO-timestamp] BUILT mockups=<n> components_referenced=<n> components_new=<n> summary='<one-sentence>'
    ```
+
    Example: `BUILT mockups=2 components_referenced=14 components_new=0 summary='discover-detail desktop+mobile mockups; reused existing partials; no new components'`.
 
 # When to escalate

@@ -77,6 +77,19 @@ class _NoopSession:
 
 
 @pytest.fixture(autouse=True)
+def _disable_background_generation():
+    """Background bundle generation opens its own `db.session.async_session`,
+    which test fixtures don't override — a spawned task would write to (or
+    hang on) the operator's real DB. Off for every test; generation_dispatch
+    unit tests exercise `_run_generation` directly."""
+    from services import generation_dispatch
+
+    generation_dispatch.enabled = False
+    yield
+    generation_dispatch.enabled = True
+
+
+@pytest.fixture(autouse=True)
 def _patch_services_to_sample_data(request, monkeypatch):
     """Make route → service-layer reads transparent to the legacy fixtures.
 

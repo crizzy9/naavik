@@ -15,7 +15,13 @@
     selected_bullet_count, total_bullet_count, resume_pdf_url,
     cover_sections, screener_answers, unreviewed_count, cost_estimate_usd
 #}
-<div id="review-workspace" class="flex flex-col min-h-screen">
+<div id="review-workspace" class="flex flex-col min-h-screen"
+     {% if application and application.docs_state == "generating" %}
+     hx-get="/_fragments/discover/workspace/{{ job.id }}"
+     hx-trigger="every 3s"
+     hx-target="this"
+     hx-swap="outerHTML"
+     {% endif %}>
   {% with job=job, application=application %}
     {% include "components/apply_topbar.html" %}
   {% endwith %}
@@ -45,10 +51,10 @@
         </p>
         <button type="button"
                 class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                hx-post="/api/v1/discover/{{ job.id }}/auto-submit"
-                hx-target="closest body"
-                hx-swap="none"
-                hx-on:click="window.location.href = '/discover/{{ job.id }}?eager=1'">
+                hx-post="/_fragments/discover/tailor/{{ job.id }}"
+                hx-target="#review-workspace"
+                hx-swap="outerHTML"
+                hx-disabled-elt="this">
           <i data-lucide="sparkles" class="h-4 w-4 text-cyan-200" stroke-width="1.5"></i>
           Tailor for this job
         </button>
@@ -131,12 +137,54 @@
             {% endif %}
           </div>
         </header>
-        {% if docs_generated %}
-        <p class="px-5 pt-3 text-xs text-slate-500 font-mono">
-          {{ selected_bullet_count }} of {{ total_bullet_count }} bullets selected · AI-trimmed to fit 1 page
-        </p>
-        <div class="px-3 py-3">
-          {% include "pages/_apply_tailored_bullets.html" with context %}
+        {% if application.docs_state == "generating" %}
+        {# In-flight — the workspace root polls every 3s until this settles. #}
+        <div class="flex flex-col items-center text-center gap-3 px-6 py-10" data-testid="tailored-generating">
+          <span class="h-8 w-8 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+          <p class="text-sm text-slate-300 max-w-md">
+            Tailoring your resume against this JD — selecting bullets, trimming to one
+            page, compiling the PDF. Usually 20–40 seconds.
+          </p>
+          <p class="text-xs text-slate-500">This page updates automatically.</p>
+        </div>
+        {% elif docs_generated %}
+        <div class="px-5 py-3 flex flex-col gap-3">
+          {% if resume_pdf_url %}
+          <iframe src="{{ resume_pdf_url }}#toolbar=0&navpanes=0"
+                  title="Tailored resume PDF"
+                  class="w-full rounded-md border border-slate-800 bg-white"
+                  style="height: 760px"
+                  data-testid="tailored-resume-embed"></iframe>
+          {% endif %}
+          <details class="group">
+            <summary class="cursor-pointer text-xs text-slate-400 hover:text-slate-200 select-none">
+              <span class="font-mono">{{ selected_bullet_count }} of {{ total_bullet_count }}</span>
+              bullets selected — see what was kept and why
+            </summary>
+            <div class="pt-3">
+              {% include "pages/_apply_tailored_bullets.html" with context %}
+            </div>
+          </details>
+        </div>
+        {% elif application.docs_state == "failed" %}
+        <div class="flex flex-col items-center text-center gap-3 px-6 py-10" data-testid="tailored-failed">
+          <div class="h-10 w-10 rounded-xl bg-rose-500/10 flex items-center justify-center ring-1 ring-rose-500/30">
+            <i data-lucide="alert-triangle" class="h-5 w-5 text-rose-300" stroke-width="1.5"></i>
+          </div>
+          <p class="text-sm text-slate-300 max-w-md">
+            Generation failed{% if generation_error %} — <span class="text-rose-300">{{ generation_error }}</span>{% endif %}.
+            Check your LLM provider settings, then retry.
+          </p>
+          <button type="button"
+                  class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  hx-post="/_fragments/apply/generate/{{ application.id }}"
+                  hx-target="#review-workspace"
+                  hx-swap="outerHTML"
+                  hx-disabled-elt="this"
+                  data-testid="tailored-retry-btn">
+            <i data-lucide="refresh-cw" class="h-4 w-4" stroke-width="1.5"></i>
+            Retry generation
+          </button>
         </div>
         {% else %}
         {# Honest empty state — nothing has been generated for this job yet. #}
