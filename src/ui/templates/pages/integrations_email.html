@@ -1,9 +1,11 @@
 {#
-  integrations_email.html — Connect IMAP page (plan 90 / 0.5.0.01).
+  integrations_email.html — connect your inbox (plan 90 / 0.5.0.01, reworked).
 
-  Lists existing EmailAccount rows + provides the Connect IMAP form.
-  Surfaces a clear "your password is encrypted at rest (Fernet, keyed from
-  SECRET_KEY)" trust note so operators understand the posture before pasting.
+  Gmail-first: one card, two fields (address + app password), crisp inline
+  steps for creating the app password, test-before-save (server side), and
+  an immediate first sync with a visible result. Other IMAP providers live
+  behind a collapsible advanced form. Decision + rationale:
+  docs/design/EMAIL_MONITORING.md.
 
   Args:
     accounts : list[EmailAccount]
@@ -17,53 +19,94 @@
     <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Email integrations</h1>
     <p class="mt-1 text-sm text-slate-400">
       Connect your inbox so Naavik can classify recruiter emails and surface
-      interview / offer / rejection signals. IMAP-only for now (Gmail API
-      arrives in a follow-up).
+      interview / offer / rejection signals against your applications.
     </p>
   </header>
 
   {# Existing accounts #}
+  {% if accounts %}
   <section class="flex flex-col gap-3">
     <h2 class="text-sm font-medium text-slate-300 tracking-tight">Connected accounts</h2>
-    {% if accounts %}
-      <div class="flex flex-col gap-2">
-        {% for account in accounts %}
-          {% include "components/_email_account_card.html" %}
-        {% endfor %}
+    <div class="flex flex-col gap-2">
+      {% for account in accounts %}
+        {% include "components/_email_account_card.html" %}
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── Gmail — the one-screen flow ─────────────────────────────────── #}
+  <section class="rounded-xl bg-slate-900 border border-slate-800 p-6" data-testid="gmail-connect-card">
+    <div class="flex items-center gap-2.5 mb-1">
+      <i data-lucide="mail" class="h-5 w-5 text-rose-400" stroke-width="1.5"></i>
+      <h2 class="text-lg font-semibold text-slate-50 tracking-tight">Connect Gmail</h2>
+    </div>
+    <p class="text-xs text-slate-400 mb-4">
+      Two minutes, one screen. Naavik reads your inbox over IMAP with a Google
+      <strong>app password</strong> — a revocable, Naavik-only credential, never
+      your real password.
+    </p>
+
+    <ol class="mb-5 flex flex-col gap-2 text-sm text-slate-300">
+      <li class="flex gap-2.5">
+        <span class="h-5 w-5 shrink-0 rounded-full bg-slate-800 text-slate-300 text-xs flex items-center justify-center font-mono">1</span>
+        <span>Make sure <a href="https://myaccount.google.com/signinoptions/twosv" target="_blank" rel="noopener" hx-boost="false" class="text-indigo-300 hover:text-indigo-200 underline underline-offset-2">2-Step Verification</a> is on (app passwords require it).</span>
+      </li>
+      <li class="flex gap-2.5">
+        <span class="h-5 w-5 shrink-0 rounded-full bg-slate-800 text-slate-300 text-xs flex items-center justify-center font-mono">2</span>
+        <span>Open <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" hx-boost="false" class="text-indigo-300 hover:text-indigo-200 underline underline-offset-2">myaccount.google.com/apppasswords</a>, name it <span class="font-mono text-slate-200">Naavik</span>, and copy the 16-letter code.</span>
+      </li>
+      <li class="flex gap-2.5">
+        <span class="h-5 w-5 shrink-0 rounded-full bg-slate-800 text-slate-300 text-xs flex items-center justify-center font-mono">3</span>
+        <span>Paste it below — Naavik tests the connection before saving anything, then runs the first sync immediately.</span>
+      </li>
+    </ol>
+
+    <form id="connect-gmail-form"
+          hx-post="/api/v1/integrations/email/gmail"
+          hx-target="#connect-gmail-result"
+          hx-swap="innerHTML"
+          hx-disabled-elt="find button[type=submit]"
+          hx-on::after-request="if(event.detail.successful){setTimeout(() => window.location.reload(), 1800)}"
+          class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <label class="flex flex-col gap-1.5">
+        <span class="text-xs font-medium text-slate-400 uppercase tracking-wide">Gmail address</span>
+        <input type="email" name="account_email" required
+               placeholder="you@gmail.com"
+               class="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"/>
+      </label>
+      <label class="flex flex-col gap-1.5">
+        <span class="text-xs font-medium text-slate-400 uppercase tracking-wide">App password</span>
+        <input type="password" name="app_password" required autocomplete="new-password"
+               placeholder="xxxx xxxx xxxx xxxx"
+               class="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/40"/>
+      </label>
+      <div class="sm:col-span-2 flex items-center justify-between gap-3">
+        <div id="connect-gmail-result" class="text-xs text-slate-400 min-w-0" data-testid="gmail-connect-result"></div>
+        <button type="submit"
+                class="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+          <i data-lucide="plug-zap" class="h-4 w-4" stroke-width="1.5"></i>
+          Test &amp; connect
+        </button>
       </div>
-    {% else %}
-      <p class="text-sm text-slate-500 italic">No accounts connected yet.</p>
-    {% endif %}
+    </form>
+
+    <p class="mt-4 text-[11px] text-slate-500 leading-relaxed">
+      The app password is encrypted at rest (Fernet, keyed from this instance's
+      <code class="text-slate-400">SECRET_KEY</code>) in your self-hosted Postgres.
+      Revoke it any time at myaccount.google.com/apppasswords — Naavik degrades
+      gracefully. If you rotate <code class="text-slate-400">SECRET_KEY</code>,
+      re-paste the app password here.
+    </p>
   </section>
 
-  {# Connect IMAP form #}
-  <section class="rounded-xl bg-slate-900 border border-slate-800 p-6">
-    <div class="flex items-center gap-2 mb-4">
-      <i data-lucide="mail-plus" class="h-5 w-5 text-indigo-400" stroke-width="1.5"></i>
-      <h2 class="text-lg font-semibold text-slate-50 tracking-tight">Connect IMAP inbox</h2>
-    </div>
-
-    <div class="mb-5 rounded-lg bg-slate-950/60 border border-indigo-700/40 p-3 text-xs text-slate-300">
-      <div class="flex items-start gap-2">
-        <i data-lucide="shield-check" class="h-4 w-4 shrink-0 mt-0.5 text-indigo-300" stroke-width="1.5"></i>
-        <div>
-          <p class="font-medium text-slate-100">Trust posture</p>
-          <p class="mt-0.5 text-slate-400">
-            Your IMAP password is <strong>encrypted at rest</strong> in your
-            self-hosted Postgres DB (Fernet, keyed from this instance's
-            <code class="text-slate-300">SECRET_KEY</code>) — a database dump
-            alone won't reveal it. Same trust posture as your login sessions:
-            anyone with <code class="text-slate-300">SECRET_KEY</code> can
-            decrypt it. Use a provider-issued <strong>app password</strong> (not
-            your main account password) and rotate / disable it in your
-            provider's UI when you stop using Naavik. If you rotate
-            <code class="text-slate-300">SECRET_KEY</code>, re-paste the app
-            password here to re-encrypt.
-          </p>
-        </div>
-      </div>
-    </div>
-
+  {# ── Other IMAP providers — advanced, collapsed by default ────────── #}
+  <details class="rounded-xl bg-slate-900 border border-slate-800 overflow-hidden" data-testid="imap-advanced">
+    <summary class="px-6 py-4 cursor-pointer text-sm text-slate-300 hover:bg-slate-800/50 transition flex items-center gap-2">
+      <i data-lucide="settings-2" class="h-4 w-4 text-slate-500" stroke-width="1.5"></i>
+      Other IMAP provider (Fastmail, iCloud, Outlook, self-hosted…)
+    </summary>
+    <div class="px-6 pb-6">
     <form id="connect-imap-form"
           hx-post="/api/v1/integrations/email/imap"
           hx-target="#connect-imap-result"
@@ -79,7 +122,7 @@
       <label class="flex flex-col gap-1.5">
         <span class="text-xs font-medium text-slate-400 uppercase tracking-wide">IMAP host</span>
         <input type="text" name="imap_host" required
-               placeholder="imap.gmail.com"
+               placeholder="imap.fastmail.com"
                class="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"/>
       </label>
       <label class="flex flex-col gap-1.5">
@@ -112,6 +155,7 @@
         </button>
       </div>
     </form>
-  </section>
+    </div>
+  </details>
 </div>
 {% endblock %}

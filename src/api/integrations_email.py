@@ -12,10 +12,12 @@ Security posture mirrors the 0.7.0.48 fix cycle (commits d0e815d/3514b9d):
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -28,6 +30,8 @@ from services import email_credentials, email_sync, imap_host_guard
 from services.auth import require_authed_session
 from services.rate_limit import check_email_sync_now_rate_limit
 from ui.routes.profile import _effective_user_id
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -74,6 +78,59 @@ async def list_email_accounts(
     return [EmailAccountRead.model_validate(r) for r in rows]
 
 
+async def _upsert_imap_account(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    account_email: str,
+    imap_host: str,
+    imap_port: int,
+    imap_username: str,
+    imap_password: str,
+    imap_use_tls: bool,
+) -> EmailAccount:
+    """Create-or-refresh the EmailAccount row (credential Fernet-encrypted)."""
+    existing = (
+        await session.exec(
+            select(EmailAccount).where(
+                EmailAccount.user_id == user_id,
+                EmailAccount.provider == EmailAccountProvider.IMAP,
+                EmailAccount.account_email == account_email,
+            )
+        )
+    ).one_or_none()
+    if existing is not None:
+        email_credentials.store_imap_password(existing, imap_password)
+        existing.imap_host = imap_host
+        existing.imap_port = imap_port
+        existing.imap_username = imap_username
+        existing.imap_use_tls = imap_use_tls
+        existing.status = EmailAccountStatus.OK
+        existing.connection_failure_count = 0
+        existing.last_error_message = None
+        existing.deleted_at = None
+        existing.updated_at = datetime.now(UTC)
+        session.add(existing)
+        await session.flush()
+        return existing
+
+    account = EmailAccount(
+        user_id=user_id,
+        provider=EmailAccountProvider.IMAP,
+        account_email=account_email,
+        imap_host=imap_host,
+        imap_port=imap_port,
+        imap_username=imap_username,
+        imap_password="",
+        imap_use_tls=imap_use_tls,
+        status=EmailAccountStatus.OK,
+    )
+    email_credentials.store_imap_password(account, imap_password)
+    session.add(account)
+    await session.flush()
+    return account
+
+
 @router.post("/api/v1/integrations/email/imap", name="api_email_account_connect")
 async def connect_imap(
     account_email: Annotated[EmailStr, Form()],
@@ -110,47 +167,113 @@ async def connect_imap(
             detail=err or "Could not connect to the mail server.",
         )
 
-    existing = (
-        await session.exec(
-            select(EmailAccount).where(
-                EmailAccount.user_id == user_id,
-                EmailAccount.provider == EmailAccountProvider.IMAP,
-                EmailAccount.account_email == account_email,
-            )
-        )
-    ).one_or_none()
-    if existing is not None:
-        email_credentials.store_imap_password(existing, imap_password)
-        existing.imap_host = imap_host
-        existing.imap_port = imap_port
-        existing.imap_username = imap_username
-        existing.imap_use_tls = imap_use_tls
-        existing.status = EmailAccountStatus.OK
-        existing.connection_failure_count = 0
-        existing.last_error_message = None
-        existing.deleted_at = None
-        existing.updated_at = datetime.now(UTC)
-        session.add(existing)
-        await session.flush()
-        await session.commit()
-        return EmailAccountRead.model_validate(existing)
-
-    account = EmailAccount(
+    account = await _upsert_imap_account(
+        session,
         user_id=user_id,
-        provider=EmailAccountProvider.IMAP,
-        account_email=account_email,
+        account_email=str(account_email),
         imap_host=imap_host,
         imap_port=imap_port,
         imap_username=imap_username,
-        imap_password="",
+        imap_password=imap_password,
         imap_use_tls=imap_use_tls,
-        status=EmailAccountStatus.OK,
     )
-    email_credentials.store_imap_password(account, imap_password)
-    session.add(account)
-    await session.flush()
     await session.commit()
     return EmailAccountRead.model_validate(account)
+
+
+GMAIL_IMAP_HOST = "imap.gmail.com"
+GMAIL_IMAP_PORT = 993
+
+
+@router.post("/api/v1/integrations/email/gmail", name="api_email_account_connect_gmail")
+async def connect_gmail(
+    account_email: Annotated[EmailStr, Form()],
+    app_password: Annotated[str, Form()],
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> HTMLResponse:
+    """One-screen Gmail connect — the user types their address + app password;
+    host/port/TLS/username are derived. Tests the connection BEFORE saving,
+    then runs the first sync immediately and reports the result inline.
+
+    Returns HTML fragments (the Gmail card swaps them in place):
+    - 200 with a success summary (+ HX-Trigger page refresh) on connect;
+    - 422 with a crisp, actionable error otherwise.
+    """
+    import json as _json
+
+    user_id = _effective_user_id(_user)
+    # Google renders app passwords as "xxxx xxxx xxxx xxxx" — accept the
+    # pasted form with spaces.
+    password = app_password.replace(" ", "").strip()
+    if len(password) != 16:
+        return HTMLResponse(
+            '<div class="text-sm text-rose-300">That doesn\'t look like a Google app '
+            "password (16 letters). Paste the code exactly as Google shows it — "
+            "spaces are fine.</div>",
+            status_code=422,
+        )
+
+    ok, err = await email_sync.test_imap_connection(
+        host=GMAIL_IMAP_HOST,
+        port=GMAIL_IMAP_PORT,
+        username=str(account_email),
+        password=password,
+    )
+    if not ok:
+        hint = (
+            "Check that 2-Step Verification is on and the app password was "
+            "created for this exact Google account."
+        )
+        return HTMLResponse(
+            f'<div class="text-sm text-rose-300">Connection failed: {err or "login rejected"}.'
+            f' <span class="text-slate-400">{hint}</span></div>',
+            status_code=422,
+        )
+
+    account = await _upsert_imap_account(
+        session,
+        user_id=user_id,
+        account_email=str(account_email),
+        imap_host=GMAIL_IMAP_HOST,
+        imap_port=GMAIL_IMAP_PORT,
+        imap_username=str(account_email),
+        imap_password=password,
+        imap_use_tls=True,
+    )
+    await session.commit()
+
+    # First sync right away — the user sees data flowing before leaving the
+    # page instead of waiting for the 10-minute cron.
+    sync_note = ""
+    try:
+        sync_result = await email_sync.sync_account(session, account)
+        await session.commit()
+        sync_note = (
+            f" First sync: {sync_result.fetched} message"
+            f"{'s' if sync_result.fetched != 1 else ''} scanned, "
+            f"{sync_result.new} new."
+        )
+    except Exception as exc:  # noqa: BLE001 — connect succeeded; sync is best-effort here
+        log.warning("gmail first sync failed for account %s: %s", account.id, exc)
+        sync_note = " First sync will run on the next 10-minute tick."
+
+    response = HTMLResponse(
+        '<div class="text-sm text-emerald-300">'
+        f"Connected {account.account_email} — inbox tracking is live.{sync_note}"
+        "</div>"
+    )
+    response.headers["HX-Trigger"] = _json.dumps(
+        {
+            "emailConnected": True,
+            "showToast": {
+                "tone": "success",
+                "text": f"Gmail connected — {account.account_email}.{sync_note}",
+            },
+        }
+    )
+    return response
 
 
 @router.post(

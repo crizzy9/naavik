@@ -22,12 +22,40 @@ the owner confirms.
 
 ---
 
+## A.0 Gmail connection UX (2026-07-02 decision)
+
+**Decision: Option B — IMAP with a Google app password, automated.** The
+`/integrations/email` page leads with a Gmail-first card: the user types
+their Gmail address + app password only; `imap.gmail.com:993/TLS` and
+`username=email` are derived server-side (`POST
+/api/v1/integrations/email/gmail`). The route strips the spaces Google
+renders into the 16-letter code, validates shape, tests the IMAP login
+BEFORE saving, upserts the Fernet-encrypted credential, then runs the
+first sync inline and reports "scanned N, new M" in the card. The page
+shows a numbered 3-step walkthrough with direct links to Google's
+2-Step-Verification and apppasswords pages. Other IMAP providers keep the
+full form behind a collapsed "advanced" disclosure.
+
+**Why not Option A (Google OAuth `gmail.readonly`)?** For a self-hosted,
+single-operator deployment every operator would have to create their own
+Google Cloud project, configure the OAuth consent screen, add themselves
+as a test user, and paste `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` into
+`.env` — strictly more homework than creating one app password, and the
+result is the same read-only inbox access. OAuth becomes the right answer
+only for a hosted multi-user deployment (where one verified client serves
+everyone); it remains the documented follow-up for that mode. All existing
+IMAP plumbing (SSRF host guard, Fernet credential storage, 10-min sync +
+classify crons, status suggestions) is reused unchanged.
+
+---
+
 ## A. Surface map
 
 **REST routes (`src/api/integrations_email.py`):**
 
 | Method | Path | Purpose |
 |---|---|---|
+| POST | `/api/v1/integrations/email/gmail` | One-screen Gmail connect (derived host/port/username, test-before-save, inline first sync; returns HTML fragment) |
 | GET | `/api/v1/integrations/email` | List the caller's `EmailAccount` rows (`EmailAccountRead` — password stripped). |
 | POST | `/api/v1/integrations/email/imap` | Connect an IMAP inbox: validate creds, encrypt + persist. CSRF-guarded. |
 | POST | `/api/v1/integrations/email/{id}/test` | Re-verify a stored account is still connectable. |
