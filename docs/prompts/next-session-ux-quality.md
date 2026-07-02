@@ -6,7 +6,7 @@ Copy everything below the line into a fresh Claude Code session running on **Fab
 ---
 
 You are a senior full-stack product engineer AND UI designer working on Naavik, my
-self-hosted career-automation web app (FastAPI + SQLModel + Postgres/pgvector,
+self-hosted career-automation web app owned by myself (FastAPI + SQLModel + Postgres/pgvector,
 HTMX + Jinja + Tailwind + DaisyUI, Typst for PDFs, APScheduler). You own product,
 design, and engineering decisions end to end.
 
@@ -67,6 +67,7 @@ WANT" sits in a separate card disconnected from the match analysis; the top bar
 has the company/role but the panels below don't tie together.
 
 Requirements:
+
 - One **full-width match panel at the top** of the workspace that combines: the
   score (big, visual), company name + role + location + salary + posted/source
   chips (the basic identity), AND the match analysis — "what they want" merged
@@ -93,6 +94,7 @@ misaligned columns; no LinkedIn/GitHub/portfolio links; generally not designed
 against a real template.
 
 Requirements:
+
 - **Pick one good default resume template and implement it properly in Typst**
   (single-column, dense, recruiter-standard: name + one contact line with
   clickable email · phone · location · LinkedIn · GitHub · portfolio; sections
@@ -105,7 +107,7 @@ Requirements:
   pitch tailored to the JD (look at the summary prompt — it's bad).
 - **Be bold with tailoring**: aggressively reorder/select/trim bullets against
   the JD, pack the page as densely as it will go while still compiling to
-  exactly 1 page (the page-count validation loop exists — use it to *fill*
+  exactly 1 page (the page-count validation loop exists — use it to _fill_
   the page, not just avoid overflow: if there's slack, include more bullets).
 - **Capture missing profile data**: `Profile.linkedin_handle`, `github_handle`,
   `portfolio_url`, `phone` exist — make the resume parser extract them, make
@@ -122,6 +124,7 @@ Requirements:
 The current letter reads like a third-person bio ("Shyam Padia's experience
 is..."). Fix the prompts (`src/llm/prompts/` — cover letter + voice grounding)
 and `src/typst/templates/cover_letter.typ`:
+
 - First person throughout ("I built...", "I'm excited about...").
 - Proper structure: date + hiring-manager/company block, greeting, hook opening
   tied to THIS company/role, 1–2 body paragraphs mapping my strongest relevant
@@ -142,6 +145,7 @@ chain and redesign it to fit the real workflow: swipe/queue →
 no submit path).
 
 Requirements:
+
 - Trace why my queued job never processed (default-off settings? dispatch gate?
   cron not firing? validation dead-end? docs never generated?). Fix root causes.
 - Redesign the pipeline with explicit, visible states: queued → docs generating
@@ -183,6 +187,7 @@ lazy two-tab split — design the information architecture properly:
 
 Clicking an item under "Up next" (→ `/discover/{id}`) can take many seconds.
 Root causes to kill:
+
 - `eager_review_generation=True` (default) makes the GET run
   `document_generator.pre_generate` synchronously (LLM + Typst) before
   rendering. A GET must never block on generation — render instantly with
@@ -207,7 +212,7 @@ on Gmail only for now. Evaluate honestly, then implement the better option:
 - **Option B — IMAP with app password, but automated**: user enters their Gmail
   address + app password only; we auto-fill imap.gmail.com:993/TLS/username,
   show crisp inline steps for generating the app password (with the direct
-  https://myaccount.google.com/apppasswords link), test the connection with a
+  <https://myaccount.google.com/apppasswords> link), test the connection with a
   visible result before saving, and start the first sync immediately with live
   progress.
 - Whichever you pick, the flow must be: one screen, minimal typing, test-before-
