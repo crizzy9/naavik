@@ -49,7 +49,8 @@ def test_discover_page_renders_score_card(client: TestClient, auth_cookies: dict
 def test_discover_review_page_renders_expanded_score_card(
     client: TestClient, auth_cookies: dict[str, str]
 ) -> None:
-    """Discover · review LEFT column renders score_card with expanded=true."""
+    """Discover · review renders the full-width match panel (which replaced
+    the LEFT-column score_card in the UX-quality redesign)."""
     # Pick a job with a DRAFT application from sample_data.
     from db import sample_data as sd
 
@@ -59,9 +60,9 @@ def test_discover_review_page_renders_expanded_score_card(
     r = client.get(f"/discover/{draft.job_id}", cookies=auth_cookies)
     assert r.status_code == 200, f"discover/{draft.job_id} returned {r.status_code}"
     html = r.text
-    assert "score-card grid" in html, "score_card container missing in review page"
-    assert "STRENGTHS" in html
-    assert "PROVENANCE" in html, "expanded=true should surface PROVENANCE footer"
+    assert 'data-testid="match-panel"' in html, "match panel missing in review page"
+    assert "YOUR STRENGTHS" in html
+    assert "WHAT THEY WANT" in html
 
 
 def test_apply_tailored_bullets_renders_without_rationale(

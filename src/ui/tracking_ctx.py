@@ -348,7 +348,9 @@ async def build_application_detail_ctx(
 
             job = await job_service.get_job(session, application.job_id)
             if job is not None and getattr(job, "score", None) is not None:
-                score = int(round(job.score))
+                # Job.score is 0–1; the chip renders 0–100.
+                raw = float(job.score)
+                score = int(round(raw * 100)) if raw <= 1.0 else int(round(raw))
             if job is not None:
                 auto_apply = application_service.auto_apply_phase(application, job)
                 job_url = getattr(job, "url", None)
