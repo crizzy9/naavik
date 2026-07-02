@@ -166,26 +166,59 @@ def test_put_notifications_form_returns_save_fragment(client: TestClient, auth_c
     _assert_fragment(r.text)
 
 
-def test_put_sources_form_returns_full_partial_not_fragment(
+def test_put_sources_form_returns_single_editor_subtree(
     client: TestClient, auth_cookies, csrf_headers, monkeypatch
 ):
-    """Sources tab is an exception to the fragment-response pattern: it
-    has no common Save button (active_save_endpoint=None) + the per-source
-    rate-limit + keywords popover editors each swap `_settings_sources.html`
-    via `hx-target="closest [data-source-editor]"`. Returning a fragment
-    here would break the popover re-render (regression caught by
-    test_paired_editors.py)."""
+    """P4 view-stacking regression: the popover editors target
+    `closest [data-source-editor]` with outerHTML, so the form response
+    must be EXACTLY one editor subtree — never the whole Sources panel
+    (which stacked a duplicate view inside the popover)."""
     from ui.routes import settings as settings_routes
 
     async def _fake_sources_view(session, *, user_id):
-        return []
-
-    async def _fake_recent_runs(session, *, user_id):
-        return []
+        return [
+            {
+                "source": "linkedin",
+                "label": "LinkedIn",
+                "icon": "linkedin",
+                "enabled": True,
+                "configured": True,
+                "last_run": None,
+                "schedule": "*/30 * * * *",
+                "rate_limit": {"rpm": 0.7, "delay_lo": 6.0, "delay_hi": 12.0},
+                "configure": {
+                    "kind": "db",
+                    "keywords": ["swe", "mle"],
+                    "location": "",
+                    "derived_keywords": [],
+                    "derived_location": "",
+                    "override_active": True,
+                },
+                "proxy": None,
+            }
+        ]
 
     monkeypatch.setattr(settings_routes, "_build_sources_view", _fake_sources_view)
-    monkeypatch.setattr(settings_routes, "_recent_scrape_runs_view", _fake_recent_runs)
+    r = client.put(
+        "/api/v1/settings/sources",
+        data={"editor_source": "linkedin", "linkedin_keywords": "swe, mle"},
+        cookies=auth_cookies,
+        headers={**csrf_headers, "Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r.status_code == 200, r.text[:300]
+    body = r.text
+    assert body.count("data-source-editor=") == 1
+    assert 'data-source-editor="linkedin"' in body
+    # Whole-panel markers must be absent.
+    assert "data-source-row=" not in body
+    assert "Recent scraper runs" not in body
 
+
+def test_put_sources_form_without_editor_source_returns_tiny_fragment(
+    client: TestClient, auth_cookies, csrf_headers
+):
+    """Writers without `editor_source` (the enable toggle, hx-swap=none)
+    get a minimal confirmation fragment their swap discards."""
     r = client.put(
         "/api/v1/settings/sources",
         data={"source": "linkedin", "linkedin": "on"},
@@ -193,8 +226,8 @@ def test_put_sources_form_returns_full_partial_not_fragment(
         headers={**csrf_headers, "Content-Type": "application/x-www-form-urlencoded"},
     )
     assert r.status_code == 200, r.text[:300]
-    # Full partial returns include the section heading.
-    assert "Job sources" in r.text or "Recent scraper runs" in r.text
+    assert "data-source-editor=" not in r.text
+    assert "Saved" in r.text
 
 
 def test_put_account_form_returns_save_fragment_replacing_stub(client: TestClient, auth_cookies):

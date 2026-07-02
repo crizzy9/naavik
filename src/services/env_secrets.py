@@ -137,9 +137,9 @@ def scraper_source_configured(
         return bool(app_settings.ashby_companies)
     profile_titles = bool(getattr(profile, "target_titles", None))
     if source is JobSource.LINKEDIN:
-        return bool(settings.linkedin_keywords) or profile_titles
+        return bool(getattr(settings, "linkedin_keywords", None)) or profile_titles
     if source is JobSource.INDEED:
-        return bool(settings.indeed_keywords) or profile_titles
+        return bool(getattr(settings, "indeed_keywords", None)) or profile_titles
     return False
 
 

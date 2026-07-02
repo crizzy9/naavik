@@ -479,22 +479,29 @@ async def put_sources(
     await session.commit()
 
     if is_form:
-        # Sources tab keeps the full-partial re-render: the per-source
-        # rate-limit + keywords popover editors each have their own
-        # `<form hx-target="closest [data-source-editor]" hx-swap="outerHTML">`
-        # that needs the whole `_settings_sources.html` body back to swap
-        # the editor block. The Sources tab does NOT have a common Save
-        # button (0.7.0.48 W4 — active_save_endpoint=None) so there's no
-        # competing fragment consumer to worry about.
-        from ui.routes.settings import _ctx_for_tab
+        # P4 view-stacking fix: the popover editors target
+        # `closest [data-source-editor]` with outerHTML, so the response
+        # must be EXACTLY that subtree — returning the whole
+        # `_settings_sources.html` body here rendered a second copy of the
+        # entire Sources panel inside the popover (the reported repro:
+        # "saving keywords stacked a duplicate view"). The submitting form
+        # carries `editor_source`; render that one editor back. Writers
+        # without it (the enable toggle, hx-swap="none") get a tiny
+        # confirmation fragment their swap discards.
+        from ui.routes.settings import _build_sources_view
         from ui.templates_setup import templates as ui_templates
 
-        ctx = await _ctx_for_tab(request, "sources", session=session, user_id=user_id)
-        return ui_templates.TemplateResponse(
-            request,
-            "pages/_settings_sources.html",
-            ctx,
-        )
+        editor_source = str(form_dict.get("editor_source") or "")
+        if editor_source:
+            rows = await _build_sources_view(session, user_id=user_id)
+            row = next((r for r in rows if r["source"] == editor_source), None)
+            if row is not None:
+                return ui_templates.TemplateResponse(
+                    request,
+                    "components/_source_editor.html",
+                    {"view": row},
+                )
+        return HTMLResponse('<span class="text-emerald-300">Saved · sources</span>')
 
     return {
         "sources_enabled": s.sources_enabled,

@@ -42,6 +42,8 @@
         hx-indicator="find [data-keywords-indicator]"
         hx-disabled-elt="find button[type=submit]"
         class="flex flex-col gap-2">
+    {# Single-editor response contract (P4 view-stacking fix). #}
+    <input type="hidden" name="editor_source" value="{{ v.source }}">
     <span class="text-[10px] text-slate-500">
       {% if v.configure.override_active %}
       This source uses a manual override (profile preferences ignored). Clear both fields to go back to profile-derived search.

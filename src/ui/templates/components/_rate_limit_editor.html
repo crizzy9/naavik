@@ -16,7 +16,12 @@
       hx-headers='{"X-CSRF-Token": "{{ csrf_token | default("") }}"}'
       hx-target="closest [data-source-editor]"
       hx-swap="outerHTML"
+      hx-indicator="find [data-rate-limit-indicator]"
+      hx-disabled-elt="find button[type=submit]"
       class="mt-2 flex flex-col gap-2 text-xs">
+  {# Tells PUT /api/v1/settings/sources which single [data-source-editor]
+     subtree to render back (P4 view-stacking fix). #}
+  <input type="hidden" name="editor_source" value="{{ v.source }}">
   <h4 class="text-[10px] uppercase tracking-wide text-slate-500">Rate limit</h4>
   <div class="grid grid-cols-3 gap-2">
     <label class="flex flex-col gap-1">
@@ -52,6 +57,10 @@
             class="px-2.5 py-1 rounded bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-medium">
       Save
     </button>
+    <span data-rate-limit-indicator class="htmx-indicator inline-flex items-center gap-1 text-[10px] text-indigo-300">
+      <span class="h-2.5 w-2.5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+      Saving…
+    </span>
     <span data-rate-limit-save-status="{{ v.source }}" class="text-[10px] text-slate-500"></span>
   </div>
 </form>

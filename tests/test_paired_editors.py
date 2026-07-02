@@ -414,13 +414,15 @@ def test_put_sources_threads_effective_user_id(
 
 
 def test_put_sources_htmx_response_returns_partial(client: TestClient, auth_cookies, csrf_headers):
-    """HTMX form-encoded PUT → response body is the `_settings_sources.html`
-    partial (no `<html>` chrome), and re-renders the rate-limit form so the
-    operator sees the saved value next render.
+    """HTMX form-encoded PUT → response is the SINGLE `_source_editor.html`
+    subtree for the submitting source (P4 view-stacking fix — the form's
+    hx-target is `closest [data-source-editor]` / outerHTML, so a
+    whole-panel response stacked a duplicate Sources view in the popover).
     """
     r = client.put(
         "/api/v1/settings/sources",
         data={
+            "editor_source": "linkedin",
             "linkedin_rpm": "0.7",
             "linkedin_lo": "6.0",
             "linkedin_hi": "12.0",
@@ -433,7 +435,11 @@ def test_put_sources_htmx_response_returns_partial(client: TestClient, auth_cook
     # Partial shape — base.html chrome absent.
     assert "<html" not in body.lower()
     assert "<body" not in body.lower()
-    # Saved panel re-renders all 6 source rows with editor partials.
-    assert 'data-source-row="linkedin"' in body
+    # Exactly the one editor subtree the swap target expects.
+    assert body.count("data-source-editor=") == 1
+    assert 'data-source-editor="linkedin"' in body
     assert 'data-rate-limit-form="linkedin"' in body
     assert 'data-keywords-form="linkedin"' in body
+    assert "data-source-row=" not in body
+    # Saved value round-trips into the re-rendered form.
+    assert 'value="0.70"' in body

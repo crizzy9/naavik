@@ -147,12 +147,13 @@ def derive_source_inputs(
     keywords, first target city as location (no location when remote-ok
     with no city configured).
     """
+    # getattr reads: legacy Settings fixtures may lack the override attrs.
     if source is JobSource.LINKEDIN:
-        override_kw = list(settings.linkedin_keywords or [])
-        override_loc = settings.linkedin_location
+        override_kw = list(getattr(settings, "linkedin_keywords", None) or [])
+        override_loc = getattr(settings, "linkedin_location", None)
     elif source is JobSource.INDEED:
-        override_kw = list(settings.indeed_keywords or [])
-        override_loc = settings.indeed_location
+        override_kw = list(getattr(settings, "indeed_keywords", None) or [])
+        override_loc = getattr(settings, "indeed_location", None)
     else:
         return [], None, False
 
