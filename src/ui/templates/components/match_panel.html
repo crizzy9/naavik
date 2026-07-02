@@ -1,15 +1,13 @@
 {% from "components/_macros.html" import chip %}
 {#
   match_panel.html — the single focal panel at the top of the review
-  workspace. Combines job identity (role @ company, location, salary,
-  source, posted age, remote policy) with the match analysis: a big score
-  ring on the left, and a three-column Requirements ↔ Strengths ↔ Gaps grid
-  that reads as one visual system (requirements carry ✓/○ coverage markers
-  computed against the scorer's strengths + matched tags).
+  workspace. Combines job identity (COMPANY bold on top, role beneath —
+  identity inversion, item 2) with the match analysis: a big score ring on
+  the left and a two-column Strengths ↔ What's-missing grid.
 
   Layout:
     row 1: [score ring | identity header + chips]
-    row 2: [WHAT THEY WANT | YOUR STRENGTHS | GAPS]  (aligned 3-col grid)
+    row 2: [YOUR STRENGTHS | WHAT'S MISSING]  (aligned 2-col grid)
     row 3: provenance footer (scoring layers, judge model, scored-at)
 
   Args:
@@ -49,10 +47,12 @@
         {% with kind="company", text=job.company_initial | default(job.company[:1] | upper), size="md", color_override=job.company_color | default("bg-slate-700") %}
           {% include "components/avatar.html" %}
         {% endwith %}
+        {# Identity inversion (item 2): the COMPANY is the decision anchor —
+           bold on top; role smaller beneath. #}
         <div class="min-w-0">
-          <h1 class="text-xl font-semibold text-slate-50 truncate leading-tight">{{ job.role }}</h1>
+          <h1 class="text-xl font-semibold text-slate-50 truncate leading-tight">{{ job.company }}</h1>
           <p class="text-sm text-slate-400 truncate">
-            {{ job.company }}{% if job.team %} · {{ job.team }}{% endif %}
+            {{ job.role }}{% if job.team %} · {{ job.team }}{% endif %}
           </p>
         </div>
       </div>
@@ -80,29 +80,11 @@
     </div>
   </div>
 
-  {# ── Row 2: Requirements ↔ Strengths ↔ Gaps ──────────────────────── #}
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-px bg-slate-800 border-t border-slate-800">
-    <div class="bg-slate-900 px-5 py-4">
-      <div class="text-[10px] uppercase tracking-wide text-slate-400 font-mono mb-2">WHAT THEY WANT</div>
-      {% if job.requirements %}
-        <ul class="flex flex-col gap-1.5 text-xs text-slate-200 leading-relaxed">
-          {% for r in job.requirements %}
-            <li class="flex gap-2">
-              {% if r.matched %}
-                <i data-lucide="check" class="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" stroke-width="2" aria-label="covered by your strengths"></i>
-              {% else %}
-                <span class="h-3.5 w-3.5 shrink-0 mt-0.5 rounded-full border border-slate-600" aria-label="not clearly covered"></span>
-              {% endif %}
-              <span>{{ r.text }}</span>
-            </li>
-          {% endfor %}
-        </ul>
-        <p class="mt-2 text-[10px] text-slate-500">✓ = covered by a strength below</p>
-      {% else %}
-        <p class="text-xs text-slate-500 italic">No structured requirements extracted yet.</p>
-      {% endif %}
-    </div>
-
+  {# ── Row 2: Strengths ↔ What's missing ───────────────────────────── #}
+  {# The old third "WHAT THEY WANT" column restated the JD and regularly
+     contradicted the other two — dropped (item 2). The full JD lives right
+     below the panel; these two columns are the analysis. #}
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-800 border-t border-slate-800">
     <div class="bg-slate-900 px-5 py-4">
       <div class="text-[10px] uppercase tracking-wide text-emerald-300 font-mono mb-2">YOUR STRENGTHS</div>
       {% if _strengths %}

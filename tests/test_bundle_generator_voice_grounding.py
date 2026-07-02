@@ -265,8 +265,10 @@ async def test_bundle_constitution_threaded_to_cover_letter_call():
 
 
 @pytest.mark.asyncio
-async def test_bundle_constitution_threaded_to_headline_call():
-    """tailor_headline_for_application receives constitution preamble."""
+async def test_bundle_headline_stage_retired():
+    """Item 2 (2026-07): the headline stage is gone — the resume header is
+    name + one contact line only. The trace keeps `headline_used=None` and
+    records the stage as skipped for older trace consumers."""
     session = AsyncMock()
     session.flush = AsyncMock()
     session.add = lambda x: None
@@ -285,12 +287,6 @@ async def test_bundle_constitution_threaded_to_headline_call():
             all=lambda: [],
         )
     )
-
-    captured_headline_kwargs: dict = {}
-
-    async def _capture_headline(*args, **kwargs):
-        captured_headline_kwargs.update(kwargs)
-        return None
 
     with (
         patch(
@@ -314,10 +310,6 @@ async def test_bundle_constitution_threaded_to_headline_call():
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.bundle_generator.tailor_headline_for_application",
-            _capture_headline,
-        ),
-        patch(
             "services.bundle_generator.dg.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
@@ -330,11 +322,12 @@ async def test_bundle_constitution_threaded_to_headline_call():
             return_value=None,
         ),
     ):
-        await generate_bundle(session, application, settings=settings, job=job)
+        result = await generate_bundle(session, application, settings=settings, job=job)
 
-    assert "system" in captured_headline_kwargs
-    assert captured_headline_kwargs["system"] is not None
-    assert captured_headline_kwargs["cache_system"] is True
+    trace = result.generation_trace
+    assert trace["headline_used"] is None
+    assert "headline" in trace["stages_skipped"]
+    assert "headline" not in trace["stages_run"]
 
 
 @pytest.mark.asyncio

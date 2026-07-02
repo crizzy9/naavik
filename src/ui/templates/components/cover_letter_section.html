@@ -13,7 +13,11 @@
 {% set mode = mode | default("view") %}
 {% set _id = "cover-section-" ~ section %}
 {% set _hx_get = "/_fragments/apply/cover-letter-section/" ~ application_id ~ "/" ~ section ~ "?mode=edit" %}
-{% set _hx_post = "/api/v1/applications/" ~ application_id ~ "/cover-letter/" ~ section %}
+{# Item 2 (2026-07): saves used to POST to
+   /api/v1/applications/{id}/cover-letter/{section} — a route that never
+   existed — so every save 404'd and the edit was lost. The fragment save
+   route persists + recompiles the letter PDF. #}
+{% set _hx_post = "/_fragments/apply/cover-letter-section/" ~ application_id ~ "/" ~ section %}
 
 {% if mode == "view" %}
   <div id="{{ _id }}"

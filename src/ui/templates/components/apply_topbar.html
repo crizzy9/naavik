@@ -16,8 +16,9 @@
     <i data-lucide="arrow-left" class="h-4 w-4" stroke-width="1.5"></i>
     Back to queue
   </a>
+  {# Identity inversion (item 2): company leads everywhere the pair renders. #}
   <span class="text-sm text-slate-500 truncate flex-1 min-w-0">
-    {{ j.role }} <span class="text-slate-600">/</span> {{ j.company }}
+    <span class="text-slate-300 font-medium">{{ j.company }}</span> <span class="text-slate-600">/</span> {{ j.role }}
   </span>
   <div class="flex items-center gap-3 shrink-0">
     {% if j.jd_url %}

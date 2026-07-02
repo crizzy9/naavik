@@ -1,161 +1,231 @@
-// Naavik 1-page resume — the single default template.
+// Naavik 1-page resume — 1:1 Typst conversion of the owner's LaTeX OnePage
+// template (cv.tex): 10pt US-letter, 0.3in side margins / 0.25in top+bottom,
+// Helvetica, centered small-caps name + one contact line, small-caps section
+// titles over a full-width rule, ○-bulleted tight itemize, jobentry /
+// educationentry / projectentry layouts. Ligatures disabled so ATS parsers
+// never see `fi`/`fl` PUA codepoints.
 //
-// Dense, recruiter-standard, ATS-parseable single column:
-// name + one clickable contact line, Summary → Experience → Projects →
-// Education → Skills, entry headings left with dates right-aligned on the
-// same baseline, tight consistent spacing. Ligatures disabled so ATS
-// parsers never see `fi`/`fl` PUA codepoints.
-//
-// Consumes JSON via `sys.inputs.data`. The payload is precomposed by
-// `document_generator._build_resume_data` — all conditional separators,
-// date ranges, and link hrefs are built in Python so the template never
-// juggles `#if` chains that leak stray spaces:
+// Consumes JSON via `sys.inputs.data`, precomposed by
+// `document_generator._build_resume_data`:
 //   {
 //     "profile": {"full_name": str},
-//     "headline": str | null,                  // tailored > profile headline
-//     "contact_links": [{"text": str, "href": str | null}],
-//     "summary": str | null,                   // JD-tailored 2-3 line pitch
+//     "contact_links": [{"text": str, "href": str | null}],   // ONE line
+//     "summary": str | null,                    // JD-tailored, optional
 //     "experiences": [
-//       {"heading": str,                       // "Senior Software Engineer · Intuit"
-//        "meta": str | null,                   // "Mountain View, CA"
-//        "dates": str,                         // "Jan 2025 – Present"
+//       {"company": str,                        // "Intuit, Personalization"
+//        "title": str,                          // "Senior Software Engineer"
+//        "location": str,                       // "Mountain View, CA"
+//        "dates": str,                          // "Jan 2025 – Present"
 //        "bullets": [str]}
 //     ],
+//     "education": [{"institution": str, "school": str | null,
+//                    "location": str, "dates": str,
+//                    "degree": str, "gpa": str | null}],
+//     "skills": [{"category": str, "items": [str]}],
 //     "projects": [{"title": str, "date": str | null, "text": str | null,
 //                   "link": str | null}],
-//     "education": [{"heading": str, "meta": str | null, "dates": str}],
-//     "skills": [{"category": str, "items": [str]}],
+//     "certifications": [{"title": str, "date": str | null,
+//                         "text": str | null}],
+//     "open_source": [{"title": str, "date": str | null, "text": str | null,
+//                      "link": str | null}],
 //   }
+// There is deliberately NO headline field — header is name + contacts only.
 
-#let data = json.decode(sys.inputs.data)
+#let data = json(bytes(sys.inputs.data))
 
 #set document(title: data.profile.full_name + " — Resume")
 
-#set page(paper: "us-letter", margin: (x: 0.45in, y: 0.38in))
+#set page(paper: "us-letter", margin: (x: 0.3in, top: 0.25in, bottom: 0.25in))
 
 #set text(
   font: ("Helvetica", "Arial", "Liberation Sans"),
-  size: 9.5pt,
+  size: 10pt,
   fill: rgb("#111111"),
   features: ("liga": 0, "clig": 0, "dlig": 0),
 )
-#set par(leading: 0.5em, justify: false)
+// leading = intra-paragraph line height; spacing = inter-paragraph gap.
+// LaTeX source uses noitemsep/nolistsep — paragraph gaps collapse to the
+// line rhythm, which is what packs the page.
+#set par(leading: 0.42em, spacing: 0.42em, justify: false)
+#set block(spacing: 0.42em)
 
-#let accent = rgb("#111111")
+#let linkcolor = rgb("#0000EE")
 
-#let section_title(name) = {
-  v(0.55em)
-  text(weight: "bold", size: 10pt, tracking: 0.06em, upper(name))
-  v(-0.62em)
-  line(length: 100%, stroke: 0.6pt + accent)
-  v(-0.18em)
+// Helvetica/Liberation Sans carry no `smcp` feature and Typst won't
+// synthesize small caps for them — emulate: uppercase everything, initial
+// letter full-size, the rest at ~78%.
+#let sc(s, ratio: 0.78) = {
+  let words = ()
+  for w in str(s).split(" ") {
+    let cl = w.clusters()
+    if cl.len() == 0 { continue }
+    words.push([#upper(cl.first())#text(size: ratio * 1em)[#upper(cl.slice(1).join())]])
+  }
+  words.join([ ])
 }
 
-// One bullet line with hanging indent so wraps align under the text.
-#let bullet_line(t) = {
-  pad(left: 2pt, par(hanging-indent: 7pt, leading: 0.45em)[• #t])
-  v(-0.62em)
+// LaTeX \titleformat: \scshape\large title, black \titlerule under, tight
+// vertical spacing (-8pt above via \vspace, -5pt after the rule).
+#let sectitle(name) = {
+  v(0.3em)
+  block(spacing: 0pt)[
+    #text(size: 12pt)[#sc(name)]
+    #v(-0.45em)
+    #line(length: 100%, stroke: 0.5pt + black)
+  ]
+  v(0.05em)
 }
 
-// Entry heading: content left, dates right, one shared baseline.
-#let entry(left_content, dates) = {
+// \setlist[itemize]{leftmargin=0.15in, noitemsep, nolistsep} with $\circ$.
+#let bullet_items(items) = {
+  pad(left: 0.03in, {
+    for b in items {
+      par(hanging-indent: 0.12in)[#text(size: 8pt)[○] #h(3pt) #b]
+    }
+  })
+}
+
+// \jobentry{company}{title}{location}{dates}:
+// \textbf{#1} \hfill #2 \hfill \textit{#3} \hfill \textbf{#4}
+#let jobentry(company, title, location, dates) = {
+  grid(
+    columns: (auto, 1fr, 1fr, auto),
+    column-gutter: 8pt,
+    align: (left, center, center, right),
+    text(weight: "bold", company),
+    title,
+    emph(location),
+    text(weight: "bold", dates),
+  )
+}
+
+// \educationentry{institution}{school}{location}{dates} + degree/GPA line:
+// \textbf{#1}, #2 \hfill \textit{#3} \hfill \textbf{#4}
+// \textit{degree} \hfill GPA: x
+#let educationentry(institution, school, location, dates, degree, gpa) = {
+  grid(
+    columns: (auto, 1fr, auto),
+    column-gutter: 8pt,
+    align: (left, center, right),
+    [#text(weight: "bold", institution)#if school != none and school != "" [, #school]],
+    emph(location),
+    text(weight: "bold", dates),
+  )
+  v(-0.35em)
   grid(
     columns: (1fr, auto),
-    column-gutter: 10pt,
-    align: (left, right),
-    left_content,
-    text(size: 8.5pt, fill: rgb("#333333"), dates),
+    emph(degree),
+    if gpa != none and gpa != "" [GPA: #gpa] else [],
+  )
+}
+
+// \projectentry{title}{date}: {#1} \hfill \textbf{#2}
+#let projectentry(title, date, url) = {
+  grid(
+    columns: (1fr, auto),
+    column-gutter: 8pt,
+    [#if url != none [#link(url, text(fill: linkcolor, title))] else [#title]],
+    text(weight: "bold", if date != none { date } else { "" }),
   )
 }
 
 // ───────── Header ─────────
 
 #align(center)[
-  #text(weight: "bold", size: 15.5pt, tracking: 0.02em, data.profile.full_name)
-  #if data.headline != none [
-    #v(-0.55em)
-    #text(size: 9.5pt, fill: rgb("#333333"), data.headline)
-  ]
-  #v(-0.5em)
-  #text(size: 8.5pt)[
+  #text(size: 14.4pt)[#sc(data.profile.full_name)]
+  #v(-0.55em)
+  #text(size: 9pt)[
     #{
       let parts = ()
       for c in data.contact_links {
         if c.href != none {
-          parts.push(link(c.href, text(fill: rgb("#1a4a8a"), c.text)))
+          parts.push(link(c.href, text(fill: linkcolor, c.text)))
         } else {
           parts.push(text(c.text))
         }
       }
-      parts.join([ #h(2pt) · #h(2pt) ])
+      parts.join([ #h(1.5pt) | #h(1.5pt) ])
     }
   ]
 ]
 
-#v(-0.2em)
+// ───────── Summary (optional; tailored per-JD) ─────────
 
-// ───────── Summary ─────────
-
-#if data.summary != none [
-  #section_title("Summary")
+#if data.at("summary", default: none) != none [
+  #sectitle("Summary")
   #text(size: 9.5pt, data.summary)
-]
-
-// ───────── Experience ─────────
-
-#section_title("Experience")
-
-#for (i, exp) in data.experiences.enumerate() [
-  #if i > 0 [#v(0.28em)]
-  #entry(
-    [#text(weight: "bold", exp.heading)#if exp.meta != none [#text(size: 8.5pt, fill: rgb("#333333"))[ — #exp.meta]]],
-    exp.dates,
-  )
-  #v(-0.5em)
-  #for b in exp.bullets [
-    #bullet_line(b)
-  ]
-  #v(0.55em)
-]
-
-// ───────── Projects ─────────
-
-#if data.projects.len() > 0 [
-  #section_title("Projects")
-  #for (i, p) in data.projects.enumerate() [
-    #if i > 0 [#v(0.22em)]
-    #entry(
-      [#text(weight: "bold", p.title)#if p.link != none [#text(size: 8.5pt)[ — #link(p.link, text(fill: rgb("#1a4a8a"), p.link.replace("https://", "").replace("http://", "")))]]],
-      if p.date != none { p.date } else { "" },
-    )
-    #if p.text != none and p.text != "" [
-      #v(-0.55em)
-      #pad(left: 2pt, text(size: 9pt, p.text))
-    ]
-    #v(-0.15em)
-  ]
+  #v(0.1em)
 ]
 
 // ───────── Education ─────────
 
 #if data.education.len() > 0 [
-  #section_title("Education")
-  #for e in data.education [
-    #entry(
-      [#text(weight: "bold", e.heading)#if e.meta != none [#text(size: 8.5pt, fill: rgb("#333333"))[ — #e.meta]]],
-      e.dates,
-    )
-    #v(-0.1em)
+  #sectitle("Education")
+  #for (i, e) in data.education.enumerate() [
+    #if i > 0 [#v(0.3em)]
+    #educationentry(e.institution, e.school, e.location, e.dates, e.degree, e.gpa)
   ]
 ]
 
-// ───────── Skills ─────────
+// ───────── Work Experience ─────────
+
+#if data.experiences.len() > 0 [
+  #sectitle("Work Experience")
+  #for (i, exp) in data.experiences.enumerate() [
+    #if i > 0 [#v(0.12em)]
+    #jobentry(exp.company, exp.title, exp.location, exp.dates)
+    #bullet_items(exp.bullets)
+  ]
+]
+
+// ───────── Technical Skills ─────────
 
 #if data.skills.len() > 0 [
-  #section_title("Skills")
-  #for s in data.skills [
-    #par(hanging-indent: 8pt, leading: 0.45em)[#text(weight: "bold", s.category + ": ")#s.items.join(", ")]
-    #v(-0.55em)
+  #sectitle("Technical Skills")
+  #grid(
+    columns: (auto, 1fr),
+    column-gutter: 10pt,
+    row-gutter: 0.42em,
+    ..data.skills.map(s => (
+      text(weight: "bold")[#s.category:],
+      [#s.items.join(", ")],
+    )).flatten()
+  )
+]
+
+// ───────── Projects ─────────
+
+#if data.projects.len() > 0 [
+  #sectitle("Projects")
+  #for p in data.projects [
+    #projectentry(p.title, p.date, p.link)
+    #if p.text != none and p.text != "" [
+      #bullet_items((p.text,))
+    ]
+  ]
+]
+
+// ───────── Certifications ─────────
+
+#if data.at("certifications", default: ()).len() > 0 [
+  #sectitle("Certifications")
+  #for c in data.certifications [
+    #projectentry(c.title, c.date, none)
+    #if c.at("text", default: none) != none and c.text != "" [
+      #bullet_items((c.text,))
+    ]
+  ]
+]
+
+// ───────── Open Source Contributions ─────────
+
+#if data.at("open_source", default: ()).len() > 0 [
+  #sectitle("Open Source Contributions")
+  #for p in data.open_source [
+    #projectentry(p.title, p.date, p.link)
+    #if p.text != none and p.text != "" [
+      #bullet_items((p.text,))
+    ]
   ]
 ]
 

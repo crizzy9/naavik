@@ -73,22 +73,54 @@ def _rationale_index_from_trace(
     return out
 
 
+async def _latest_resume_blob(
+    session: AsyncSession, application: Application | None
+) -> dict | None:
+    """`bullet_selection` blob of the newest error-free RESUME document."""
+    if application is None or application.id is None:
+        return None
+    from services import document_generator as dg
+
+    doc = await dg._latest_error_free_doc(
+        session, application.id, dg.GeneratedDocumentKind.RESUME
+    )
+    if doc is None or not doc.bullet_selection:
+        return None
+    return dict(doc.bullet_selection)
+
+
 async def tailored_bullet_groups(
     session: AsyncSession,
     *,
     user_id: int,
     application: Application | None = None,
 ) -> list[dict[str, object]]:
-    """Group bullets by experience for the tailored-resume section.
+    """Group bullets by experience for the tailored-resume ledger.
 
-    Selection state comes ONLY from the real generation trace
-    (`generation_trace.bullet_selection_log`, written by bundle_generator).
+    Selection + line text come from the latest generated RESUME document's
+    `bullet_selection` blob (which the workspace edit/toggle recompiles keep
+    current), with per-application text overrides layered on top. Falls back
+    to the generation trace's `bullet_selection_log` for legacy bundles.
     Before generation there is no selection to show — the template renders
-    the honest "nothing generated yet" empty state instead (the prior
-    hardcoded 'first 7 bullets selected' + fake chips are gone).
+    the honest "nothing generated yet" empty state instead.
     """
     experiences = await profile_service.list_experiences(session, user_id)
     rationale_index = _rationale_index_from_trace(application)
+
+    blob = await _latest_resume_blob(session, application)
+    doc_selected: set[int] | None = None
+    doc_lines: dict[int, str] = {}
+    if blob and blob.get("selected_ids"):
+        doc_selected = {int(x) for x in blob["selected_ids"]}
+        doc_lines = {int(k): str(v) for k, v in (blob.get("trimmed_lines") or {}).items()}
+
+    artifacts = getattr(application, "submission_artifacts", None) or {}
+    text_overrides = {
+        int(k): str(v)
+        for k, v in (artifacts.get("bullet_text_overrides") or {}).items()
+        if str(v).strip()
+    }
+
     # One batched query for all bullets — the per-experience loop was an N+1
     # on every workspace render.
     all_bullets = await profile_service.list_all_bullets(session, user_id)
@@ -103,13 +135,20 @@ async def tailored_bullet_groups(
         rows = []
         for b in bullets:
             rationale = rationale_index.get(b.id)
-            is_selected = bool(rationale and rationale.get("selected"))
+            if doc_selected is not None:
+                is_selected = b.id in doc_selected
+            else:
+                is_selected = bool(rationale and rationale.get("selected"))
+            line = text_overrides.get(b.id) or doc_lines.get(b.id)
+            chips = []
+            if b.id in text_overrides:
+                chips.append("you tweaked")
             rows.append(
                 {
                     "id": b.id,
                     "selected": is_selected,
-                    "trimmed_line": _trim(b.text) if is_selected else b.text,
-                    "chips": [],
+                    "trimmed_line": line or (_trim(b.text) if is_selected else b.text),
+                    "chips": chips,
                     "tags": _bullet_tags(b),
                     "rationale": rationale,
                 }
@@ -306,21 +345,25 @@ async def build_review_ctx(
         if application
         else []
     )
-    # Honest generation state for the tailored-resume section: "generated"
-    # means a real bullet_selection_log exists (bundle_generator ran).
-    rationale_index = _rationale_index_from_trace(application)
-    docs_generated = bool(rationale_index)
     all_rows = [r for g in groups for r in g["rows"]]
     selected_count = sum(1 for r in all_rows if r["selected"])
 
     resume_pdf_url = None
     cover_pdf_url = None
+    resume_page_count = None
     if application is not None:
         docs = await application_service.latest_documents(session, application.id)
-        if any(getattr(d, "kind", None) and str(d.kind.value) == "resume" for d in docs):
-            resume_pdf_url = f"/api/v1/applications/{application.id}/resume.pdf"
-        if any(getattr(d, "kind", None) and str(d.kind.value) == "cover_letter" for d in docs):
-            cover_pdf_url = f"/api/v1/applications/{application.id}/cover-letter.pdf"
+        for d in docs:
+            kind = getattr(d, "kind", None)
+            if kind and str(kind.value) == "resume":
+                resume_pdf_url = f"/api/v1/applications/{application.id}/resume.pdf"
+                resume_page_count = getattr(d, "page_count", None)
+            elif kind and str(kind.value) == "cover_letter":
+                cover_pdf_url = f"/api/v1/applications/{application.id}/cover-letter.pdf"
+    # Honest generation state: a real selection log exists (bundle ran) OR a
+    # compiled resume document is on disk (covers workspace-edited bundles).
+    rationale_index = _rationale_index_from_trace(application)
+    docs_generated = bool(rationale_index) or resume_pdf_url is not None
 
     breakdown = job.match_breakdown or {}
     requirements = match_requirements(
@@ -367,6 +410,8 @@ async def build_review_ctx(
         "docs_generated": docs_generated,
         "selected_bullet_count": selected_count,
         "total_bullet_count": len(all_rows),
+        "application_id": application.id if application else None,
+        "resume_page_count": resume_page_count,
         "resume_pdf_url": resume_pdf_url,
         "cover_pdf_url": cover_pdf_url,
         "cover_sections": sections,

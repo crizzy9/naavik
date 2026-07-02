@@ -1,29 +1,57 @@
 {#
   apply_action_bar.html — sticky bottom bar on Discover · review.
 
+  Owns the whole-bundle actions (item 2): Generate tailored documents /
+  Regen live HERE next to Submit — generation produces resume + cover
+  letter + screeners, so it never belonged inside the resume section.
+
   Args:
-    application      : dict — id
+    application      : dict — id, docs_state
     screener_count   : int (required)
     unreviewed_count : int (required) — gates submit when > 0
     cost_estimate_usd: float (required)
     board_label      : friendly board name (e.g. "greenhouse.io")
+    docs_generated   : bool — flips the Generate button into a Regen affordance
 #}
 {% set a = application %}
-{% set disabled = unreviewed_count and unreviewed_count > 0 %}
+{% set docs_generated = docs_generated | default(false) %}
+{% set _generating = a and a.docs_state == "generating" %}
+{% set disabled = (unreviewed_count and unreviewed_count > 0) or not docs_generated %}
 <footer class="sticky bottom-0 flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-800 bg-slate-950/95 backdrop-blur flex-wrap">
   <div class="text-sm text-slate-400 font-mono min-w-0">
-    Ready to apply · resume + cover letter + {{ screener_count }} screeners · est. cost ${{ "%.2f" | format(cost_estimate_usd | float) }}
+    {% if docs_generated %}
+      Ready to apply · resume + cover letter + {{ screener_count }} screeners · est. cost ${{ "%.2f" | format(cost_estimate_usd | float) }}
+    {% elif _generating %}
+      Generating documents — this bar unlocks when they're ready…
+    {% else %}
+      Nothing generated yet · est. cost ${{ "%.2f" | format(cost_estimate_usd | float) }}
+    {% endif %}
   </div>
   <div class="flex items-center gap-2 shrink-0 flex-wrap">
-    {# Real bundle download — serves the generated resume/cover PDFs (409 with a
-       toast if nothing generated yet). Was a dead button with no handler. #}
+    {# Whole-bundle Generate / Regen. #}
+    {% if not _generating %}
+    <button type="button"
+            class="inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40
+                   {% if docs_generated %}text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700{% else %}text-white bg-indigo-500 hover:bg-indigo-400{% endif %}"
+            hx-post="/_fragments/apply/generate/{{ a.id }}"
+            hx-target="#review-workspace"
+            hx-swap="outerHTML"
+            hx-indicator="#apply-generate-indicator"
+            hx-disabled-elt="this"
+            data-testid="{{ 'tailored-regen-bar-btn' if docs_generated else 'tailored-generate-btn' }}">
+      <i data-lucide="{{ 'refresh-cw' if docs_generated else 'sparkles' }}" class="h-4 w-4" stroke-width="1.5"></i>
+      {{ "Regen documents" if docs_generated else "Generate tailored documents" }}
+    </button>
+    {% endif %}
+    {% if docs_generated %}
+    {# Real bundle download — serves the generated resume/cover PDFs. #}
     <a href="/api/v1/applications/{{ a.id }}/bundle" hx-boost="false" download
        class="inline-flex items-center gap-2 text-sm text-slate-300 hover:text-slate-50 px-3 py-2 rounded hover:bg-slate-800 transition">
       <i data-lucide="download" class="h-4 w-4" stroke-width="1.5"></i>
       Download bundle
     </a>
-    {# Open the real ATS job posting. Was href="#" (dead). `job.jd_url` is the
-       scraped posting URL; hide the link when there's no URL to open. #}
+    {% endif %}
+    {# Open the real ATS job posting. #}
     {% if job and job.jd_url %}
     <a href="{{ job.jd_url }}" hx-boost="false" target="_blank" rel="noopener"
        class="inline-flex items-center gap-2 text-sm text-slate-100 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 transition">
@@ -33,7 +61,9 @@
     {% endif %}
     <button type="button"
             class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
-            {% if disabled %}disabled title="Resolve {{ unreviewed_count }} unreviewed screener answers before submitting"{% endif %}
+            {% if disabled %}disabled
+              title="{% if not docs_generated %}Generate the documents first{% else %}Resolve {{ unreviewed_count }} unreviewed screener answers before submitting{% endif %}"
+            {% endif %}
             hx-post="/api/v1/applications/{{ a.id }}/submit"
             hx-target="body"
             hx-swap="none">

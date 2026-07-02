@@ -28,9 +28,10 @@
     {% with kind="company", text=j.company_initial | default(j.company[:1] | upper), size="md", color_override="bg-white/10 ring-1 ring-white/30" %}
       {% include "components/avatar.html" %}
     {% endwith %}
+    {# Identity inversion (item 2): company bold on top, role beneath. #}
     <div class="flex-1 min-w-0">
-      <div class="text-[10px] uppercase tracking-wide text-white/80 font-mono truncate">{{ j.company }}</div>
-      <div class="text-base font-semibold text-white truncate">{{ j.role }}{% if j.team %} · {{ j.team }}{% endif %}</div>
+      <div class="text-lg font-semibold text-white truncate leading-tight">{{ j.company }}</div>
+      <div class="text-sm text-white/85 truncate">{{ j.role }}{% if j.team %} · {{ j.team }}{% endif %}</div>
     </div>
     <div class="shrink-0 flex flex-col items-end gap-1">
       {% if j.unscored %}
@@ -90,10 +91,6 @@
       {% for t in j.tags or [] %}{{ tag_chip(t) }}{% endfor %}
     </div>
 
-    {# Plan 72 § Surface 1 — score_card (Variant B linear bento) replaces the
-       two-column lower body's right-column-only match_breakdown. The card now
-       runs full-width below the JD bullets, surfacing strengths / gaps /
-       provenance alongside the per-dim bars. #}
     <div class="pt-2">
       <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">WHAT THEY WANT</div>
       <ul class="flex flex-col gap-1.5 text-sm text-slate-200 leading-relaxed">
@@ -105,10 +102,62 @@
         {% endfor %}
       </ul>
     </div>
+
+    {# Match zone (item 2): the score renders ONCE — in the header circle.
+       The body carries the analysis: per-dimension bars, then strengths +
+       what's missing side by side. (The old embedded score_card repeated
+       the score circle and its 12-col bento grid misaligned inside the
+       card column.) #}
     {% if not j.unscored %}
-      {% with score=j.score, match_breakdown=j.match_breakdown or {}, expanded=false %}
-        {% include "components/score_card.html" %}
-      {% endwith %}
+      {% set _mb = j.match_breakdown or {} %}
+      {% set _per_dim = _mb.get("per_dimension") or {} %}
+      {% set _strengths = _mb.get("strengths") or [] %}
+      {% set _gaps = _mb.get("gaps") or [] %}
+      {% set _visa_note = _mb.get("visa_note") %}
+      <div class="pt-1 flex flex-col gap-3 border-t border-slate-800/60">
+        <div class="pt-2">
+          <div class="text-[10px] uppercase tracking-wide text-slate-500 font-mono mb-2">PER-DIMENSION</div>
+          {% if _per_dim %}
+            {% with breakdown=_per_dim %}
+              {% include "components/match_breakdown.html" %}
+            {% endwith %}
+          {% else %}
+            <span class="text-xs text-slate-500 italic">no per-dimension data</span>
+          {% endif %}
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div class="rounded-md bg-emerald-500/5 ring-1 ring-emerald-500/20 px-3 py-2">
+            <div class="text-[10px] uppercase tracking-wide text-emerald-300 font-mono mb-1.5">STRENGTHS</div>
+            {% if _strengths %}
+              <ul class="flex flex-col gap-1 text-xs text-slate-200 leading-relaxed">
+                {% for s in _strengths %}
+                  <li class="flex gap-1.5"><span class="text-emerald-400 shrink-0" aria-hidden="true">+</span><span>{{ s }}</span></li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <span class="text-xs text-slate-500 italic">no strengths surfaced</span>
+            {% endif %}
+          </div>
+          <div class="rounded-md bg-amber-500/5 ring-1 ring-amber-500/20 px-3 py-2">
+            <div class="text-[10px] uppercase tracking-wide text-amber-300 font-mono mb-1.5">WHAT'S MISSING</div>
+            {% if _gaps %}
+              <ul class="flex flex-col gap-1 text-xs text-slate-200 leading-relaxed">
+                {% for g in _gaps %}
+                  <li class="flex gap-1.5"><span class="text-amber-400 shrink-0" aria-hidden="true">−</span><span>{{ g }}</span></li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <span class="text-xs text-slate-500 italic">no gaps identified</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if j.visa_concern and _visa_note %}
+          <div class="rounded-md bg-rose-500/5 ring-1 ring-rose-500/20 px-3 py-2">
+            <div class="text-[10px] uppercase tracking-wide text-rose-300 font-mono mb-1">VISA</div>
+            <p class="text-xs text-slate-200 leading-relaxed">{{ _visa_note }}</p>
+          </div>
+        {% endif %}
+      </div>
     {% endif %}
   </div>
 

@@ -45,5 +45,8 @@ def test_review_page_renders_match_panel():
     r = client.get(f"/discover/{job.id}", cookies={"naavik_session": "fake-1"})
     assert r.status_code == 200
     assert 'data-testid="match-panel"' in r.text
-    assert "WHAT THEY WANT" in r.text
+    # Item 2 (2026-07): the third "WHAT THEY WANT" column is retired — two
+    # refined columns only.
+    assert "WHAT THEY WANT" not in r.text
     assert "YOUR STRENGTHS" in r.text
+    assert "WHAT&#39;S MISSING" in r.text or "WHAT'S MISSING" in r.text

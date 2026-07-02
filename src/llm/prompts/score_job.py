@@ -87,11 +87,27 @@ Return a JobScore object matching the schema with:
 - `explanation`: 1-2 sentences on why (max 512 chars)
 - `matched_tags`: tags from {tag_vocabulary} that align between job and candidate
 - `per_dimension`: dict of {{tag -> alignment 0.0-1.0}} for each matched tag (max 9 keys)
-- `strengths`: 0-5 short bullet strings highlighting fit (max 120 chars each)
-- `gaps`: 3-5 short bullet strings of specific skills the candidate lacks (max 120 chars each)
+- `strengths`: 0-5 bullet strings (max 120 chars each)
+- `gaps`: 0-5 bullet strings (max 120 chars each)
 - `suggested_bullets`: list of bullet IDs (integers from the bracketed IDs above) ordered most-relevant-first, max 8
 - `visa_concern`: true iff the job requires citizenship/GC and the candidate needs sponsorship
 - `visa_note`: short string explaining the visa concern, or null
+
+Rules for `strengths` and `gaps` — these render side by side as the match
+analysis the candidate reads before applying, so they must be sharp:
+- Every entry must PAIR something specific from the job description with
+  the candidate's record: "JD wants X — candidate shipped Y" (strength) or
+  "JD requires X — nothing in the profile shows it" (gap). Name the actual
+  technology / responsibility from the JD, not a category.
+- No filler ("strong engineering background", "good culture fit"), no
+  restating the JD without a verdict, no résumé keywords the JD never asks
+  for.
+- Deduplicate: one entry per distinct theme. If two JD lines want the same
+  skill, cover them once.
+- An item may appear in strengths OR gaps, never both; when partially
+  covered, pick the side the evidence favors and say "partial:" in the text.
+- Fewer, sharper entries beat five vague ones. Zero gaps is acceptable for
+  a genuinely dead-on match; zero strengths for a genuinely bad one.
 
 Be honest about gaps — the candidate uses this to decide whether to apply.
 """

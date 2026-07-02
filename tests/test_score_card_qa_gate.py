@@ -32,25 +32,26 @@ def client() -> TestClient:
 
 
 def test_discover_page_renders_score_card(client: TestClient, auth_cookies: dict[str, str]) -> None:
-    """Discover swipe-card renders score_card composite + nested panels."""
+    """Item 2 (2026-07): the swipe card shows the score ONCE (header circle) —
+    the embedded score_card composite (second MATCH circle + 12-col bento that
+    misaligned inside the card column) is gone. The card body carries the
+    per-dimension bars + strengths + what's-missing directly."""
     r = client.get("/discover", cookies=auth_cookies)
     assert r.status_code == 200, f"discover returned {r.status_code}"
     html = r.text
-    assert "score-card grid" in html, "score_card container not rendered"
+    assert "score-card grid" not in html, "embedded score_card must not render in swipe card"
     assert "STRENGTHS" in html, "strengths panel header not rendered"
     # `WHAT'S MISSING` gets HTML-escaped to `WHAT&#39;S MISSING`.
     assert "WHAT&#39;S MISSING" in html or "WHAT'S MISSING" in html
-    assert "PER-DIMENSION" in html, "per-dimension middle zone not rendered"
-    # Default `expanded=False` on swipe card → no provenance footer.
-    # (Loose assertion: PROVENANCE may still appear on the review page surface
-    # that's also included in the same HTML render if discover bundles them.)
+    assert "PER-DIMENSION" in html, "per-dimension bars not rendered in card body"
 
 
 def test_discover_review_page_renders_expanded_score_card(
     client: TestClient, auth_cookies: dict[str, str]
 ) -> None:
-    """Discover · review renders the full-width match panel (which replaced
-    the LEFT-column score_card in the UX-quality redesign)."""
+    """Item 2 (2026-07): the match panel is TWO columns — Strengths +
+    What's missing. The old third "WHAT THEY WANT" column restated the JD and
+    regularly contradicted the other two; it's gone."""
     # Pick a job with a DRAFT application from sample_data.
     from db import sample_data as sd
 
@@ -62,7 +63,10 @@ def test_discover_review_page_renders_expanded_score_card(
     html = r.text
     assert 'data-testid="match-panel"' in html, "match panel missing in review page"
     assert "YOUR STRENGTHS" in html
-    assert "WHAT THEY WANT" in html
+    assert "WHAT&#39;S MISSING" in html or "WHAT'S MISSING" in html
+    # Only the swipe card's JD-bullets section may carry this label — the
+    # match panel's third column is retired.
+    assert html.count("WHAT THEY WANT") == 0, "match panel must not render WHAT THEY WANT"
 
 
 def test_apply_tailored_bullets_renders_without_rationale(

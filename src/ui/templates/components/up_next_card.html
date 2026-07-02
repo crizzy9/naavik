@@ -43,9 +43,10 @@
   {% with kind="company", text=j.company_initial | default(j.company[:1] | upper) if j.company else "?", size="sm", color_override=j.company_color | default("bg-slate-700") %}
     {% include "components/avatar.html" %}
   {% endwith %}
+  {# Identity inversion (item 2): company bold on top, role beneath. #}
   <div class="flex-1 min-w-0">
-    <div class="text-sm text-slate-100 truncate">{{ j.role }}</div>
-    <div class="text-xs text-slate-400 truncate font-mono">{{ j.salary_range | default("") }}</div>
+    <div class="text-sm font-medium text-slate-100 truncate">{{ j.company | default("") }}</div>
+    <div class="text-xs text-slate-400 truncate">{{ j.role }}{% if j.salary_range %} · <span class="font-mono">{{ j.salary_range }}</span>{% endif %}</div>
   </div>
   {% if state == "stuck" %}
     <span class="relative z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono uppercase tracking-wide text-slate-300 shrink-0"

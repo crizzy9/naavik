@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from services.auth import CSRF_COOKIE
-from ui.template_helpers import APP_Q_LABEL_MAPS, APP_Q_OPTIONS, app_q_label
+from ui.template_helpers import APP_Q_LABEL_MAPS, APP_Q_OPTIONS, app_q_label, format_jd
 
 
 def _csrf_token_ctx(request: Request) -> dict[str, str]:
@@ -69,3 +69,5 @@ templates.env.globals["TAG_VOCAB"] = TAG_VOCAB
 templates.env.globals["APP_Q_OPTIONS"] = APP_Q_OPTIONS
 templates.env.globals["APP_Q_LABEL_MAPS"] = APP_Q_LABEL_MAPS
 templates.env.globals["app_q_label"] = app_q_label
+# Item 2 (2026-07) — plain-text JD → structured escaped HTML.
+templates.env.filters["format_jd"] = format_jd

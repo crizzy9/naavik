@@ -46,10 +46,6 @@ from services.constitution import render_preamble
 from services.ethics_preflight import EthicsReport, preflight_check
 from services.hiring_manager_extractor import HiringManagerHit, extract_hiring_manager
 from services.keyword_coverage import CoverageReport, compute_coverage
-from services.recruiter_optimization import (
-    HEADLINE_SCORE_GATE,
-    tailor_headline_for_application,
-)
 from services.voice_grounding import VoiceCorpus, assemble_corpus
 
 log = logging.getLogger(__name__)
@@ -288,7 +284,8 @@ async def generate_bundle(
        trim + page-count retry; we add ethics pre-flight on its bullet
        output AFTER the fact, since the existing pipeline is a single
        atomic call)
-    4. tailored headline (gated on `Job.score ≥ HEADLINE_SCORE_GATE`)
+    4. (headline stage retired 2026-07 — the resume header is name +
+       one contact line only; `trace["headline_used"]` stays None)
     5. cover letter generation (existing `generate_cover_letter` —
        0.3.1 uses the SOTA prompt under the hood; T15 backward-compat
        keeps both paths working)
@@ -412,43 +409,14 @@ async def generate_bundle(
         }
     trace["stages_run"].append("hiring_manager")
 
-    # Stage 3 — tailored headline FIRST (gated on Job.score ≥ 0.50), so it can
-    # actually render on the resume PDF. It used to run after the resume
-    # compiled, which meant the headline landed in the trace but never on
-    # the document.
-    if await dg.is_cost_capped(session, user_id, settings):
-        result.degraded = True
-        result.degraded_reason = "cost_cap_reached"
-        trace["degraded_mode"] = True
-        trace["stages_skipped"].extend(["headline", "resume", "cover_letter", "screeners"])
-        result.generation_trace = trace
-        await _persist_trace(session, application, trace)
-        return result
-
-    profile, experiences = await _load_profile_experiences(session, user_id)
-    headline = None
-    job_score_val = float(getattr(job, "score", 0.0) or 0.0)
+    # Stage 3 (headline) RETIRED — item 2 (2026-07): the resume header is
+    # name + one contact line, nothing else. `trace["headline_used"]` stays
+    # in the trace shape (always None) so older trace consumers don't
+    # special-case a missing key. `matched_tags` survives — the cover
+    # letter stage grounds on it.
+    trace["stages_skipped"].append("headline")
     breakdown = getattr(job, "match_breakdown", None) or {}
     matched_tags = list(breakdown.get("matched_tags") or [])
-    if profile is not None and job_score_val >= HEADLINE_SCORE_GATE:
-        headline = await tailor_headline_for_application(
-            session=session,
-            user_id=user_id,
-            settings=settings,
-            profile=profile,
-            experiences=experiences,
-            job=job,
-            job_score=job_score_val,
-            matched_tags=matched_tags,
-            application_id=application.id,
-            system=preamble,
-            cache_system=cache_preamble,
-        )
-        if headline is not None:
-            trace["headline_used"] = headline.headline_one_line
-        trace["stages_run"].append("headline")
-    else:
-        trace["stages_skipped"].append("headline")
 
     # Stage 4 — resume (delegates to existing pipeline)
     if await dg.is_cost_capped(session, user_id, settings):
@@ -468,7 +436,6 @@ async def generate_bundle(
             job=job,
             system=preamble,
             cache_system=cache_preamble,
-            tailored_headline=(headline.headline_one_line if headline is not None else None),
         )
         result.resume = resume
         trace["stages_run"].append("resume")

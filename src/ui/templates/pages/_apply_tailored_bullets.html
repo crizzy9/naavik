@@ -1,5 +1,23 @@
-{# Discover · review middle column — tailored resume bullets. Args: groups #}
-<div class="flex flex-col gap-4">
+{#
+  _apply_tailored_bullets.html — the tailored-resume ledger (Discover ·
+  review). Wraps its own container div so the workspace edit/toggle
+  fragment routes can swap it wholesale.
+
+  Args:
+    groups            : list from discover_review_ctx.tailored_bullet_groups
+    application_id    : int | none — enables the working per-app edit/toggle
+                        controls on each row
+    resume_page_count : int | none — >1 renders the honest overflow warning
+#}
+{% set application_id = application_id | default(none) %}
+{% set resume_page_count = resume_page_count | default(none) %}
+<div id="apply-tailored-bullets" class="flex flex-col gap-4">
+  {% if resume_page_count and resume_page_count > 1 %}
+    <div class="flex items-center gap-2 rounded-md bg-amber-500/10 ring-1 ring-amber-500/30 px-3 py-2 text-xs text-amber-200">
+      <i data-lucide="alert-triangle" class="h-3.5 w-3.5 shrink-0" stroke-width="1.5"></i>
+      The resume currently runs {{ resume_page_count }} pages — exclude a bullet or two to get back to one.
+    </div>
+  {% endif %}
   {% for g in groups %}
     <section>
       <header class="px-3 py-2 text-xs uppercase tracking-wide text-slate-400 font-medium border-b border-slate-800/50">
@@ -9,7 +27,7 @@
         {% for r in g.rows %}
           {% with bullet={"id": r.id, "text": r.trimmed_line, "tags": r.tags},
                   selected=r.selected, trimmed_line=r.trimmed_line, chips=r.chips,
-                  rationale=r.rationale %}
+                  rationale=r.rationale, application_id=application_id %}
             {% include "components/tailored_bullet_row.html" %}
           {% endwith %}
         {% endfor %}

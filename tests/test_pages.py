@@ -83,8 +83,10 @@ _PAGES = [
     (
         "discover_review_eager",
         "/discover/113",
-        ["Tailored resume", "Cover letter", "Submit application", "WHAT THEY WANT"],
-        ["/generate/cover-letter", "/generate/resume"],
+        # Item 2 (2026-07): "WHAT THEY WANT" column retired from the match
+        # panel — the review page pins the two-column analysis instead.
+        ["Tailored resume", "Cover letter", "Submit application", "YOUR STRENGTHS"],
+        ["/generate/cover-letter", "/generate/resume", "WHAT THEY WANT"],
     ),
     (
         "tracking",

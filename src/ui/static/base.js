@@ -319,6 +319,22 @@
   });
 
   // ---------------------------------------------------------------- //
+  // resumePdfUpdated / coverPdfUpdated → reload the matching PDF     //
+  // embed so the iframe shows the freshly recompiled document after  //
+  // a workspace edit (bullet toggle/edit, cover-section save).       //
+  // ---------------------------------------------------------------- //
+  function _reloadPdfEmbed(testid) {
+    var f = document.querySelector('[data-testid="' + testid + '"]');
+    if (f && f.tagName === 'IFRAME') { f.src = f.src; }
+  }
+  document.body.addEventListener('resumePdfUpdated', function () {
+    _reloadPdfEmbed('tailored-resume-embed');
+  });
+  document.body.addEventListener('coverPdfUpdated', function () {
+    _reloadPdfEmbed('cover-letter-embed');
+  });
+
+  // ---------------------------------------------------------------- //
   // 8a. Server-event toasts (P5 universal feedback).                 //
   // These HX-Trigger events used to fire into the void — no listener //
   // existed, so degraded bundles / retries / deletions were silent.  //

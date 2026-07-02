@@ -99,3 +99,110 @@ def app_q_label(field: str, value: str | None) -> str:
     if not value:
         return "—"
     return APP_Q_LABEL_MAPS.get(field, {}).get(str(value), str(value))
+
+
+# ── Job-description formatter (item 2, 2026-07) ─────────────────────────
+# Scraped JDs arrive as plain-text blobs; rendering them with
+# `whitespace-pre-line` read like a wall of text. This formats the blob
+# into real structure — section headings, bullet lists, paragraphs — with
+# every piece of input HTML-escaped first (no raw HTML injection; scraped
+# markup renders inert as text).
+
+import re
+from html import escape as _html_escape
+
+from markupsafe import Markup
+
+_JD_BULLET_RE = re.compile(r"^\s*(?:[-–—*•·◦▪‣]|\d{1,2}[.)])\s+(.*)$")
+# Known JD section names — matched case-insensitively when a short line is
+# made of them (with optional trailing colon).
+_JD_SECTION_WORDS = (
+    "about",
+    "responsibilities",
+    "requirements",
+    "qualifications",
+    "benefits",
+    "perks",
+    "compensation",
+    "what you'll do",
+    "what you will do",
+    "what you'll bring",
+    "who you are",
+    "nice to have",
+    "nice-to-have",
+    "bonus points",
+    "the role",
+    "the team",
+    "your impact",
+    "why join",
+    "our stack",
+    "tech stack",
+    "interview process",
+    "equal opportunity",
+)
+
+
+def _jd_is_heading(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped or len(stripped) > 64 or stripped.endswith((".", ",", ";")):
+        return False
+    if stripped.endswith(":"):
+        return True
+    letters = [c for c in stripped if c.isalpha()]
+    if letters and sum(c.isupper() for c in letters) / len(letters) > 0.85 and len(letters) >= 4:
+        return True  # ALL-CAPS section banner
+    lowered = stripped.lower().rstrip(":")
+    return any(lowered.startswith(w) for w in _JD_SECTION_WORDS) and len(stripped.split()) <= 6
+
+
+def format_jd(text: str | None) -> Markup:
+    """Plain-text JD → structured, fully-escaped HTML."""
+    if not text:
+        return Markup("")
+    out: list[str] = []
+    para: list[str] = []
+    in_list = False
+
+    def _close_para() -> None:
+        nonlocal para
+        if para:
+            body = "<br>".join(_html_escape(line) for line in para)
+            out.append(f'<p class="text-sm text-slate-300 leading-relaxed">{body}</p>')
+            para = []
+
+    def _close_list() -> None:
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            _close_para()
+            _close_list()
+            continue
+        m = _JD_BULLET_RE.match(line)
+        if m:
+            _close_para()
+            if not in_list:
+                out.append('<ul class="list-disc pl-5 flex flex-col gap-1 marker:text-slate-500">')
+                in_list = True
+            out.append(
+                f'<li class="text-sm text-slate-300 leading-relaxed">{_html_escape(m.group(1))}</li>'
+            )
+            continue
+        if _jd_is_heading(line):
+            _close_para()
+            _close_list()
+            heading = _html_escape(line.strip().rstrip(":"))
+            out.append(
+                '<h4 class="text-[11px] uppercase tracking-wide text-slate-400 '
+                f'font-mono font-medium mt-4 first:mt-0 mb-1">{heading}</h4>'
+            )
+            continue
+        _close_list()
+        para.append(line.strip())
+    _close_para()
+    _close_list()
+    return Markup("\n".join(out))

@@ -76,13 +76,15 @@
         {% endwith %}
       {% endif %}
 
-      {# Row 1b — full JD, collapsible, full-width #}
+      {# Row 1b — full JD, collapsible, full-width. `format_jd` renders the
+         scraped text like a real posting (headings / bullets / paragraphs),
+         escaping every line — no raw HTML injection. #}
       <details class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
         <summary class="px-5 py-3 text-xs uppercase tracking-wide text-slate-400 font-medium cursor-pointer hover:bg-slate-800/50 transition">
           JOB DESCRIPTION
         </summary>
-        <div class="px-5 py-4 text-sm text-slate-300 leading-relaxed whitespace-pre-line">
-          {{ job.description }}
+        <div class="px-5 py-4 flex flex-col gap-2" data-testid="jd-formatted">
+          {{ job.description | format_jd }}
         </div>
       </details>
 
@@ -140,13 +142,15 @@
                   style="height: 760px"
                   data-testid="tailored-resume-embed"></iframe>
           {% endif %}
-          <details class="group">
+          <details class="group" data-testid="tailored-ledger">
             <summary class="cursor-pointer text-xs text-slate-400 hover:text-slate-200 select-none">
               <span class="font-mono">{{ selected_bullet_count }} of {{ total_bullet_count }}</span>
-              bullets selected — see what was kept and why
+              bullets selected — edit lines or toggle them in/out for this application
             </summary>
             <div class="pt-3">
-              {% include "pages/_apply_tailored_bullets.html" with context %}
+              {% with groups=tailored_bullet_groups, application_id=application_id, resume_page_count=resume_page_count %}
+                {% include "pages/_apply_tailored_bullets.html" %}
+              {% endwith %}
             </div>
           </details>
         </div>
@@ -171,26 +175,19 @@
           </button>
         </div>
         {% else %}
-        {# Honest empty state — nothing has been generated for this job yet. #}
+        {# Honest empty state — generation is a whole-bundle action, so the
+           button lives in the sticky action bar below (next to Submit). #}
         <div class="flex flex-col items-center text-center gap-3 px-6 py-10">
           <div class="h-10 w-10 rounded-xl bg-slate-800 flex items-center justify-center">
             <i data-lucide="file-x-2" class="h-5 w-5 text-slate-500" stroke-width="1.5"></i>
           </div>
           <p class="text-sm text-slate-300 max-w-md">
-            No tailored resume yet. Generate one — Naavik selects the most relevant
-            bullets for this JD, trims them to fit one page, and compiles the PDF.
+            No tailored resume yet. Hit
+            <span class="text-indigo-300 font-medium">Generate tailored documents</span>
+            in the bar below — Naavik selects the most relevant bullets for this JD,
+            rewrites them against the posting, packs them onto one page, and compiles
+            the PDF (plus cover letter + screener answers).
           </p>
-          <button type="button"
-                  class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                  hx-post="/_fragments/apply/generate/{{ application.id }}"
-                  hx-target="#review-workspace"
-                  hx-swap="outerHTML"
-                  hx-indicator="#apply-generate-indicator"
-                  hx-disabled-elt="this"
-                  data-testid="tailored-generate-btn">
-            <i data-lucide="sparkles" class="h-4 w-4" stroke-width="1.5"></i>
-            Generate tailored documents
-          </button>
         </div>
         {% endif %}
       </section>
@@ -264,10 +261,11 @@
       </section>
     </div>
 
-    {# Sticky bottom action bar #}
+    {# Sticky bottom action bar — owns whole-bundle actions: Generate /
+       Regen live here next to Submit (item 2). #}
     {% with application=application, screener_count=screener_answers | length,
             unreviewed_count=unreviewed_count, cost_estimate_usd=cost_estimate_usd,
-            board_label=job.board_label %}
+            board_label=job.board_label, docs_generated=docs_generated %}
       {% include "components/apply_action_bar.html" %}
     {% endwith %}
   {% endif %}

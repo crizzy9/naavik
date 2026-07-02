@@ -825,12 +825,25 @@ async def fragment_cover_section_save(
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    """Persist an edited cover-letter section to the DB (per-application,
-    IDOR-checked) — replaces the process-global dict write."""
+    """Persist an edited cover-letter section (per-application, IDOR-checked)
+    AND recompile the letter PDF so the embed matches the saved text.
+
+    Item 2 (2026-07): the edit form used to POST to
+    `/api/v1/applications/{id}/cover-letter/{section}` — a route that never
+    existed — so every save 404'd and the edit was lost. The form now posts
+    here; on success the recompiled PDF is announced via the
+    `coverPdfUpdated` HX-Trigger (base.js reloads the iframe).
+    """
+    import json as _json
+
+    from services import document_generator as dg
+    from services import settings_service
+
+    user_id = _effective_user_id(user)
     ok = await application_service.update_cover_section(
         session,
         application_id=application_id,
-        user_id=_effective_user_id(user),
+        user_id=user_id,
         section=section,
         text=text,
     )
@@ -839,8 +852,21 @@ async def fragment_cover_section_save(
             status_code=404,
             detail="Generate a cover letter first, then edit its sections.",
         )
+    application = await application_service.get_application(session, application_id)
+    user_settings = await settings_service.get_or_create(session, user_id=user_id)
+    toast = {"tone": "success", "text": "Section saved — letter PDF updated."}
+    try:
+        await dg.recompile_cover_letter_from_sections(
+            session, application, settings=user_settings
+        )
+    except Exception as exc:  # noqa: BLE001 — save must survive a compile hiccup
+        log.warning("cover-letter recompile after edit failed: %s", exc)
+        toast = {
+            "tone": "warning",
+            "text": "Section saved, but the PDF recompile failed — Regen to refresh it.",
+        }
     await session.commit()
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request,
         "components/cover_letter_section.html",
         {
@@ -850,6 +876,166 @@ async def fragment_cover_section_save(
             "text": text,
             "mode": "view",
         },
+    )
+    response.headers["HX-Trigger"] = _json.dumps({"coverPdfUpdated": True, "showToast": toast})
+    return response
+
+
+async def _application_owned_or_404(session, application_id: int, user_id: int):
+    application = await application_service.get_application(session, application_id)
+    if (
+        application is None
+        or application.user_id != user_id
+        or getattr(application, "deleted_at", None) is not None
+    ):
+        raise HTTPException(status_code=404, detail="Application not found")
+    return application
+
+
+async def _ledger_response(
+    request: Request,
+    session: AsyncSession,
+    *,
+    user_id: int,
+    application,
+    doc,
+    toast: dict,
+) -> HTMLResponse:
+    """Re-render the tailored-bullets ledger + announce the fresh resume PDF."""
+    import json as _json
+
+    groups = await drctx.tailored_bullet_groups(session, user_id=user_id, application=application)
+    page_count = getattr(doc, "page_count", None) if doc is not None else None
+    response = templates.TemplateResponse(
+        request,
+        "pages/_apply_tailored_bullets.html",
+        {
+            "groups": groups,
+            "application_id": application.id,
+            "resume_page_count": page_count,
+        },
+    )
+    response.headers["HX-Trigger"] = _json.dumps({"resumePdfUpdated": True, "showToast": toast})
+    return response
+
+
+@router.post(
+    "/_fragments/apply/resume-bullet/{application_id}/{bullet_id}/toggle",
+    response_class=HTMLResponse,
+    name="apply_resume_bullet_toggle",
+)
+async def fragment_resume_bullet_toggle(
+    request: Request,
+    application_id: int,
+    bullet_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Toggle a bullet in/out of THIS application's resume and recompile.
+
+    Writes the per-app `bullet_overrides` map (same machinery the tracking
+    detail uses), then recompiles the PDF from the stored selection — no
+    LLM round-trip.
+    """
+    from models.enums import BulletSelectionOverride
+    from services import document_generator as dg
+    from services import profile_service, settings_service
+
+    user_id = _effective_user_id(user)
+    application = await _application_owned_or_404(session, application_id, user_id)
+    if not await profile_service.owns_bullet(session, bullet_id=bullet_id, user_id=user_id):
+        raise HTTPException(status_code=404, detail="Bullet not found")
+
+    doc_before = await dg._latest_error_free_doc(
+        session, application_id, dg.GeneratedDocumentKind.RESUME
+    )
+    if doc_before is None or not doc_before.bullet_selection:
+        raise HTTPException(status_code=409, detail="Generate the resume first, then edit it.")
+    currently_in = bullet_id in {
+        int(b) for b in (doc_before.bullet_selection.get("selected_ids") or [])
+    }
+
+    artifacts = dict(application.submission_artifacts or {})
+    overrides = dict(artifacts.get("bullet_overrides") or {})
+    overrides[str(bullet_id)] = (
+        BulletSelectionOverride.NEVER_INCLUDE.value
+        if currently_in
+        else BulletSelectionOverride.ALWAYS_INCLUDE.value
+    )
+    artifacts["bullet_overrides"] = overrides
+    application.submission_artifacts = artifacts
+    session.add(application)
+    await session.flush()
+
+    user_settings = await settings_service.get_or_create(session, user_id=user_id)
+    doc = await dg.recompile_resume_from_selection(session, application, settings=user_settings)
+    await session.commit()
+
+    verb = "removed from" if currently_in else "added to"
+    toast = {"tone": "success", "text": f"Bullet {verb} this resume — PDF updated."}
+    if doc is not None and (doc.page_count or 1) > 1:
+        toast = {
+            "tone": "warning",
+            "text": f"Bullet {verb} the resume — now {doc.page_count} pages. Remove something to get back to one.",
+        }
+    return await _ledger_response(
+        request, session, user_id=user_id, application=application, doc=doc, toast=toast
+    )
+
+
+@router.post(
+    "/_fragments/apply/resume-bullet/{application_id}/{bullet_id}",
+    response_class=HTMLResponse,
+    name="apply_resume_bullet_save",
+)
+async def fragment_resume_bullet_save(
+    request: Request,
+    application_id: int,
+    bullet_id: int,
+    text: Annotated[str, Form()] = "",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Save an edited bullet line FOR THIS APPLICATION and recompile the PDF.
+
+    The edit lives in `submission_artifacts.bullet_text_overrides` — the
+    profile's master bullet is untouched.
+    """
+    from services import document_generator as dg
+    from services import profile_service, settings_service
+
+    user_id = _effective_user_id(user)
+    application = await _application_owned_or_404(session, application_id, user_id)
+    if not await profile_service.owns_bullet(session, bullet_id=bullet_id, user_id=user_id):
+        raise HTTPException(status_code=404, detail="Bullet not found")
+    cleaned = text.strip()
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="Bullet text cannot be empty")
+
+    artifacts = dict(application.submission_artifacts or {})
+    text_overrides = dict(artifacts.get("bullet_text_overrides") or {})
+    text_overrides[str(bullet_id)] = cleaned
+    artifacts["bullet_text_overrides"] = text_overrides
+    application.submission_artifacts = artifacts
+    session.add(application)
+    await session.flush()
+
+    user_settings = await settings_service.get_or_create(session, user_id=user_id)
+    doc = await dg.recompile_resume_from_selection(session, application, settings=user_settings)
+    if doc is None:
+        raise HTTPException(status_code=409, detail="Generate the resume first, then edit it.")
+    await session.commit()
+
+    toast = {"tone": "success", "text": "Bullet updated for this application — PDF recompiled."}
+    if (doc.page_count or 1) > 1:
+        toast = {
+            "tone": "warning",
+            "text": f"Bullet saved — the resume now runs {doc.page_count} pages.",
+        }
+    return await _ledger_response(
+        request, session, user_id=user_id, application=application, doc=doc, toast=toast
     )
 
 

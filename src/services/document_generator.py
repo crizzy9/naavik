@@ -442,43 +442,78 @@ async def _tailor_summary(
 # ── Resume generation ───────────────────────────────────────────────────
 
 
-async def _trim_one_bullet(
+# One printed line in `onepage.typ` (10pt Liberation Sans, 0.3in margins,
+# ○ + 0.15in list indent) holds ~118 characters; 112 leaves headroom so a
+# refined bullet NEVER wraps. Calibrated by compiling the cv.tex-equivalent
+# payload and bisecting the wrap point.
+RESUME_BULLET_CHAR_BUDGET = 112
+
+# JD excerpt cap for the per-bullet refine prompt — full JDs blow up the
+# token bill × ~20 bullets per generation.
+_REFINE_JD_CHARS = 2400
+
+
+async def _refine_one_bullet(
     *,
     session: AsyncSession,
     settings: Settings,
     user_id: int,
     application_id: int | None,
     bullet: Bullet,
-    target_chars: int = 120,
+    job_text: str,
+    target_chars: int = RESUME_BULLET_CHAR_BUDGET,
     system: str | None = None,
     cache_system: bool = False,
 ) -> str:
-    if len(bullet.text) <= target_chars:
-        return bullet.text
+    """Rewrite one bullet against the JD (mirror truthful terminology) AND
+    enforce the one-line character budget.
+
+    Every selected bullet goes through one refine call; a result over
+    budget gets ONE stricter retry, then falls back to the shorter of the
+    two candidates (the page-fit loop + eval scorecard catch stragglers).
+    LLM failure degrades to plain truncation of the original.
+    """
+    from llm.prompts.refine_bullet import PROMPT as REFINE_PROMPT
+    from llm.prompts.refine_bullet import RefinedBullet
+
     provider = get_provider(settings)
-    prompt = (
-        f"Trim this bullet to one resume line of at most {target_chars} characters.\n\n"
-        f"Original:\n{bullet.text}\n\n"
-        "Preserve every number, every verb, the most concrete result. Return "
-        "TrimmedBullet with trimmed + dropped_phrases."
-    )
-    try:
-        result = await llm_tracker.tracked_call(
-            session=session,
-            user_id=user_id,
-            provider=provider,
-            method="structured",
-            prompt_name="trim_bullet",
-            application_id=application_id,
-            prompt=prompt,
-            schema=__import__("llm.prompts.trim_bullet", fromlist=["TrimmedBullet"]).TrimmedBullet,
-            system=system,
-            cache_system=cache_system,
-        )
-        return str(result.value.get("trimmed") or bullet.text)
-    except LLMProviderError as exc:
-        log.warning("trim_bullet failed; using truncation: %s", exc)
+
+    async def _call(target: int, text: str) -> str | None:
+        try:
+            result = await llm_tracker.tracked_call(
+                session=session,
+                user_id=user_id,
+                provider=provider,
+                method="structured",
+                prompt_name="refine_bullet",
+                application_id=application_id,
+                prompt=REFINE_PROMPT.format(
+                    job_text=job_text[:_REFINE_JD_CHARS], text=text, target_chars=target
+                ),
+                schema=RefinedBullet,
+                system=system,
+                cache_system=cache_system,
+            )
+            refined = str(result.value.get("refined") or "").strip()
+            return refined or None
+        except LLMProviderError as exc:
+            log.warning("refine_bullet failed: %s", exc)
+            return None
+
+    first = await _call(target_chars, bullet.text)
+    if first is None:
+        # No provider / hard failure — degrade honestly to a trim.
+        if len(bullet.text) <= target_chars:
+            return bullet.text
         return bullet.text[: target_chars - 1] + "…"
+    if len(first) <= target_chars:
+        return first
+    second = await _call(int(target_chars * 0.9), first)
+    candidates = [c for c in (first, second) if c]
+    fitting = [c for c in candidates if len(c) <= target_chars]
+    if fitting:
+        return fitting[0]
+    return min(candidates, key=len)
 
 
 def _format_date(d: datetime | None) -> str | None:
@@ -606,16 +641,18 @@ async def _build_resume_data(
     snap: ProfileSnapshot,
     selected_bullet_ids: list[int],
     trimmed: dict[int, str],
-    tailored_headline: str | None = None,
     tailored_summary: str | None = None,
 ) -> dict[str, Any]:
-    """Compose the payload consumed by `onepage.typ`.
+    """Compose the payload consumed by `onepage.typ` (cv.tex-conversion shape).
 
     Every experience renders — an experience may carry fewer bullets after
     the page-fit loop, but it never silently vanishes (the old
     `if not kept: continue` ate whole jobs when the selection cap starved
     them). Kept bullets are ordered by selection priority (bold tailoring:
     the most JD-relevant result leads each role).
+
+    There is deliberately no headline field — the header is name + one
+    contact line, nothing else.
     """
     selected = set(selected_bullet_ids)
     priority = {bid: i for i, bid in enumerate(selected_bullet_ids)}
@@ -624,31 +661,33 @@ async def _build_resume_data(
         bullets = snap.bullets_by_experience.get(exp.id, [])
         kept = [b for b in bullets if b.id in selected]
         kept.sort(key=lambda b: priority.get(b.id, 10_000))
+        company = exp.company
+        if exp.team:
+            company = f"{exp.company}, {exp.team}"
         experiences_payload.append(
             {
-                "heading": f"{exp.title} · {exp.company}",
-                "meta": exp.location,
+                "company": company,
+                "title": exp.title,
+                "location": exp.location or "",
                 "dates": _date_range(exp.start_date, exp.end_date),
                 "bullets": [trimmed.get(b.id, b.text) for b in kept],
             }
         )
     p = snap.profile
-    headline = tailored_headline or (p.headline or None) or None
     # `summary_full` is the user-editable master (item 1); `summary_short`
     # is the AI-condensed leftover kept only as a fallback.
     summary = tailored_summary or p.summary_short or p.summary_full or None
-    education_payload = []
-    for e in snap.education:
-        meta_parts = [e.degree]
-        if e.gpa:
-            meta_parts.append(f"GPA {e.gpa}")
-        education_payload.append(
-            {
-                "heading": e.institution,
-                "meta": " · ".join(mp for mp in meta_parts if mp) or None,
-                "dates": _date_range(e.start_date, e.end_date),
-            }
-        )
+    education_payload = [
+        {
+            "institution": e.institution,
+            "school": e.school,
+            "location": e.location or "",
+            "dates": _date_range(e.start_date, e.end_date),
+            "degree": e.degree,
+            "gpa": e.gpa,
+        }
+        for e in snap.education
+    ]
 
     def _project_payload(rows: list[Project]) -> list[dict]:
         out = []
@@ -666,15 +705,14 @@ async def _build_resume_data(
 
     certifications_payload = [
         {
-            "title": c.title,
-            "issuer": c.issuer,
+            "title": f"{c.title} - {c.issuer}" if c.issuer else c.title,
             "date": _format_date(getattr(c, "date", None)),
+            "text": (c.description or None),
         }
         for c in snap.certifications
     ]
     return {
         "profile": {"full_name": p.full_name},
-        "headline": headline if headline else None,
         "contact_links": _contact_links(p),
         "summary": summary if summary else None,
         "experiences": experiences_payload,
@@ -730,6 +768,9 @@ def _application_bullet_overrides(application: Application) -> dict[int, str]:
 # tail until the page fits, which packs the page as densely as it will go.
 RESUME_MAX_START_BULLETS = 22
 RESUME_MAX_FIT_ATTEMPTS = 14
+# Density add-back cap — bounds LLM refine calls + typst compiles after the
+# fit loop when spare page room remains.
+RESUME_MAX_ADDBACK = 8
 
 
 def _ensure_min_one_per_experience(
@@ -789,15 +830,19 @@ async def generate_resume(
     job: Job | None = None,
     system: str | None = None,
     cache_system: bool = False,
-    tailored_headline: str | None = None,
 ) -> GeneratedDocument:
     """Generate a tailored 1-page resume for `application`.
 
     Bold-tailoring contract:
     - The LLM ranks the FULL bullet inventory against the JD; the page-fit
       loop starts generous (`RESUME_MAX_START_BULLETS`) and drops the
-      lowest-priority bullet on overflow — so the page ends up as dense as
-      one page allows, not just "under the limit".
+      lowest-priority bullet on overflow.
+    - After the page fits, the ADD-BACK pass pulls the next-ranked bullets
+      in (even sub-relevant ones) until adding one more would overflow —
+      the page ends up PACKED, not just "under the limit". Selected
+      JD-relevant content still leads each role.
+    - Every selected bullet is REWRITTEN against the JD (`refine_bullet`):
+      mirror the posting's terminology where truthful, one printed line.
     - Every experience keeps ≥1 bullet; no job ever silently vanishes.
     - The summary is rewritten per-JD (`tailor_summary`).
 
@@ -837,17 +882,18 @@ async def generate_resume(
         ranked_ids[:RESUME_MAX_START_BULLETS], ranked_ids, snap
     )
 
+    job_text = job.description or job.description_html or ""
     candidate_set = set(candidate_ids)
     selected_bullets: list[Bullet] = [b for b in _bullet_inventory(snap) if b.id in candidate_set]
     trimmed: dict[int, str] = {}
     for b in selected_bullets:
-        trimmed[b.id] = await _trim_one_bullet(
+        trimmed[b.id] = await _refine_one_bullet(
             session=session,
             settings=settings,
             user_id=user_id,
             application_id=application.id,
             bullet=b,
-            target_chars=130,
+            job_text=job_text,
             system=system,
             cache_system=cache_system,
         )
@@ -879,7 +925,6 @@ async def generate_resume(
             snap=snap,
             selected_bullet_ids=candidate_ids,
             trimmed=trimmed,
-            tailored_headline=tailored_headline,
             tailored_summary=tailored_summary,
         )
         try:
@@ -920,6 +965,67 @@ async def generate_resume(
     else:
         final_result = result
 
+    # Density add-back pass: the fit loop stops at "fits"; a packed page
+    # wants the NEXT-ranked bullets back in even when they're only
+    # sub-relevant to this JD. Add one at a time in rank order until adding
+    # one more would overflow, then rewind that last add. Bullets dropped BY
+    # the fit loop stay dropped (they already proved they don't fit).
+    added_back: list[int] = []
+    if final_result is not None and not overflows(final_result, max_pages=1):
+        skip = set(candidate_ids) | set(dropped_for_fit)
+        addback_queue = [bid for bid in ranked_ids if bid not in skip]
+        by_id = {b.id: b for b in _bullet_inventory(snap)}
+        disk_pdf_overflows = False
+        for bid in addback_queue[:RESUME_MAX_ADDBACK]:
+            bullet = by_id.get(bid)
+            if bullet is None:
+                continue
+            if bid not in trimmed:
+                trimmed[bid] = await _refine_one_bullet(
+                    session=session,
+                    settings=settings,
+                    user_id=user_id,
+                    application_id=application.id,
+                    bullet=bullet,
+                    job_text=job_text,
+                    system=system,
+                    cache_system=cache_system,
+                )
+            attempt_ids = [*candidate_ids, bid]
+            data = await _build_resume_data(
+                snap=snap,
+                selected_bullet_ids=attempt_ids,
+                trimmed=trimmed,
+                tailored_summary=tailored_summary,
+            )
+            try:
+                result = await typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
+            except TypstError as exc:
+                log.warning("add-back compile failed; keeping fitted page: %s", exc)
+                disk_pdf_overflows = True  # disk state unknown — recompile below
+                break
+            if overflows(result, max_pages=1):
+                disk_pdf_overflows = True
+                break
+            candidate_ids = attempt_ids
+            added_back.append(bid)
+            final_result = result
+        if disk_pdf_overflows:
+            # The last attempted add overflowed (or failed) — the PDF on
+            # disk is not the fitted selection; recompile it.
+            data = await _build_resume_data(
+                snap=snap,
+                selected_bullet_ids=candidate_ids,
+                trimmed=trimmed,
+                tailored_summary=tailored_summary,
+            )
+            try:
+                final_result = await typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
+            except TypstError as exc:  # pragma: no cover — compiled moments ago
+                log.warning("post-add-back recompile failed: %s", exc)
+        if added_back:
+            log.info("density add-back kept %d extra bullets", len(added_back))
+
     application.docs_state = DocsState.READY
     session.add(application)
 
@@ -935,11 +1041,183 @@ async def generate_resume(
             "selected_ids": candidate_ids,
             "ranked_ids": ranked_ids,
             "dropped_for_fit": dropped_for_fit,
+            "added_back": added_back,
             "summary": tailored_summary,
             "trimmed_lines": {str(k): v for k, v in trimmed.items()},
             "jd_hash": _hash_jd(job.description_html or job.description),
         },
     )
+    session.add(doc)
+    await session.flush()
+    return doc
+
+
+# ── Workspace edit recompiles (item 2, 2026-07) ─────────────────────────
+# The review workspace lets the user edit a tailored bullet's text and
+# toggle include/exclude for THIS application, then see the PDF update.
+# These recompile paths are LLM-free: they reuse the latest generated
+# document's selection + refined lines, layer the per-app overrides on
+# top, and re-run only the Typst compile.
+
+
+def _application_text_overrides(application: Application) -> dict[int, str]:
+    """Per-app bullet TEXT overrides from `submission_artifacts` — the
+    workspace's 'edit this line for this application' storage."""
+    artifacts = getattr(application, "submission_artifacts", None) or {}
+    raw = artifacts.get("bullet_text_overrides") if isinstance(artifacts, dict) else None
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[int, str] = {}
+    for key, value in raw.items():
+        if not isinstance(value, str) or not value.strip():
+            continue
+        try:
+            out[int(key)] = value.strip()
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+async def _latest_error_free_doc(
+    session: AsyncSession, application_id: int, kind: GeneratedDocumentKind
+) -> GeneratedDocument | None:
+    return (
+        await session.exec(
+            select(GeneratedDocument)
+            .where(
+                GeneratedDocument.application_id == application_id,
+                GeneratedDocument.kind == kind,
+                GeneratedDocument.error.is_(None),
+            )
+            .order_by(GeneratedDocument.compiled_at.desc())
+            .limit(1)
+        )
+    ).one_or_none()
+
+
+async def recompile_resume_from_selection(
+    session: AsyncSession,
+    application: Application,
+    *,
+    settings: Settings,
+) -> GeneratedDocument | None:
+    """Recompile the resume PDF from the latest doc's selection + per-app
+    overrides (text edits, include/exclude toggles). No LLM calls.
+
+    Returns the updated GeneratedDocument, or None when nothing has been
+    generated yet. May legitimately produce >1 page when the user forces
+    extra bullets in — the caller surfaces the page count honestly.
+    """
+    doc = await _latest_error_free_doc(session, application.id, GeneratedDocumentKind.RESUME)
+    if doc is None or not doc.bullet_selection:
+        return None
+    snap = await load_profile_snapshot(session, application.user_id)
+    if snap is None:
+        return None
+    blob = dict(doc.bullet_selection)
+    selected_ids = [int(b) for b in (blob.get("selected_ids") or [])]
+    trimmed = {int(k): str(v) for k, v in (blob.get("trimmed_lines") or {}).items()}
+
+    include_overrides = _application_bullet_overrides(application)
+    text_overrides = _application_text_overrides(application)
+    live_ids = {b.id for b in _bullet_inventory(snap)}
+
+    effective = [
+        bid
+        for bid in selected_ids
+        if bid in live_ids
+        and include_overrides.get(bid) != BulletSelectionOverride.NEVER_INCLUDE.value
+    ]
+    forced_in = [
+        bid
+        for bid, ov in include_overrides.items()
+        if ov == BulletSelectionOverride.ALWAYS_INCLUDE.value
+        and bid in live_ids
+        and bid not in effective
+    ]
+    effective.extend(sorted(forced_in))
+
+    by_id = {b.id: b for b in _bullet_inventory(snap)}
+    texts: dict[int, str] = {}
+    for bid in effective:
+        texts[bid] = text_overrides.get(bid) or trimmed.get(bid) or by_id[bid].text
+
+    template_name, pdf_standard = _select_template(application, settings)
+    out_pdf = _app_documents_dir(application.id) / "resume.pdf"
+    data = await _build_resume_data(
+        snap=snap,
+        selected_bullet_ids=effective,
+        trimmed=texts,
+        tailored_summary=(blob.get("summary") or None),
+    )
+    result = await typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
+
+    blob["selected_ids"] = effective
+    blob["trimmed_lines"] = {str(k): v for k, v in texts.items()}
+    blob["edited_in_workspace"] = True
+    doc.bullet_selection = blob
+    doc.byte_size = result.byte_size
+    doc.page_count = result.page_count
+    doc.compiled_at = result.compiled_at
+    session.add(doc)
+    await session.flush()
+    return doc
+
+
+async def recompile_cover_letter_from_sections(
+    session: AsyncSession,
+    application: Application,
+    *,
+    settings: Settings,
+) -> GeneratedDocument | None:
+    """Recompile the cover-letter PDF from the latest doc's (edited)
+    `sections` blob so the embed matches what the user saved. No LLM calls.
+    """
+    doc = await _latest_error_free_doc(
+        session, application.id, GeneratedDocumentKind.COVER_LETTER
+    )
+    if doc is None or not doc.bullet_selection:
+        return None
+    sections = doc.bullet_selection.get("sections")
+    if not isinstance(sections, dict):
+        return None
+    snap = await load_profile_snapshot(session, application.user_id)
+    if snap is None:
+        return None
+    job = None
+    if application.job_id is not None:
+        job = (await session.exec(select(Job).where(Job.id == application.job_id))).one_or_none()
+    if job is None:
+        return None
+
+    hm_used = doc.bullet_selection.get("hiring_manager_used") or {}
+    recipient_name = str(hm_used.get("name")) if hm_used.get("name") else None
+    recipient_title = hm_used.get("title") if recipient_name else None
+    greeting = f"Dear {recipient_name}," if recipient_name else "Dear Hiring Team,"
+
+    typst_data = {
+        "profile": {
+            "full_name": snap.profile.full_name,
+            "email": snap.profile.email,
+            "phone": snap.profile.phone,
+            "location": snap.profile.location,
+        },
+        "job": {"company": job.company, "role": job.role},
+        "recipient": {"name": recipient_name, "title": recipient_title},
+        "greeting": greeting,
+        "letter": {
+            "intro": str(sections.get("intro", "")),
+            "body": str(sections.get("body", "")),
+            "why_company": str(sections.get("why_company", "")),
+            "close": str(sections.get("close", "")),
+        },
+        "today": datetime.now(UTC).strftime("%B %-d, %Y"),
+    }
+    out_pdf = _app_documents_dir(application.id) / "cover-letter.pdf"
+    result = await typst_compile("cover_letter", typst_data, out_pdf)
+    doc.byte_size = result.byte_size
+    doc.page_count = result.page_count
+    doc.compiled_at = result.compiled_at
     session.add(doc)
     await session.flush()
     return doc
