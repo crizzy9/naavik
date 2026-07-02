@@ -37,26 +37,24 @@ def tmp_output_dir() -> Path:
 
 def _minimal_resume_data() -> dict:
     return {
-        "profile": {
-            "full_name": "Shyam Padia",
-            "headline": "Senior Software Engineer",
-            "email": "shyam.padia930@gmail.com",
-            "phone": "+1 555 555 0100",
-            "location": "Boston, MA",
-            "portfolio_url": "crypticsoul.dev",
-            "linkedin_handle": "shyampadia",
-            "github_handle": "crizzy9",
-            "summary_short": (
-                "Backend + ML engineer with 8+ years building personalization platforms at scale."
-            ),
-        },
+        "profile": {"full_name": "Shyam Padia"},
+        "headline": "Senior Software Engineer",
+        "contact_links": [
+            {"text": "shyam.padia930@gmail.com", "href": "mailto:shyam.padia930@gmail.com"},
+            {"text": "+1 555 555 0100", "href": None},
+            {"text": "Boston, MA", "href": None},
+            {"text": "linkedin.com/in/shyampadia", "href": "https://linkedin.com/in/shyampadia"},
+            {"text": "github.com/crizzy9", "href": "https://github.com/crizzy9"},
+            {"text": "crypticsoul.dev", "href": "https://crypticsoul.dev"},
+        ],
+        "summary": (
+            "Backend + ML engineer with 8+ years building personalization platforms at scale."
+        ),
         "experiences": [
             {
-                "company": "Intuit",
-                "role": "Senior Software Engineer",
-                "location": "Mountain View, CA",
-                "start_date": "Jul 2020",
-                "end_date": None,
+                "heading": "Senior Software Engineer · Intuit",
+                "meta": "Mountain View, CA",
+                "dates": "Jul 2020 – Present",
                 "bullets": [
                     "Built ML personalization platform serving 100M+ users; +23% homepage CTR",
                     "Led 3-engineer team migrating legacy services to Kubernetes",
@@ -65,11 +63,9 @@ def _minimal_resume_data() -> dict:
         ],
         "education": [
             {
-                "institution": "Northeastern University",
-                "degree": "MS Computer Science",
-                "start_date": "2017",
-                "end_date": "2019",
-                "gpa": "3.8",
+                "heading": "Northeastern University",
+                "meta": "MS Computer Science · GPA 3.8",
+                "dates": "2017 – 2019",
             }
         ],
         "skills": [
@@ -79,8 +75,9 @@ def _minimal_resume_data() -> dict:
         "projects": [
             {
                 "title": "Naavik",
+                "date": "Feb 2026",
                 "text": "Open-source career automation platform",
-                "link": "github.com/crizzy9/naavik",
+                "link": "https://github.com/crizzy9/naavik",
             }
         ],
     }

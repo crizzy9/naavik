@@ -1,6 +1,9 @@
-"""select_bullets — Wave 6 wires this end-to-end (resume tailoring).
+"""select_bullets — rank the FULL bullet inventory against a JD.
 
-Per BACKEND.md § K.4, § M.3.
+The document generator no longer asks for a top-N cut: it wants every
+candidate bullet in priority order, then packs the page as densely as it
+will go (dropping from the tail on Typst overflow, never emptying an
+experience). `selected_ids` therefore carries a full ranking.
 """
 
 from __future__ import annotations
@@ -9,7 +12,8 @@ from pydantic import BaseModel, Field
 
 from llm.base import LLMProvider
 
-PROMPT = """Select the {max} most relevant bullets for this job.
+PROMPT = """Rank ALL of the candidate's resume bullets by relevance to this job,
+most relevant first.
 
 Profile bullets (id → text):
 {bullets}
@@ -19,9 +23,15 @@ Role: {role}
 Description: {description}
 Required skills: {skills}
 
-Honor `selection_override` rules (always_include must appear; never_include
-must NOT appear). Return BulletSelection with selected_ids in order of
-priority for the resume.
+Ranking guidance:
+- Bullets that hit the JD's core responsibilities and named technologies rank
+  highest; generic bullets rank lowest.
+- Prefer bullets with concrete numbers/results over vague ones at equal
+  relevance.
+- Return EVERY id exactly once in `selected_ids`, ordered by priority. Do not
+  invent ids and do not omit any.
+
+Return BulletSelection with the complete ranking in selected_ids.
 """
 
 
@@ -35,14 +45,12 @@ async def select_bullets(
     *,
     bullets: list[dict],
     job: dict,
-    max_select: int = 12,
 ) -> BulletSelection:
     bullets_text = "\n".join(f"{b['id']} → {b['text']}" for b in bullets)
     rendered = PROMPT.format(
-        max=max_select,
         bullets=bullets_text,
         role=job.get("role", ""),
-        description=job.get("description", "")[:1000],
+        description=job.get("description", "")[:1500],
         skills=", ".join(job.get("skills_required", [])),
     )
     result = await provider.structured(rendered, BulletSelection, max_tokens=1024)

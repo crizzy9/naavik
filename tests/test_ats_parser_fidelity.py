@@ -122,47 +122,48 @@ def test_parse_score_report_dataclass_shape():
 
 
 @pytest.mark.skipif(not _HAS_TYPST, reason="typst not on PATH")
-def test_validate_parse_fidelity_on_real_onepage_ats_pdf(tmp_path):
-    """End-to-end smoke test — compile the ATS template + parse-fidelity-check it."""
+def test_validate_parse_fidelity_on_real_onepage_pdf(tmp_path):
+    """End-to-end smoke test — compile the consolidated onepage template +
+    parse-fidelity-check its output."""
     import json
     import subprocess
 
     template_dir = Path(__file__).resolve().parent.parent / "src" / "typst" / "templates"
-    template = template_dir / "onepage_ats.typ"
+    template = template_dir / "onepage.typ"
     data = {
-        "profile": {
-            "full_name": "Test Candidate",
-            "headline": "Software Engineer",
-            "email": "test@example.com",
-            "phone": "+1 555 0100",
-            "location": "City",
-            "portfolio_url": None,
-            "linkedin_handle": None,
-            "github_handle": None,
-            "summary_short": "Engineer with experience.",
-        },
-        "tailored_headline": None,
+        "profile": {"full_name": "Test Candidate"},
+        "headline": "Software Engineer",
+        "contact_links": [
+            {"text": "test@example.com", "href": "mailto:test@example.com"},
+            {"text": "+1 555 0100", "href": None},
+            {"text": "City", "href": None},
+            {"text": "linkedin.com/in/test", "href": "https://linkedin.com/in/test"},
+        ],
+        "summary": "Engineer with experience.",
         "experiences": [
             {
-                "company": "Acme",
-                "role": "Senior Engineer",
-                "location": "City",
-                "start_date": "Jan 2022",
-                "end_date": None,
+                "heading": "Senior Engineer · Acme",
+                "meta": "City",
+                "dates": "Jan 2022 – Present",
                 "bullets": ["Shipped a feature.", "Cut costs by half."],
             }
         ],
         "education": [
             {
-                "institution": "University",
-                "degree": "BS CS",
-                "start_date": "Sep 2014",
-                "end_date": "May 2018",
-                "gpa": None,
+                "heading": "University",
+                "meta": "BS CS",
+                "dates": "Sep 2014 – May 2018",
             }
         ],
         "skills": [{"category": "Languages", "items": ["Python"]}],
-        "projects": [],
+        "projects": [
+            {
+                "title": "Sideproject",
+                "date": "Feb 2024",
+                "text": "Built a thing that does things.",
+                "link": "https://example.com/sideproject",
+            }
+        ],
     }
     out_pdf = tmp_path / "out.pdf"
     cmd = [

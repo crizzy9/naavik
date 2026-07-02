@@ -412,12 +412,50 @@ async def generate_bundle(
         }
     trace["stages_run"].append("hiring_manager")
 
-    # Stage 3 — resume (delegates to existing pipeline)
+    # Stage 3 — tailored headline FIRST (gated on Job.score ≥ 0.50), so it can
+    # actually render on the resume PDF. It used to run after the resume
+    # compiled, which meant the headline landed in the trace but never on
+    # the document.
     if await dg.is_cost_capped(session, user_id, settings):
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
         trace["degraded_mode"] = True
-        trace["stages_skipped"].extend(["resume", "headline", "cover_letter", "screeners"])
+        trace["stages_skipped"].extend(["headline", "resume", "cover_letter", "screeners"])
+        result.generation_trace = trace
+        await _persist_trace(session, application, trace)
+        return result
+
+    profile, experiences = await _load_profile_experiences(session, user_id)
+    headline = None
+    job_score_val = float(getattr(job, "score", 0.0) or 0.0)
+    breakdown = getattr(job, "match_breakdown", None) or {}
+    matched_tags = list(breakdown.get("matched_tags") or [])
+    if profile is not None and job_score_val >= HEADLINE_SCORE_GATE:
+        headline = await tailor_headline_for_application(
+            session=session,
+            user_id=user_id,
+            settings=settings,
+            profile=profile,
+            experiences=experiences,
+            job=job,
+            job_score=job_score_val,
+            matched_tags=matched_tags,
+            application_id=application.id,
+            system=preamble,
+            cache_system=cache_preamble,
+        )
+        if headline is not None:
+            trace["headline_used"] = headline.headline_one_line
+        trace["stages_run"].append("headline")
+    else:
+        trace["stages_skipped"].append("headline")
+
+    # Stage 4 — resume (delegates to existing pipeline)
+    if await dg.is_cost_capped(session, user_id, settings):
+        result.degraded = True
+        result.degraded_reason = "cost_cap_reached"
+        trace["degraded_mode"] = True
+        trace["stages_skipped"].extend(["resume", "cover_letter", "screeners"])
         result.generation_trace = trace
         await _persist_trace(session, application, trace)
         return result
@@ -430,6 +468,7 @@ async def generate_bundle(
             job=job,
             system=preamble,
             cache_system=cache_preamble,
+            tailored_headline=(headline.headline_one_line if headline is not None else None),
         )
         result.resume = resume
         trace["stages_run"].append("resume")
@@ -470,41 +509,6 @@ async def generate_bundle(
         result.generation_trace = trace
         await _persist_trace(session, application, trace)
         return result
-
-    # Stage 4 — tailored headline (gated on Job.score ≥ 0.50)
-    if await dg.is_cost_capped(session, user_id, settings):
-        result.degraded = True
-        result.degraded_reason = "cost_cap_reached"
-        trace["degraded_mode"] = True
-        trace["stages_skipped"].extend(["headline", "cover_letter", "screeners"])
-        result.generation_trace = trace
-        await _persist_trace(session, application, trace)
-        return result
-
-    profile, experiences = await _load_profile_experiences(session, user_id)
-    headline = None
-    job_score_val = float(getattr(job, "score", 0.0) or 0.0)
-    breakdown = getattr(job, "match_breakdown", None) or {}
-    matched_tags = list(breakdown.get("matched_tags") or [])
-    if profile is not None and job_score_val >= HEADLINE_SCORE_GATE:
-        headline = await tailor_headline_for_application(
-            session=session,
-            user_id=user_id,
-            settings=settings,
-            profile=profile,
-            experiences=experiences,
-            job=job,
-            job_score=job_score_val,
-            matched_tags=matched_tags,
-            application_id=application.id,
-            system=preamble,
-            cache_system=cache_preamble,
-        )
-        if headline is not None:
-            trace["headline_used"] = headline.headline_one_line
-        trace["stages_run"].append("headline")
-    else:
-        trace["stages_skipped"].append("headline")
 
     # Stage 5 — cover letter (delegates to existing pipeline; T15 keeps old path)
     if await dg.is_cost_capped(session, user_id, settings):

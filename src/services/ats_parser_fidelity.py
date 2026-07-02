@@ -42,8 +42,10 @@ _DATE_RE = re.compile(
 )
 
 # Required canonical section header strings (research § B.4 allowlist).
+# "Experience" alone is equally canonical across ATS parsers — the
+# consolidated onepage.typ template uses it.
 _HEAD_PROFESSIONAL_EXPERIENCE = re.compile(
-    r"^\s*Professional\s+Experience\s*$", re.MULTILINE | re.IGNORECASE
+    r"^\s*(?:Professional\s+)?Experience\s*$", re.MULTILINE | re.IGNORECASE
 )
 _HEAD_EDUCATION = re.compile(r"^\s*Education\s*$", re.MULTILINE | re.IGNORECASE)
 _HEAD_SKILLS = re.compile(r"^\s*Skills\s*$", re.MULTILINE | re.IGNORECASE)

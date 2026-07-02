@@ -34,9 +34,9 @@ Resume text:
 {resume_text}
 
 Return ExtractedResume with full_name, headline, location, email, phone,
-summary_full (the resume's summary/objective paragraph verbatim, if any),
-summary_short (<= 25 words), experiences[], skills[], educations[], and
-projects[].
+linkedin_handle, github_handle, portfolio_url, summary_full (the resume's
+summary/objective paragraph verbatim, if any), summary_short (<= 25 words),
+experiences[], skills[], educations[], and projects[].
 
 Rules:
 - Each experience carries bullets[] — the FULL text of each achievement
@@ -47,6 +47,11 @@ Rules:
   "Present"/current roles.
 - skills[] groups the resume's skill lines as {{category, items[]}}
   (e.g. category "Languages", items ["Python", "Go"]).
+- linkedin_handle / github_handle are the BARE handles (e.g. "shyampadia"
+  from linkedin.com/in/shyampadia, "crizzy9" from github.com/crizzy9) —
+  strip any URL prefix. portfolio_url is a personal website / portfolio
+  domain (e.g. "crypticsoul.dev"); use null when absent. Resume headers
+  often list these as plain text or hyperlinks near the contact line.
 - Do not invent content that is not in the resume text.
 """
 
@@ -91,6 +96,9 @@ class ExtractedResume(BaseModel):
     location: str | None = None
     email: str | None = None
     phone: str | None = None
+    linkedin_handle: str | None = None
+    github_handle: str | None = None
+    portfolio_url: str | None = None
     summary_full: str | None = None
     summary_short: str | None = None
     experiences: list[ExtractedExperience] = []

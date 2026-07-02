@@ -56,6 +56,15 @@
           {% with label="CURRENT COMPANY", name="current_company", value=profile.current_company, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
           {% with label="LOCATION", name="location", value=profile.location, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
         </div>
+        {# Contact + links row — these flow straight into the tailored resume
+           header (email · phone · linkedin · github · portfolio). #}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+          {% with label="EMAIL", name="email", value=profile.email, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="PHONE", name="phone", value=profile.phone, autosave_enabled=false, placeholder="+1 (555) 555-0100" %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="LINKEDIN HANDLE", name="linkedin_handle", value=profile.linkedin_handle, autosave_enabled=false, placeholder="handle, e.g. shyampadia" %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="GITHUB HANDLE", name="github_handle", value=profile.github_handle, autosave_enabled=false, placeholder="handle, e.g. crizzy9" %}{% include "components/editor_field.html" %}{% endwith %}
+          {% with label="PORTFOLIO URL", name="portfolio_url", value=profile.portfolio_url, autosave_enabled=false, placeholder="e.g. crypticsoul.dev" %}{% include "components/editor_field.html" %}{% endwith %}
+        </div>
       {% endset %}
       {% with title="Identity", body=_identity_body %}
         {% include "components/editor_card.html" %}

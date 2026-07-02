@@ -290,7 +290,7 @@ def _split_bullets_by_override(
     return always, never, auto
 
 
-async def _ai_select_bullets(
+async def _ai_rank_bullets(
     *,
     session: AsyncSession,
     settings: Settings,
@@ -298,12 +298,15 @@ async def _ai_select_bullets(
     job: Job,
     user_id: int,
     application_id: int | None,
-    max_select: int = 12,
     system: str | None = None,
     cache_system: bool = False,
     application_overrides: dict[int, str] | None = None,
 ) -> list[int]:
-    """Return ordered list of selected bullet ids honoring overrides + LLM.
+    """Return the FULL bullet inventory in priority order, honoring overrides.
+
+    `always_include` bullets lead (profile order); the LLM ranks the rest;
+    `never_include` bullets are excluded. The page-fit loop packs from the
+    head of this list and drops from the tail.
 
     `application_overrides` (plan 86 / 0.4.5.08) — per-application bullet
     overrides keyed by bullet id, values `"always_include"` / `"never_include"`.
@@ -313,13 +316,12 @@ async def _ai_select_bullets(
     if not inventory:
         return []
     always, never, auto = _split_bullets_by_override(inventory, application_overrides)
+    del never
 
-    selected_ids: list[int] = [b.id for b in always]
-    remaining = max_select - len(selected_ids)
-    if remaining <= 0 or not auto:
-        return selected_ids[:max_select]
+    ranked: list[int] = [b.id for b in always]
+    if not auto:
+        return ranked
 
-    # AI-pick the rest from `auto` only (skip never).
     provider = get_provider(settings)
     bullet_payload = [{"id": b.id, "text": b.text} for b in auto]
     job_payload = {
@@ -335,7 +337,7 @@ async def _ai_select_bullets(
             method="structured",
             prompt_name="select_bullets",
             application_id=application_id,
-            prompt=_render_select_prompt(bullet_payload, job_payload, remaining),
+            prompt=_render_rank_prompt(bullet_payload, job_payload),
             schema=__import__(
                 "llm.prompts.select_bullets", fromlist=["BulletSelection"]
             ).BulletSelection,
@@ -344,25 +346,85 @@ async def _ai_select_bullets(
         )
         chosen = list(result.value.get("selected_ids", [])) if result else []
     except LLMProviderError as exc:
-        log.warning("select_bullets LLM failed; falling back to first-N: %s", exc)
-        chosen = [b.id for b in auto[:remaining]]
-    # Defend against the model returning ids outside the auto pool.
+        log.warning("select_bullets LLM failed; falling back to profile order: %s", exc)
+        chosen = [b.id for b in auto]
+    # Defend against the model returning ids outside the auto pool, and
+    # re-append anything it omitted so no bullet silently vanishes from the
+    # candidate pool (it can still be dropped by the page-fit loop).
     auto_ids = {b.id for b in auto}
-    chosen = [cid for cid in chosen if cid in auto_ids]
-    selected_ids.extend(chosen[:remaining])
-    return selected_ids[:max_select]
+    seen: set[int] = set()
+    cleaned: list[int] = []
+    for cid in chosen:
+        if cid in auto_ids and cid not in seen:
+            seen.add(cid)
+            cleaned.append(cid)
+    for b in auto:
+        if b.id not in seen:
+            cleaned.append(b.id)
+    ranked.extend(cleaned)
+    return ranked
 
 
-def _render_select_prompt(bullets: list[dict], job: dict, remaining: int) -> str:
+def _render_rank_prompt(bullets: list[dict], job: dict) -> str:
+    from llm.prompts.select_bullets import PROMPT as RANK_PROMPT
+
     lines = "\n".join(f"{b['id']} → {b['text']}" for b in bullets)
-    return (
-        f"Select the {remaining} most relevant bullets for this job.\n\n"
-        f"Bullets:\n{lines}\n\n"
-        f"Job role: {job['role']}\n"
-        f"Description: {job['description'][:1000]}\n"
-        f"Required skills: {', '.join(job.get('skills_required', []))}\n\n"
-        "Return BulletSelection with selected_ids in priority order."
+    return RANK_PROMPT.format(
+        bullets=lines,
+        role=job.get("role", ""),
+        description=(job.get("description") or "")[:1500],
+        skills=", ".join(job.get("skills_required", [])),
     )
+
+
+async def _tailor_summary(
+    *,
+    session: AsyncSession,
+    settings: Settings,
+    snap: ProfileSnapshot,
+    job: Job,
+    user_id: int,
+    application_id: int | None,
+    ranked_bullet_ids: list[int],
+    system: str | None = None,
+    cache_system: bool = False,
+) -> str | None:
+    """JD-tailored 2–3 line summary pitch. Falls back to the profile summary."""
+    from llm.prompts.tailor_summary import TailoredSummary, render_prompt
+
+    p = snap.profile
+    fallback = p.summary_short or p.summary_full
+    by_id = {b.id: b for b in _bullet_inventory(snap)}
+    top_bullets = [by_id[bid].text for bid in ranked_bullet_ids[:8] if bid in by_id]
+    profile_text = (
+        f"Headline: {p.headline or '(none)'}\n"
+        f"Current summary: {fallback or '(none)'}\n"
+        f"Skills: {', '.join(item for s in snap.skills for item in (s.items or [])[:6])[:400]}"
+    )
+    job_text = (
+        f"{job.company} — {job.role}\n{(job.description or job.description_html or '')[:1500]}"
+    )
+    try:
+        provider = get_provider(settings)
+        result = await llm_tracker.tracked_call(
+            session=session,
+            user_id=user_id,
+            provider=provider,
+            method="structured",
+            prompt_name="tailor_summary",
+            application_id=application_id,
+            prompt=render_prompt(
+                name=p.full_name, profile_text=profile_text, bullets=top_bullets, job_text=job_text
+            ),
+            schema=TailoredSummary,
+            system=system,
+            cache_system=cache_system,
+        )
+        summary = str(result.value.get("summary") or "").strip()
+        return summary or fallback
+    except LLMProviderError as exc:
+        log.warning("tailor_summary failed; using profile summary: %s", exc)
+        return fallback
 
 
 # ── Resume generation ───────────────────────────────────────────────────
@@ -485,89 +547,127 @@ async def regen_bullet_for_variance(
         return original_text
 
 
+def _strip_scheme(url: str) -> str:
+    return url.removeprefix("https://").removeprefix("http://").rstrip("/")
+
+
+def _normalize_handle(handle: str, domain_prefix: str) -> str:
+    """Accept either a bare handle or a pasted profile URL."""
+    h = _strip_scheme(handle.strip()).removeprefix("www.")
+    if h.startswith(domain_prefix):
+        h = h[len(domain_prefix) :]
+    return h.strip("/")
+
+
+def _contact_links(p: Profile) -> list[dict[str, str | None]]:
+    """Ordered contact-line entries; empty fields are simply absent (no blank
+    separators — the template joins whatever it gets with `·`)."""
+    links: list[dict[str, str | None]] = []
+    if p.email:
+        links.append({"text": p.email, "href": f"mailto:{p.email}"})
+    if p.phone:
+        links.append({"text": p.phone, "href": None})
+    if p.location:
+        links.append({"text": p.location, "href": None})
+    if getattr(p, "linkedin_handle", None):
+        handle = _normalize_handle(p.linkedin_handle, "linkedin.com/in/")
+        links.append(
+            {"text": f"linkedin.com/in/{handle}", "href": f"https://linkedin.com/in/{handle}"}
+        )
+    if getattr(p, "github_handle", None):
+        handle = _normalize_handle(p.github_handle, "github.com/")
+        links.append({"text": f"github.com/{handle}", "href": f"https://github.com/{handle}"})
+    if getattr(p, "portfolio_url", None):
+        display = _strip_scheme(p.portfolio_url)
+        links.append({"text": display, "href": f"https://{display}"})
+    return links
+
+
+def _date_range(start, end) -> str:
+    start_s = _format_date(start) or ""
+    end_s = _format_date(end) or "Present"
+    return f"{start_s} – {end_s}" if start_s else end_s
+
+
 async def _build_resume_data(
     *,
     snap: ProfileSnapshot,
     selected_bullet_ids: list[int],
     trimmed: dict[int, str],
     tailored_headline: str | None = None,
+    tailored_summary: str | None = None,
 ) -> dict[str, Any]:
-    """Render the resume payload consumed by `onepage.typ` / `onepage_ats.typ`.
+    """Compose the payload consumed by `onepage.typ`.
 
-    `tailored_headline` (plan 66 § T7) — when present, surfaces as the
-    one-line headline under the candidate's name on the ATS template;
-    `onepage.typ` ignores this field.
+    Every experience renders — an experience may carry fewer bullets after
+    the page-fit loop, but it never silently vanishes (the old
+    `if not kept: continue` ate whole jobs when the selection cap starved
+    them). Kept bullets are ordered by selection priority (bold tailoring:
+    the most JD-relevant result leads each role).
     """
     selected = set(selected_bullet_ids)
+    priority = {bid: i for i, bid in enumerate(selected_bullet_ids)}
     experiences_payload: list[dict] = []
     for exp in snap.experiences:
         bullets = snap.bullets_by_experience.get(exp.id, [])
         kept = [b for b in bullets if b.id in selected]
-        if not kept:
-            continue
+        kept.sort(key=lambda b: priority.get(b.id, 10_000))
         experiences_payload.append(
             {
-                "company": exp.company,
-                "role": exp.title,
-                "location": exp.location,
-                "start_date": _format_date(exp.start_date) or "",
-                "end_date": _format_date(exp.end_date),
+                "heading": f"{exp.title} · {exp.company}",
+                "meta": exp.location,
+                "dates": _date_range(exp.start_date, exp.end_date),
                 "bullets": [trimmed.get(b.id, b.text) for b in kept],
             }
         )
     p = snap.profile
-    return {
-        "profile": {
-            "full_name": p.full_name,
-            "headline": p.headline,
-            "email": p.email,
-            "phone": p.phone,
-            "location": p.location,
-            "portfolio_url": p.portfolio_url,
-            "linkedin_handle": p.linkedin_handle,
-            "github_handle": p.github_handle,
-            "summary_short": p.summary_short,
-        },
-        "tailored_headline": tailored_headline,
-        "experiences": experiences_payload,
-        "education": [
+    headline = tailored_headline or (p.headline or None) or None
+    summary = tailored_summary or p.summary_short or None
+    education_payload = []
+    for e in snap.education:
+        meta_parts = [e.degree]
+        if e.gpa:
+            meta_parts.append(f"GPA {e.gpa}")
+        education_payload.append(
             {
-                "institution": e.institution,
-                "degree": e.degree,
-                "start_date": _format_date(e.start_date) or "",
-                "end_date": _format_date(e.end_date),
-                "gpa": e.gpa,
+                "heading": e.institution,
+                "meta": " · ".join(mp for mp in meta_parts if mp) or None,
+                "dates": _date_range(e.start_date, e.end_date),
             }
-            for e in snap.education
-        ],
+        )
+    projects_payload = []
+    for pr in snap.projects:
+        link = getattr(pr, "link", None)
+        projects_payload.append(
+            {
+                "title": pr.title,
+                "date": _format_date(getattr(pr, "date", None)),
+                "text": (pr.text or None),
+                "link": (f"https://{_strip_scheme(link)}" if link else None),
+            }
+        )
+    return {
+        "profile": {"full_name": p.full_name},
+        "headline": headline if headline else None,
+        "contact_links": _contact_links(p),
+        "summary": summary if summary else None,
+        "experiences": experiences_payload,
+        "education": education_payload,
         "skills": [{"category": s.category, "items": list(s.items)} for s in snap.skills],
-        "projects": [{"title": pr.title, "text": pr.text, "link": pr.link} for pr in snap.projects],
+        "projects": projects_payload,
     }
 
 
 def _select_template(application: Application, settings: Settings) -> tuple[str, str | None]:
-    """Pick the resume template + PDF standard for `application`.
-
-    Plan 66 (0.3.1) § T6 + T12. Returns ``(template_name, pdf_standard)``.
-
-    Resolution order:
-    1. `Settings.resume_template_preference` ∈ {"ats", "creative"} forces the
-       template explicitly.
-    2. `Settings.resume_template_preference == "auto"` (default) →
-       ATS variant when `Application.board` ∈ ATS-known set; creative otherwise.
-
-    The ATS variant pairs with PDF/A-1b output (`pdf_standard="a-1b"`); the
-    creative variant uses default PDF (None).
+    """One template (`onepage.typ`) for every board — it is both the dense
+    recruiter-standard layout AND ATS-safe (single column, ligatures off,
+    plain bullets). Returns ``(template_name, pdf_standard)``; ATS-known
+    boards keep PDF/A-1b output for maximum parser compatibility.
     """
-    pref = getattr(settings, "resume_template_preference", "auto")
-    if pref == "ats":
-        return "onepage_ats", "a-1b"
-    if pref == "creative":
-        return "onepage", None
-    # auto — board-driven
+    del settings  # `resume_template_preference` is vestigial post-consolidation
     board = getattr(application, "board", None)
     if board is not None and board in _ATS_BOARDS:
-        return "onepage_ats", "a-1b"
+        return "onepage", "a-1b"
     return "onepage", None
 
 
@@ -598,6 +698,61 @@ def _application_bullet_overrides(application: Application) -> dict[int, str]:
     return out
 
 
+# Start the page-fit loop with this many bullets; the loop drops from the
+# tail until the page fits, which packs the page as densely as it will go.
+RESUME_MAX_START_BULLETS = 22
+RESUME_MAX_FIT_ATTEMPTS = 14
+
+
+def _ensure_min_one_per_experience(
+    candidate_ids: list[int], ranked_ids: list[int], snap: ProfileSnapshot
+) -> list[int]:
+    """Every experience contributes at least one bullet to the candidate set.
+
+    The old top-N cut starved older experiences to zero bullets and the
+    renderer then dropped the whole job. Missing experiences get their
+    highest-ranked bullet appended.
+    """
+    candidate = set(candidate_ids)
+    rank = {bid: i for i, bid in enumerate(ranked_ids)}
+    out = list(candidate_ids)
+    for exp in snap.experiences:
+        bullets = snap.bullets_by_experience.get(exp.id, [])
+        if not bullets or any(b.id in candidate for b in bullets):
+            continue
+        ranked_for_exp = [b.id for b in bullets if b.id in rank]
+        if not ranked_for_exp:
+            continue
+        best = min(ranked_for_exp, key=lambda bid: rank[bid])
+        out.append(best)
+        candidate.add(best)
+    return out
+
+
+def _drop_lowest_priority(
+    candidate_ids: list[int], snap: ProfileSnapshot
+) -> tuple[list[int], int | None]:
+    """Drop the lowest-priority bullet whose experience keeps ≥1 bullet.
+
+    Falls back to a plain tail-drop when every experience is down to its
+    last bullet (the page has to fit eventually).
+    """
+    exp_of = {b.id: exp_id for exp_id, bs in snap.bullets_by_experience.items() for b in bs}
+    counts: dict[int, int] = {}
+    for bid in candidate_ids:
+        eid = exp_of.get(bid)
+        if eid is not None:
+            counts[eid] = counts.get(eid, 0) + 1
+    for i in range(len(candidate_ids) - 1, -1, -1):
+        bid = candidate_ids[i]
+        eid = exp_of.get(bid)
+        if eid is None or counts.get(eid, 0) > 1:
+            return candidate_ids[:i] + candidate_ids[i + 1 :], bid
+    if candidate_ids:
+        return candidate_ids[:-1], candidate_ids[-1]
+    return candidate_ids, None
+
+
 async def generate_resume(
     session: AsyncSession,
     application: Application,
@@ -606,16 +761,21 @@ async def generate_resume(
     job: Job | None = None,
     system: str | None = None,
     cache_system: bool = False,
+    tailored_headline: str | None = None,
 ) -> GeneratedDocument:
     """Generate a tailored 1-page resume for `application`.
 
-    Raises `CostCapExceededError` when today's spend exceeded the user's cap.
-    On Typst overflow, drops the lowest-priority bullet and re-compiles
-    (max 3 retries) before persisting `error="overflow"` and returning.
+    Bold-tailoring contract:
+    - The LLM ranks the FULL bullet inventory against the JD; the page-fit
+      loop starts generous (`RESUME_MAX_START_BULLETS`) and drops the
+      lowest-priority bullet on overflow — so the page ends up as dense as
+      one page allows, not just "under the limit".
+    - Every experience keeps ≥1 bullet; no job ever silently vanishes.
+    - The summary is rewritten per-JD (`tailor_summary`).
 
+    Raises `CostCapExceededError` when today's spend exceeded the user's cap.
     `system` + `cache_system` thread the voice-grounded constitution preamble
-    (plan 66 § T2) into every LLM call within the resume pipeline so
-    Anthropic's ephemeral cache fires across stages within the bundle.
+    (plan 66 § T2) into every LLM call within the resume pipeline.
     """
     user_id = application.user_id
     if await is_cost_capped(session, user_id, settings):
@@ -634,19 +794,23 @@ async def generate_resume(
     await session.flush()
 
     application_overrides = _application_bullet_overrides(application)
-    selected_ids = await _ai_select_bullets(
+    ranked_ids = await _ai_rank_bullets(
         session=session,
         settings=settings,
         snap=snap,
         job=job,
         user_id=user_id,
         application_id=application.id,
-        max_select=12,
         system=system,
         cache_system=cache_system,
         application_overrides=application_overrides or None,
     )
-    selected_bullets: list[Bullet] = [b for b in _bullet_inventory(snap) if b.id in selected_ids]
+    candidate_ids = _ensure_min_one_per_experience(
+        ranked_ids[:RESUME_MAX_START_BULLETS], ranked_ids, snap
+    )
+
+    candidate_set = set(candidate_ids)
+    selected_bullets: list[Bullet] = [b for b in _bullet_inventory(snap) if b.id in candidate_set]
     trimmed: dict[int, str] = {}
     for b in selected_bullets:
         trimmed[b.id] = await _trim_one_bullet(
@@ -655,24 +819,40 @@ async def generate_resume(
             user_id=user_id,
             application_id=application.id,
             bullet=b,
-            target_chars=120,
+            target_chars=130,
             system=system,
             cache_system=cache_system,
         )
+
+    tailored_summary = await _tailor_summary(
+        session=session,
+        settings=settings,
+        snap=snap,
+        job=job,
+        user_id=user_id,
+        application_id=application.id,
+        ranked_bullet_ids=ranked_ids,
+        system=system,
+        cache_system=cache_system,
+    )
 
     out_dir = _app_documents_dir(application.id)
     out_pdf = out_dir / "resume.pdf"
 
     template_name, pdf_standard = _select_template(application, settings)
 
-    # Page-count retry loop: drop the lowest-priority bullet on overflow.
-    candidate_ids = list(selected_ids)
+    # Page-fit loop: pack the page, dropping the lowest-priority bullet on
+    # overflow — never emptying an experience.
+    dropped_for_fit: list[int] = []
     final_result = None
-    for attempt in range(3):
+    result = None
+    for _attempt in range(RESUME_MAX_FIT_ATTEMPTS):
         data = await _build_resume_data(
             snap=snap,
             selected_bullet_ids=candidate_ids,
             trimmed=trimmed,
+            tailored_headline=tailored_headline,
+            tailored_summary=tailored_summary,
         )
         try:
             result = await typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
@@ -682,7 +862,7 @@ async def generate_resume(
             doc = GeneratedDocument(
                 application_id=application.id,
                 kind=GeneratedDocumentKind.RESUME,
-                path=str(out_pdf.relative_to(_documents_dir().parent.parent)),
+                path=str(out_pdf),
                 byte_size=0,
                 page_count=None,
                 compiled_at=datetime.now(UTC),
@@ -703,11 +883,14 @@ async def generate_resume(
         if not candidate_ids:
             final_result = result
             break
-        # Drop the last (lowest-priority) bullet and retry.
-        dropped = candidate_ids.pop()
-        log.info("resume overflowed page 1 (attempt %d); dropping bullet %d", attempt + 1, dropped)
+        candidate_ids, dropped = _drop_lowest_priority(candidate_ids, snap)
+        if dropped is None:
+            final_result = result
+            break
+        dropped_for_fit.append(dropped)
+        log.info("resume overflowed page 1; dropped bullet %d (fit loop)", dropped)
     else:
-        final_result = result  # noqa: F821 — set in last loop iteration
+        final_result = result
 
     application.docs_state = DocsState.READY
     session.add(application)
@@ -722,6 +905,9 @@ async def generate_resume(
         model=settings.llm_model,
         bullet_selection={
             "selected_ids": candidate_ids,
+            "ranked_ids": ranked_ids,
+            "dropped_for_fit": dropped_for_fit,
+            "summary": tailored_summary,
             "trimmed_lines": {str(k): v for k, v in trimmed.items()},
             "jd_hash": _hash_jd(job.description_html or job.description),
         },
