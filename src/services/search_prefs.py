@@ -86,7 +86,9 @@ async def refresh_title_expansions(
     pending = [
         t
         for t in titles
-        if force or not (existing.get(t) or {}).get("expanded") or existing[t].get("model") == "none"
+        if force
+        or not (existing.get(t) or {}).get("expanded")
+        or existing[t].get("model") == "none"
     ]
     # Prune expansions for removed titles.
     pruned = {k: v for k, v in existing.items() if k in titles}

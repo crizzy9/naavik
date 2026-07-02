@@ -142,9 +142,7 @@ async def get_overview(
     actions = await overview_service.compose_priority_actions(session, user_id)
     email_connected = bool(await email_service.list_accounts(session, user_id))
     threads = (
-        await email_service.recent_signals(session, user_id, limit=6)
-        if email_connected
-        else []
+        await email_service.recent_signals(session, user_id, limit=6) if email_connected else []
     )
     counts = await overview_service.pipeline_strip_counts(session, user_id)
     return templates.TemplateResponse(

@@ -239,6 +239,10 @@ async def test_scheduler_top_level_exception_does_not_leak_proxy_creds_in_logs(
         async def commit(self):
             pass
 
+        async def exec(self, _stmt):
+            # Profile lookup (search-prefs derivation) returns no profile.
+            return SimpleNamespace(one_or_none=lambda: None, all=lambda: [])
+
     session = _FakeSession()
 
     with caplog.at_level(_logging.DEBUG, logger="scheduler.scraping"):
@@ -333,6 +337,10 @@ async def test_scheduler_chained_exception_does_not_leak_proxy_creds(
 
         async def commit(self):
             pass
+
+        async def exec(self, _stmt):
+            # Profile lookup (search-prefs derivation) returns no profile.
+            return SimpleNamespace(one_or_none=lambda: None, all=lambda: [])
 
     session = _FakeSession()
 

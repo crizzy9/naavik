@@ -131,9 +131,7 @@ async def test_refresh_title_expansions_degrades_without_provider(monkeypatch):
     monkeypatch.setattr(search_prefs, "get_provider", _raise)
     p = _profile(target_titles=["ML Engineer"])
     session = _FakeSession()
-    changed = await search_prefs.refresh_title_expansions(
-        session, profile=p, settings=_settings()
-    )
+    changed = await search_prefs.refresh_title_expansions(session, profile=p, settings=_settings())
     assert changed is True
     entry = p.title_expansions["ML Engineer"]
     assert entry["expanded"] == ["ML Engineer"]
@@ -160,9 +158,7 @@ async def test_refresh_title_expansions_stores_llm_output(monkeypatch):
 
     p = _profile(target_titles=["ML Engineer"])
     session = _FakeSession()
-    changed = await search_prefs.refresh_title_expansions(
-        session, profile=p, settings=_settings()
-    )
+    changed = await search_prefs.refresh_title_expansions(session, profile=p, settings=_settings())
     assert changed is True
     entry = p.title_expansions["ML Engineer"]
     assert "Machine Learning Engineer" in entry["expanded"]
@@ -183,9 +179,7 @@ async def test_refresh_title_expansions_prunes_removed_titles_and_skips_fresh(mo
         },
     )
     session = _FakeSession()
-    changed = await search_prefs.refresh_title_expansions(
-        session, profile=p, settings=_settings()
-    )
+    changed = await search_prefs.refresh_title_expansions(session, profile=p, settings=_settings())
     assert changed is True  # pruning counts as change
     assert "Removed Title" not in p.title_expansions
     assert p.title_expansions["Kept Title"]["expanded"] == ["Kept Title", "KT II"]

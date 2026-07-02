@@ -112,9 +112,7 @@ def env_indicators_for_notifications_tab() -> dict[str, bool]:
     }
 
 
-def scraper_source_configured(
-    source: JobSource, settings: Settings, profile=None
-) -> bool:
+def scraper_source_configured(source: JobSource, settings: Settings, profile=None) -> bool:
     """True iff the source has the operator-facing config it needs to scrape.
 
     Per plan 49 / 0.2.0.16 § D.3 + docs/design/JOB_SEARCH_PREFERENCES.md.

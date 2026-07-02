@@ -492,9 +492,7 @@ async def post_job_by_url(
     settings = await settings_service.get_or_create(session, user_id=user_id)
     try:
         provider = get_provider(settings)
-        raw_job = await enrich_raw_job(
-            session, user_id=user_id, provider=provider, raw_job=raw_job
-        )
+        raw_job = await enrich_raw_job(session, user_id=user_id, provider=provider, raw_job=raw_job)
     except LLMProviderError as exc:
         log.info("add-by-url enrichment skipped (no provider): %s", exc)
 

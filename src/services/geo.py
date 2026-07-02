@@ -88,7 +88,11 @@ def normalize_city(free_text: str) -> str | None:
     """
     if not free_text:
         return None
-    parts = [p for p in (_norm(p) for p in free_text.split(",")) if p and p not in {"usa", "us", "united states"}]
+    parts = [
+        p
+        for p in (_norm(p) for p in free_text.split(","))
+        if p and p not in {"usa", "us", "united states"}
+    ]
     if not parts:
         return None
     city_q = parts[0]

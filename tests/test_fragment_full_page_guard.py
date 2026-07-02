@@ -68,8 +68,9 @@ def test_parameterless_fragment_gets_never_return_full_pages(
     path: str, client: TestClient, auth_cookies
 ):
     # Some fragment routes require query params; send harmless defaults.
-    r = client.get(path, params={"q": "bo", "title": "t", "message": "m", "action": "/x"},
-                   cookies=auth_cookies)
+    r = client.get(
+        path, params={"q": "bo", "title": "t", "message": "m", "action": "/x"}, cookies=auth_cookies
+    )
     # 2xx → must be a bare fragment. 4xx (missing params) is fine — the
     # guard only cares that successful renders aren't full pages.
     if 200 <= r.status_code < 300:

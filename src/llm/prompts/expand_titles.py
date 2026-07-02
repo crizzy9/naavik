@@ -74,4 +74,10 @@ def render_prompt(*, titles: list[str], headline: str | None) -> str:
     )
 
 
-__all__ = ["MAX_EXPANSIONS_PER_TITLE", "PROMPT", "TitleExpansion", "TitleExpansions", "render_prompt"]
+__all__ = [
+    "MAX_EXPANSIONS_PER_TITLE",
+    "PROMPT",
+    "TitleExpansion",
+    "TitleExpansions",
+    "render_prompt",
+]
