@@ -1,6 +1,7 @@
 {# _manual_job_entry_modal.html — `+ Add manually` flow on Tracking (plan 53 § B). #}
 {% set _body %}
   <form id="manual-job-form"
+        hx-target-error="#manual-job-error"
         hx-post="/api/v1/jobs/manual"
         hx-headers='{"X-CSRF-Token": "{{ csrf_token | default("") }}"}'
         class="flex flex-col gap-4">

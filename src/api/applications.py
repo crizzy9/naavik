@@ -323,19 +323,19 @@ async def generate_bundle_route(
         ),
         "generation_trace": bundle.generation_trace,
     }
-    headers = {}
+    # P5: every outcome fires a body event base.js turns into a toast —
+    # this route's main HTMX caller uses hx-swap="none", so without a
+    # trigger the whole generation was silent.
     if bundle.degraded:
-        headers["HX-Trigger"] = "bundle-degraded"
+        trigger = "bundle-degraded"
     elif bundle.parse_fidelity and bundle.parse_fidelity.tier == "toast":
-        headers["HX-Trigger"] = "parse-fidelity-warning"
-    return (
-        response
-        if not headers
-        else Response(
-            content=json.dumps(response),
-            media_type="application/json",
-            headers=headers,
-        )
+        trigger = "parse-fidelity-warning"
+    else:
+        trigger = "bundle-generated"
+    return Response(
+        content=json.dumps(response),
+        media_type="application/json",
+        headers={"HX-Trigger": trigger},
     )
 
 

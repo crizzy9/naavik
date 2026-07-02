@@ -522,7 +522,13 @@ async def put_sources(
                     "components/_source_editor.html",
                     {"view": row},
                 )
-        return HTMLResponse('<span class="text-emerald-300">Saved · sources</span>')
+        resp = HTMLResponse('<span class="text-emerald-300">Saved · sources</span>')
+        import json as _json
+
+        resp.headers["HX-Trigger"] = _json.dumps(
+            {"showToast": {"tone": "success", "text": "Sources updated."}}
+        )
+        return resp
 
     return {
         "sources_enabled": s.sources_enabled,

@@ -5,6 +5,7 @@
 #}
 <div class="flex flex-col gap-6 max-w-3xl">
   <form id="{{ save_form_id }}"
+        hx-indicator="#settings-save-indicator"
         hx-put="{{ active_save_endpoint }}"
         hx-target="#settings-save-result"
         hx-swap="innerHTML"

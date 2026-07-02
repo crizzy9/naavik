@@ -57,10 +57,16 @@
             hx-post="/api/v1/extraction/upload"
             hx-encoding="multipart/form-data"
             hx-target="#hero-resume-result"
+            hx-target-error="#hero-resume-result"
             hx-swap="innerHTML"
+            hx-indicator="#hero-resume-indicator"
             hx-trigger="change from:#hero-resume-input">
             <input id="hero-resume-input" name="resume" type="file" accept="application/pdf" class="sr-only">
           </form>
+          <span id="hero-resume-indicator" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-indigo-300">
+            <span class="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+            Uploading &amp; parsing…
+          </span>
         </div>
       {% endif %}
     </div>

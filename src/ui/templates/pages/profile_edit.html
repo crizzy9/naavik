@@ -166,10 +166,16 @@
             hx-post="/api/v1/extraction/upload"
             hx-encoding="multipart/form-data"
             hx-target="#resume-replace-result"
+            hx-target-error="#resume-replace-result"
             hx-swap="innerHTML"
+            hx-indicator="#resume-replace-indicator"
             hx-trigger="change from:#resume-replace-input">
             <input id="resume-replace-input" name="resume" type="file" accept="application/pdf" class="sr-only">
           </form>
+          <span id="resume-replace-indicator" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-indigo-300">
+            <span class="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+            Uploading &amp; parsing — the AI parse can take ~30s…
+          </span>
           <div id="resume-replace-result"></div>
           {% if profile.raw_resume_text %}
             {# Plan 0.7.0.48 W3 hacker LOW fold-in (2026-05-25): truncate

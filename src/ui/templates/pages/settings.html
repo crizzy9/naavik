@@ -14,6 +14,10 @@
             aria-live="polite"
             data-testid="settings-save-result"></span>
       {% if active_save_endpoint %}
+        <span id="settings-save-indicator" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-indigo-300">
+          <span class="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+          Saving…
+        </span>
         <button type="submit"
                 form="settings-active-form"
                 data-testid="settings-save"

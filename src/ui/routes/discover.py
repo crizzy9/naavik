@@ -42,6 +42,16 @@ def _effective_user_id(user: User | None) -> int:
     return user.id if user is not None else 1
 
 
+def _with_toast(response, tone: str, text: str):
+    """Attach a showToast HX-Trigger — P5 universal feedback for actions
+    whose swap alone is easy to miss (job-detail buttons use hx-swap=none;
+    swipes advance the card but say nothing about what just happened)."""
+    import json as _json
+
+    response.headers["HX-Trigger"] = _json.dumps({"showToast": {"tone": tone, "text": text}})
+    return response
+
+
 def _parse_filters_or_422(request: Request) -> dctx.JobFilter:
     """Parse the request querystring; surface Pydantic errors as 422."""
     try:
@@ -130,7 +140,9 @@ async def post_skip(
     except PermissionError as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc
     await session.commit()
-    return await _next_card_response(request, session, user_id=user_id)
+    return _with_toast(
+        await _next_card_response(request, session, user_id=user_id), "info", "Skipped."
+    )
 
 
 @router.post("/api/v1/discover/{job_id}/save", response_class=HTMLResponse, name="discover_save")
@@ -149,7 +161,11 @@ async def post_save(
     except PermissionError as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc
     await session.commit()
-    return await _next_card_response(request, session, user_id=user_id)
+    return _with_toast(
+        await _next_card_response(request, session, user_id=user_id),
+        "success",
+        "Saved for later.",
+    )
 
 
 @router.post(
@@ -182,7 +198,11 @@ async def post_auto_submit(
     )
     await session.commit()
     await _maybe_dispatch_auto_apply_now(session, user_id=user_id)
-    return await _next_card_response(request, session, user_id=user_id)
+    return _with_toast(
+        await _next_card_response(request, session, user_id=user_id),
+        "success",
+        "Queued for auto-apply — documents will be tailored and submitted.",
+    )
 
 
 @router.post(

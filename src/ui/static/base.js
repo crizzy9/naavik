@@ -82,7 +82,13 @@
   // the dialog's stacking context.                                   //
   // ---------------------------------------------------------------- //
   document.body.addEventListener('click', function (e) {
-    if (e.target.tagName === 'DIALOG' && e.target.hasAttribute('open')) {
+    // Only close truly-modal dialogs (shown via showModal(); clicks on the
+    // ::backdrop report the dialog itself as target). For `<dialog open>`
+    // (non-modal — how our HTMX modals render), a click reporting the
+    // DIALOG element is INSIDE the dialog (its own padding/gaps), and
+    // closing there made modals vanish under the user's cursor (the
+    // "+ Add by URL shows no input" bug).
+    if (e.target.tagName === 'DIALOG' && e.target.hasAttribute('open') && e.target.matches(':modal')) {
       e.target.close();
     }
   });
@@ -298,6 +304,51 @@
     if (!text) return;
     var tone = detail.tone || 'info';
     showToast(tone, text);
+  });
+
+  // ---------------------------------------------------------------- //
+  // 8a. Server-event toasts (P5 universal feedback).                 //
+  // These HX-Trigger events used to fire into the void — no listener //
+  // existed, so degraded bundles / retries / deletions were silent.  //
+  // ---------------------------------------------------------------- //
+  var _eventToasts = {
+    'bundle-generated': ['success', 'Documents generated.'],
+    'bundle-degraded': ['warning', 'Bundle generated with degradations — check the review workspace.'],
+    'parse-fidelity-warning': ['info', 'Generated resume parses below the comfort tier — worth a manual look.'],
+    'applicationRetried': ['success', 'Retry queued.'],
+    'bulletDeleted': ['info', 'Bullet deleted.'],
+  };
+  Object.keys(_eventToasts).forEach(function (name) {
+    document.body.addEventListener(name, function () {
+      showToast(_eventToasts[name][0], _eventToasts[name][1]);
+    });
+  });
+
+  // ---------------------------------------------------------------- //
+  // 8b. Generic error toast — no failed operation is ever silent.    //
+  // Skipped when the trigger declares hx-target-error (it renders    //
+  // its own inline error), when optimistic rollback owns the toast,  //
+  // or when the settings-save handler owns the slot.                 //
+  // ---------------------------------------------------------------- //
+  function genericErrorToast(e) {
+    var elt = e.detail && e.detail.elt;
+    if (elt && elt.closest && elt.closest('[hx-target-error]')) return;
+    var tgt = e.detail && e.detail.target;
+    if (tgt && tgt.dataset && tgt.dataset.rollback) return;
+    if (tgt && tgt.id === 'settings-save-result') return;
+    if (document.getElementById('settings-save-result')) return; // settingsSaveError owns it
+    var xhr = e.detail && e.detail.xhr;
+    var status = xhr ? xhr.status : 0;
+    var detail = '';
+    if (xhr && xhr.responseText && xhr.responseText.length < 300) {
+      try { detail = JSON.parse(xhr.responseText).detail || ''; } catch (err) { detail = ''; }
+    }
+    if (typeof detail !== 'string') detail = '';
+    showToast('danger', 'Request failed' + (status ? ' (' + status + ')' : '') + (detail ? ' — ' + detail : '.'));
+  }
+  document.body.addEventListener('htmx:responseError', genericErrorToast);
+  document.body.addEventListener('htmx:sendError', function () {
+    showToast('danger', 'Network error — the app could not be reached.');
   });
 
   // ---------------------------------------------------------------- //
