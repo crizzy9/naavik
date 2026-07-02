@@ -38,6 +38,11 @@ _EMBEDDING_DIM = 768
 
 
 class OpenAIProvider(LLMProvider):
+    """All chat calls send `max_completion_tokens` — post-gpt-4o model
+    families (gpt-5.x, o-series) reject the legacy `max_tokens` param with a
+    400, and the older models accept the new name. This surfaced the moment
+    item 10 made the SELECTED model actually reach the wire."""
+
     DEFAULT_MODEL = "gpt-4o"
 
     def __init__(self, api_key: str, model: str | None = DEFAULT_MODEL) -> None:
@@ -59,7 +64,7 @@ class OpenAIProvider(LLMProvider):
         try:
             response = await self._client.chat.completions.create(
                 model=self._model,
-                max_tokens=max_tokens,
+                max_completion_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
             )
         except Exception as exc:  # noqa: BLE001
@@ -164,7 +169,7 @@ class OpenAIProvider(LLMProvider):
         try:
             response = await self._client.chat.completions.create(
                 model=self._model,
-                max_tokens=max_tokens,
+                max_completion_tokens=max_tokens,
                 response_format={"type": "json_schema", "json_schema": json_schema},
                 messages=messages,
             )
@@ -199,7 +204,7 @@ class OpenAIProvider(LLMProvider):
         try:
             stream = await self._client.chat.completions.create(
                 model=self._model,
-                max_tokens=max_tokens,
+                max_completion_tokens=max_tokens,
                 stream=True,
                 messages=[{"role": "user", "content": prompt}],
             )
