@@ -70,6 +70,44 @@
     {% endfor %}
   </section>
 
+  {# Inferred applications awaiting confirmation (item 5) — the inbox found
+     receipts for applications Naavik wasn't tracking. #}
+  {% if inferred_pending %}
+  <section class="rounded-lg bg-indigo-500/5 border border-indigo-500/30 px-4 py-3 flex flex-col gap-2" data-testid="inferred-pending-banner">
+    <div class="flex items-center gap-2 text-sm text-indigo-100">
+      <i data-lucide="mail-check" class="h-4 w-4 text-indigo-300" stroke-width="1.5"></i>
+      Your inbox shows {{ inferred_pending | length }} application{{ "s" if inferred_pending | length != 1 }} Naavik wasn't tracking — confirm to add {{ "them" if inferred_pending | length != 1 else "it" }} to the pipeline.
+    </div>
+    <ul class="flex flex-col gap-1.5">
+      {% for p in inferred_pending %}
+        <li id="inferred-pending-{{ p.id }}" class="flex items-center gap-3 rounded-md bg-slate-950/50 px-3 py-2">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-slate-100 truncate"><span class="font-medium">{{ p.company }}</span> · {{ p.role }}</div>
+            <div class="text-xs text-slate-500 truncate">applied {{ p.applied_at_label }}{% if p.subject %} · “{{ p.subject }}”{% endif %}</div>
+          </div>
+          <button type="button"
+                  class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-medium"
+                  hx-post="/api/v1/applications/{{ p.id }}/inferred/confirm"
+                  hx-swap="none"
+                  hx-disabled-elt="this"
+                  data-testid="inferred-confirm-{{ p.id }}">
+            <i data-lucide="check" class="h-3.5 w-3.5" stroke-width="2"></i>
+            Track it
+          </button>
+          <button type="button"
+                  class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  hx-post="/api/v1/applications/{{ p.id }}/inferred/dismiss"
+                  hx-swap="none"
+                  hx-disabled-elt="this"
+                  data-testid="inferred-dismiss-{{ p.id }}">
+            Not mine
+          </button>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   {# Upcoming calendar events (item 11) — renders only when the calendar is
      connected AND events exist in the next 14 days; honest absence otherwise. #}
   {% if upcoming_events %}

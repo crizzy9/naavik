@@ -91,6 +91,13 @@ class EmailMessage(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), nullable=True),
     )
 
+    # Item 5 (2026-07): application-inference marker — the receipt detector
+    # visits every message once; NULL = not yet examined.
+    inference_processed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+
     created_at: datetime = Field(
         default_factory=utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),

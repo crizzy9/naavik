@@ -131,7 +131,13 @@ async def build_tracking_ctx(
     show_closed: bool = False,
     show_drafts: bool = False,
 ) -> dict[str, object]:
+    from services import email_application_inference as inference
+
     visible_apps = await application_service.list_visible_in_tracking(session, user_id)
+    # Item 5 — unconfirmed inferred applications stay off the board; they
+    # live in the confirmation banner until the user confirms/dismisses.
+    inferred_pending = [a for a in visible_apps if inference.is_unconfirmed_inferred(a)]
+    visible_apps = [a for a in visible_apps if not inference.is_unconfirmed_inferred(a)]
     if show_drafts:
         visible_apps = visible_apps + await application_service.list_drafts(session, user_id)
     closed = await application_service.list_closed(session, user_id)
@@ -201,6 +207,17 @@ async def build_tracking_ctx(
     ]
 
     return {
+        # Item 5 — proposed applications inferred from inbox receipts.
+        "inferred_pending": [
+            {
+                "id": a.id,
+                "company": a.company,
+                "role": a.role,
+                "applied_at_label": _relative_label(a.applied_at),
+                "subject": (a.submission_artifacts or {}).get("inferred", {}).get("subject", ""),
+            }
+            for a in inferred_pending
+        ],
         "upcoming_events": [
             {
                 "id": e.id,

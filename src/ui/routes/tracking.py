@@ -547,6 +547,67 @@ async def put_application_notes(
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# Item 5 (2026-07) — inferred-application confirm / dismiss
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/api/v1/applications/{application_id}/inferred/confirm",
+    name="api_inferred_confirm",
+)
+async def post_inferred_confirm(
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    from services import email_application_inference as inference
+
+    ok = await inference.confirm(
+        session, user_id=_effective_user_id(user), application_id=application_id
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="No pending inferred application")
+    await session.commit()
+    # Full refresh: the banner row leaves AND the card appears in APPLIED —
+    # that state change IS the feedback.
+    response = Response(status_code=204)
+    response.headers["HX-Refresh"] = "true"
+    return response
+
+
+@router.post(
+    "/api/v1/applications/{application_id}/inferred/dismiss",
+    name="api_inferred_dismiss",
+)
+async def post_inferred_dismiss(
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    from services import email_application_inference as inference
+
+    ok = await inference.dismiss(
+        session, user_id=_effective_user_id(user), application_id=application_id
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="No pending inferred application")
+    await session.commit()
+    response = Response(status_code=204)
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "removeElement": {"selector": f"#inferred-pending-{application_id}"},
+            "showToast": {
+                "tone": "info",
+                "text": "Dismissed — the job stays in your library, untracked.",
+            },
+        }
+    )
+    return response
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Plan 86 § W3.2 / 0.4.5.08 — per-application bullet override toggle
 # ─────────────────────────────────────────────────────────────────────────
 

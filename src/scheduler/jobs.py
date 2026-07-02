@@ -357,12 +357,17 @@ async def classify_emails() -> None:
     Picks unclassified EmailMessage rows. Graceful no-LLM degrade marks rows
     `unclassified_reason=NO_PROVIDER_CONFIGURED` so they retry post-LLM-config.
     """
+    from services.email_application_inference import infer_unprocessed
     from services.email_classifier import classify_unprocessed
 
     async with async_session() as session:
         n = await classify_unprocessed(session, limit=200)
+        # Item 5 (2026-07): application-receipt inference rides the same
+        # tick — deterministic, so it works even when classification
+        # degraded to NO_PROVIDER_CONFIGURED.
+        inferred = await infer_unprocessed(session, limit=200)
         await session.commit()
-    log.info("classify_emails classified=%d", n)
+    log.info("classify_emails classified=%d inferred_applications=%d", n, inferred)
 
 
 async def sync_calendars() -> None:

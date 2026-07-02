@@ -76,6 +76,9 @@ class JobSource(StrEnum):
     RSSHUB = "rsshub"
     N8N_LEGACY = "n8n_legacy"
     MANUAL = "manual"
+    # Item 5 (2026-07): job inferred from an application-confirmation email
+    # (no scrape; metadata parsed from the receipt).
+    EMAIL = "email"
 
 
 class VisaRestriction(StrEnum):
