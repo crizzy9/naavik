@@ -207,8 +207,13 @@ async def test_scheduler_non_linkedin_source_never_gets_proxy(monkeypatch):
     monkeypatch.setattr(scraping, "Crawl4AIClient", _CapturingClient)
     monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
     monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+    # Sources must be configured or `_scrape_one_user` skips before the
+    # client is constructed (unconfigured-source guard).
+    monkeypatch.setattr(app_settings, "greenhouse_companies", ["acme"])
+    monkeypatch.setattr(app_settings, "lever_companies", ["acme"])
+    monkeypatch.setattr(app_settings, "ashby_companies", ["acme"])
 
-    s = _make_settings()
+    s = _make_settings(indeed_keywords=["swe"])
     session = _FakeSession()
     for src in (JobSource.GREENHOUSE, JobSource.LEVER, JobSource.ASHBY, JobSource.INDEED):
         await scraping._scrape_one_user(session, settings=s, source=src)

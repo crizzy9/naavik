@@ -3275,7 +3275,7 @@ def _om(
     opened_days_ago: int | None = None,
     ai_generated: bool = True,
     human_edited: bool = False,
-    drafted_by_model: str | None = "claude-3.5-sonnet-20250219",
+    drafted_by_model: str | None = "claude-sonnet-4-6",
 ) -> OutreachMessage:
     sent_at = _ago(days=sent_days_ago) if sent_days_ago is not None else None
     replied_at = _ago(days=replied_days_ago) if replied_days_ago is not None else None
@@ -4595,7 +4595,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 901,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -4609,7 +4609,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 902,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -4763,7 +4763,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 903,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -4777,7 +4777,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 904,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -4879,7 +4879,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 905,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -4893,7 +4893,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 906,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5005,7 +5005,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 907,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5019,7 +5019,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 908,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5096,7 +5096,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 909,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5110,7 +5110,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 910,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5179,7 +5179,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 911,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5193,7 +5193,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 912,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5227,7 +5227,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 913,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5241,7 +5241,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 914,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5312,7 +5312,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 915,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5340,7 +5340,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 916,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5354,7 +5354,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 917,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5459,7 +5459,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 918,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5473,7 +5473,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 919,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5558,7 +5558,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 920,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5572,7 +5572,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 921,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5618,7 +5618,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 922,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5632,7 +5632,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 923,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5703,7 +5703,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 924,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5717,7 +5717,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 925,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5762,7 +5762,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 926,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5776,7 +5776,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 927,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -5803,7 +5803,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 928,
                 "kind": "resume",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.04,
                 "token_count": 1822,
                 "page_count": 1,
@@ -5817,7 +5817,7 @@ APP_EVENTS.extend(
             {
                 "generated_document_id": 929,
                 "kind": "cover_letter",
-                "model": "claude-3.5-sonnet-20250219",
+                "model": "claude-sonnet-4-6",
                 "cost_usd": 0.03,
                 "token_count": 1421,
                 "page_count": 1,
@@ -6184,7 +6184,7 @@ def _doc(
         byte_size=byte_size,
         page_count=page_count,
         compiled_at=compiled,
-        model="claude-3.5-sonnet-20250219",
+        model="claude-sonnet-4-6",
         cost_usd=cost,
         token_count=tokens,
         error=error,
@@ -6517,7 +6517,7 @@ SCREENER_ANSWERS: list[ApplicationScreenerAnswer] = [
         "been pushing me. Plus the safety-first culture lines up with how I want to "
         "build.",
         ScreenerAnswerSource.DRAFTED,
-        drafted_by="claude-3.5-sonnet-20250219",
+        drafted_by="claude-sonnet-4-6",
         reviewed_days_ago=21,
         days_ago=22,
     ),
@@ -6557,7 +6557,7 @@ SCREENER_ANSWERS: list[ApplicationScreenerAnswer] = [
         "actually changes founder behavior — and the Atlas ranking surface is "
         "exactly the kind of personalization-meets-product problem I love.",
         ScreenerAnswerSource.DRAFTED,
-        drafted_by="claude-3.5-sonnet-20250219",
+        drafted_by="claude-sonnet-4-6",
         reviewed_days_ago=2,
         days_ago=3,
     ),
@@ -6583,7 +6583,7 @@ SCREENER_ANSWERS: list[ApplicationScreenerAnswer] = [
         "Yes",
         ScreenerAnswerSource.DRAFTED,
         choices=["Yes", "No", "Depends on cadence"],
-        drafted_by="claude-3.5-sonnet-20250219",
+        drafted_by="claude-sonnet-4-6",
         reviewed_days_ago=None,
         days_ago=3,
         order_index=2,
@@ -6599,7 +6599,7 @@ SCREENER_ANSWERS: list[ApplicationScreenerAnswer] = [
         "is exactly the kind of distributed-systems-meets-product surface that "
         "matches my Intuit + Plaid backgrounds.",
         ScreenerAnswerSource.DRAFTED,
-        drafted_by="claude-3.5-sonnet-20250219",
+        drafted_by="claude-sonnet-4-6",
         reviewed_days_ago=7,
         days_ago=7,
     ),
@@ -6611,7 +6611,7 @@ SCREENER_ANSWERS: list[ApplicationScreenerAnswer] = [
         ScreenerQuestionType.NUMERIC,
         "8",
         ScreenerAnswerSource.DRAFTED,
-        drafted_by="claude-3.5-sonnet-20250219",
+        drafted_by="claude-sonnet-4-6",
         reviewed_days_ago=7,
         days_ago=7,
         order_index=1,
@@ -6626,7 +6626,7 @@ SCREENER_ANSWERS: list[ApplicationScreenerAnswer] = [
         "Yes",
         ScreenerAnswerSource.DRAFTED,
         choices=["Yes", "No"],
-        drafted_by="claude-3.5-sonnet-20250219",
+        drafted_by="claude-sonnet-4-6",
         reviewed_days_ago=5,
         days_ago=5,
     ),
@@ -6665,7 +6665,7 @@ SCREENER_ANSWERS: list[ApplicationScreenerAnswer] = [
         "Discord's Relevance team is at the intersection of ranking and "
         "developer-experience that drew me to ML in the first place.",
         ScreenerAnswerSource.DRAFTED,
-        drafted_by="claude-3.5-sonnet-20250219",
+        drafted_by="claude-sonnet-4-6",
         reviewed_days_ago=32,
         days_ago=33,
     ),
@@ -6677,7 +6677,7 @@ SCREENER_ANSWERS: list[ApplicationScreenerAnswer] = [
         ScreenerQuestionType.NUMERIC,
         "7",
         ScreenerAnswerSource.DRAFTED,
-        drafted_by="claude-3.5-sonnet-20250219",
+        drafted_by="claude-sonnet-4-6",
         reviewed_days_ago=32,
         days_ago=33,
         order_index=1,
@@ -6719,7 +6719,7 @@ SCREENER_ANSWERS: list[ApplicationScreenerAnswer] = [
         ScreenerQuestionType.NUMERIC,
         "$385,000 CAD",
         ScreenerAnswerSource.DRAFTED,
-        drafted_by="claude-3.5-sonnet-20250219",
+        drafted_by="claude-sonnet-4-6",
         reviewed_days_ago=None,
         days_ago=1,
         order_index=2,
@@ -6734,7 +6734,7 @@ SCREENER_ANSWERS: list[ApplicationScreenerAnswer] = [
         "Mercury sits in the rare overlap of fintech and developer empathy — "
         "the card platform is the kind of ledger-and-rails system I love.",
         ScreenerAnswerSource.DRAFTED,
-        drafted_by="claude-3.5-sonnet-20250219",
+        drafted_by="claude-sonnet-4-6",
         reviewed_days_ago=None,
         days_ago=1,
     ),
@@ -6830,7 +6830,7 @@ def _usage(
 
 # Build ~30 rows summing to ~$3.42 over the last 30 days.
 # Anthropic dominates (default provider).
-_anthr = "claude-3.5-sonnet-20250219"
+_anthr = "claude-sonnet-4-6"
 _oai = "gpt-4o"
 _olla = "llama3.1:70b"
 
@@ -7861,7 +7861,7 @@ async def _append_outreach_message(
         body=body,
         status=status,
         ai_generated=True,
-        drafted_by_model="claude-3.5-sonnet-20250219",
+        drafted_by_model="claude-sonnet-4-6",
         created_at=now,
         updated_at=now,
     )

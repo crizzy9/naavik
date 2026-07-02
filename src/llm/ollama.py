@@ -28,12 +28,15 @@ _EMBEDDING_MODEL = "nomic-embed-text"
 
 
 class OllamaProvider(LLMProvider):
+    DEFAULT_MODEL = "llama3.1:70b"
+
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        model: str = "llama3.1:70b",
+        model: str | None = DEFAULT_MODEL,
     ) -> None:
-        self._model = model
+        # None → provider default (cross-provider fallback in llm.get_provider).
+        self._model = model or self.DEFAULT_MODEL
         self._base = base_url.rstrip("/")
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(120.0))
 

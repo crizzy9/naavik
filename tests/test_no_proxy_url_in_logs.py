@@ -212,7 +212,8 @@ async def test_scheduler_top_level_exception_does_not_leak_proxy_creds_in_logs(
         sources_enabled={},
         consecutive_scrape_failures={},
         workday_companies=[],
-        linkedin_keywords=None,
+        # Non-empty: the unconfigured-source guard skips before scraping.
+        linkedin_keywords=["swe"],
         linkedin_location=None,
         indeed_keywords=None,
         indeed_location=None,
@@ -306,7 +307,8 @@ async def test_scheduler_chained_exception_does_not_leak_proxy_creds(
         sources_enabled={},
         consecutive_scrape_failures={},
         workday_companies=[],
-        linkedin_keywords=None,
+        # Non-empty: the unconfigured-source guard skips before scraping.
+        linkedin_keywords=["swe"],
         linkedin_location=None,
         indeed_keywords=None,
         indeed_location=None,

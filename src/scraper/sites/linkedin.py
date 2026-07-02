@@ -43,7 +43,7 @@ from scraper.url_guard import is_safe_destination
 log = logging.getLogger(__name__)
 
 _URN_RE = re.compile(r"urn:li:jobPosting:(\d+)")
-_VIEW_HREF_RE = re.compile(r"/jobs/view/(\d+)")
+_VIEW_HREF_RE = re.compile(r"/jobs/view/(?:[^/?#]*-)?(\d+)")
 
 
 class LinkedInScraper(_BaseSiteScraper):
@@ -158,12 +158,18 @@ class LinkedInScraper(_BaseSiteScraper):
 
     @staticmethod
     def _extract_external_id(li) -> str | None:  # type: ignore[no-untyped-def]
+        # The live guest API carries `data-entity-urn` on an inner
+        # `div.base-card`, not on the `<li>` itself — check both.
         urn = li.get("data-entity-urn") if hasattr(li, "get") else None
+        if not urn:
+            urn_el = li.select_one("[data-entity-urn]")
+            urn = urn_el.get("data-entity-urn") if urn_el is not None else None
         if urn:
             m = _URN_RE.search(str(urn))
             if m:
                 return m.group(1)
-        # Fallback: any <a href="/jobs/view/<id>"> inside the card.
+        # Fallback: any <a href=".../jobs/view/<slug>-<id>"> inside the card
+        # (live hrefs embed a title slug before the numeric id).
         for a in li.select("a[href]"):
             href = a.get("href", "")
             m = _VIEW_HREF_RE.search(str(href))

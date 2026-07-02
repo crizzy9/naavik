@@ -30,7 +30,7 @@ def _settings(**overrides):
     base = {
         "user_id": 1,
         "llm_provider": "anthropic",
-        "llm_model": "claude-3.5-sonnet-20250219",
+        "llm_model": "claude-sonnet-4-6",
         "daily_llm_cost_cap_usd": None,
         "originality_api_key": None,
         "parse_fidelity_threshold": 0.75,
@@ -123,7 +123,7 @@ async def test_single_tool_happy_path_ships():
     )
 
     fake_provider = AnthropicProvider.__new__(AnthropicProvider)
-    fake_provider._model = "claude-3.5-sonnet-20250219"
+    fake_provider._model = "claude-sonnet-4-6"
     fake_provider._client = fake_client
 
     fake_parse_report = SimpleNamespace(
@@ -188,7 +188,7 @@ async def test_iteration_cap_returns_exhausted():
     )
 
     fake_provider = AnthropicProvider.__new__(AnthropicProvider)
-    fake_provider._model = "claude-3.5-sonnet-20250219"
+    fake_provider._model = "claude-sonnet-4-6"
     fake_provider._client = fake_client
 
     with (
@@ -234,7 +234,7 @@ async def test_budget_early_exit_records_cost_cap_reason():
     session.add = lambda r: None
 
     fake_provider = AnthropicProvider.__new__(AnthropicProvider)
-    fake_provider._model = "claude-3.5-sonnet-20250219"
+    fake_provider._model = "claude-sonnet-4-6"
     fake_provider._client = SimpleNamespace()
     fake_provider._client.messages = SimpleNamespace(create=AsyncMock())
 
@@ -275,7 +275,7 @@ async def test_ship_with_caveats_decision_recognized():
     session.add = lambda r: None
 
     fake_provider = AnthropicProvider.__new__(AnthropicProvider)
-    fake_provider._model = "claude-3.5-sonnet-20250219"
+    fake_provider._model = "claude-sonnet-4-6"
     fake_provider._client = SimpleNamespace()
     fake_provider._client.messages = SimpleNamespace(
         create=AsyncMock(

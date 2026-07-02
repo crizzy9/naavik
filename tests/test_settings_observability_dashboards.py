@@ -160,7 +160,7 @@ def _make_sources_settings(**overrides):
         "scraper_rate_limits": {},
         "daily_llm_cost_cap_usd": None,
         "llm_provider": LLMProvider.ANTHROPIC,
-        "llm_model": "claude-3.5-sonnet-20250219",
+        "llm_model": "claude-sonnet-4-6",
         "deployment_mode": DeploymentMode.SELF_HOSTED,
         # Plan 61 (`0.2.7.14` / `0.2.7.16`): semantic-match template partial
         # reads these unconditionally; default OFF.

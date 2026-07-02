@@ -24,7 +24,7 @@ def _settings(**overrides):
     base = {
         "user_id": 1,
         "llm_provider": "anthropic",
-        "llm_model": "claude-3.5-sonnet-20250219",
+        "llm_model": "claude-sonnet-4-6",
         "daily_llm_cost_cap_usd": None,
         "originality_api_key": None,
     }

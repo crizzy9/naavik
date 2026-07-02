@@ -131,7 +131,7 @@ def _make_settings(**kw):
     base = {
         "user_id": 1,
         "llm_provider": __import__("models", fromlist=["LLMProvider"]).LLMProvider.ANTHROPIC,
-        "llm_model": "claude-3.5-sonnet-20250219",
+        "llm_model": "claude-sonnet-4-6",
         "llm_fallback_provider": None,
         "eager_review_generation": True,
         "daily_llm_cost_cap_usd": None,
@@ -372,7 +372,7 @@ async def test_answer_screeners_drafts_custom_question_via_llm():
 
     fake_provider = SimpleNamespace(
         provider_id="anthropic",
-        model_name="claude-3.5-sonnet-20250219",
+        model_name="claude-sonnet-4-6",
     )
 
     async def fake_tracked_call(**kwargs):

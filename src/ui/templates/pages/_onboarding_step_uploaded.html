@@ -1,11 +1,60 @@
-{# Onboarding · Upload confirmation — swap target of /api/v1/extraction/upload. #}
+{# Onboarding · Upload confirmation — swap target of /api/v1/extraction/upload.
+
+   Args:
+     chars / filename       : raw-extract telemetry
+     structured             : bool — the LLM parse ran and persisted rows
+     parsed                 : dict | None — what the parse produced, so the
+                              user can verify success ON THIS SCREEN:
+                              {full_name, email, phone,
+                               experiences: [{company, title, bullets}],
+                               educations: [str], projects: [str],
+                               skill_groups: int}
+#}
 <div>
   <h1 class="text-xl font-semibold text-slate-50 tracking-tight">Got it — resume uploaded</h1>
   <p class="mt-1.5 text-sm text-slate-400 leading-relaxed">
     Extracted <span class="font-mono text-slate-200">{{ chars }}</span> characters from
     <span class="font-mono text-slate-200">{{ filename }}</span>.
   </p>
-  {% if structured %}
+
+  {% if structured and parsed %}
+    <div data-parse-summary class="mt-4 rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-4">
+      <p class="text-xs font-medium text-emerald-300/90 uppercase tracking-wide">Parsed into your profile</p>
+
+      <dl class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs">
+        <div><dt class="text-slate-500 inline">Name:</dt> <dd class="inline text-slate-200 font-mono">{{ parsed.full_name or "—" }}</dd></div>
+        <div><dt class="text-slate-500 inline">Email:</dt> <dd class="inline text-slate-200 font-mono">{{ parsed.email or "—" }}</dd></div>
+        <div><dt class="text-slate-500 inline">Phone:</dt> <dd class="inline text-slate-200 font-mono">{{ parsed.phone or "—" }}</dd></div>
+      </dl>
+
+      {% if parsed.experiences %}
+        <p class="mt-3 text-xs text-slate-400">Experience ({{ parsed.experiences | length }})</p>
+        <ul class="mt-1 flex flex-col gap-0.5">
+          {% for exp in parsed.experiences %}
+            <li class="text-xs text-slate-300">
+              <span class="font-medium text-slate-200">{{ exp.title }}</span>
+              <span class="text-slate-500">·</span> {{ exp.company }}
+              <span class="text-slate-500 font-mono">· {{ exp.bullets }} bullet{{ '' if exp.bullets == 1 else 's' }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-400">
+        {% if parsed.educations %}
+          <span>Education: <span class="text-slate-200">{{ parsed.educations | join(" · ") }}</span></span>
+        {% endif %}
+        {% if parsed.projects %}
+          <span>Projects: <span class="text-slate-200 font-mono">{{ parsed.projects | length }}</span></span>
+        {% endif %}
+        {% if parsed.skill_groups %}
+          <span>Skill groups: <span class="text-slate-200 font-mono">{{ parsed.skill_groups }}</span></span>
+        {% endif %}
+      </div>
+
+      <p class="mt-3 text-[11px] text-slate-500">Review and refine everything on the next page.</p>
+    </div>
+  {% elif structured %}
     <p class="mt-3 text-xs text-emerald-300/90 leading-relaxed">
       Parsed your resume into structured profile data — added
       <span class="font-mono">{{ experiences_added }}</span>
@@ -15,11 +64,18 @@
   {% else %}
     <p class="mt-3 text-xs text-slate-500 leading-relaxed">
       We auto-filled any empty name / email / phone fields from your resume, and saved the full
-      extracted text to your profile under "Raw resume text (parsed source)". To auto-structure
-      experiences and bullets, configure an LLM provider in Settings — otherwise fill in the rest
-      manually on the next page.
+      extracted text to your profile under "Raw resume text (parsed source)".
+      {% if parse_error %}
+        <span class="block mt-1.5 text-rose-300/90">
+          Structured parsing failed: <span class="font-mono">{{ parse_error }}</span>
+        </span>
+      {% else %}
+        To auto-structure experiences and bullets, configure an LLM provider in Settings —
+        otherwise fill in the rest manually on the next page.
+      {% endif %}
     </p>
   {% endif %}
+
   <div class="mt-6 flex items-center justify-end gap-3">
     <a href="/profile/edit"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/40">

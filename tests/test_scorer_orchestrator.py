@@ -69,7 +69,7 @@ def _settings_stub(*, cap: float | None = None):
     return SimpleNamespace(
         daily_llm_cost_cap_usd=cap,
         llm_provider="anthropic",
-        llm_model="claude-3.5-sonnet-20250219",
+        llm_model="claude-sonnet-4-6",
         score_per_dim_weights={},
     )
 

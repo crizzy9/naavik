@@ -125,6 +125,27 @@
   document.body.addEventListener('htmx:responseError', rollback);
   document.body.addEventListener('htmx:sendError', rollback);
 
+  // Settings saves: htmx never swaps error responses, so a failed PUT used
+  // to leave #settings-save-result blank ("Save did nothing"). Surface the
+  // status + server detail honestly. textContent assembly avoids injecting
+  // server-controlled strings as HTML.
+  function settingsSaveError(e) {
+    var slot = document.getElementById('settings-save-result');
+    if (!slot) return;
+    var xhr = e.detail && e.detail.xhr;
+    var detail = '';
+    if (xhr && xhr.responseText) {
+      try { detail = JSON.parse(xhr.responseText).detail || ''; } catch (err) { detail = ''; }
+    }
+    var span = document.createElement('span');
+    span.className = 'text-rose-300';
+    span.textContent = 'Save failed' + (xhr ? ' (' + xhr.status + ')' : '') +
+      (detail ? ' - ' + detail : '');
+    slot.replaceChildren(span);
+  }
+  document.body.addEventListener('htmx:responseError', settingsSaveError);
+  document.body.addEventListener('htmx:sendError', settingsSaveError);
+
   // ---------------------------------------------------------------- //
   // 6. Upload progress                                               //
   // ---------------------------------------------------------------- //

@@ -59,18 +59,37 @@ The NixOS module (`nix/module.nix`) follows Lumino's service patterns:
 ```bash
 git clone https://github.com/crizzy9/naavik.git && cd naavik
 
-# Optional: provide API keys / overrides (defaults work out of the box)
-cp .env.example .env
+cp .env.example .env && chmod 0600 .env
+
+# REQUIRED: generate a signing key. docker compose refuses to start without it.
+echo "SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
+
+# STRONGLY RECOMMENDED for anything internet-reachable: set a DB password
+echo "POSTGRES_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" >> .env
 
 # One command — Postgres + auto-migrate + app, all wired
 docker compose up -d
 
-# Open http://localhost:8003
+# Open http://localhost:8003 — you'll be redirected to /login; click
+# "Create account" to register the first user (no seeded credentials).
 ```
 
+> **`SECRET_KEY` is mandatory.** `docker-compose.yml` uses `${SECRET_KEY:?...}`, so
+> `docker compose up -d` errors out immediately if it isn't set — there is no insecure
+> default in production. Rotating it invalidates all active sessions.
+>
+> **`POSTGRES_PASSWORD` defaults to `password`.** Fine for a laptop; unacceptable for a
+> reachable host. Set it in `.env` before first boot (it's baked into the DB volume on
+> initialization — changing it later requires `docker compose down -v` or an `ALTER ROLE`).
+>
+> **Never set `NAAVIK_DEBUG=1` in production.** It bypasses the `SECRET_KEY` length
+> validator *and* re-enables the `naavik_session=fake-1` dev bootstrap cookie, which maps
+> any request to the first user — a full authentication bypass. Leave it unset outside dev.
+
 - Migrations run automatically on first start.
-- State persists in named volumes: `naavik-db-data` (Postgres) + `naavik-data` (snapshots, generated PDFs).
+- State persists in named volumes: `naavik-db-data` (Postgres) + `naavik-data` (snapshots, generated PDFs, resume uploads).
 - Secrets live in `.env` (gitignored, `chmod 0600`); see § Configuration for the slot inventory.
+- First user: open the app, click **Create account** — the first signup owns the instance. No credentials are seeded.
 - To upgrade: `git pull && docker compose pull && docker compose up -d`.
 - To reset: `docker compose down -v` (wipes volumes!).
 - Override config via `docker-compose.override.yml` (gitignored).
@@ -91,7 +110,7 @@ For users who prefer not to self-host. Functionally identical to self-hosted —
 
 ## 4. Development (bare metal)
 
-The repo is Nix-first. One command boots Postgres (with pgvector), runs migrations, seeds the canonical fixture set, and starts FastAPI dev with auto-reload:
+The repo is Nix-first. One command boots Postgres (with pgvector), runs migrations, and starts FastAPI dev with auto-reload (no user is seeded — sign up on first visit):
 
 ```bash
 nix run .#dev

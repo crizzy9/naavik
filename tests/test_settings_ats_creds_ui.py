@@ -37,7 +37,7 @@ def _make_settings(**overrides):
     base = {
         "user_id": 1,
         "llm_provider": SimpleNamespace(value="anthropic"),
-        "llm_model": "claude-3.5-sonnet-20250219",
+        "llm_model": "claude-sonnet-4-6",
         "llm_fallback_provider": None,
         "deployment_mode": SimpleNamespace(value="self_hosted"),
         "auto_apply_adapter_confidence_threshold": 0.7,

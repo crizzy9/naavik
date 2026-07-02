@@ -624,3 +624,63 @@ What would make it better: Add a small enum/category column such as `usage_categ
 | 5 | Normalize email messages when Phase 5 starts: `EmailMessage(thread_id, message_id_external, sent_at, direction, sender, recipients, body_ref, classification)`. | HIGH | 3-6 days | Required for robust email search, per-message events, and thread growth control. |
 
 Additional cleanup worth batching into small migrations: drop `User.is_admin` and `Settings.allow_multiple_users`; document or align soft-delete policy for `Skill`/`Education`/`Certification`; add an index for outreach follow-up scans (`user_id`, `status`, `sent_at`) where `deleted_at IS NULL`; document enum casing conventions in `DATA_MODEL.md`.
+
+---
+
+## Referential Integrity — ON DELETE rules (migration `0025_fk_ondelete_rules`)
+
+Previously every foreign key relied on Postgres's default `NO ACTION`, leaving
+orphan behavior undefined and blocking clean account/profile/application
+deletion. The `0025` migration (2026-07-01) makes the rules explicit at the DB
+level, and the model layer declares them via `Field(..., ondelete=...)` so
+fresh installs emit the same DDL. The rule is principled:
+
+- **Nullable FK → `ON DELETE SET NULL`** — the row is an independent record that
+  merely *references* the deleted entity and should survive it.
+- **Non-null FK → `ON DELETE CASCADE`** — the row is *owned* by its parent and
+  has no meaning without it.
+
+| Ownership edge (CASCADE) | Independent reference (SET NULL) |
+|---|---|
+| `user` → settings, profile, profile_embedding, revoked_jwt, job, job_scrape_run, job_embedding, application, ats_credential, app_event, api_usage, profile_answer, contact, outreach_message, email_thread, email_message, email_account | `application.job_id` → job (application keeps its snapshot) |
+| `profile` → experience, skill, education, project, certification | `job.warm_intro_contact_id`, `job.last_scrape_run_id` |
+| `experience` → bullet | `outreach_message.application_id`, `app_event.application_id`, `api_usage.application_id` |
+| `application` → generated_document, application_screener_answer, contact_application_link | `email_thread.application_id`, `email_thread.contact_id` |
+| `contact` → contact_application_link, outreach_message | `email_message.application_id`, `email_message.account_id` |
+| `tenant` → tenant_signing_key; `email_thread` → email_message; `job` → job_embedding | (`job.duplicate_of_id` self-FK was already SET NULL) |
+
+`account_service.delete_user_account` performs the same deletion explicitly in
+child→parent order so it works identically on SQLite (test backend, FK cascade
+off) and Postgres; the migration is the defense-in-depth DB guarantee for any
+path that deletes a `user`/`profile`/`application` row directly.
+
+---
+
+## Enum Labels — Postgres labels ARE the Python member NAMES (migration `0026_enum_label_names`)
+
+SQLAlchemy's `sa.Enum(PyEnum)` binds parameters as the Python member **name**
+(`ClosedReason.USER_ARCHIVED` → `'USER_ARCHIVED'`), never the `.value`. Most
+Naavik enums use `NAME == value` so this was invisible — but five types had
+been created (0001/0022/0024-era) with lowercase **values** as their Postgres
+labels, making every bind against them fail at runtime on live Postgres:
+
+| Type | Broken surface |
+|---|---|
+| `closedreason` | Closing/archiving an application with a reason |
+| `emailaccountprovider`, `emailaccountstatus` | EmailAccount insert + the 10-minute email-sync cron (crashed every firing) |
+| `unclassifiedreason` | Email classifier degrade-reason writes |
+| `appeventkind` (`email_status_suggested` label only) | Email→status suggestion audit event |
+| `signingalgorithm` (`EdDSA` label only) | Latent — EdDSA signing keys (reserved) |
+
+CI never caught this because the service-test backend is SQLite, where enums
+are TEXT. Migration `0026_enum_label_names` (2026-07-02) renames every
+mismatched label to the member name via conditional
+`ALTER TYPE … RENAME VALUE` (data follows automatically; Python `.value`
+strings used by templates/JSON are untouched). Convention, now enforced:
+
+- **Postgres enum labels MUST equal the Python member names.** New enum
+  migrations must emit `[m.name for m in Enum]`, never `.value` lists.
+- Guarded by `tests/test_enum_labels.py`: a static check that 0026 covers
+  every historical name↔value mismatch, plus a live-Postgres parity check
+  (`NAAVIK_LIVE_DB=1`) comparing `pg_enum` labels against every model
+  column's member names.

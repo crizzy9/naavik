@@ -143,6 +143,11 @@ async def post_extraction_upload(
     if resume.content_type not in {"application/pdf", "application/x-pdf"}:
         raise HTTPException(status_code=422, detail="Only PDF uploads are supported.")
 
+    # Capture eagerly: after a mid-request DB failure the ORM instance is
+    # expired and `user.id` would lazy-load on a poisoned session (turning a
+    # gracefully-degradable parse failure into a 500 in the except blocks).
+    user_id = user.id
+
     payload = await resume.read()
     if len(payload) == 0:
         raise HTTPException(status_code=422, detail="Uploaded file is empty.")
@@ -152,7 +157,7 @@ async def post_extraction_upload(
             detail=f"File exceeds {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB cap.",
         )
 
-    upload_dir = Path(app_settings.data_dir) / "uploads" / str(user.id)
+    upload_dir = Path(app_settings.data_dir) / "uploads" / str(user_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
     safe_name = Path(resume.filename or "resume.pdf").name
@@ -188,10 +193,10 @@ async def post_extraction_upload(
     # surfaced raw_resume_text NULL post-upload despite the service call
     # firing cleanly.)
     try:
-        await profile_service.set_raw_resume_text(session, user.id, extracted)
+        await profile_service.set_raw_resume_text(session, user_id, extracted)
         await session.commit()
     except Exception as exc:  # noqa: BLE001 — persistence is best-effort
-        log.warning("set_raw_resume_text failed user=%s: %s", user.id, exc)
+        log.warning("set_raw_resume_text failed user=%s: %s", user_id, exc)
         await session.rollback()
 
     # Structured parse: when an LLM provider is configured, run the full
@@ -203,30 +208,35 @@ async def post_extraction_upload(
     # regex identity backfill below so onboarding still makes progress.
     structured_ok = False
     experiences_added = 0
+    parsed_summary: dict | None = None
+    parse_error: str | None = None
     try:
         from services import extraction, settings_service
 
-        user_settings = await settings_service.get_or_create(session, user_id=user.id)
+        user_settings = await settings_service.get_or_create(session, user_id=user_id)
         if env_secrets.resolve_active_llm_provider() is not None:
             await extraction.extract_to_profile(
                 session,
-                user_id=user.id,
+                user_id=user_id,
                 settings=user_settings,
                 pdf_path=target,
             )
             await session.commit()
             structured_ok = True
-            experiences_added = len(await profile_service.list_experiences(session, user.id))
+            parsed_summary = await _parsed_profile_summary(session, user_id)
+            experiences_added = len(parsed_summary["experiences"])
     except extraction.ExtractionError as exc:
-        log.warning("structured resume parse failed user=%s: %s", user.id, exc)
+        log.warning("structured resume parse failed user=%s: %s", user_id, exc)
         await session.rollback()
+        parse_error = str(exc)
     except Exception as exc:  # noqa: BLE001 — never fail the upload on parse issues
-        log.warning("structured resume parse errored user=%s: %s", user.id, exc)
+        log.warning("structured resume parse errored user=%s: %s", user_id, exc)
         await session.rollback()
+        parse_error = str(exc)
 
     log.info(
         "extraction upload user=%s file=%s bytes=%d chars=%d structured=%s experiences=%d",
-        user.id,
+        user_id,
         safe_name,
         len(payload),
         len(extracted),
@@ -242,5 +252,32 @@ async def post_extraction_upload(
             "filename": safe_name,
             "structured": structured_ok,
             "experiences_added": experiences_added,
+            "parsed": parsed_summary,
+            "parse_error": parse_error,
         },
     )
+
+
+async def _parsed_profile_summary(session: AsyncSession, user_id: int) -> dict:
+    """What the parse produced — rendered on the confirmation screen so the
+    user can verify success without navigating away."""
+    profile = await profile_service.get_profile(session, user_id)
+    experiences = await profile_service.list_experiences(session, user_id)
+    educations = await profile_service.list_educations(session, user_id)
+    projects = await profile_service.list_projects(session, user_id)
+    skills = await profile_service.list_skills(session, user_id)
+
+    exp_views = []
+    for exp in experiences:
+        bullets = await profile_service.get_bullets_for_experience(session, exp.id)
+        exp_views.append({"company": exp.company, "title": exp.title, "bullets": len(bullets)})
+
+    return {
+        "full_name": profile.full_name if profile else None,
+        "email": profile.email if profile else None,
+        "phone": profile.phone if profile else None,
+        "experiences": exp_views,
+        "educations": [e.institution for e in educations],
+        "projects": [p.title for p in projects],
+        "skill_groups": len(skills),
+    }

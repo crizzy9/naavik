@@ -37,10 +37,13 @@ _EMBEDDING_DIM = 768
 
 
 class OpenAIProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "gpt-4o") -> None:
+    DEFAULT_MODEL = "gpt-4o"
+
+    def __init__(self, api_key: str, model: str | None = DEFAULT_MODEL) -> None:
         if not api_key:
             raise LLMProviderError("openai api_key is empty", kind="auth_required")
-        self._model = model
+        # None → provider default (cross-provider fallback in llm.get_provider).
+        self._model = model or self.DEFAULT_MODEL
         self._client = AsyncOpenAI(api_key=api_key)
 
     @property
@@ -70,6 +73,28 @@ class OpenAIProvider(LLMProvider):
             model=self._model,
         )
 
+    @staticmethod
+    def _to_strict_schema(node: object) -> None:
+        """Make a Pydantic JSON schema OpenAI-strict, in place.
+
+        `strict: true` json_schema mode requires every object to carry
+        `additionalProperties: false` and to list ALL properties in
+        `required` (optional fields express optionality via a null-union
+        type, which Pydantic already emits for `X | None`). Without this
+        the API rejects the request with `'additionalProperties' is
+        required to be supplied and to be false`.
+        """
+        if isinstance(node, dict):
+            if node.get("type") == "object" or "properties" in node:
+                props = node.get("properties", {})
+                node["additionalProperties"] = False
+                node["required"] = list(props.keys())
+            for value in node.values():
+                OpenAIProvider._to_strict_schema(value)
+        elif isinstance(node, list):
+            for value in node:
+                OpenAIProvider._to_strict_schema(value)
+
     async def structured(
         self,
         prompt: str,
@@ -79,9 +104,11 @@ class OpenAIProvider(LLMProvider):
         system: str | None = None,
         cache_system: bool = False,  # noqa: ARG002 — accepted for interface parity; OpenAI doesn't cache
     ) -> StructuredResult:
+        strict_schema = schema.model_json_schema()
+        self._to_strict_schema(strict_schema)
         json_schema = {
             "name": schema.__name__,
-            "schema": schema.model_json_schema(),
+            "schema": strict_schema,
             "strict": True,
         }
         messages: list[dict] = []

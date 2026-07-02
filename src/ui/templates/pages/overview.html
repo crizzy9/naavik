@@ -69,7 +69,7 @@
         <h2 class="text-base font-medium text-slate-50">Recent email signal</h2>
         <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono uppercase tracking-wide">
           <i data-lucide="mail" class="h-3 w-3" stroke-width="1.5"></i>
-          auto-detected · gmail
+          auto-detected
         </span>
       </header>
 
@@ -97,7 +97,7 @@
   <section>
     <header class="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
       <h2 class="text-base font-medium text-slate-50">Pipeline · live</h2>
-      <span class="text-xs text-slate-500 font-mono">{{ active_count }} active · last sync 2m ago</span>
+      <span class="text-xs text-slate-500 font-mono">{{ active_count }} active</span>
     </header>
     {% with counts=pipeline_counts %}
       {% include "components/pipeline_strip.html" %}

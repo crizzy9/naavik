@@ -149,14 +149,28 @@ def up_next_dict(j: SQLJob) -> dict[str, object]:
     }
 
 
-def stats_strip(today_apps: int) -> dict[str, int]:
+async def stats_strip(session: AsyncSession, *, user_id: int) -> dict[str, int]:
+    """Live counts for the Discover header strip — no fabricated numbers.
+
+    `applied` / `scanned` are today-scoped; `saved` / `skipped` are queue
+    totals (the queue states have no per-day timestamp).
+    """
+    from datetime import UTC, datetime, time
+
+    day_start = datetime.combine(datetime.now(UTC).date(), time.min, tzinfo=UTC)
     return {
-        "applied": today_apps,
-        "auto": 1,
-        "manual": 0,
-        "saved": 0,
-        "skipped": 0,
-        "scanned": 142,
+        "applied": await application_service.count_applied_since(
+            session, user_id=user_id, since=day_start
+        ),
+        "saved": await job_service.count_jobs_in_queue_state(
+            session, user_id=user_id, state=JobQueueState.SAVED
+        ),
+        "skipped": await job_service.count_jobs_in_queue_state(
+            session, user_id=user_id, state=JobQueueState.SKIPPED
+        ),
+        "scanned": await job_service.sum_listings_scanned_since(
+            session, user_id=user_id, since=day_start
+        ),
     }
 
 
@@ -295,7 +309,7 @@ async def build_discover_ctx(
         "stuck_drafts": stuck_views,
         "saved_count": len(saved),
         "auto_apply_drafts": auto_apply_views,
-        "stats": stats_strip(today_apps=2),
+        "stats": await stats_strip(session, user_id=user_id),
         "unswiped_count": len(queue),
         "filters": effective_filters,
         "filters_active": _active_chip_count(effective_filters),

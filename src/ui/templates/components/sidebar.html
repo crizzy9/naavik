@@ -12,8 +12,12 @@
 #}
 {# Accepts either `active` (catalog name) or `active_sidebar` (route handler context). #}
 {% set active = active | default(active_sidebar) | default(none) %}
-{% set user_name = user_name | default("Shyam Padia") %}
-{% set user_initials = user_initials | default("SP") %}
+{# Identity comes from the auth dependency (request.state.user_display_name)
+   - never a hardcoded sample name. The dev fake-session path has no user,
+   so fall back to a neutral placeholder. #}
+{% set _state_name = request.state.user_display_name | default(none, true) if request else none %}
+{% set user_name = user_name | default(_state_name, true) | default("Account", true) %}
+{% set user_initials = user_initials | default((user_name[:2] | upper), true) %}
 {% set deployment_mode = deployment_mode | default("self-hosted") %}
 {% set unswiped_count = unswiped_count | default(0) %}
 {% set followup_count = followup_count | default(0) %}

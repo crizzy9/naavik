@@ -56,18 +56,24 @@ class BatchResponse:
 
 # USD per million tokens; updated when Anthropic's pricing changes.
 _PRICING = {
-    "claude-3.5-sonnet-20250219": {"input": 3.0, "output": 15.0},
-    "claude-3.5-haiku-20250219": {"input": 0.80, "output": 4.0},
+    "claude-opus-4-8": {"input": 5.0, "output": 25.0},
+    "claude-sonnet-4-6": {"input": 3.0, "output": 15.0},
+    "claude-haiku-4-5": {"input": 1.0, "output": 5.0},
     # Default fallback if a future model isn't on this sheet.
-    "_default": {"input": 3.0, "output": 15.0},
+    "_default": {"input": 5.0, "output": 25.0},
 }
 
 
 class AnthropicProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "claude-3.5-sonnet-20250219") -> None:
+    DEFAULT_MODEL = "claude-opus-4-8"
+
+    def __init__(self, api_key: str, model: str | None = DEFAULT_MODEL) -> None:
         if not api_key:
             raise LLMProviderError("anthropic api_key is empty", kind="auth_required")
-        self._model = model
+        # `model=None` means "use the provider default" — the cross-provider
+        # fallback in `llm.get_provider` passes None when the stored model
+        # belongs to a different provider.
+        self._model = model or self.DEFAULT_MODEL
         self._client = AsyncAnthropic(api_key=api_key)
 
     @property

@@ -29,7 +29,7 @@
       {% include "components/avatar.html" %}
     {% endwith %}
     <div class="flex-1 min-w-0">
-      <div class="text-[10px] uppercase tracking-wide text-white/80 font-mono">COMPANY</div>
+      <div class="text-[10px] uppercase tracking-wide text-white/80 font-mono truncate">{{ j.company }}</div>
       <div class="text-base font-semibold text-white truncate">{{ j.role }}{% if j.team %} · {{ j.team }}{% endif %}</div>
     </div>
     <div class="shrink-0 flex flex-col items-end gap-1">

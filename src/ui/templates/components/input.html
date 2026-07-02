@@ -17,7 +17,9 @@
     options      : list[(value, label)] — only used when type="select" (Issue 4)
 #}
 {% set type_ = type | default("text") %}
-{% set value = value | default("") %}
+{# boolean-mode default also catches None - plain default() only catches
+   undefined, letting Python None render as the literal string "None". #}
+{% set value = value | default("", true) %}
 {% set required = required | default(false) %}
 {% set mono = mono | default(false) %}
 {% set disabled = disabled | default(false) %}
@@ -70,6 +72,11 @@
       {% if required %}required{% endif %}
       {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
       {% if disabled %}disabled{% endif %}
+      {# number inputs default to step=1, so fractional values (0.85) fail
+         the browser's step-mismatch constraint and SILENTLY block form
+         submission - Save appears dead. step="any" accepts decimals;
+         callers can still pass an explicit step via extra_attrs. #}
+      {% if type_ == "number" and "step=" not in (extra_attrs | default("") | string) %}step="any"{% endif %}
       aria-label="{{ _aria }}"
       class="{{ _base }} {{ _border_focus }} {{ _font }}"
       {{ extra_attrs | default('') | safe }}

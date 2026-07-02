@@ -473,7 +473,7 @@ class Settings(_Base):
     user_id: int
 
     llm_provider: LLMProvider = LLMProvider.ANTHROPIC
-    llm_model: str = "claude-3.5-sonnet-20250219"
+    llm_model: str = "claude-sonnet-4-6"
     llm_fallback_provider: LLMProvider | None = None
 
     auto_apply_enabled: bool = False

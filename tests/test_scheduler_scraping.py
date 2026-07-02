@@ -52,15 +52,21 @@ def _make_settings(
     scraper_rate_limits: dict | None = None,
 ):
     """Lightweight Settings stand-in. SQLModel construction inside tests
-    avoids the FastAPI app + db boot path."""
+    avoids the FastAPI app + db boot path.
+
+    LinkedIn / Indeed keywords default to a non-empty list: the
+    unconfigured-source guard in `_scrape_one_user` skips sources with no
+    keywords, and the lifecycle tests here exercise post-configuration
+    behavior. Pass `linkedin_keywords=None` to exercise the guard itself.
+    """
     return SimpleNamespace(
         user_id=user_id,
         sources_enabled=sources_enabled or {},
         consecutive_scrape_failures=consecutive_scrape_failures or {},
         workday_companies=workday_companies or [],
-        linkedin_keywords=linkedin_keywords,
+        linkedin_keywords=["swe"] if linkedin_keywords is None else linkedin_keywords,
         linkedin_location=linkedin_location,
-        indeed_keywords=indeed_keywords,
+        indeed_keywords=["swe"] if indeed_keywords is None else indeed_keywords,
         indeed_location=indeed_location,
         notify_on_errors=notify_on_errors,
         notify_threshold=0.8,
@@ -610,7 +616,7 @@ async def test_scrape_source_iterates_all_settings_rows(monkeypatch):
 
     calls = []
 
-    async def fake_one_user(session, *, settings, source):
+    async def fake_one_user(session, *, settings, source, max_listings=None):
         calls.append(settings.user_id)
 
     monkeypatch.setattr(scraping, "_scrape_one_user", fake_one_user)
@@ -635,3 +641,103 @@ async def test_scrape_source_iterates_all_settings_rows(monkeypatch):
 
     await scraping._scrape_source(JobSource.LINKEDIN)
     assert calls == [1, 2]
+
+
+# ── _scrape_one_user — unconfigured-source guard + manual-run bounds ───
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_source_skipped(monkeypatch):
+    """No keywords → no scrape (no meaningless SUCCESS·0-listings run)."""
+    called = {"n": 0}
+
+    async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
+        called["n"] += 1
+        return SimpleNamespace(status=JobScrapeStatus.SUCCESS)
+
+    monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+    s = _make_settings(linkedin_keywords=[])
+    session = _FakeSession()
+    await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN)
+    assert called["n"] == 0
+
+
+@pytest.mark.asyncio
+async def test_manual_run_caps_listings_and_marks_triggered_by(monkeypatch):
+    """max_listings override → bounded query + triggered_by='manual'."""
+    captured = {}
+
+    async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
+        captured["max_listings"] = query.max_listings
+        captured["triggered_by"] = triggered_by
+        return SimpleNamespace(status=JobScrapeStatus.SUCCESS)
+
+    monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+    s = _make_settings()
+    session = _FakeSession()
+    await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN, max_listings=10)
+    assert captured == {"max_listings": 10, "triggered_by": "manual"}
+
+
+@pytest.mark.asyncio
+async def test_manual_run_floors_rate_limit(monkeypatch):
+    """Manual runs raise sub-floor rpm to _MANUAL_RUN_MIN_RPM; cron keeps it."""
+    seen_rpm = []
+
+    class _CapturingClient:
+        def __init__(self, **kw):
+            seen_rpm.append(kw.get("rate_limit_per_minute"))
+            self.rate_limit_hits = 0
+            self.backoff_total_s = 0.0
+            self.user_agent = "ua"
+            self.proxy_request_count = 0
+            self.proxy_bytes_estimated = 0
+            self.proxy_config = None
+
+    async def fake_run_scraper(session, *, scraper, user_id, query, triggered_by):
+        return SimpleNamespace(status=JobScrapeStatus.SUCCESS)
+
+    monkeypatch.setattr(scraping, "Crawl4AIClient", _CapturingClient)
+    monkeypatch.setattr(scraping, "run_scraper", fake_run_scraper)
+    monkeypatch.setattr(scraping, "llm_get_provider", lambda _s: None)
+    s = _make_settings()
+    session = _FakeSession()
+    await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN)
+    await scraping._scrape_one_user(session, settings=s, source=JobSource.LINKEDIN, max_listings=10)
+    assert seen_rpm[0] == pytest.approx(0.4)  # cron: class-attr budget
+    assert seen_rpm[1] == pytest.approx(scraping._MANUAL_RUN_MIN_RPM)
+
+
+@pytest.mark.asyncio
+async def test_scrape_source_only_user_id_scopes_run(monkeypatch):
+    calls = []
+
+    async def fake_one_user(session, *, settings, source, max_listings=None):
+        calls.append(settings.user_id)
+
+    monkeypatch.setattr(scraping, "_scrape_one_user", fake_one_user)
+
+    a = _make_settings(user_id=1)
+    b = _make_settings(user_id=2)
+
+    class _FakeExecResult:
+        def all(self):
+            return [a, b]
+
+    class _ScopedFakeSession(_FakeSession):
+        async def exec(self, _stmt):
+            return _FakeExecResult()
+
+    class _Ctx:
+        async def __aenter__(self):
+            return _ScopedFakeSession()
+
+        async def __aexit__(self, *a):
+            return False
+
+    monkeypatch.setattr(scraping, "async_session", lambda: _Ctx())
+
+    await scraping._scrape_source(JobSource.LINKEDIN, only_user_id=2)
+    assert calls == [2]

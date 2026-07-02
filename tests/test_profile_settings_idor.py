@@ -154,7 +154,7 @@ def test_put_settings_llm_threads_authed_user_id(client_with_user_42):
     with patch("services.settings_service.update_llm", new=_spy):
         r = client.put(
             "/api/v1/settings/llm",
-            data={"llm_provider": "anthropic", "llm_model": "claude-3.5-sonnet-20250219"},
+            data={"llm_provider": "anthropic", "llm_model": "claude-sonnet-4-6"},
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 

@@ -252,6 +252,22 @@ def _patch_services_to_sample_data(request, monkeypatch):
     monkeypatch.setattr(job_service, "list_jobs", _list_jobs)
     monkeypatch.setattr(job_service, "list_jobs_by_queue_state", _list_jobs_by_queue_state)
     monkeypatch.setattr(job_service, "auto_apply_queue", _auto_apply_queue)
+
+    async def _count_jobs_in_queue_state(_session, *, user_id, state):
+        return len(await _list_jobs_by_queue_state(_session, user_id=user_id, state=state))
+
+    def _as_aware(dt):
+        from datetime import UTC as _UTC
+
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=_UTC)
+
+    async def _sum_listings_scanned_since(_session, *, user_id, since):
+        return sum(
+            int(getattr(r, "listings_returned", 0) or 0)
+            for r in sd.JOB_SCRAPE_RUNS
+            if r.started_at is not None and _as_aware(r.started_at) >= _as_aware(since)
+        )
+
     monkeypatch.setattr(job_service, "set_queue_state", _set_queue_state)
     monkeypatch.setattr(job_service, "create_scraped_job_stub", _create_scraped_job_stub)
     monkeypatch.setattr(job_service, "list_recent_scrape_runs", _list_recent_scrape_runs)
@@ -259,6 +275,8 @@ def _patch_services_to_sample_data(request, monkeypatch):
     monkeypatch.setattr(
         job_service, "list_recent_scrape_runs_by_source", _list_recent_scrape_runs_by_source
     )
+    monkeypatch.setattr(job_service, "count_jobs_in_queue_state", _count_jobs_in_queue_state)
+    monkeypatch.setattr(job_service, "sum_listings_scanned_since", _sum_listings_scanned_since)
 
     # ── application_service ─────────────────────────────────────────────
     async def _get_application(_session, application_id):
@@ -423,6 +441,18 @@ def _patch_services_to_sample_data(request, monkeypatch):
         # asserting failure aggregates override this per-test.
         return []
 
+    async def _count_applied_since(_session, *, user_id, since):
+        return len(
+            [
+                a
+                for a in sd.APPLICATIONS
+                if getattr(a, "user_id", 1) == user_id
+                and getattr(a, "applied_at", None) is not None
+                and _as_aware(a.applied_at) >= _as_aware(since)
+            ]
+        )
+
+    monkeypatch.setattr(application_service, "count_applied_since", _count_applied_since)
     monkeypatch.setattr(application_service, "get_application", _get_application)
     monkeypatch.setattr(application_service, "get_application_for_job", _get_application_for_job)
     monkeypatch.setattr(application_service, "stuck_drafts", _stuck_drafts)

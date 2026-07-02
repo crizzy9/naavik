@@ -389,6 +389,37 @@ async def get_scrape_run(session: AsyncSession, scrape_run_id: int) -> JobScrape
     return (await session.exec(stmt)).one_or_none()
 
 
+async def count_jobs_in_queue_state(
+    session: AsyncSession, *, user_id: int, state: JobQueueState
+) -> int:
+    """Live count of the user's jobs in one queue state (Discover stats strip)."""
+    from sqlalchemy import func
+
+    stmt = (
+        select(func.count())
+        .select_from(Job)
+        .where(Job.user_id == user_id, Job.queue_state == state, Job.deleted_at.is_(None))
+    )
+    return int((await session.exec(stmt)).one() or 0)
+
+
+async def sum_listings_scanned_since(
+    session: AsyncSession, *, user_id: int, since: datetime
+) -> int:
+    """Total listings returned by the user's scrape runs since `since`.
+
+    Feeds the Discover "N scanned today" figure — real run telemetry, not a
+    hardcoded placeholder.
+    """
+    from sqlalchemy import func
+
+    stmt = select(func.coalesce(func.sum(JobScrapeRun.listings_returned), 0)).where(
+        JobScrapeRun.user_id == user_id,
+        JobScrapeRun.started_at >= since,
+    )
+    return int((await session.exec(stmt)).one() or 0)
+
+
 async def list_recent_scrape_runs(
     session: AsyncSession,
     *,

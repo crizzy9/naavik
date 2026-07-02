@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -279,14 +279,29 @@ async def put_auto_apply(
 
     from ui.routes.settings import _effective_user_id
 
+    # Coerce numeric form fields; empty string = "leave unchanged" (skip).
+    # Raw strings used to flow into the service where `float("")` 500'd the
+    # whole save with zero UI feedback.
+    def _opt_num(field: str, cast):
+        raw = payload.get(field)
+        if raw is None:
+            return None
+        text = str(raw).strip()
+        if not text:
+            return None
+        try:
+            return cast(float(text)) if cast is int else cast(text)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail=f"{field} must be a number") from None
+
     s = await settings_service.update_auto_apply(
         session,
         user_id=_effective_user_id(_user),
         auto_apply_enabled=_tri_state("auto_apply_enabled"),
-        auto_apply_score_threshold=payload.get("auto_apply_score_threshold"),
-        auto_apply_daily_cap=payload.get("auto_apply_daily_cap"),
+        auto_apply_score_threshold=_opt_num("auto_apply_score_threshold", float),
+        auto_apply_daily_cap=_opt_num("auto_apply_daily_cap", int),
         eager_review_generation=_tri_state("eager_review_generation"),
-        daily_llm_cost_cap_usd=payload.get("daily_llm_cost_cap_usd"),
+        daily_llm_cost_cap_usd=_opt_num("daily_llm_cost_cap_usd", float),
         auto_apply_immediate_dispatch=immediate,
         auto_apply_per_board_daily_caps=per_board,
         auto_apply_dry_run=dry_run,

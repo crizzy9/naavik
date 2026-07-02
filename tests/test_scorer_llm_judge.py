@@ -30,7 +30,7 @@ def _settings_stub(cap: float | None = None):
     return SimpleNamespace(
         daily_llm_cost_cap_usd=cap,
         llm_provider="anthropic",
-        llm_model="claude-3.5-sonnet-20250219",
+        llm_model="claude-sonnet-4-6",
     )
 
 
@@ -151,7 +151,7 @@ async def test_llm_judge_provider_error_returns_llm_failed():
 
     class _FakeProvider:
         provider_id = "anthropic"
-        model_name = "claude-3.5-sonnet-20250219"
+        model_name = "claude-sonnet-4-6"
 
     async def _raising(**kwargs):
         raise LLMProviderError("boom", kind="provider_error")
@@ -181,7 +181,7 @@ async def test_llm_judge_happy_path_returns_score():
 
     class _FakeProvider:
         provider_id = "anthropic"
-        model_name = "claude-3.5-sonnet-20250219"
+        model_name = "claude-sonnet-4-6"
 
     js = JobScore(
         score=0.86,
@@ -199,7 +199,7 @@ async def test_llm_judge_happy_path_returns_score():
             value=js.model_dump(),
             input_tokens=100,
             output_tokens=50,
-            model="claude-3.5-sonnet-20250219",
+            model="claude-sonnet-4-6",
         )
 
     with (
@@ -232,7 +232,7 @@ async def test_llm_judge_validation_failure_returns_llm_failed():
 
     class _FakeProvider:
         provider_id = "anthropic"
-        model_name = "claude-3.5-sonnet-20250219"
+        model_name = "claude-sonnet-4-6"
 
     async def _stub_tracked_call(**kwargs):
         return StructuredResult(
@@ -240,7 +240,7 @@ async def test_llm_judge_validation_failure_returns_llm_failed():
             value={"score": 99.0, "explanation": "nope"},  # score > 1 fails validation
             input_tokens=10,
             output_tokens=5,
-            model="claude-3.5-sonnet-20250219",
+            model="claude-sonnet-4-6",
         )
 
     with (

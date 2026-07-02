@@ -81,7 +81,7 @@ _PROVIDERS_DISPLAY = [
     {
         "id": "anthropic",
         "name": "Anthropic Claude",
-        "model_default": "claude-3.5-sonnet-20250219",
+        "model_default": "claude-sonnet-4-6",
         "description": "Recommended · best resume bullet quality.",
         "kind": "CLOUD",
         "env_var": "ANTHROPIC_API_KEY",
@@ -110,9 +110,9 @@ _PROVIDERS_DISPLAY = [
 # are SDK-supported model IDs at the time of release, not user-managed data.
 _LLM_MODEL_OPTIONS: dict[str, list[str]] = {
     "anthropic": [
-        "claude-3.5-sonnet-20250219",
-        "claude-3.5-haiku-20250219",
-        "claude-3-opus-20240229",
+        "claude-opus-4-8",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
     ],
     "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
     "ollama": ["llama3.1:70b", "llama3.1:8b", "qwen2.5:32b"],
@@ -259,9 +259,14 @@ async def _ctx_for_tab(
         "provider_id": provider_id,
         "saved_provider_id": saved_provider_id,
         "model_options": _llm_model_options_for(provider_id),
+        # Select the SAVED model whenever it belongs to the rendered
+        # provider's catalog. Comparing provider ids instead used to drop
+        # the user's saved choice on every reload when the preference
+        # provider (no env key) differed from the env-active one — Save
+        # said "Saved" but the dropdown silently reverted.
         "selected_model": (
             settings.llm_model
-            if settings and provider_id == saved_provider_id
+            if settings and settings.llm_model in _llm_model_options_for(provider_id)
             else _llm_default_model_for(provider_id)
         ),
         "env_indicators": env_indicators,
@@ -764,6 +769,87 @@ async def get_settings_sources(
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
 
+_MANUAL_RUN_MAX_LISTINGS = 10
+
+
+@router.post(
+    "/_fragments/settings/sources/{source}/run",
+    response_class=HTMLResponse,
+    name="settings_source_run_fragment",
+)
+async def post_settings_source_run(
+    request: Request,
+    source: str,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Queue a one-off bounded scrape for `source`, scoped to the caller.
+
+    Manual verification path for local dev + self-hosters: schedules a
+    transient DateTrigger(now) run of the source's cron body capped at
+    `_MANUAL_RUN_MAX_LISTINGS` listings for the requesting user only.
+    Returns an inline status chip (swapped over the button); the run's
+    outcome lands in the "Recent scraper runs" table on refresh.
+    """
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from apscheduler.triggers.date import DateTrigger
+
+    from scheduler import get_scheduler
+    from scraper.sites import scrapers as scraper_registry
+
+    def _chip(tone: str, icon: str, text: str, status_code: int = 200) -> HTMLResponse:
+        tones = {
+            "emerald": "bg-emerald-500/15 text-emerald-200 ring-emerald-500/30",
+            "rose": "bg-rose-500/15 text-rose-200 ring-rose-500/30",
+        }
+        return HTMLResponse(
+            f'<span data-source-run-result="{tone}" class="inline-flex items-center '
+            f'gap-1 px-2 py-1 rounded text-[11px] font-mono ring-1 {tones[tone]}">'
+            f'<i data-lucide="{icon}" class="h-3 w-3" stroke-width="1.5"></i>'
+            f"{text}</span>",
+            status_code=status_code,
+        )
+
+    if source not in scraper_registry:
+        return _chip("rose", "circle-alert", "unknown source", 404)
+
+    user_id = _effective_user_id(user)
+    user_settings = await settings_service.get_or_create(session, user_id=user_id)
+    if not env_secrets.scraper_source_configured(JobSource(source), user_settings):
+        hint = (
+            "set keywords via Configure"
+            if source in ("linkedin", "indeed")
+            else "set its company list first (see Configure)"
+        )
+        return _chip("rose", "circle-alert", f"not configured — {hint}", 422)
+
+    scheduler = get_scheduler()
+    if scheduler is None:
+        return _chip("rose", "circle-alert", "scheduler not running", 503)
+    job = scheduler.get_job(f"scraping.{source}")
+    if job is None:
+        return _chip("rose", "circle-alert", "scrape job not registered", 503)
+
+    manual_id = f"scraping.{source}-manual-{uuid4().hex[:8]}"
+    scheduler.add_job(
+        job.func,
+        DateTrigger(run_date=datetime.now(UTC)),
+        id=manual_id,
+        name=manual_id,
+        kwargs={
+            "max_listings": _MANUAL_RUN_MAX_LISTINGS,
+            "only_user_id": _effective_user_id(user),
+        },
+        max_instances=1,
+        coalesce=True,
+        replace_existing=False,
+    )
+    return _chip("emerald", "check", "queued — see Recent scraper runs")
+
+
 @router.get("/settings/submissions", response_class=HTMLResponse, name="settings_submissions")
 async def get_settings_submissions(
     request: Request,
@@ -895,7 +981,7 @@ async def post_llm_test(request: Request, fail: Annotated[str | None, Query()] =
     return templates.TemplateResponse(
         request,
         "components/connection_status_card.html",
-        {"ok": True, "latency_ms": 412, "model": "claude-3.5-sonnet-20250219"},
+        {"ok": True, "latency_ms": 412, "model": "claude-sonnet-4-6"},
     )
 
 
@@ -1174,7 +1260,7 @@ async def get_settings_llm_model_options(
     settings = await settings_service.get_or_create(session, user_id=_effective_user_id(user))
     selected = (
         settings.llm_model
-        if (settings and provider == settings.llm_provider.value)
+        if (settings and settings.llm_model in _llm_model_options_for(provider))
         else _llm_default_model_for(provider)
     )
     return templates.TemplateResponse(

@@ -1,6 +1,11 @@
 """extract_resume — Wave 6 wires this end-to-end (Onboarding step 2).
 
 Per BACKEND.md § M.3. Wave 4 ships the schema skeleton.
+
+All list fields carry fully-typed item models (no bare `dict`) — OpenAI's
+strict json_schema mode rejects free-form objects, and typed shapes give
+the extractor model an explicit contract that maps 1:1 onto the Skill /
+Education / Project rows persisted by `services.extraction._persist_profile`.
 """
 
 from __future__ import annotations
@@ -9,14 +14,40 @@ from pydantic import BaseModel
 
 from llm.base import LLMProvider
 
+# Keep in sync with `ui/templates_setup.TAG_VOCAB` + CLAUDE.md § Resume/CV
+# Data Model (the canonical 9-tag vocabulary).
+TAG_VOCAB = (
+    "ai-ml",
+    "backend",
+    "frontend",
+    "devops",
+    "data-eng",
+    "genai",
+    "leadership",
+    "platform",
+    "product",
+)
+
 PROMPT = """Extract a candidate profile from this resume PDF text.
 
 Resume text:
 {resume_text}
 
-Return ExtractedResume with full_name, headline, summary, experiences[],
-skills[], educations[], projects[]. Each experience has bullets[] (long-form
-text, one per achievement), tags[] (from the 9-tag vocabulary).
+Return ExtractedResume with full_name, headline, location, email, phone,
+summary_full (the resume's summary/objective paragraph verbatim, if any),
+summary_short (<= 25 words), experiences[], skills[], educations[], and
+projects[].
+
+Rules:
+- Each experience carries bullets[] — the FULL text of each achievement
+  bullet, one entry per bullet, preserving numbers and verbs.
+- bullet_tags[] is parallel to bullets[]: for each bullet, choose 1-3 tags
+  from exactly this vocabulary: {tag_vocab}.
+- Dates are ISO strings: "YYYY-MM-DD", "YYYY-MM", or "YYYY". Use null for
+  "Present"/current roles.
+- skills[] groups the resume's skill lines as {{category, items[]}}
+  (e.g. category "Languages", items ["Python", "Go"]).
+- Do not invent content that is not in the resume text.
 """
 
 
@@ -31,6 +62,29 @@ class ExtractedExperience(BaseModel):
     bullet_tags: list[list[str]] = []  # parallel to bullets
 
 
+class ExtractedSkillGroup(BaseModel):
+    category: str
+    items: list[str] = []
+
+
+class ExtractedEducation(BaseModel):
+    institution: str
+    degree: str
+    location: str | None = None
+    start_date: str | None = None  # ISO date string
+    end_date: str | None = None
+    gpa: str | None = None
+    courses: list[str] = []
+
+
+class ExtractedProject(BaseModel):
+    title: str
+    text: str = ""  # one-line description / achievement text
+    date: str | None = None  # ISO date string
+    tags: list[str] = []
+    link: str | None = None
+
+
 class ExtractedResume(BaseModel):
     full_name: str
     headline: str | None = None
@@ -40,9 +94,9 @@ class ExtractedResume(BaseModel):
     summary_full: str | None = None
     summary_short: str | None = None
     experiences: list[ExtractedExperience] = []
-    skills: list[dict] = []  # [{category, items[]}]
-    educations: list[dict] = []
-    projects: list[dict] = []
+    skills: list[ExtractedSkillGroup] = []
+    educations: list[ExtractedEducation] = []
+    projects: list[ExtractedProject] = []
 
 
 async def extract_resume(
@@ -50,6 +104,6 @@ async def extract_resume(
     *,
     resume_text: str,
 ) -> ExtractedResume:
-    rendered = PROMPT.format(resume_text=resume_text[:30_000])
+    rendered = PROMPT.format(resume_text=resume_text[:30_000], tag_vocab=", ".join(TAG_VOCAB))
     result = await provider.structured(rendered, ExtractedResume, max_tokens=4096)
     return ExtractedResume.model_validate(result.value)

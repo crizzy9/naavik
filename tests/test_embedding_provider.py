@@ -27,7 +27,7 @@ async def test_anthropic_embed_raises():
     """Anthropic doesn't offer embeddings; calling embed must raise."""
     from llm.anthropic import AnthropicProvider
 
-    provider = AnthropicProvider(api_key="sk-test", model="claude-3.5-sonnet-20250219")
+    provider = AnthropicProvider(api_key="sk-test", model="claude-sonnet-4-6")
     with pytest.raises(LLMProviderError) as exc:
         await provider.embed("text")
     assert exc.value.kind == "embed_unsupported"

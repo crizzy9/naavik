@@ -142,11 +142,13 @@ async def _structure_with_llm(
     provider: LLMProvider,
     resume_text: str,
 ) -> dict[str, Any]:
-    schema = __import__("llm.prompts.extract_resume", fromlist=["ExtractedResume"]).ExtractedResume
-    prompt = (
-        "Extract structured fields from this resume.\n\n"
-        f"Resume text:\n{resume_text[:8000]}\n\n"
-        "Return ExtractedResume with profile + experiences + bullets."
+    # NOTE: the package __init__ re-exports the `extract_resume` FUNCTION,
+    # shadowing the module attribute — import the names directly.
+    from llm.prompts.extract_resume import PROMPT, TAG_VOCAB, ExtractedResume
+
+    prompt = PROMPT.format(
+        resume_text=resume_text[:30_000],
+        tag_vocab=", ".join(TAG_VOCAB),
     )
     result = await llm_tracker.tracked_call(
         session=session,
@@ -155,7 +157,8 @@ async def _structure_with_llm(
         method="structured",
         prompt_name="extract_resume",
         prompt=prompt,
-        schema=schema,
+        schema=ExtractedResume,
+        max_tokens=8192,
     )
     return dict(result.value)
 
@@ -166,8 +169,16 @@ async def _persist_profile(
     user_id: int,
     structured: dict[str, Any],
 ) -> Profile:
-    """Upsert Profile + Experience + Bullet rows from the structured payload."""
-    from sqlmodel import select
+    """Upsert Profile identity + REPLACE the resume-derived sections.
+
+    The uploaded resume is the source of truth for experiences / bullets /
+    educations / skills / projects — re-uploading replaces those wholesale
+    (owner directive: "Update Resume … should replace the current content").
+    Profile identity fields merge non-destructively so hand-edits survive.
+    """
+    from sqlmodel import delete, select
+
+    from models import Education, Project, Skill
 
     existing = (
         await session.exec(
@@ -175,15 +186,17 @@ async def _persist_profile(
         )
     ).one_or_none()
 
-    profile_payload = structured.get("profile") or structured.get("profile_data") or {}
+    # ExtractedResume carries identity fields at the top level; older
+    # callers/tests may still nest them under "profile".
+    profile_payload = structured.get("profile") or structured.get("profile_data") or structured
 
     now = datetime.now(UTC)
     if existing is None:
         profile = Profile(
             user_id=user_id,
-            full_name=profile_payload.get("full_name", "Unknown"),
-            headline=profile_payload.get("headline", ""),
-            email=profile_payload.get("email", ""),
+            full_name=profile_payload.get("full_name") or "Unknown",
+            headline=profile_payload.get("headline") or "",
+            email=profile_payload.get("email") or "",
             phone=profile_payload.get("phone"),
             location=profile_payload.get("location"),
             portfolio_url=profile_payload.get("portfolio_url"),
@@ -197,57 +210,174 @@ async def _persist_profile(
         session.add(profile)
         await session.flush()
     else:
-        # Merge — only set fields that aren't already populated.
-        for key, value in profile_payload.items():
+        # Merge — only set known identity fields that aren't already populated.
+        for key in (
+            "full_name",
+            "headline",
+            "email",
+            "phone",
+            "location",
+            "portfolio_url",
+            "github_handle",
+            "linkedin_handle",
+            "summary_full",
+            "summary_short",
+        ):
+            value = profile_payload.get(key)
             if value is None:
                 continue
-            if hasattr(existing, key) and not getattr(existing, key, None):
+            if not getattr(existing, key, None):
                 setattr(existing, key, value)
         existing.updated_at = now
         session.add(existing)
         await session.flush()
         profile = existing
 
-    # Persist experiences + bullets if present.
-    for exp_payload in structured.get("experiences", []):
+    # Replace resume-derived sections (mirrors account_service's child→parent
+    # deletion order so the SQLite test backend works without FK cascades).
+    old_exp_ids = [
+        exp_id
+        for exp_id in (
+            await session.exec(select(Experience.id).where(Experience.profile_id == profile.id))
+        ).all()
+        if exp_id is not None
+    ]
+    if old_exp_ids:
+        await session.exec(delete(Bullet).where(Bullet.experience_id.in_(old_exp_ids)))
+        await session.exec(delete(Experience).where(Experience.id.in_(old_exp_ids)))
+    await session.exec(delete(Education).where(Education.profile_id == profile.id))
+    await session.exec(delete(Skill).where(Skill.profile_id == profile.id))
+    await session.exec(delete(Project).where(Project.profile_id == profile.id))
+    await session.flush()
+
+    for order, exp_payload in enumerate(structured.get("experiences") or []):
+        start = _parse_date(exp_payload.get("start_date")) or now
+        end = _parse_date(exp_payload.get("end_date"))
+        if end is not None and end <= start:
+            end = None  # ck_experience_dates: start_date < end_date
         exp = Experience(
             profile_id=profile.id,
-            company=exp_payload.get("company", ""),
-            title=exp_payload.get("title") or exp_payload.get("role", ""),
+            company=exp_payload.get("company") or "",
+            title=exp_payload.get("title") or exp_payload.get("role") or "",
+            team=exp_payload.get("team"),
             location=exp_payload.get("location"),
-            start_date=_parse_date(exp_payload.get("start_date")) or now,
-            end_date=_parse_date(exp_payload.get("end_date")),
-            order_index=exp_payload.get("order_index", 0),
+            start_date=start,
+            end_date=end,
+            order_index=exp_payload.get("order_index", order),
             created_at=now,
             updated_at=now,
         )
         session.add(exp)
         await session.flush()
-        for idx, b_payload in enumerate(exp_payload.get("bullets", [])):
+        from llm.prompts.extract_resume import TAG_VOCAB
+
+        bullet_tags = exp_payload.get("bullet_tags") or []
+        for idx, b_payload in enumerate(exp_payload.get("bullets") or []):
+            if isinstance(b_payload, str):
+                text = b_payload
+                tags = bullet_tags[idx] if idx < len(bullet_tags) else []
+            else:
+                text = b_payload.get("text", "")
+                tags = b_payload.get("tags", [])
+            # Guardrail (ERD_v2 rec #2): only vocabulary tags reach the DB —
+            # off-vocab strings from the extractor would silently poison
+            # tag-based scoring and bullet selection.
+            tags = [t for t in (tags or []) if t in TAG_VOCAB]
             bullet = Bullet(
                 experience_id=exp.id,
                 order_index=idx,
-                text=b_payload if isinstance(b_payload, str) else b_payload.get("text", ""),
-                tags=(b_payload.get("tags", []) if isinstance(b_payload, dict) else []),
+                text=text,
+                tags=list(tags or []),
                 edited_at=now,
                 created_at=now,
                 updated_at=now,
             )
             session.add(bullet)
-            await session.flush()
+        await session.flush()
+
+    for order, edu_payload in enumerate(structured.get("educations") or []):
+        institution = edu_payload.get("institution") or edu_payload.get("school") or ""
+        if not institution:
+            continue
+        session.add(
+            Education(
+                profile_id=profile.id,
+                institution=institution,
+                school=edu_payload.get("school"),
+                location=edu_payload.get("location"),
+                degree=edu_payload.get("degree") or "",
+                start_date=_parse_date(edu_payload.get("start_date")) or now,
+                end_date=_parse_date(edu_payload.get("end_date")),
+                gpa=edu_payload.get("gpa"),
+                courses=list(edu_payload.get("courses") or []),
+                order_index=order,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    for order, skill_payload in enumerate(structured.get("skills") or []):
+        category = skill_payload.get("category") or ""
+        if not category:
+            continue
+        session.add(
+            Skill(
+                profile_id=profile.id,
+                category=category,
+                items=list(skill_payload.get("items") or []),
+                order_index=order,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    for order, proj_payload in enumerate(structured.get("projects") or []):
+        title = proj_payload.get("title") or proj_payload.get("name") or ""
+        if not title:
+            continue
+        session.add(
+            Project(
+                profile_id=profile.id,
+                title=title,
+                date=_parse_date(proj_payload.get("date")),
+                text=proj_payload.get("text") or proj_payload.get("description") or "",
+                tags=list(proj_payload.get("tags") or []),
+                link=proj_payload.get("link") or proj_payload.get("url"),
+                order_index=order,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    await session.flush()
     return profile
 
 
 def _parse_date(raw: Any) -> datetime | None:
+    """Parse ISO-ish date strings the extractor emits: full ISO, YYYY-MM, YYYY."""
     if raw is None:
         return None
     if isinstance(raw, datetime):
         return raw
     if isinstance(raw, str):
-        try:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
+        candidate = raw.strip()
+        if not candidate:
             return None
+        try:
+            parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+            # asyncpg rejects naive datetimes on TIMESTAMPTZ columns.
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+        except ValueError:
+            pass
+        import re as _re
+
+        m = _re.fullmatch(r"(\d{4})-(\d{2})", candidate)
+        if m:
+            return datetime(int(m.group(1)), int(m.group(2)), 1, tzinfo=UTC)
+        m = _re.fullmatch(r"(\d{4})", candidate)
+        if m:
+            return datetime(int(m.group(1)), 1, 1, tzinfo=UTC)
+        return None
     return None
 
 

@@ -642,6 +642,27 @@ async def require_authed_session(
                 "Location": "/auth/change-password",
             },
         )
+
+    # Sidebar identity: prefer the profile's full name, fall back to the
+    # email local-part. Read by base.html via `request.state` so every page
+    # shows the real signed-in user (the sidebar used to hardcode the
+    # sample-data owner's name for every account).
+    display_name = user.email.split("@", 1)[0]
+    try:
+        from models import Profile as _Profile
+
+        profile_name = (
+            await session.exec(
+                select(_Profile.full_name).where(
+                    _Profile.user_id == user.id, _Profile.deleted_at.is_(None)
+                )
+            )
+        ).one_or_none()
+        if profile_name:
+            display_name = profile_name
+    except Exception:  # noqa: BLE001 — identity chrome must never 500 a page
+        pass
+    request.state.user_display_name = display_name
     return user
 
 

@@ -175,7 +175,7 @@ def test_rescore_happy_path_calls_orchestrator():
     settings = Settings(
         user_id=1,
         semantic_match_enabled=False,
-        llm_model="claude-3.5-sonnet-20250219",
+        llm_model="claude-sonnet-4-6",
     )
 
     exec_calls = [

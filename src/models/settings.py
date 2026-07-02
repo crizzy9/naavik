@@ -33,7 +33,7 @@ class Settings(SQLModel, table=True):
 
     # LLM
     llm_provider: LLMProvider = Field(default=LLMProvider.ANTHROPIC)
-    llm_model: str = Field(default="claude-3.5-sonnet-20250219")
+    llm_model: str = Field(default="claude-sonnet-4-6")
     llm_fallback_provider: LLMProvider | None = None
 
     # Auto-apply

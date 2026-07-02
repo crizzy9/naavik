@@ -47,7 +47,7 @@ def env_keys(monkeypatch):
 def test_anthropic_estimate_cost() -> None:
     from llm.anthropic import AnthropicProvider
 
-    p = AnthropicProvider(api_key="sk-test", model="claude-3.5-sonnet-20250219")
+    p = AnthropicProvider(api_key="sk-test", model="claude-sonnet-4-6")
     cost = p.estimate_cost(input_tokens=1_000_000, output_tokens=1_000_000)
     # Sonnet: $3 input + $15 output per 1M tokens.
     assert abs(cost - 18.0) < 0.001
@@ -106,7 +106,7 @@ def test_factory_anthropic(env_keys) -> None:
     from llm import get_provider
 
     settings = Settings(
-        user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="claude-3.5-sonnet-20250219"
+        user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="claude-sonnet-4-6"
     )
 
     provider = get_provider(settings)
@@ -114,7 +114,7 @@ def test_factory_anthropic(env_keys) -> None:
     from llm.anthropic import AnthropicProvider
 
     assert isinstance(provider, AnthropicProvider)
-    assert provider.model_name == "claude-3.5-sonnet-20250219"
+    assert provider.model_name == "claude-sonnet-4-6"
 
 
 def test_factory_openai(env_keys) -> None:
@@ -190,7 +190,7 @@ def test_factory_raises_when_nothing_configured(monkeypatch) -> None:
     monkeypatch.setattr(app_settings, "openai_api_key", None)
     monkeypatch.setattr(app_settings, "ollama_base_url", None)
     settings = Settings(
-        user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="claude-3.5-sonnet-20250219"
+        user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="claude-sonnet-4-6"
     )
     with pytest.raises(LLMProviderError) as exc_info:
         get_provider(settings)

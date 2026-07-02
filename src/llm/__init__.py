@@ -102,7 +102,13 @@ def get_provider(
         )
 
     active_enum = LLMProviderEnum(active_id)
-    return _build_provider(active_enum, user_settings.llm_model)
+    # The stored llm_model was chosen for the *preferred* provider — passing
+    # it to a different provider 404s on every call (e.g. Settings said
+    # ANTHROPIC + "llama3.1:70b", only OPENAI_API_KEY set → OpenAI rejected
+    # the Ollama model name). Cross-provider fallback uses the fallback
+    # provider's own default model instead.
+    model = user_settings.llm_model if active_enum == target else None
+    return _build_provider(active_enum, model)
 
 
 def get_embedding_provider(

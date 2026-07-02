@@ -11,7 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.session import get_session
 from models import User
-from services import email_service, overview_service
+from services import email_service, overview_service, profile_service
 from services.auth import require_authed_session
 from ui.templates_setup import templates
 
@@ -39,21 +39,25 @@ def _effective_user_id(user: User | None) -> int:
     return user.id if user is not None else 1
 
 
-def _greeting(now: datetime) -> str:
+def _greeting(now: datetime, full_name: str | None) -> str:
     h = now.hour
     if h < 12:
-        return "Good morning, Shyam."
-    if h < 17:
-        return "Good afternoon, Shyam."
-    return "Good evening, Shyam."
+        base = "Good morning"
+    elif h < 17:
+        base = "Good afternoon"
+    else:
+        base = "Good evening"
+    first = (full_name or "").strip().split(" ")[0]
+    return f"{base}, {first}." if first else f"{base}."
 
 
 def _date_pill(now: datetime) -> str:
     weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    tz = now.strftime("%Z") or "local"
     return (
         f"{weekdays[now.weekday()]} · {months[now.month - 1]} {now.day:>2} · "
-        f"{now.hour:02d}:{now.minute:02d} PT"
+        f"{now.hour:02d}:{now.minute:02d} {tz}"
     )
 
 
@@ -103,20 +107,20 @@ async def _build_kpis(session: AsyncSession, user_id: int) -> list[dict[str, obj
         {
             "label": "RESPONSE RATE · 90D",
             "value": f"{kpis.response_rate * 100:.1f}%",
-            "delta": "+2.1%",
-            "sub": "3× market avg",
+            "delta": None,
+            "sub": None,
         },
         {
             "label": "ONSITE RATE",
             "value": f"{kpis.onsite_rate * 100:.1f}%",
-            "delta": "-0.4%",
+            "delta": None,
             "sub": None,
         },
         {
             "label": "OFFER RATE",
             "value": f"{kpis.offer_rate * 100:.1f}%",
-            "delta": "+0.7%",
-            "sub": (f"{kpis.offer_count} offer{'s' if kpis.offer_count != 1 else ''} · 1 pending"),
+            "delta": None,
+            "sub": f"{kpis.offer_count} offer{'s' if kpis.offer_count != 1 else ''}",
         },
     ]
 
@@ -133,7 +137,8 @@ async def get_overview(
     user: User | None = Depends(require_authed_session),
 ):
     user_id = _effective_user_id(user)
-    now = datetime.now(UTC)
+    now = datetime.now().astimezone()
+    profile = await profile_service.get_profile(session, user_id)
     actions = await overview_service.compose_priority_actions(session, user_id)
     threads = await email_service.recent_signals(session, user_id, limit=6)
     counts = await overview_service.pipeline_strip_counts(session, user_id)
@@ -143,7 +148,7 @@ async def get_overview(
         {
             "active_sidebar": "overview",
             "active_template_path": "/",
-            "greeting": _greeting(now),
+            "greeting": _greeting(now, profile.full_name if profile else None),
             "subline": (
                 f"{len(actions)} priority actions queued for today"
                 if actions

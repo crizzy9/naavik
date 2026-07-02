@@ -1947,3 +1947,18 @@ async def list_for_export(
         }
         for a in rows
     ]
+
+
+async def count_applied_since(session: AsyncSession, *, user_id: int, since: datetime) -> int:
+    """Applications submitted (applied_at set) since `since` — Discover stats strip."""
+    stmt = (
+        select(func.count())
+        .select_from(Application)
+        .where(
+            Application.user_id == user_id,
+            Application.applied_at.isnot(None),  # type: ignore[union-attr]
+            Application.applied_at >= since,
+            Application.deleted_at.is_(None),  # type: ignore[union-attr]
+        )
+    )
+    return int((await session.exec(stmt)).one() or 0)

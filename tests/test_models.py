@@ -199,7 +199,7 @@ def test_docs_generated_payload_round_trip() -> None:
     payload = DocsGeneratedPayload(
         generated_document_id=712,
         document_kind=GeneratedDocumentKind.RESUME,
-        model="claude-3.5-sonnet-20250219",
+        model="claude-sonnet-4-6",
         cost_usd=0.04,
         token_count=1822,
         page_count=1,

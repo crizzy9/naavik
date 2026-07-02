@@ -82,7 +82,7 @@ async def create_message(
     status: OutreachStatus = OutreachStatus.DRAFT,
     channel: str = "linkedin_dm",
     ai_generated: bool = True,
-    drafted_by_model: str | None = "claude-3.5-sonnet-20250219",
+    drafted_by_model: str | None = "claude-sonnet-4-6",
 ) -> OutreachMessage:
     """Insert a new OutreachMessage row."""
     now = datetime.now(UTC)

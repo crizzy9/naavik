@@ -201,3 +201,62 @@ def test_pause_auto_apply_404_when_unknown_job(client, monkeypatch):
         headers=_CSRF_HEADERS,
     )
     assert r.status_code == 404
+
+
+def test_put_auto_apply_form_empty_numeric_fields_do_not_500(client, monkeypatch):
+    """Empty optional numeric fields = "leave unchanged", never `float('')`.
+
+    Hardening-pass regression: the common Save submits the FULL form, so an
+    untouched empty "daily cost cap" input arrived as `""` and the service's
+    `float("")` 500'd the whole save with zero UI feedback.
+    """
+    captured: dict = {}
+
+    async def fake_update(session, user_id, **kwargs):
+        captured.update(kwargs)
+
+        class _S:
+            auto_apply_enabled = True
+            auto_apply_score_threshold = 0.85
+            auto_apply_daily_cap = 7
+            eager_review_generation = True
+            daily_llm_cost_cap_usd = None
+            auto_apply_immediate_dispatch = False
+            auto_apply_per_board_daily_caps = {}
+            auto_apply_dry_run = False
+
+        return _S()
+
+    from services import settings_service
+
+    monkeypatch.setattr(settings_service, "update_auto_apply", fake_update)
+
+    r = client.put(
+        "/api/v1/settings/auto-apply",
+        data={
+            "auto_apply_score_threshold": "0.85",
+            "auto_apply_daily_cap": "7",
+            "daily_llm_cost_cap_usd": "",  # untouched empty input
+        },
+        headers=_CSRF_HEADERS,
+    )
+    assert r.status_code == 200
+    assert captured["daily_llm_cost_cap_usd"] is None
+    assert captured["auto_apply_score_threshold"] == 0.85
+    assert captured["auto_apply_daily_cap"] == 7
+
+
+def test_put_auto_apply_form_non_numeric_field_422(client, monkeypatch):
+    async def fake_update(session, user_id, **kwargs):  # pragma: no cover
+        raise AssertionError("service must not be reached on bad input")
+
+    from services import settings_service
+
+    monkeypatch.setattr(settings_service, "update_auto_apply", fake_update)
+
+    r = client.put(
+        "/api/v1/settings/auto-apply",
+        data={"auto_apply_score_threshold": "not-a-number"},
+        headers=_CSRF_HEADERS,
+    )
+    assert r.status_code == 422

@@ -39,6 +39,7 @@ from scraper.rate_limit import resolve_rate_limit
 from scraper.redaction import safe_exc
 from scraper.sites import scrapers as scraper_registry
 from scraper.types import ScrapeQuery
+from services import env_secrets
 from services.notifications import notify_admin_error
 from services.scraper_service import run_scraper
 
@@ -59,6 +60,11 @@ _DEFAULT_CRON_SCHEDULES: dict[str, str] = {
 _INDEED_INTERVAL_MINUTES = 90
 
 _CONSECUTIVE_FAIL_THRESHOLD = 3
+
+# Floor applied to manual Run-now verification runs so a bounded 10-listing
+# check completes in minutes, not hours. Cron runs keep the per-source
+# sustained budget untouched.
+_MANUAL_RUN_MIN_RPM = 6.0
 
 # Plan 64 § D.6 — emit the LinkedIn-without-proxy warning ONCE per process to
 # avoid drowning per-firing logs. The flag flips True on first observation;
@@ -124,7 +130,9 @@ async def _maybe_notify_threshold_cross(
     )
 
 
-async def _scrape_one_user(session, *, settings: Settings, source: JobSource) -> None:
+async def _scrape_one_user(
+    session, *, settings: Settings, source: JobSource, max_listings: int | None = None
+) -> None:
     """Run one (user, source) scrape; mutate Settings.consecutive_scrape_failures.
 
     Skips only when `sources_enabled[source.value] is False` — operator
@@ -140,6 +148,19 @@ async def _scrape_one_user(session, *, settings: Settings, source: JobSource) ->
     threshold-cross will alert again.
     """
     if settings.sources_enabled.get(source.value, True) is False:
+        return
+
+    # Skip unconfigured sources instead of firing a meaningless query
+    # (empty keywords / empty company list ⇒ "SUCCESS · 0 listings" noise,
+    # which reads as a working scrape that found nothing). The Settings ·
+    # Sources panel surfaces the not-configured state; the manual Run-now
+    # endpoint rejects unconfigured sources loudly before queueing.
+    if not env_secrets.scraper_source_configured(source, settings):
+        log.debug(
+            "scraping.%s skipped for user=%s: source not configured",
+            source.value,
+            settings.user_id,
+        )
         return
 
     counters: dict[str, int] = dict(settings.consecutive_scrape_failures or {})
@@ -162,6 +183,14 @@ async def _scrape_one_user(session, *, settings: Settings, source: JobSource) ->
     # fallback when no operator override exists or when the override fails
     # validation.
     rl_config = resolve_rate_limit(settings, source)
+    if max_listings is not None and rl_config.rpm < _MANUAL_RUN_MIN_RPM:
+        # Manual Run-now is a small bounded verification run; the sustained
+        # 24/7 crawl budget (e.g. LinkedIn 0.4 rpm) would stretch a 10-listing
+        # run past an hour. One short burst at 6 rpm is within the operator-
+        # tunable range and doesn't move the sustained crawl posture.
+        rl_config = rl_config.model_copy(
+            update={"rpm": _MANUAL_RUN_MIN_RPM, "delay_lo": 2.0, "delay_hi": 5.0}
+        )
     # Plan 64 § D — proxy resolution. LinkedIn-only this plan; non-LinkedIn
     # sources always get None back. Boot-time validation in `config.py`
     # already caught a malformed env-var; resolver returning None for
@@ -195,13 +224,16 @@ async def _scrape_one_user(session, *, settings: Settings, source: JobSource) ->
         provider=provider,
     )
 
+    query = _compose_query(source, settings)
+    if max_listings is not None:
+        query = query.model_copy(update={"max_listings": max_listings})
     try:
         run = await run_scraper(
             session,
             scraper=scraper,
             user_id=settings.user_id,
-            query=_compose_query(source, settings),
-            triggered_by="cron",
+            query=query,
+            triggered_by="cron" if max_listings is None else "manual",
         )
     except Exception as exc:  # noqa: BLE001 — per-user isolation
         # Plan 64 PR #165 delta-fix HIGH-1 + HIGH-2: `log.exception` would
@@ -256,40 +288,55 @@ async def _scrape_one_user(session, *, settings: Settings, source: JobSource) ->
         )
 
 
-async def _scrape_source(source: JobSource) -> None:
-    """Job body for `scraping.<source>`. One firing → iterate enabled users."""
+async def _scrape_source(
+    source: JobSource,
+    *,
+    max_listings: int | None = None,
+    only_user_id: int | None = None,
+) -> None:
+    """Job body for `scraping.<source>`. One firing → iterate enabled users.
+
+    `max_listings` / `only_user_id` are set only by manual "Run now"
+    triggers (Settings · Sources): a bounded run scoped to the requesting
+    user so the operator gets fast, attributable feedback instead of a
+    multi-hour all-user crawl at production rate limits.
+    """
     async with async_session() as session:
         rows = (await session.exec(select(Settings))).all()
         for s in rows:
-            await _scrape_one_user(session, settings=s, source=source)
+            if only_user_id is not None and s.user_id != only_user_id:
+                continue
+            await _scrape_one_user(session, settings=s, source=source, max_listings=max_listings)
         await session.commit()
 
 
 # ── Per-source job entrypoints (named so APScheduler can serialize them) ─
 
 
-async def scrape_linkedin() -> None:
-    await _scrape_source(JobSource.LINKEDIN)
+async def scrape_linkedin(max_listings: int | None = None, only_user_id: int | None = None) -> None:
+    await _scrape_source(JobSource.LINKEDIN, max_listings=max_listings, only_user_id=only_user_id)
 
 
-async def scrape_workday() -> None:
-    await _scrape_source(JobSource.WORKDAY)
+async def scrape_workday(max_listings: int | None = None, only_user_id: int | None = None) -> None:
+    await _scrape_source(JobSource.WORKDAY, max_listings=max_listings, only_user_id=only_user_id)
 
 
-async def scrape_greenhouse() -> None:
-    await _scrape_source(JobSource.GREENHOUSE)
+async def scrape_greenhouse(
+    max_listings: int | None = None, only_user_id: int | None = None
+) -> None:
+    await _scrape_source(JobSource.GREENHOUSE, max_listings=max_listings, only_user_id=only_user_id)
 
 
-async def scrape_lever() -> None:
-    await _scrape_source(JobSource.LEVER)
+async def scrape_lever(max_listings: int | None = None, only_user_id: int | None = None) -> None:
+    await _scrape_source(JobSource.LEVER, max_listings=max_listings, only_user_id=only_user_id)
 
 
-async def scrape_ashby() -> None:
-    await _scrape_source(JobSource.ASHBY)
+async def scrape_ashby(max_listings: int | None = None, only_user_id: int | None = None) -> None:
+    await _scrape_source(JobSource.ASHBY, max_listings=max_listings, only_user_id=only_user_id)
 
 
-async def scrape_indeed() -> None:
-    await _scrape_source(JobSource.INDEED)
+async def scrape_indeed(max_listings: int | None = None, only_user_id: int | None = None) -> None:
+    await _scrape_source(JobSource.INDEED, max_listings=max_listings, only_user_id=only_user_id)
 
 
 _JOB_FUNCS = {

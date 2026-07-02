@@ -48,13 +48,26 @@
             <i data-lucide="pencil" class="h-4 w-4" stroke-width="1.5"></i>
             Edit profile
           </a>
-          <button type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+          <label for="hero-resume-input"
+                 class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
             <i data-lucide="upload-cloud" class="h-4 w-4" stroke-width="1.5"></i>
             Update resume
-          </button>
+          </label>
+          <form
+            hx-post="/api/v1/extraction/upload"
+            hx-encoding="multipart/form-data"
+            hx-target="#hero-resume-result"
+            hx-swap="innerHTML"
+            hx-trigger="change from:#hero-resume-input">
+            <input id="hero-resume-input" name="resume" type="file" accept="application/pdf" class="sr-only">
+          </form>
         </div>
       {% endif %}
     </div>
+
+    {% if editable %}
+      <div id="hero-resume-result" class="mt-2 empty:hidden"></div>
+    {% endif %}
 
     {% if p.contacts %}
       <div class="mt-4 flex flex-wrap gap-1.5">

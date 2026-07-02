@@ -93,7 +93,7 @@ def _patch_db_dependencies(monkeypatch):
     [
         (
             "anthropic",
-            ["claude-3.5-sonnet-20250219", "claude-3.5-haiku-20250219"],
+            ["claude-sonnet-4-6", "claude-haiku-4-5"],
             ["llama3.1", "gpt-4o"],
         ),
         (
@@ -272,7 +272,7 @@ def test_put_llm_form_round_trip_persists_provider(client: TestClient, auth_cook
         "/api/v1/settings/llm",
         data={
             "llm_provider": "anthropic",
-            "llm_model": "claude-3.5-sonnet-20250219",
+            "llm_model": "claude-sonnet-4-6",
         },
         cookies=auth_cookies,
         headers={"Content-Type": "application/x-www-form-urlencoded"},

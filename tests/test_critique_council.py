@@ -27,7 +27,7 @@ def _settings():
     return SimpleNamespace(
         user_id=1,
         llm_provider="anthropic",
-        llm_model="claude-3.5-sonnet-20250219",
+        llm_model="claude-sonnet-4-6",
         originality_api_key=None,
     )
 
@@ -177,7 +177,7 @@ async def test_critique_bundle_majority_revise_triggers_regen():
 
     fake_provider = SimpleNamespace(
         provider_id="anthropic",
-        model_name="claude-3.5-sonnet-20250219",
+        model_name="claude-sonnet-4-6",
         estimate_cost=lambda *, input_tokens, output_tokens: 0.001,
         batch=AsyncMock(return_value=responses),
     )
@@ -233,7 +233,7 @@ async def test_critique_bundle_unanimous_ship_no_regen():
 
     fake_provider = SimpleNamespace(
         provider_id="anthropic",
-        model_name="claude-3.5-sonnet-20250219",
+        model_name="claude-sonnet-4-6",
         estimate_cost=lambda *, input_tokens, output_tokens: 0.001,
         batch=AsyncMock(return_value=responses),
     )
@@ -274,7 +274,7 @@ async def test_critique_all_personas_fail_returns_degraded():
 
     fake_provider = SimpleNamespace(
         provider_id="anthropic",
-        model_name="claude-3.5-sonnet-20250219",
+        model_name="claude-sonnet-4-6",
         estimate_cost=lambda *, input_tokens, output_tokens: 0.0,
         batch=AsyncMock(return_value=responses),
     )

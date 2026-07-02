@@ -2,7 +2,11 @@
   discover_stats_strip.html — compact stats row at top of Discover.
 
   Args:
-    stats : dict {applied, auto, manual, saved, skipped, scanned}
+    stats : dict {applied, saved, skipped, scanned} — live counts from
+            discover_ctx.stats_strip. `applied`/`scanned` are today-scoped;
+            `saved`/`skipped` are queue totals. (The auto/manual split was
+            dropped: submission mode isn't recorded on Application, and the
+            strip must never fabricate numbers.)
 #}
 {% set s = stats %}
 <div class="flex items-center gap-4 px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs flex-wrap">
@@ -10,16 +14,6 @@
   <span class="inline-flex items-center gap-1 font-mono text-slate-300">
     <span class="font-semibold text-slate-100 tabular-nums">{{ s.applied | default(0) }}</span>
     <span class="text-slate-500">applied</span>
-  </span>
-  <span class="inline-flex items-center gap-1 font-mono text-slate-300">
-    <i data-lucide="zap" class="h-3.5 w-3.5 text-emerald-400" stroke-width="1.5"></i>
-    <span class="font-semibold text-slate-100 tabular-nums">{{ s.auto | default(0) }}</span>
-    <span class="text-slate-500">auto</span>
-  </span>
-  <span class="inline-flex items-center gap-1 font-mono text-slate-300">
-    <i data-lucide="pencil" class="h-3.5 w-3.5 text-slate-400" stroke-width="1.5"></i>
-    <span class="font-semibold text-slate-100 tabular-nums">{{ s.manual | default(0) }}</span>
-    <span class="text-slate-500">manual</span>
   </span>
   <span class="inline-flex items-center gap-1 font-mono text-slate-300">
     <i data-lucide="bookmark" class="h-3.5 w-3.5 text-slate-400" stroke-width="1.5"></i>
@@ -31,5 +25,5 @@
     <span class="font-semibold text-slate-100 tabular-nums">{{ s.skipped | default(0) }}</span>
     <span class="text-slate-500">skipped</span>
   </span>
-  <span class="ml-auto text-slate-500 font-mono text-[11px]">queue refreshes hourly · {{ s.scanned | default(0) }} scanned today</span>
+  <span class="ml-auto text-slate-500 font-mono text-[11px]">{{ s.scanned | default(0) }} scanned today</span>
 </div>

@@ -248,7 +248,10 @@ def upgrade() -> None:
 
     if is_postgres:
         with op.get_context().autocommit_block():
-            op.execute("ALTER TYPE appeventkind ADD VALUE IF NOT EXISTS 'email_status_suggested'")
+            # Label = the Python member NAME (SQLAlchemy binds names — see
+            # 0026_enum_label_names). Historical DBs that ran the original
+            # lowercase form get the rename in 0026; both paths converge.
+            op.execute("ALTER TYPE appeventkind ADD VALUE IF NOT EXISTS 'EMAIL_STATUS_SUGGESTED'")
 
 
 def downgrade() -> None:

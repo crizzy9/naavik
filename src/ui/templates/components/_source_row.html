@@ -126,6 +126,20 @@
                    after:bg-white after:rounded-full after:transition peer-checked:after:translate-x-4"></span>
     </label>
 
+    <button type="button"
+            data-source-run-now="{{ v.source }}"
+            hx-post="/_fragments/settings/sources/{{ v.source }}/run"
+            hx-headers='{"X-CSRF-Token": "{{ csrf_token | default("") }}"}'
+            hx-swap="outerHTML"
+            hx-disabled-elt="this"
+            {% if not v.enabled %}disabled title="Enable this source first"{% endif %}
+            class="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono
+                   bg-slate-800 text-slate-200 ring-1 ring-slate-700
+                   hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed">
+      <i data-lucide="play" class="h-3 w-3" stroke-width="1.5"></i>
+      Run now
+    </button>
+
     <details class="text-xs" data-source-configure>
       <summary class="cursor-pointer list-none inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200">
         Configure
