@@ -1,0 +1,77 @@
+{#
+  _tracking_library.html — Tracking · Jobs library.
+
+  Every Job the system knows, faceted by queue state, searchable, with the
+  auto-apply phase and the linked application attached per row. Swapped into
+  `#tracking-main` (fragment granularity: this IS the panel).
+
+  Args (from tracking_ctx.build_library_ctx):
+    library_rows, library_facets, library_state, library_q, library_score_min
+#}
+<div id="tracking-library" class="flex flex-col gap-4" data-testid="tracking-library">
+  {# ── Facets + search ─────────────────────────────────────────────── #}
+  <div class="flex items-center gap-3 flex-wrap">
+    <div class="flex items-center gap-1.5 flex-wrap" role="tablist" aria-label="Queue state">
+      {% for f in library_facets %}
+        <button type="button"
+                role="tab"
+                aria-selected="{{ 'true' if f.value == library_state else 'false' }}"
+                hx-get="/_fragments/tracking/library?state={{ f.value }}&q={{ library_q | urlencode }}&score_min={{ library_score_min }}"
+                hx-target="#tracking-main"
+                hx-swap="innerHTML"
+                hx-push-url="/tracking?tab=library&state={{ f.value }}&q={{ library_q | urlencode }}"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition
+                       {% if f.value == library_state %}bg-indigo-500/20 border-indigo-500/50 text-indigo-100
+                       {% else %}bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800{% endif %}"
+                data-testid="library-facet-{{ f.value }}">
+          {{ f.label }}
+          <span class="font-mono text-[10px] {{ 'text-indigo-200' if f.value == library_state else 'text-slate-500' }}">{{ f.count }}</span>
+        </button>
+      {% endfor %}
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <div class="relative">
+        <i data-lucide="search" class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" stroke-width="1.5"></i>
+        <input type="search" name="q" value="{{ library_q }}"
+               placeholder="Search company or role…"
+               hx-get="/_fragments/tracking/library?state={{ library_state }}&score_min={{ library_score_min }}"
+               hx-trigger="input changed delay:350ms, search"
+               hx-target="#tracking-main"
+               hx-swap="innerHTML"
+               class="w-64 pl-8 pr-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+               data-testid="library-search">
+      </div>
+    </div>
+  </div>
+
+  {# ── Table ───────────────────────────────────────────────────────── #}
+  {% if library_rows %}
+  <div class="overflow-x-auto rounded-lg border border-slate-800">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="bg-slate-900/80 text-left text-[10px] uppercase tracking-wide text-slate-500">
+          <th class="px-3 py-2 font-medium">Company / Role</th>
+          <th class="px-3 py-2 font-medium">Score</th>
+          <th class="px-3 py-2 font-medium">Board</th>
+          <th class="px-3 py-2 font-medium">State</th>
+          <th class="px-3 py-2 font-medium">Found</th>
+          <th class="px-3 py-2 font-medium text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800/80 bg-slate-950/40">
+        {% for r in library_rows %}
+          {% include "components/tracking_library_row.html" %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-xs text-slate-600">{{ library_rows | length }} job{{ "s" if library_rows | length != 1 }}{% if library_rows | length == 200 %} (showing first 200){% endif %}</p>
+  {% else %}
+  <div class="flex flex-col items-center gap-2 py-14 text-center rounded-lg border border-slate-800 bg-slate-900/40">
+    <i data-lucide="inbox" class="h-6 w-6 text-slate-600" stroke-width="1.5"></i>
+    <p class="text-sm text-slate-400">
+      {% if library_q %}No jobs match "{{ library_q }}"{% elif library_state != "all" %}Nothing in this state yet{% else %}No jobs scraped yet — sources run hourly{% endif %}
+    </p>
+  </div>
+  {% endif %}
+</div>

@@ -228,15 +228,36 @@ async def build_application_detail_ctx(
     status_timeline.reverse()
 
     documents = await application_service.list_documents_for(session, application.id)
-    docs = [
+    _PDF_URLS = {
+        "resume": f"/api/v1/applications/{application.id}/resume.pdf",
+        "cover_letter": f"/api/v1/applications/{application.id}/cover-letter.pdf",
+    }
+    seen_kinds: set[str] = set()
+    docs = []
+    for d in documents:
+        kind = d.kind.value
+        docs.append(
+            {
+                "id": d.id,
+                "kind": kind,
+                "compiled_at": d.compiled_at,
+                "compiled_at_label": _relative_label(d.compiled_at),
+                "path": d.path,
+                # Only the latest doc per kind is servable via the PDF routes.
+                "pdf_url": _PDF_URLS.get(kind) if kind not in seen_kinds else None,
+            }
+        )
+        seen_kinds.add(kind)
+
+    # Screener answers — what was (or would be) sent with the application.
+    screener_rows = [
         {
-            "id": d.id,
-            "kind": d.kind.value,
-            "compiled_at": d.compiled_at,
-            "compiled_at_label": _relative_label(d.compiled_at),
-            "path": d.path,
+            "question": s.question_text,
+            "answer": s.answer or "",
+            "source": s.source.value,
+            "reviewed": s.reviewed_at is not None,
         }
-        for d in documents
+        for s in await application_service.list_screener_answers_for(session, application.id)
     ]
 
     contacts = await contact_tracker.list_contacts_for_application(session, application.id)
@@ -319,6 +340,8 @@ async def build_application_detail_ctx(
     # any failure (jobs deleted etc.) falls back to a None chip — template
     # gates render on `a.score is not none and a.job_id`.
     score: int | None = None
+    auto_apply = None
+    job_url: str | None = None
     if application.job_id is not None:
         try:
             from services import job_service
@@ -326,6 +349,9 @@ async def build_application_detail_ctx(
             job = await job_service.get_job(session, application.job_id)
             if job is not None and getattr(job, "score", None) is not None:
                 score = int(round(job.score))
+            if job is not None:
+                auto_apply = application_service.auto_apply_phase(application, job)
+                job_url = getattr(job, "url", None)
         except Exception:  # noqa: BLE001 — defensive; chip optional
             score = None
 
@@ -352,9 +378,115 @@ async def build_application_detail_ctx(
         },
         "status_timeline": status_timeline,
         "documents": docs,
+        "screener_answers": screener_rows,
         "contacts": contact_rows,
         "last_failure": last_failure,
         "postmortem_ts": postmortem_ts,
+        "auto_apply": auto_apply,
+        "job_url": job_url,
         # Plan 86 / 0.4.5.08
         "bullets_used": bullets_used_rows,
+    }
+
+
+# ── Jobs library (Tracking · single lifecycle surface) ──────────────────
+
+LIBRARY_FACETS: list[tuple[str, str]] = [
+    ("all", "All"),
+    ("unswiped", "New"),
+    ("saved", "Saved"),
+    ("queued_for_auto_apply", "Auto-apply queue"),
+    ("ready_to_submit", "Ready for you"),
+    ("applied", "Applied"),
+    ("skipped", "Skipped"),
+]
+
+
+def _job_library_row(job, application, phase) -> dict[str, object]:
+    initial, color = _initial_color(job.company)
+    return {
+        "id": job.id,
+        "company": job.company,
+        "company_initial": initial,
+        "company_color": color,
+        "role": job.role,
+        "location": getattr(job, "location", None),
+        "score": int(round(float(getattr(job, "score", 0.0) or 0.0) * 100)),
+        "board_label": (job.board.value if getattr(job, "board", None) else "manual"),
+        "source_label": (job.source.value if getattr(job, "source", None) else "manual"),
+        "state": job.queue_state.value,
+        "state_label": job.queue_state.value.replace("_", " "),
+        "phase": phase,
+        "found_label": _relative_label(getattr(job, "found_at", None)),
+        "url": getattr(job, "url", None),
+        "application_id": application.id if application else None,
+        "application_status": (application.status.value if application else None),
+    }
+
+
+async def build_library_ctx(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    state: str = "all",
+    q: str = "",
+    score_min: float = 0.0,
+) -> dict[str, object]:
+    """Tracking · Jobs library — every Job the system knows, faceted by
+    queue state, searchable, with the auto-apply phase + linked application
+    attached per row."""
+    from models import JobFilter
+    from models.enums import JobQueueState
+    from services import job_service
+
+    facet_counts: dict[str, int] = {}
+    total = 0
+    for value, _label in LIBRARY_FACETS:
+        if value == "all":
+            continue
+        try:
+            qs = JobQueueState(value)
+        except ValueError:
+            continue
+        n = await job_service.count_jobs_in_queue_state(session, user_id=user_id, state=qs)
+        facet_counts[value] = int(n or 0)
+        total += int(n or 0)
+    facet_counts["all"] = total
+
+    filters = JobFilter()
+    if state != "all":
+        try:
+            filters = filters.model_copy(update={"queue_state": JobQueueState(state)})
+        except ValueError:
+            state = "all"
+    if q:
+        filters = filters.model_copy(update={"q": q})
+    if score_min > 0.0:
+        filters = filters.model_copy(update={"score_min": score_min})
+
+    jobs = await job_service.list_jobs(
+        session, user_id=user_id, filters=filters, page=0, page_size=200
+    )
+
+    apps = await application_service.list_applications(session, user_id=user_id)
+    apps_by_job: dict[int, Application] = {}
+    for a in apps:
+        if a.job_id is not None:
+            apps_by_job.setdefault(a.job_id, a)
+
+    rows = []
+    for j in jobs:
+        app = apps_by_job.get(j.id)
+        phase = application_service.auto_apply_phase(app, j)
+        rows.append(_job_library_row(j, app, phase))
+
+    return {
+        "library_rows": rows,
+        "library_facets": [
+            {"value": v, "label": label, "count": facet_counts.get(v, 0)}
+            for v, label in LIBRARY_FACETS
+        ],
+        "library_state": state,
+        "library_q": q,
+        "library_score_min": score_min,
     }

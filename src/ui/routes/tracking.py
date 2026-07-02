@@ -18,7 +18,7 @@ from api.auth import require_csrf
 from config import settings as app_settings
 from db.session import get_session
 from models import User
-from models.enums import AppEventKind, ApplicationStatus, ClosedReason
+from models.enums import AppEventKind, ApplicationStatus, ClosedReason, JobQueueState
 from services import application_analytics, application_service
 from services.auth import require_authed_session
 from ui import tracking_ctx as tctx
@@ -44,18 +44,30 @@ def _effective_user_id(user: User | None) -> int:
 async def get_tracking(
     request: Request,
     view: Annotated[Literal["board", "list"], Query()] = "board",
+    tab: Annotated[Literal["pipeline", "library"], Query()] = "pipeline",
+    state: Annotated[str, Query()] = "all",
+    q: Annotated[str, Query()] = "",
+    score_min: Annotated[float, Query()] = 0.0,
     show_closed: Annotated[int, Query()] = 0,
     show_drafts: Annotated[int, Query()] = 0,
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
+    user_id = _effective_user_id(user)
     ctx = await tctx.build_tracking_ctx(
         session,
-        user_id=_effective_user_id(user),
+        user_id=user_id,
         view=view,
         show_closed=bool(show_closed),
         show_drafts=bool(show_drafts),
     )
+    ctx["current_tab"] = tab
+    if tab == "library":
+        ctx.update(
+            await tctx.build_library_ctx(
+                session, user_id=user_id, state=state, q=q, score_min=score_min
+            )
+        )
     ctx["active_sidebar"] = "tracking"
     ctx["active_template_path"] = "/tracking"
     return templates.TemplateResponse(request, "pages/tracking.html", ctx)
@@ -105,6 +117,100 @@ async def fragment_list(
         show_drafts=bool(show_drafts),
     )
     return templates.TemplateResponse(request, "pages/_tracking_list.html", ctx)
+
+
+@router.get(
+    "/_fragments/tracking/library",
+    response_class=HTMLResponse,
+    name="tracking_library_fragment",
+)
+async def fragment_library(
+    request: Request,
+    state: Annotated[str, Query()] = "all",
+    q: Annotated[str, Query()] = "",
+    score_min: Annotated[float, Query()] = 0.0,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Jobs-library fragment — facet chips + search re-render the table."""
+    ctx = await tctx.build_library_ctx(
+        session,
+        user_id=_effective_user_id(user),
+        state=state,
+        q=q,
+        score_min=score_min,
+    )
+    return templates.TemplateResponse(request, "pages/_tracking_library.html", ctx)
+
+
+_LIBRARY_ACTIONS: dict[str, tuple[JobQueueState, str]] = {
+    "save": (JobQueueState.SAVED, "Saved."),
+    "skip": (JobQueueState.SKIPPED, "Skipped."),
+    "restore": (JobQueueState.UNSWIPED, "Back in the review queue."),
+    "queue": (JobQueueState.QUEUED_FOR_AUTO_APPLY, "Queued for auto-apply."),
+}
+
+
+@router.post(
+    "/_fragments/tracking/library/{job_id}/{action}",
+    response_class=HTMLResponse,
+    name="tracking_library_action",
+)
+async def library_row_action(
+    request: Request,
+    job_id: int,
+    action: str,
+    state: Annotated[str, Query()] = "all",
+    q: Annotated[str, Query()] = "",
+    score_min: Annotated[float, Query()] = 0.0,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Row-level queue-state actions in the Jobs library.
+
+    `queue` routes through `application_service.queue_auto_apply` (creates
+    the DRAFT + stamps queued_at + kicks background docs) so a library-queued
+    job behaves exactly like a right-swipe. Returns the re-rendered library
+    fragment so counts + facets stay truthful.
+    """
+    import json as _json
+
+    if action not in _LIBRARY_ACTIONS:
+        raise HTTPException(status_code=404, detail="Unknown action")
+    user_id = _effective_user_id(user)
+    target_state, toast = _LIBRARY_ACTIONS[action]
+
+    if action == "queue":
+        from models.enums import DocsState
+        from services import generation_dispatch, settings_service
+
+        settings = await settings_service.get_or_create(session, user_id=user_id)
+        draft = await application_service.queue_auto_apply(
+            session, user_id=user_id, job_id=job_id, settings=settings
+        )
+        docs_missing = draft.docs_state in {DocsState.NONE, DocsState.STALE, DocsState.FAILED}
+        if docs_missing:
+            draft.docs_state = DocsState.GENERATING
+        await session.commit()
+        if docs_missing:
+            generation_dispatch.spawn_generation(draft.id)
+    else:
+        from services import job_service
+
+        job = await job_service.set_queue_state(
+            session, job_id, user_id=user_id, state=target_state
+        )
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        await session.commit()
+
+    ctx = await tctx.build_library_ctx(
+        session, user_id=user_id, state=state, q=q, score_min=score_min
+    )
+    response = templates.TemplateResponse(request, "pages/_tracking_library.html", ctx)
+    response.headers["HX-Trigger"] = _json.dumps({"showToast": {"tone": "success", "text": toast}})
+    return response
 
 
 @router.get(

@@ -10,6 +10,18 @@
         {{ active_count }} active · {{ closed_count }} closed{% if email_connected %} · inbox synced every 10 min{% endif %}
       </p>
     </div>
+    {% set current_tab = current_tab | default("pipeline") %}
+    <nav class="flex items-center gap-1 p-0.5 rounded-lg bg-slate-900 border border-slate-800" aria-label="Tracking views" data-testid="tracking-tabs">
+      <a href="/tracking"
+         class="px-3 py-1.5 rounded-md text-sm transition {{ 'bg-slate-800 text-slate-50' if current_tab == 'pipeline' else 'text-slate-400 hover:text-slate-200' }}">
+        Pipeline
+      </a>
+      <a href="/tracking?tab=library"
+         class="px-3 py-1.5 rounded-md text-sm transition {{ 'bg-slate-800 text-slate-50' if current_tab == 'library' else 'text-slate-400 hover:text-slate-200' }}"
+         data-testid="tracking-tab-library">
+        Jobs library
+      </a>
+    </nav>
     <div class="flex items-center gap-2 flex-wrap shrink-0">
       {% if email_connected %}
       <span class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs">
@@ -25,6 +37,7 @@
         <span class="text-indigo-300">· connect →</span>
       </a>
       {% endif %}
+      {% if current_tab != "library" %}
       {% with current_view=current_view %}
         {% include "components/view_toggle.html" %}
       {% endwith %}
@@ -40,6 +53,7 @@
                class="rounded border-slate-700 bg-slate-900 text-indigo-500 focus:ring-indigo-500/40">
         Show drafts
       </label>
+      {% endif %}
       {# Plan 81 § D.4 — link to the analytics dashboard. #}
       <a href="/tracking/analytics"
          data-testid="tracking-analytics-link"
@@ -76,9 +90,11 @@
     {% endwith %}
   {% endif %}
 
-  {# Main board / list area #}
+  {# Main area — pipeline board/list OR the jobs library, by tab #}
   <div id="tracking-main">
-    {% if current_view == "list" %}
+    {% if current_tab == "library" %}
+      {% include "pages/_tracking_library.html" %}
+    {% elif current_view == "list" %}
       {% include "pages/_tracking_list.html" %}
     {% else %}
       {% include "pages/_tracking_board.html" %}

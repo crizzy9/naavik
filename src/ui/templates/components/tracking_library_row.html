@@ -1,0 +1,88 @@
+{% from "components/_macros.html" import score_circle %}
+{#
+  tracking_library_row.html — one <tr> in the Jobs library table.
+
+  Args:
+    r : dict from tracking_ctx._job_library_row — id, company, company_initial,
+        company_color, role, location, score, board_label, state, state_label,
+        phase, found_label, url, application_id, application_status
+    library_state, library_q, library_score_min : current filter context so
+        row actions re-render the fragment with the same filters.
+#}
+{% set _qs = "state=" ~ library_state ~ "&q=" ~ (library_q | urlencode) ~ "&score_min=" ~ library_score_min %}
+{% set _state_tone = {
+  "unswiped": "text-slate-300 bg-slate-800",
+  "saved": "text-sky-200 bg-sky-500/15",
+  "skipped": "text-slate-500 bg-slate-800/60",
+  "queued_for_auto_apply": "text-emerald-200 bg-emerald-500/15",
+  "ready_to_submit": "text-amber-200 bg-amber-500/15",
+  "applied": "text-indigo-200 bg-indigo-500/15",
+} %}
+<tr class="hover:bg-slate-900/60 transition" data-testid="library-row-{{ r.id }}">
+  <td class="px-3 py-2.5">
+    <a href="/discover/{{ r.id }}" class="flex items-center gap-2.5 min-w-0 group">
+      {% with kind="company", text=r.company_initial, size="sm", color_override=r.company_color %}
+        {% include "components/avatar.html" %}
+      {% endwith %}
+      <span class="min-w-0">
+        <span class="block text-slate-100 truncate group-hover:text-indigo-200 transition">{{ r.role }}</span>
+        <span class="block text-xs text-slate-500 truncate">{{ r.company }}{% if r.location %} · {{ r.location }}{% endif %}</span>
+      </span>
+    </a>
+  </td>
+  <td class="px-3 py-2.5">{{ score_circle(score=r.score, size="compact") }}</td>
+  <td class="px-3 py-2.5"><span class="font-mono text-xs text-slate-400">{{ r.board_label }}</span></td>
+  <td class="px-3 py-2.5">
+    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide {{ _state_tone.get(r.state, 'text-slate-300 bg-slate-800') }}"
+          {% if r.phase and r.phase.reason %}title="{{ r.phase.reason }}"{% endif %}>
+      {{ r.state_label }}
+    </span>
+    {% if r.phase and r.phase.phase == "generating" %}
+      <span class="ml-1 inline-block h-2.5 w-2.5 rounded-full border border-cyan-400 border-t-transparent animate-spin align-middle" title="documents generating"></span>
+    {% endif %}
+  </td>
+  <td class="px-3 py-2.5 text-xs text-slate-500">{{ r.found_label }}</td>
+  <td class="px-3 py-2.5">
+    <div class="flex items-center justify-end gap-1">
+      <a href="/discover/{{ r.id }}"
+         class="px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+         title="Open review workspace">Open</a>
+      {% if r.url %}
+        <a href="{{ r.url }}" target="_blank" rel="noopener" hx-boost="false"
+           class="px-1.5 py-1 rounded text-xs text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+           title="Open original posting">
+          <i data-lucide="external-link" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        </a>
+      {% endif %}
+      {% if r.state in ("unswiped", "saved", "ready_to_submit") %}
+        <button type="button"
+                hx-post="/_fragments/tracking/library/{{ r.id }}/queue?{{ _qs }}"
+                hx-target="#tracking-main" hx-swap="innerHTML"
+                class="px-2 py-1 rounded text-xs text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/10"
+                title="Queue for auto-apply"
+                data-testid="library-queue-{{ r.id }}">Queue</button>
+      {% endif %}
+      {% if r.state in ("unswiped", "queued_for_auto_apply", "ready_to_submit") %}
+        <button type="button"
+                hx-post="/_fragments/tracking/library/{{ r.id }}/save?{{ _qs }}"
+                hx-target="#tracking-main" hx-swap="innerHTML"
+                class="px-2 py-1 rounded text-xs text-sky-300 hover:text-sky-100 hover:bg-sky-500/10"
+                title="Save for later">Save</button>
+      {% endif %}
+      {% if r.state == "skipped" %}
+        <button type="button"
+                hx-post="/_fragments/tracking/library/{{ r.id }}/restore?{{ _qs }}"
+                hx-target="#tracking-main" hx-swap="innerHTML"
+                class="px-2 py-1 rounded text-xs text-indigo-300 hover:text-indigo-100 hover:bg-indigo-500/10"
+                title="Put back in the review queue"
+                data-testid="library-restore-{{ r.id }}">Restore</button>
+      {% elif r.state not in ("applied",) %}
+        <button type="button"
+                hx-post="/_fragments/tracking/library/{{ r.id }}/skip?{{ _qs }}"
+                hx-target="#tracking-main" hx-swap="innerHTML"
+                class="px-2 py-1 rounded text-xs text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                title="Skip">Skip</button>
+      {% endif %}
+    </div>
+  </td>
+</tr>

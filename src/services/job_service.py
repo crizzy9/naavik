@@ -64,6 +64,12 @@ async def list_jobs(
     if not filters.include_duplicates:
         stmt = stmt.where(Job.duplicate_of_id.is_(None))
 
+    if filters.q:
+        # Free-text search over company + role (Tracking · Jobs library).
+        pattern = f"%{filters.q.strip()}%"
+        from sqlalchemy import or_
+
+        stmt = stmt.where(or_(Job.company.ilike(pattern), Job.role.ilike(pattern)))
     if filters.company is not None:
         stmt = stmt.where(Job.company == filters.company)
     if filters.source is not None:

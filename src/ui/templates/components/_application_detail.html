@@ -171,15 +171,74 @@
         <ul class="flex flex-col gap-1.5">
           {% for d in documents %}
             <li class="flex items-center justify-between gap-2 text-sm">
-              <span class="text-slate-200">{{ d.kind | replace('_', ' ') }}</span>
+              {% if d.pdf_url %}
+                <a href="{{ d.pdf_url }}" target="_blank" rel="noopener" hx-boost="false"
+                   class="inline-flex items-center gap-1.5 text-indigo-300 hover:text-indigo-200"
+                   data-testid="detail-doc-{{ d.kind }}">
+                  <i data-lucide="file-text" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+                  {{ d.kind | replace('_', ' ') }}
+                </a>
+              {% else %}
+                <span class="text-slate-400">{{ d.kind | replace('_', ' ') }} <span class="text-slate-600">(superseded)</span></span>
+              {% endif %}
               <span class="text-xs text-slate-500">{{ d.compiled_at_label }}</span>
             </li>
           {% endfor %}
         </ul>
+        <a href="/api/v1/applications/{{ a.id }}/bundle" hx-boost="false"
+           class="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200">
+          <i data-lucide="download" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Download bundle (zip)
+        </a>
       {% else %}
         <p class="text-sm text-slate-500">No generated documents yet.</p>
       {% endif %}
     </section>
+
+    {# Auto-apply pipeline state — where this application actually is. #}
+    {% if auto_apply %}
+      <section data-testid="detail-auto-apply">
+        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Auto-apply</div>
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide
+                       {{ 'bg-indigo-500/15 text-indigo-200' if auto_apply.phase == 'submitted'
+                          else ('bg-amber-500/15 text-amber-200' if auto_apply.phase == 'needs_you'
+                          else 'bg-emerald-500/15 text-emerald-200') }}">
+            {{ auto_apply.label }}
+          </span>
+          {% if auto_apply.at %}
+            <span class="text-xs text-slate-500 font-mono">{{ auto_apply.at[:16] | replace("T", " ") }}</span>
+          {% endif %}
+        </div>
+        {% if auto_apply.reason %}
+          <p class="mt-1.5 text-xs text-amber-200/80 leading-relaxed">{{ auto_apply.reason }}</p>
+          {% if job_url %}
+            <a href="{{ job_url }}" target="_blank" rel="noopener" hx-boost="false"
+               class="mt-1 inline-flex items-center gap-1 text-xs text-slate-300 hover:text-slate-100 underline underline-offset-2">
+              Open posting to submit ↗
+            </a>
+          {% endif %}
+        {% endif %}
+      </section>
+    {% endif %}
+
+    {# Screener answers — exactly what was / will be sent. #}
+    {% if screener_answers %}
+      <section data-testid="detail-screeners">
+        <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">
+          Screener answers · <span class="font-mono">{{ screener_answers | length }}</span>
+        </div>
+        <ul class="flex flex-col gap-2">
+          {% for s in screener_answers %}
+            <li class="text-sm">
+              <div class="text-slate-400 text-xs">{{ s.question }}</div>
+              <div class="text-slate-200 mt-0.5">{{ s.answer or "—" }}</div>
+              <div class="text-[10px] font-mono text-slate-600 mt-0.5">{{ s.source }}{% if not s.reviewed and s.source == "drafted" %} · <span class="text-amber-300">needs review</span>{% endif %}</div>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
 
     {# Plan 86 § W3.2 / 0.4.5.08 — per-application bullet override toggles.
        Cycles null → always_include → never_include → null on click. Writes

@@ -176,6 +176,8 @@ class Job(SQLModel, table=True):
 class JobFilter(BaseModel):
     """Query-param filter for `/api/v1/jobs` (Phase 2.0.11 surface)."""
 
+    # Free-text search over company + role (ILIKE) — Tracking · Jobs library.
+    q: str | None = None
     company: str | None = None
     source: JobSource | None = None
     board: ApplicationBoard | None = None
