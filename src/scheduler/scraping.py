@@ -32,7 +32,7 @@ from sqlmodel import select
 from db.session import async_session
 from llm import get_provider as llm_get_provider
 from llm.base import LLMProviderError
-from models import JobScrapeStatus, JobSource, Settings
+from models import JobScrapeStatus, JobSource, Profile, Settings
 from scraper.crawl4ai_client import Crawl4AIClient
 from scraper.proxy import resolve_proxy_config, safe_proxy_host
 from scraper.rate_limit import resolve_rate_limit
@@ -75,29 +75,59 @@ _LINKEDIN_PROXY_WARNED: bool = False
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
-def _compose_query(source: JobSource, settings: Settings) -> ScrapeQuery:
-    """Build a per-source ScrapeQuery from Settings + env-loaded config."""
+# Cap the per-firing fan-out for keyword sources: one ScrapeQuery per target
+# title, at most this many titles per firing. Later titles are NOT silently
+# dropped forever — the list is stable, so tightening the cap just means the
+# operator sees fewer parallel title queries; a log line records truncation.
+_MAX_TITLE_QUERIES = 3
+
+
+def _compose_queries(
+    source: JobSource, settings: Settings, profile: Profile | None
+) -> list[ScrapeQuery]:
+    """Build the per-source ScrapeQuery list.
+
+    Keyword sources (LinkedIn / Indeed) derive from profile-level
+    job-search preferences — ONE query per target title so multi-title
+    users get OR semantics across searches (docs/design/
+    JOB_SEARCH_PREFERENCES.md § E). A non-empty per-source Settings
+    keyword override wins and behaves like the legacy single query.
+    Company-list sources are unchanged.
+    """
     from config import settings as app_settings
+    from services.search_prefs import derive_source_inputs
 
     if source is JobSource.WORKDAY:
-        return ScrapeQuery(company_filter=list(settings.workday_companies or []))
+        return [ScrapeQuery(company_filter=list(settings.workday_companies or []))]
     if source is JobSource.GREENHOUSE:
-        return ScrapeQuery(company_filter=list(app_settings.greenhouse_companies or []))
+        return [ScrapeQuery(company_filter=list(app_settings.greenhouse_companies or []))]
     if source is JobSource.LEVER:
-        return ScrapeQuery(company_filter=list(app_settings.lever_companies or []))
+        return [ScrapeQuery(company_filter=list(app_settings.lever_companies or []))]
     if source is JobSource.ASHBY:
-        return ScrapeQuery(company_filter=list(app_settings.ashby_companies or []))
-    if source is JobSource.LINKEDIN:
-        return ScrapeQuery(
-            keywords=list(settings.linkedin_keywords or []),
-            location=settings.linkedin_location,
-        )
-    if source is JobSource.INDEED:
-        return ScrapeQuery(
-            keywords=list(settings.indeed_keywords or []),
-            location=settings.indeed_location,
-        )
-    return ScrapeQuery()
+        return [ScrapeQuery(company_filter=list(app_settings.ashby_companies or []))]
+    if source in (JobSource.LINKEDIN, JobSource.INDEED):
+        keywords, location, is_override = derive_source_inputs(profile, settings, source)
+        if is_override:
+            # Legacy behavior: the override keyword list is ONE query.
+            return [ScrapeQuery(keywords=keywords, location=location)]
+        titles = keywords[:_MAX_TITLE_QUERIES]
+        if len(keywords) > len(titles):
+            log.info(
+                "scraping.%s user=%s: %d target titles, querying first %d",
+                source.value,
+                settings.user_id,
+                len(keywords),
+                len(titles),
+            )
+        return [
+            ScrapeQuery(
+                keywords=[title],
+                location=location,
+                raw_meta={"target_title": title},
+            )
+            for title in titles
+        ]
+    return [ScrapeQuery()]
 
 
 async def _maybe_notify_threshold_cross(
@@ -150,12 +180,16 @@ async def _scrape_one_user(
     if settings.sources_enabled.get(source.value, True) is False:
         return
 
+    profile = (
+        await session.exec(select(Profile).where(Profile.user_id == settings.user_id))
+    ).one_or_none()
+
     # Skip unconfigured sources instead of firing a meaningless query
     # (empty keywords / empty company list ⇒ "SUCCESS · 0 listings" noise,
     # which reads as a working scrape that found nothing). The Settings ·
     # Sources panel surfaces the not-configured state; the manual Run-now
     # endpoint rejects unconfigured sources loudly before queueing.
-    if not env_secrets.scraper_source_configured(source, settings):
+    if not env_secrets.scraper_source_configured(source, settings, profile):
         log.debug(
             "scraping.%s skipped for user=%s: source not configured",
             source.value,
@@ -224,17 +258,23 @@ async def _scrape_one_user(
         provider=provider,
     )
 
-    query = _compose_query(source, settings)
+    queries = _compose_queries(source, settings, profile)
     if max_listings is not None:
-        query = query.model_copy(update={"max_listings": max_listings})
+        # Manual Run-now is a bounded verification run — split the listing
+        # budget across the per-title queries instead of multiplying it.
+        per_query = max(1, max_listings // len(queries))
+        queries = [q.model_copy(update={"max_listings": per_query}) for q in queries]
+    statuses: list[JobScrapeStatus] = []
     try:
-        run = await run_scraper(
-            session,
-            scraper=scraper,
-            user_id=settings.user_id,
-            query=query,
-            triggered_by="cron" if max_listings is None else "manual",
-        )
+        for query in queries:
+            run = await run_scraper(
+                session,
+                scraper=scraper,
+                user_id=settings.user_id,
+                query=query,
+                triggered_by="cron" if max_listings is None else "manual",
+            )
+            statuses.append(run.status)
     except Exception as exc:  # noqa: BLE001 — per-user isolation
         # Plan 64 PR #165 delta-fix HIGH-1 + HIGH-2: `log.exception` would
         # attach the full traceback (which embeds `repr(exc)` for every
@@ -270,12 +310,14 @@ async def _scrape_one_user(
         )
         return
 
-    if run.status in (JobScrapeStatus.SUCCESS, JobScrapeStatus.PARTIAL):
+    # Counter semantics across the per-title query fan-out: any healthy run
+    # resets (the source works); all-FAILED increments once per firing.
+    if any(s in (JobScrapeStatus.SUCCESS, JobScrapeStatus.PARTIAL) for s in statuses):
         if previous_failures != 0:
             counters[source.value] = 0
             settings.consecutive_scrape_failures = counters
             session.add(settings)
-    elif run.status is JobScrapeStatus.FAILED:
+    elif JobScrapeStatus.FAILED in statuses:
         new_failures = previous_failures + 1
         counters[source.value] = new_failures
         settings.consecutive_scrape_failures = counters

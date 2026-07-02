@@ -1,0 +1,145 @@
+{# Job-search preferences editor — profile-level target titles + locations.
+   Context contract (docs/design/JOB_SEARCH_PREFERENCES.md § D):
+     sp.target_titles     : list[str]
+     sp.expansions        : {title: {"expanded": [...], "model": str}}
+     sp.target_cities     : list[str]
+     sp.remote_ok         : bool
+   Every mutating control targets closest [data-search-prefs] with
+   outerHTML and the PUT returns THIS fragment — granularity matched to
+   the swap target (the P4 stacking lesson). #}
+<section id="job-search"
+         data-search-prefs
+         class="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+  <header class="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800">
+    <div class="min-w-0">
+      <h2 class="text-sm font-semibold text-slate-100 flex items-center gap-2">
+        <i data-lucide="radar" class="h-4 w-4 text-indigo-400" stroke-width="1.5"></i>
+        Job search
+      </h2>
+      <p class="text-xs text-slate-500 mt-0.5">
+        Target titles + locations drive every job source. Similar titles are matched
+        automatically (e.g. "Senior Software Engineer" ≈ "SDE III").
+      </p>
+    </div>
+    <span class="search-prefs-indicator htmx-indicator inline-flex items-center gap-1.5 text-xs text-indigo-300">
+      <span class="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+      Saving…
+    </span>
+  </header>
+
+  <div class="px-4 py-4 flex flex-col gap-5">
+    {# ── Target titles ─────────────────────────────────────────────── #}
+    <div>
+      <div class="text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-2">Target titles</div>
+      <div class="flex flex-wrap gap-2 mb-2" data-testid="target-title-chips">
+        {% for title in sp.target_titles %}
+        <span class="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-full bg-indigo-500/15 text-indigo-200 text-xs border border-indigo-500/30">
+          {{ title }}
+          <button type="button"
+                  class="h-4 w-4 inline-flex items-center justify-center rounded-full hover:bg-indigo-500/30"
+                  aria-label="Remove {{ title }}"
+                  hx-put="/api/v1/profile/search-prefs"
+                  hx-vals='{"action": "remove_title", "title": {{ title | tojson }}}'
+                  hx-target="closest [data-search-prefs]"
+                  hx-swap="outerHTML"
+                  hx-indicator="closest [data-search-prefs] .search-prefs-indicator">
+            <i data-lucide="x" class="h-3 w-3" stroke-width="1.5"></i>
+          </button>
+        </span>
+        {% else %}
+        <span class="text-xs text-slate-500 italic">No target titles yet — add one to start discovering jobs.</span>
+        {% endfor %}
+      </div>
+      <form class="flex items-center gap-2"
+            hx-put="/api/v1/profile/search-prefs"
+            hx-vals='{"action": "add_title"}'
+            hx-target="closest [data-search-prefs]"
+            hx-swap="outerHTML"
+            hx-indicator="closest [data-search-prefs] .search-prefs-indicator"
+            hx-disabled-elt="find button">
+        <input name="title" type="text" required minlength="2" maxlength="80"
+               placeholder="e.g. Senior Software Engineer"
+               autocomplete="off"
+               class="flex-1 max-w-sm rounded-lg bg-slate-950/60 border border-slate-700 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/40" />
+        <button type="submit"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 text-sm transition">
+          <i data-lucide="plus" class="h-4 w-4" stroke-width="1.5"></i>
+          Add
+        </button>
+      </form>
+      {% if sp.target_titles %}
+      <details class="mt-2 group">
+        <summary class="text-xs text-slate-500 cursor-pointer hover:text-slate-300 select-none">
+          Matched title variants
+        </summary>
+        <div class="mt-2 flex flex-col gap-1.5">
+          {% for title in sp.target_titles %}
+          {% set entry = sp.expansions.get(title) or {} %}
+          <div class="text-xs text-slate-400">
+            <span class="text-slate-300 font-medium">{{ title }}</span>
+            {% if entry.get("expanded") %}
+              → {{ entry["expanded"] | join(" · ") }}
+              {% if entry.get("model") == "none" %}
+              <span class="text-amber-400/80">(exact match only — no AI provider configured)</span>
+              {% endif %}
+            {% else %}
+              <span class="text-slate-500 italic">expansion pending</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+    </div>
+
+    {# ── Locations ─────────────────────────────────────────────────── #}
+    <div>
+      <div class="text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-2">Locations (US)</div>
+      <div class="flex flex-wrap gap-2 mb-2" data-testid="target-city-chips">
+        {% for city in sp.target_cities %}
+        <span class="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-full bg-cyan-500/10 text-cyan-200 text-xs border border-cyan-500/30">
+          <i data-lucide="map-pin" class="h-3 w-3" stroke-width="1.5"></i>
+          {{ city }}
+          <button type="button"
+                  class="h-4 w-4 inline-flex items-center justify-center rounded-full hover:bg-cyan-500/30"
+                  aria-label="Remove {{ city }}"
+                  hx-put="/api/v1/profile/search-prefs"
+                  hx-vals='{"action": "remove_city", "city": {{ city | tojson }}}'
+                  hx-target="closest [data-search-prefs]"
+                  hx-swap="outerHTML"
+                  hx-indicator="closest [data-search-prefs] .search-prefs-indicator">
+            <i data-lucide="x" class="h-3 w-3" stroke-width="1.5"></i>
+          </button>
+        </span>
+        {% else %}
+        <span class="text-xs text-slate-500 italic">No cities yet{% if sp.remote_ok %} — remote-only search{% endif %}.</span>
+        {% endfor %}
+      </div>
+      <div class="relative max-w-sm">
+        <input name="q" type="text" autocomplete="off"
+               placeholder="Start typing a city…"
+               class="w-full rounded-lg bg-slate-950/60 border border-slate-700 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+               hx-get="/_fragments/profile/cities"
+               hx-trigger="input changed delay:250ms, focus"
+               hx-target="next [data-city-suggestions]"
+               hx-swap="innerHTML"
+               data-testid="city-autocomplete-input" />
+        <div data-city-suggestions
+             class="absolute z-20 left-0 right-0 top-full mt-1 flex flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-xl empty:hidden overflow-hidden"></div>
+      </div>
+    </div>
+
+    {# ── Remote toggle ─────────────────────────────────────────────── #}
+    <label class="inline-flex items-center gap-3 cursor-pointer select-none">
+      <input type="checkbox" name="remote_ok"
+             class="toggle toggle-sm toggle-primary"
+             {% if sp.remote_ok %}checked{% endif %}
+             hx-put="/api/v1/profile/search-prefs"
+             hx-vals='{"action": "set_remote"}'
+             hx-target="closest [data-search-prefs]"
+             hx-swap="outerHTML"
+             hx-indicator="closest [data-search-prefs] .search-prefs-indicator" />
+      <span class="text-sm text-slate-300">Open to remote roles</span>
+    </label>
+  </div>
+</section>

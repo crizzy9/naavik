@@ -115,6 +115,91 @@ async def put_profile_bulk(
     )
 
 
+# ── Job-search preferences (docs/design/JOB_SEARCH_PREFERENCES.md § C) ──
+# NOTE: registered BEFORE the `/{field}` catch-all so the literal path wins.
+
+
+def _search_prefs_ctx(profile) -> dict[str, Any]:
+    return {
+        "sp": {
+            "target_titles": list(getattr(profile, "target_titles", None) or []),
+            "expansions": dict(getattr(profile, "title_expansions", None) or {}),
+            "target_cities": list(getattr(profile, "target_cities", None) or []),
+            "remote_ok": bool(getattr(profile, "remote_ok", True)),
+        }
+    }
+
+
+@router.put("/api/v1/profile/search-prefs", name="api_profile_search_prefs")
+async def put_search_prefs(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> HTMLResponse:
+    """Mutate one aspect of the job-search preferences, re-render the editor.
+
+    Actions (form-encoded): add_title / remove_title (title=), add_city /
+    remove_city (city=), set_remote (remote_ok checkbox present = on).
+    Title changes synchronously refresh the LLM expansion set (visible via
+    the fragment's hx-indicator; degrades to exact-match with no provider).
+    The response is the SAME `_search_prefs_editor.html` fragment the
+    controls target — granularity matched to `closest [data-search-prefs]`.
+    """
+    from services import search_prefs, settings_service
+
+    form = await request.form()
+    action = str(form.get("action") or "")
+    user_id = _effective_user_id(_user)
+    profile = await profile_service.get_profile(session, user_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="profile not found")
+
+    titles_changed = False
+    if action == "add_title":
+        title = str(form.get("title") or "").strip()
+        if title and title.lower() not in {t.lower() for t in profile.target_titles or []}:
+            profile.target_titles = [*(profile.target_titles or []), title]
+            titles_changed = True
+    elif action == "remove_title":
+        title = str(form.get("title") or "").strip()
+        profile.target_titles = [
+            t for t in (profile.target_titles or []) if t.lower() != title.lower()
+        ]
+        titles_changed = True
+    elif action == "add_city":
+        city = str(form.get("city") or "").strip()
+        from services.geo import normalize_city
+
+        normalized = normalize_city(city)
+        if normalized and normalized not in (profile.target_cities or []):
+            profile.target_cities = [*(profile.target_cities or []), normalized]
+    elif action == "remove_city":
+        city = str(form.get("city") or "").strip()
+        profile.target_cities = [c for c in (profile.target_cities or []) if c != city]
+    elif action == "set_remote":
+        # Unchecked checkboxes are absent from the form payload.
+        profile.remote_ok = form.get("remote_ok") is not None
+    else:
+        raise HTTPException(status_code=422, detail=f"unknown action {action!r}")
+
+    session.add(profile)
+    await session.flush()
+
+    if titles_changed:
+        user_settings = await settings_service.get_or_create(session, user_id=user_id)
+        await search_prefs.refresh_title_expansions(
+            session, profile=profile, settings=user_settings
+        )
+
+    await session.commit()
+    return templates.TemplateResponse(
+        request,
+        "components/_search_prefs_editor.html",
+        _search_prefs_ctx(profile),
+    )
+
+
 # ── Per-field PUT (legacy autosave — retained for non-profile-edit consumers) ──
 
 

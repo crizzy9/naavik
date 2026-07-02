@@ -77,6 +77,27 @@ class Profile(SQLModel, table=True):
 
     cover_letter_base: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
 
+    # Job-search preferences (docs/design/JOB_SEARCH_PREFERENCES.md).
+    # These drive ALL scrapers via scheduler/scraping._compose_queries;
+    # Settings' per-source keyword fields survive only as overrides.
+    target_titles: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(ARRAY(String), nullable=False, server_default="{}"),
+    )
+    # {title: {"expanded": [...equivalent titles...], "generated_at": iso, "model": str}}
+    # LLM-generated; refreshed when a title changes. model="none" when no
+    # provider was configured (expansion degrades to the raw title).
+    title_expansions: dict = Field(
+        default_factory=dict,
+        sa_column=Column(JSONB, nullable=False, server_default="{}"),
+    )
+    # Normalized "City, ST" strings from the bundled US-cities dataset.
+    target_cities: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(ARRAY(String), nullable=False, server_default="{}"),
+    )
+    remote_ok: bool = Field(default=True)
+
     # Plan 73 (0.3.2.03): per-role-family 30-day score trends.
     # Written by APScheduler cron `score.aggregate_daily`; consumed by Profile
     # hero sparkline strip. Shape documented in docs/design/DATA_MODEL.md.

@@ -1,25 +1,12 @@
 # Naavik — Agent Guide
 
-> **This is the canonical reference for AI agents working on Naavik.**
-> **Last updated:** 2026-05-19 (Plan 29 / `0.2.0.06` EXECUTED — Crawl4AI scraper substrate. New `src/scraper/` layer: `types.py` (RawJob 17-field Pydantic v2 DTO w/ `extra="forbid"` + `*_hint` enum fields + ScrapeQuery), `base.py` (`ScraperBase(ABC)` matching `LLMProvider(ABC)` convention; `async def scrape(query) -> AsyncIterator[RawJob]`; class-level `rate_limit_per_minute=30` + `random_delay_seconds=(1.0, 3.0)` reserve `0.2.0.13` interface), `crawl4ai_client.py` (`Crawl4AIClient` wraps `AsyncWebCrawler` w/ `enable_stealth=True` default; `fetch_html(url)` + `stream_many(urls)`), `sites/__init__.py` (registry stub for `0.2.0.07`) + `sites/sample.py` (test fixture; NOT registered for production). New `src/services/scraper_service.py:run_scraper` orchestrates JobScrapeRun lifecycle (RUNNING → SUCCESS/PARTIAL/FAILED/TIMED_OUT) consuming plan 27's `job_service.upsert_job` + `record_scrape_run`. Deps: `crawl4ai==0.8.6` (post-litellm-hotfix exact pin) added; `playwright>=1.58.0,<1.59` PROMOTED from dev extras to base deps. 43 new tests (RawJob validation, ABC enforcement, Crawl4AIClient w/ `_FakeAsyncCrawler` mock, SampleScraper materialization, JobScrapeRun status derivation across 7 lifecycle outcomes). No new CLI / vault / env / on-disk surface. Nix flake / Docker Chromium binary install DEFERRED to `0.2.0.07` per OQ.5. Canonical ScraperBase + RawJob + Crawl4AIClient reference: `docs/design/SCRAPER_BASE.md` (graduated from plan 29). BACKEND.md § J.1 collapses `list_jobs + fetch_detail + matches` sketch to streaming `scrape()` per plan § D.5.)
-> Earlier line: 2026-05-19 (Plan 27 / `0.2.0.05` EXECUTED — Job model hardening + `JobScrapeRun`. 6 new `Job` columns (`external_id` partial-unique on `(user_id, source, external_id) WHERE deleted_at IS NULL`; `remote_policy` / `seniority_level` / `posted_at_text` / `description_extracted_at` / `description_extraction_model` / `last_scrape_run_id` FK); `visa_restrictions` promoted from `str | None` to typed `VisaRestriction` enum. New `JobScrapeRun` SQLModel + table (per-scraper-invocation observability). 4 new Postgres ENUM types (`visarestriction` / `remotepolicy` / `senioritylevel` / `jobscrapestatus`); `JobSource` collapses from 2-value catch-all to 10 per-source values (LINKEDIN/WORKDAY/GREENHOUSE/LEVER/ASHBY/INDEED/COMPANY_DIRECT/RSSHUB/N8N_LEGACY/MANUAL; `AUTOMATED` deprecated). Alembic 0005 additive. New `src/services/job_service.py` (8 functions: `upsert_job` / `get_job` / `list_jobs` / `archive_job` / `restore_job` / `create_manual_job` / `count_jobs_by_source` / `record_scrape_run`). No new env / CLI / on-disk surface; sole on-disk addition is the `job_scrape_run` DB table. Canonical Job + JobScrapeRun reference: `docs/design/JOB_MODEL.md` (graduated from plan 27).)
-> Earlier line: 2026-05-19 (Plan 26 / `0.2.0.01` EXECUTED — vault deprecation. `src/services/vault.py` (436 LOC AES-256-GCM + PBKDF2 + audit-log) DELETED. `src/cli/{vault,init}.py` (258 LOC) DELETED. Alembic 0004 drops 5 vault-derived `Settings` columns. Settings UI no longer accepts API-key / webhook input; env-presence indicators sourced from `services/env_secrets.py` instead. `.env.example` rewritten with 14 slot rows incl. new `TELEGRAM_CHAT_ID`. `naavik init` + `naavik vault <...>` print migration hints (exit 2). `~/.naavik/secrets.enc{,.lock,.bak.*}` + `~/.naavik/key.bin` + `~/.naavik/logs/vault-audit.log` are no longer written or read. Single survivor CLI: `naavik serve` (dies in `0.2.0.02`). 0.2.1.03 (Argon2id PBKDF2 upgrade) closed as moot.)
-> Earlier line: 2026-05-19 (Plan 25 / `0.1.1` EXECUTED — legacy bash → Python rewrite + 5 mutating `task` subcommands (`insert` / `defer` / `prioritize` / `move` / `renumber`) + CHANGELOG markdown-escape hardening. `.claude/naavik-ops gh` + `memory` no longer subprocess-wrap legacy bash — native Python under `.claude/naavik_ops/{gh,memory}.py`. `scripts/gh-project.sh` + `scripts/agent-memory.sh` + `scripts/roadmap_parser.py` DELETED. Single-writer rule preserved. Design doc: `docs/design/PHASE_NUMBERING.md`.)
-> Earlier line: 2026-05-17 (Plan 19 / A.15 EXECUTED — agent memory + learning system. § Agent System infrastructure table adds `.claude/memory/` + `.claude/naavik_ops/memory.py` (single-writer rule per A.15) + 4 memory-aware skills; slash commands table adds `/memory` + `/learn`. Design doc: `docs/design/AGENT_MEMORY.md`. Workflow integration: `docs/AGENT_OPS.md § 14`.)
-> Earlier line: 2026-05-10 (§ Key Conventions § CLI — both the `naavik` script AND the encrypted vault are on a sunset track per ROADMAP § Phase 2 tasks 2.12 (vault → env-based secrets) and 2.11 (CLI deletion, sequenced after 2.12). Do NOT extend either; new operator features ship as Settings UI or `.env.example` slots.)
-> **Always read this before starting work.**
-
 ---
 
 ## Quick Start
 
 ```
 1. Read this file (AGENTS.md)
-2. Read docs/PLAYBOOK.md — the strict task-classification + procedure tree the manager
-   consults on EVERY user message (codified after the aa2f6a0 workflow miss; ROADMAP § Phase A row A.14).
-   9 categories: STATUS / INSPECT / 3 gate responses / PRODUCT_WORK / BUG_TRIAGE / CONTRACT_CHANGE / BOOKKEEPING.
-   CONTRACT_CHANGE = PR; BOOKKEEPING = direct push to main. Never mix.
-3. Read ROADMAP.md — understand current phase and what's already done
+3. Read ROADMAP.md — understand current milestones
 4. Read DESIGN.md — if you're doing any UI work (root-level design system reference)
 5. Read docs/design/WORKFLOW.md — for the full design → implementation pipeline
 6. Start work. Update ROADMAP.md as you go.
@@ -50,21 +37,21 @@
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Language | Python 3.12+ |
-| Backend | FastAPI + SQLModel (Pydantic + SQLAlchemy) |
-| Frontend | HTMX + Jinja2 + Tailwind CSS + DaisyUI |
-| Database | PostgreSQL + pgvector |
-| ORM/Migrations | SQLModel + Alembic |
-| Scraping | Crawl4AI (primary) + Playwright (fallback) |
-| AI/LLM | Direct SDK calls — Anthropic, OpenAI, Ollama |
-| PDF Generation | Typst (primary), LaTeX compatibility planned |
-| Scheduling | APScheduler (PostgreSQL job store) |
-| Auth | FastAPI JWT (forms — email + password) — OIDC for self-hosted (Authentik / Keycloak / Okta) is Phase 2+ |
-| Notifications | Discord webhooks, Telegram bot |
-| Deployment | Docker Compose + NixOS service module |
-| Dev Environment | Nix flake + uv |
+| Layer           | Technology                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------- |
+| Language        | Python 3.12+                                                                                            |
+| Backend         | FastAPI + SQLModel (Pydantic + SQLAlchemy)                                                              |
+| Frontend        | HTMX + Jinja2 + Tailwind CSS + DaisyUI                                                                  |
+| Database        | PostgreSQL + pgvector                                                                                   |
+| ORM/Migrations  | SQLModel + Alembic                                                                                      |
+| Scraping        | Crawl4AI (primary) + Playwright (fallback)                                                              |
+| AI/LLM          | Direct SDK calls — Anthropic, OpenAI, Ollama                                                            |
+| PDF Generation  | Typst (primary), LaTeX compatibility planned                                                            |
+| Scheduling      | APScheduler (PostgreSQL job store)                                                                      |
+| Auth            | FastAPI JWT (forms — email + password) — OIDC for self-hosted (Authentik / Keycloak / Okta) is Phase 2+ |
+| Notifications   | Discord webhooks, Telegram bot                                                                          |
+| Deployment      | Docker Compose + NixOS service module                                                                   |
+| Dev Environment | Nix flake + uv                                                                                          |
 
 ---
 
@@ -123,6 +110,7 @@ When you need to know what's currently in any of these directories, **list them*
 ## Key Conventions
 
 ### Code Style
+
 - Use `ruff` for linting and formatting
 - Type hints on all function signatures
 - Pydantic models for all API input/output
@@ -130,12 +118,14 @@ When you need to know what's currently in any of these directories, **list them*
 - Async endpoints where I/O is involved (DB, HTTP, LLM calls)
 
 ### API Design
+
 - REST endpoints under `/api/v1/`
 - HTMX view routes under `/` (return HTML fragments)
 - Portfolio public API under `/api/portfolio/` (no auth required)
 - Use FastAPI dependency injection for DB sessions, auth, LLM providers
 
 ### Frontend (HTMX)
+
 - Templates in `src/ui/templates/`
 - Reusable partials in `src/ui/templates/components/`
 - Page templates in `src/ui/templates/pages/`
@@ -145,6 +135,7 @@ When you need to know what's currently in any of these directories, **list them*
 - Lucide Icons exclusively — stroke width 1.5
 
 ### Database
+
 - PostgreSQL with pgvector extension
 - Alembic for migrations
 - SQLModel for models
@@ -152,6 +143,7 @@ When you need to know what's currently in any of these directories, **list them*
 - Never raw SQL in route handlers — use service layer
 
 ### LLM Integration
+
 - All LLM calls go through `llm/base.py` abstract interface
 - Implementations: `llm/anthropic.py`, `llm/openai.py`, `llm/ollama.py`
 - User selects provider in settings — stored per-user in DB
@@ -159,6 +151,7 @@ When you need to know what's currently in any of these directories, **list them*
 - Prompt templates live in `llm/prompts/` as Python modules (not string files)
 
 ### Resume/CV Data Model
+
 - Profile data lives in PostgreSQL, NOT in YAML/JSON files
 - Each experience bullet is a single field — the **long, full version**. AI trims it at apply time to fit one line on the tailored 1-page resume, preserving numbers and verbs. **No oneline / detailed split.**
 - Bullets are tagged with the 9-tag vocabulary: `ai-ml`, `backend`, `frontend`, `devops`, `data-eng`, `genai`, `leadership`, `platform`, `product` (auto-generated by LLM during resume parse and on each new bullet; user can edit)
@@ -344,11 +337,13 @@ UI work plugs into the broader workflow above. The design pipeline (`docs/design
 ## External Integrations
 
 ### Portfolio Website (crypticsoul.dev)
+
 - `GET /api/portfolio/cv` — full profile as JSON
 - `GET /api/portfolio/resume.pdf` — latest generic 1-page resume
 - CV page fetches at build time; profile updates trigger Netlify rebuild webhook
 
 ### n8n (Legacy)
+
 - Previous automation lived on n8n (`n8n.luminolab.net`); the n8n instance still runs as the source-of-truth until Phase 2 scrapers ship
 - DataTable "Job Applications": `hfvivTlQThpPytkl`
 - RSShub: `rsshub.luminolab.net` (kept as a job-feed source — Naavik consumes it directly)
@@ -357,14 +352,14 @@ UI work plugs into the broader workflow above. The design pipeline (`docs/design
 
 ## Decision Log
 
-| Date | Decision | Context |
-|---|---|---|
+| Date       | Decision                                | Context                                                           |
+| ---------- | --------------------------------------- | ----------------------------------------------------------------- |
 | 2026-04-25 | UI Screens & Design workflow formalized | Added DESIGN.md, SCREENS.md, WORKFLOW.md, CLAUDE_DESIGN_PROMPT.md |
-| 2026-04-25 | Phase 0 Complete | Foundation infrastructure shipped |
-| 2026-04-25 | Dark mode primary | Light mode deferred to Phase 6 |
-| 2026-04-25 | Lucide Icons exclusively | No mixing icon sets |
-| 2026-04-25 | Inter + JetBrains Mono typography | Paired for readability and data density |
-| 2026-04-25 | Indigo/cyan brand palette | AI sophistication + navigator water theme |
+| 2026-04-25 | Phase 0 Complete                        | Foundation infrastructure shipped                                 |
+| 2026-04-25 | Dark mode primary                       | Light mode deferred to Phase 6                                    |
+| 2026-04-25 | Lucide Icons exclusively                | No mixing icon sets                                               |
+| 2026-04-25 | Inter + JetBrains Mono typography       | Paired for readability and data density                           |
+| 2026-04-25 | Indigo/cyan brand palette               | AI sophistication + navigator water theme                         |
 
 ---
 
@@ -374,23 +369,23 @@ Slash commands at project scope (see `.claude/commands/<name>.md`):
 
 ### Slash commands
 
-| Command | Purpose |
-|---|---|
-| `/build` | Autonomous milestone delivery loop. |
-| `/plan` | Architect drafts a plan + opens GH Issue. |
-| `/discuss` | Multi-agent debate. |
-| `/triage-bug` | Devops repros, engineer fixes. |
-| `/review-pr` | Engineer + hacker review in parallel. |
-| `/threat-model` | Hacker produces STRIDE for a feature / doc. |
-| `/design-screen` | Designer mocks a screen. |
-| `/groom` | Manager grooms the Project board. |
-| `/standup` | Current state + drift + budget snapshot. |
-| `/bootstrap` | First-time setup wrapper. |
-| `/sync-roadmap` | Diff ROADMAP vs Project; --apply pushes ROADMAP → Project. |
-| `/budget` | Token spend ledger vs caps. |
-| `/runs` | Trace history. |
-| `/memory` | Read-only inspection of `.claude/memory/` stores (decisions / discussions / lessons / patterns / knowledge / runs-analysis). |
-| `/learn` | Manual retrospective. Analyzes last N runs, mines patterns, surfaces promotion + ROADMAP candidates. |
+| Command          | Purpose                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `/build`         | Autonomous milestone delivery loop.                                                                                          |
+| `/plan`          | Architect drafts a plan + opens GH Issue.                                                                                    |
+| `/discuss`       | Multi-agent debate.                                                                                                          |
+| `/triage-bug`    | Devops repros, engineer fixes.                                                                                               |
+| `/review-pr`     | Engineer + hacker review in parallel.                                                                                        |
+| `/threat-model`  | Hacker produces STRIDE for a feature / doc.                                                                                  |
+| `/design-screen` | Designer mocks a screen.                                                                                                     |
+| `/groom`         | Manager grooms the Project board.                                                                                            |
+| `/standup`       | Current state + drift + budget snapshot.                                                                                     |
+| `/bootstrap`     | First-time setup wrapper.                                                                                                    |
+| `/sync-roadmap`  | Diff ROADMAP vs Project; --apply pushes ROADMAP → Project.                                                                   |
+| `/budget`        | Token spend ledger vs caps.                                                                                                  |
+| `/runs`          | Trace history.                                                                                                               |
+| `/memory`        | Read-only inspection of `.claude/memory/` stores (decisions / discussions / lessons / patterns / knowledge / runs-analysis). |
+| `/learn`         | Manual retrospective. Analyzes last N runs, mines patterns, surfaces promotion + ROADMAP candidates.                         |
 
 ### Infrastructure
 
@@ -424,7 +419,7 @@ Phase A (Agent System) is tracked separately from product phases 0–6 because i
 
 ## Contact
 
-- Repo: https://github.com/crizzy9/naavik
+- Repo: <https://github.com/crizzy9/naavik>
 - Issues: Use GitHub issues for bugs and feature requests
 - Design questions: Check `DESIGN.md` first
 - Architecture questions: Check this file and `ROADMAP.md`

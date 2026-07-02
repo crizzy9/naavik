@@ -1,0 +1,40 @@
+{# Live scrape-run status strip (docs/design/JOB_SEARCH_PREFERENCES.md § G).
+   Self-polling while any run is queued/running; also refreshes on the
+   body-level `scrape-status-changed` event fired by run triggers.
+   Context: runs=[{source_label, status, new_jobs, listings, started_label,
+   error}], any_active=bool, poll=bool. Rendered on Discover + Settings·Sources. #}
+<div id="scrape-status-strip"
+     hx-get="/_fragments/scrape-status"
+     hx-trigger="{% if poll %}every 3s, {% endif %}scrape-status-changed from:body"
+     hx-swap="outerHTML"
+     class="{% if runs %}flex{% else %}hidden{% endif %} flex-col gap-1.5"
+     data-testid="scrape-status-strip">
+  {% for r in runs %}
+  <div class="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs">
+    <span class="font-medium text-slate-200 w-20 shrink-0">{{ r.source_label }}</span>
+    {% if r.status == "queued" %}
+    <span class="inline-flex items-center gap-1.5 text-slate-400">
+      <span class="h-2.5 w-2.5 rounded-full bg-slate-500 animate-pulse"></span>
+      queued
+    </span>
+    {% elif r.status == "running" %}
+    <span class="inline-flex items-center gap-1.5 text-indigo-300">
+      <span class="h-2.5 w-2.5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+      running · {{ r.listings }} listing{{ "s" if r.listings != 1 }} so far
+    </span>
+    {% elif r.status in ("success", "partial") %}
+    <span class="inline-flex items-center gap-1.5 text-emerald-300">
+      <i data-lucide="check-circle-2" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      done · found {{ r.new_jobs }} new job{{ "s" if r.new_jobs != 1 }}
+      {% if r.status == "partial" %}<span class="text-amber-300/80">(partial)</span>{% endif %}
+    </span>
+    {% else %}
+    <span class="inline-flex items-center gap-1.5 text-rose-300">
+      <i data-lucide="x-circle" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      {{ r.status.replace("_", " ") }}{% if r.error %} · {{ r.error }}{% endif %}
+    </span>
+    {% endif %}
+    <span class="ml-auto text-slate-500 shrink-0">{{ r.started_label }}</span>
+  </div>
+  {% endfor %}
+</div>

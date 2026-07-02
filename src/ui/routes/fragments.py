@@ -15,11 +15,104 @@ from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.session import get_session
+from models import User
 from services import profile_service
+from services.auth import require_authed_session
 from ui import profile_ctx as pctx
 from ui.templates_setup import templates
 
 router = APIRouter()
+
+# Sources shown on the scrape-status strip, with short labels.
+_STRIP_SOURCE_LABELS = {
+    "linkedin": "LinkedIn",
+    "indeed": "Indeed",
+    "workday": "Workday",
+    "greenhouse": "Greenhouse",
+    "lever": "Lever",
+    "ashby": "Ashby",
+}
+
+
+@router.get("/_fragments/scrape-status", response_class=HTMLResponse, name="scrape_status")
+async def get_scrape_status(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Live scrape-run status strip — queued → running → found N → done/failed.
+
+    Queued = a transient `scraping.<source>-manual-*` APScheduler job exists
+    but its JobScrapeRun row hasn't been opened yet. Running/finished rows
+    come from JobScrapeRun (last 15 minutes). Polls itself every 3s while
+    anything is active (docs/design/JOB_SEARCH_PREFERENCES.md § G).
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from services import job_service
+    from ui.routes.profile import _effective_user_id
+    from ui.routes.settings import _format_started_at
+
+    user_id = _effective_user_id(user)
+    rows = await job_service.list_recent_scrape_runs(session, user_id=user_id, limit=12)
+    cutoff = datetime.now(UTC) - timedelta(minutes=15)
+
+    runs: list[dict] = []
+    running_sources: set[str] = set()
+    for run in rows:
+        started = run.started_at
+        if started is not None and started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        is_running = run.status.value == "running"
+        if not is_running and (started is None or started < cutoff):
+            continue
+        if is_running:
+            running_sources.add(run.source.value)
+        runs.append(
+            {
+                "source_label": _STRIP_SOURCE_LABELS.get(run.source.value, run.source.value),
+                "status": run.status.value,
+                "new_jobs": run.new_jobs or 0,
+                "listings": run.listings_returned or 0,
+                "started_label": _format_started_at(run.started_at),
+                "error": (run.errors or [None])[0],
+            }
+        )
+
+    # Queued = accepted manual trigger with no RUNNING row yet.
+    queued: list[dict] = []
+    try:
+        from scheduler import get_scheduler
+
+        sched = get_scheduler()
+        if sched is not None:
+            for job in sched.get_jobs():
+                parts = job.id.split("-manual-")
+                if len(parts) == 2 and parts[0].startswith("scraping."):
+                    source_value = parts[0].removeprefix("scraping.")
+                    if source_value not in running_sources:
+                        queued.append(
+                            {
+                                "source_label": _STRIP_SOURCE_LABELS.get(
+                                    source_value, source_value
+                                ),
+                                "status": "queued",
+                                "new_jobs": 0,
+                                "listings": 0,
+                                "started_label": "",
+                                "error": None,
+                            }
+                        )
+    except Exception:  # noqa: BLE001 — scheduler absent in some test contexts
+        pass
+
+    runs = queued + runs
+    any_active = bool(queued) or bool(running_sources)
+    return templates.TemplateResponse(
+        request,
+        "components/_scrape_status_strip.html",
+        {"runs": runs[:6], "poll": any_active},
+    )
 
 
 @router.get("/_modal/confirm", response_class=HTMLResponse, name="modal_confirm")

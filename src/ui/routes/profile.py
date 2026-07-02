@@ -61,6 +61,13 @@ async def _build_profile_ctx(session: AsyncSession, user_id: int) -> dict[str, o
         "app_questions": pctx.app_questions_pairs(profile),
         "anchors": pctx.PROFILE_ANCHORS,
         "readiness": pctx.application_readiness(profile),
+        # Job-search preferences editor (components/_search_prefs_editor.html)
+        "sp": {
+            "target_titles": list(getattr(profile, "target_titles", None) or []),
+            "expansions": dict(getattr(profile, "title_expansions", None) or {}),
+            "target_cities": list(getattr(profile, "target_cities", None) or []),
+            "remote_ok": bool(getattr(profile, "remote_ok", True)),
+        },
     }
 
 
@@ -86,3 +93,19 @@ async def get_edit(
     ctx["active_sidebar"] = "profile"
     ctx["active_template_path"] = "/profile/edit"
     return templates.TemplateResponse(request, "pages/profile_edit.html", ctx)
+
+
+@router.get("/_fragments/profile/cities", response_class=HTMLResponse, name="profile_cities")
+async def get_city_suggestions(
+    request: Request,
+    q: str = "",
+    _user: User | None = Depends(require_authed_session),
+):
+    """City-autocomplete suggestion list for the job-search prefs editor."""
+    from services.geo import search_cities
+
+    return templates.TemplateResponse(
+        request,
+        "components/_city_suggestions.html",
+        {"items": search_cities(q) if len(q.strip()) >= 2 else []},
+    )

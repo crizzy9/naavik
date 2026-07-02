@@ -484,6 +484,7 @@ async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> 
 
     settings_obj = await settings_service.get_or_create(session, user_id=user_id)
     last_runs = await job_service.list_recent_scrape_runs_by_source(session, user_id=user_id)
+    profile_obj = await profile_service.get_profile(session, user_id)
 
     rows: list[dict] = []
     for entry in _SOURCES_PANEL:
@@ -491,7 +492,7 @@ async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> 
         source_value = source.value
         sources_enabled = getattr(settings_obj, "sources_enabled", {}) or {}
         source_schedules = getattr(settings_obj, "source_schedules", {}) or {}
-        configured = env_secrets.scraper_source_configured(source, settings_obj)
+        configured = env_secrets.scraper_source_configured(source, settings_obj, profile_obj)
         rate_limit = resolve_rate_limit(settings_obj, source)
         run = last_runs.get(source)
         last_run_view: dict | None = None
@@ -538,10 +539,20 @@ async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> 
             location_attr = (
                 "linkedin_location" if source is JobSource.LINKEDIN else "indeed_location"
             )
+            # docs/design/JOB_SEARCH_PREFERENCES.md § D — profile prefs are
+            # the primary input; Settings fields survive as overrides.
+            from services.search_prefs import derive_source_inputs
+
+            derived_kw, derived_loc, is_override = derive_source_inputs(
+                profile_obj, settings_obj, source
+            )
             configure_block = {
                 "kind": "db",
                 "keywords": list(getattr(settings_obj, keywords_attr, None) or []),
                 "location": getattr(settings_obj, location_attr, None) or "",
+                "derived_keywords": [] if is_override else derived_kw,
+                "derived_location": ("" if is_override else (derived_loc or "")),
+                "override_active": is_override,
             }
         # Plan 64 / 0.2.7.11 — LinkedIn proxy presence indicator. The host is
         # rendered (not the userinfo) so operators can verify which provider
@@ -805,12 +816,15 @@ async def post_settings_source_run(
             "emerald": "bg-emerald-500/15 text-emerald-200 ring-emerald-500/30",
             "rose": "bg-rose-500/15 text-rose-200 ring-rose-500/30",
         }
+        # scrape-status-changed kicks the live status strip (Discover +
+        # Sources) so a queued run shows up without waiting for the poll.
         return HTMLResponse(
             f'<span data-source-run-result="{tone}" class="inline-flex items-center '
             f'gap-1 px-2 py-1 rounded text-[11px] font-mono ring-1 {tones[tone]}">'
             f'<i data-lucide="{icon}" class="h-3 w-3" stroke-width="1.5"></i>'
             f"{text}</span>",
             status_code=status_code,
+            headers={"HX-Trigger": "scrape-status-changed"},
         )
 
     if source not in scraper_registry:

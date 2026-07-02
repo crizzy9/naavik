@@ -26,12 +26,29 @@
                 cta_label="Clear filters", cta_url="/discover" %}
           {% include "components/empty_state.html" %}
         {% endwith %}
-      {% else %}
-        {% with icon="check-circle-2",
-                line="No new matches today. Naavik scans hourly — check back soon.",
-                cta_label="Open tracking", cta_url="/tracking" %}
+      {% elif not search_prefs_ready %}
+        {# No job-search preferences yet — nothing will ever land here until
+           the user sets target titles (docs/design/JOB_SEARCH_PREFERENCES.md). #}
+        {% with icon="radar",
+                line="No job search configured yet. Set your target titles and locations — every job source runs off them.",
+                cta_label="Set up your job search", cta_url="/profile/edit#job-search" %}
           {% include "components/empty_state.html" %}
         {% endwith %}
+      {% else %}
+        {% with icon="check-circle-2",
+                line="No new matches right now. Scans run on a schedule — or kick one off yourself.",
+                cta_label="Run LinkedIn scan now", cta_url=None %}
+          {% include "components/empty_state.html" %}
+        {% endwith %}
+        <button type="button"
+                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium transition"
+                hx-post="/_fragments/settings/sources/linkedin/run"
+                hx-swap="none"
+                hx-disabled-elt="this"
+                data-testid="discover-run-linkedin">
+          <i data-lucide="play" class="h-4 w-4" stroke-width="1.5"></i>
+          Run LinkedIn scan now
+        </button>
       {% endif %}
     {% endif %}
   </div>

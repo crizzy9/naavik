@@ -234,6 +234,28 @@ async def post_extraction_upload(
         await session.rollback()
         parse_error = str(exc)
 
+    # Seed job-search preferences from the fresh parse (current title +
+    # location) so a new user reaches Discover results without touching
+    # Settings, then expand titles (degrades to raw titles with no LLM).
+    # Best-effort: never fail the upload on preference seeding.
+    try:
+        from services import search_prefs
+
+        profile_row = await profile_service.get_profile(session, user_id)
+        if profile_row is not None:
+            seeded = await search_prefs.prefill_search_prefs(session, profile=profile_row)
+            if seeded:
+                from services import settings_service as _settings_service
+
+                user_settings = await _settings_service.get_or_create(session, user_id=user_id)
+                await search_prefs.refresh_title_expansions(
+                    session, profile=profile_row, settings=user_settings
+                )
+            await session.commit()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("search-pref prefill failed user=%s: %s", user_id, exc)
+        await session.rollback()
+
     log.info(
         "extraction upload user=%s file=%s bytes=%d chars=%d structured=%s experiences=%d",
         user_id,

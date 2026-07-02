@@ -101,65 +101,106 @@ class _FakeSession:
         return self.exec_results.pop(0)
 
 
-# ── _compose_query ──────────────────────────────────────────────────────
+# ── _compose_queries ────────────────────────────────────────────────────
 
 
-def test_compose_query_workday_reads_workday_companies():
+def _make_profile(**kw):
+    base = {
+        "target_titles": [],
+        "title_expansions": {},
+        "target_cities": [],
+        "remote_ok": True,
+        "headline": "Senior Software Engineer at Intuit",
+    }
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def test_compose_queries_workday_reads_workday_companies():
     s = _make_settings(workday_companies=["foo/External", "bar/Careers"])
-    q = scraping._compose_query(JobSource.WORKDAY, s)
+    (q,) = scraping._compose_queries(JobSource.WORKDAY, s, None)
     assert q.company_filter == ["foo/External", "bar/Careers"]
 
 
-def test_compose_query_linkedin_reads_keywords_and_location():
+def test_compose_queries_linkedin_override_wins_as_single_query():
+    """A non-empty per-source Settings keyword override keeps legacy
+    single-query behavior even when profile prefs exist."""
     s = _make_settings(
         linkedin_keywords=["senior swe", "ml engineer"],
         linkedin_location="United States",
     )
-    q = scraping._compose_query(JobSource.LINKEDIN, s)
+    profile = _make_profile(target_titles=["Platform Engineer"], target_cities=["Austin, TX"])
+    (q,) = scraping._compose_queries(JobSource.LINKEDIN, s, profile)
     assert q.keywords == ["senior swe", "ml engineer"]
     assert q.location == "United States"
 
 
-def test_compose_query_indeed_reads_keywords_and_location():
+def test_compose_queries_linkedin_derives_one_query_per_title():
+    s = _make_settings(linkedin_keywords=[], linkedin_location=None)
+    profile = _make_profile(
+        target_titles=["Senior Software Engineer", "ML Engineer"],
+        target_cities=["Boston, MA"],
+    )
+    queries = scraping._compose_queries(JobSource.LINKEDIN, s, profile)
+    assert [q.keywords for q in queries] == [["Senior Software Engineer"], ["ML Engineer"]]
+    assert all(q.location == "Boston, MA" for q in queries)
+    assert queries[0].raw_meta["target_title"] == "Senior Software Engineer"
+
+
+def test_compose_queries_linkedin_remote_ok_no_city_has_no_location():
+    s = _make_settings(linkedin_keywords=[], linkedin_location=None)
+    profile = _make_profile(target_titles=["SRE"], target_cities=[], remote_ok=True)
+    (q,) = scraping._compose_queries(JobSource.LINKEDIN, s, profile)
+    assert q.location is None
+
+
+def test_compose_queries_title_fanout_capped():
+    s = _make_settings(linkedin_keywords=[])
+    profile = _make_profile(target_titles=[f"Title {i}" for i in range(6)])
+    queries = scraping._compose_queries(JobSource.LINKEDIN, s, profile)
+    assert len(queries) == scraping._MAX_TITLE_QUERIES
+
+
+def test_compose_queries_indeed_reads_override():
     s = _make_settings(
         indeed_keywords=["software engineer"],
         indeed_location="Remote",
     )
-    q = scraping._compose_query(JobSource.INDEED, s)
+    (q,) = scraping._compose_queries(JobSource.INDEED, s, None)
     assert q.keywords == ["software engineer"]
     assert q.location == "Remote"
 
 
-def test_compose_query_greenhouse_reads_env(monkeypatch):
+def test_compose_queries_greenhouse_reads_env(monkeypatch):
     from config import settings as app_settings
 
     monkeypatch.setattr(app_settings, "greenhouse_companies", ["anthropic", "openai"])
     s = _make_settings()
-    q = scraping._compose_query(JobSource.GREENHOUSE, s)
+    (q,) = scraping._compose_queries(JobSource.GREENHOUSE, s, None)
     assert q.company_filter == ["anthropic", "openai"]
 
 
-def test_compose_query_lever_reads_env(monkeypatch):
+def test_compose_queries_lever_reads_env(monkeypatch):
     from config import settings as app_settings
 
     monkeypatch.setattr(app_settings, "lever_companies", ["replit", "scale"])
     s = _make_settings()
-    q = scraping._compose_query(JobSource.LEVER, s)
+    (q,) = scraping._compose_queries(JobSource.LEVER, s, None)
     assert q.company_filter == ["replit", "scale"]
 
 
-def test_compose_query_ashby_reads_env(monkeypatch):
+def test_compose_queries_ashby_reads_env(monkeypatch):
     from config import settings as app_settings
 
     monkeypatch.setattr(app_settings, "ashby_companies", ["linear", "vercel"])
     s = _make_settings()
-    q = scraping._compose_query(JobSource.ASHBY, s)
+    (q,) = scraping._compose_queries(JobSource.ASHBY, s, None)
     assert q.company_filter == ["linear", "vercel"]
 
 
-def test_compose_query_workday_empty_workday_companies():
+def test_compose_queries_workday_empty_workday_companies():
     s = _make_settings(workday_companies=None)
-    q = scraping._compose_query(JobSource.WORKDAY, s)
+    (q,) = scraping._compose_queries(JobSource.WORKDAY, s, None)
     assert q.company_filter == []
 
 

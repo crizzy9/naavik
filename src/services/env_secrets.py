@@ -112,15 +112,18 @@ def env_indicators_for_notifications_tab() -> dict[str, bool]:
     }
 
 
-def scraper_source_configured(source: JobSource, settings: Settings) -> bool:
+def scraper_source_configured(
+    source: JobSource, settings: Settings, profile=None
+) -> bool:
     """True iff the source has the operator-facing config it needs to scrape.
 
-    Per plan 49 / 0.2.0.16 § D.3. Composition:
+    Per plan 49 / 0.2.0.16 § D.3 + docs/design/JOB_SEARCH_PREFERENCES.md.
+    Composition:
     - Company-list sources (Workday / Greenhouse / Lever / Ashby): configured
       iff their env-var watchlist is non-empty (Workday reads
       `Settings.workday_companies`; the other three read env-loaded config).
-    - Keyword sources (LinkedIn / Indeed): configured iff their per-user
-      Settings.{linkedin,indeed}_keywords list is non-empty.
+    - Keyword sources (LinkedIn / Indeed): configured iff the profile has
+      `target_titles` OR a per-source Settings keyword override is set.
     - Other sources (COMPANY_DIRECT / RSSHUB / N8N_LEGACY / MANUAL): not
       surfaced on the Sources panel; returns False.
     """
@@ -132,10 +135,11 @@ def scraper_source_configured(source: JobSource, settings: Settings) -> bool:
         return bool(app_settings.lever_companies)
     if source is JobSource.ASHBY:
         return bool(app_settings.ashby_companies)
+    profile_titles = bool(getattr(profile, "target_titles", None))
     if source is JobSource.LINKEDIN:
-        return bool(settings.linkedin_keywords)
+        return bool(settings.linkedin_keywords) or profile_titles
     if source is JobSource.INDEED:
-        return bool(settings.indeed_keywords)
+        return bool(settings.indeed_keywords) or profile_titles
     return False
 
 

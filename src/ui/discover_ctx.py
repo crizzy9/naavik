@@ -268,6 +268,17 @@ async def build_discover_ctx(
 
     effective_filters = filters or JobFilter()
     queue = await _live_unswiped(session, user_id=user_id, filters=effective_filters)
+
+    # Post-fetch title relevance (docs/design/JOB_SEARCH_PREFERENCES.md § E):
+    # jobs whose title matches a targeted-title variant surface first;
+    # non-matching jobs stay in the queue (never drop data), just later.
+    from services import profile_service
+    from services.search_prefs import title_matches
+
+    profile = await profile_service.get_profile(session, user_id)
+    if getattr(profile, "target_titles", None):
+        queue = sorted(queue, key=lambda j: not title_matches(j.role, profile))
+
     saved = await job_service.list_jobs_by_queue_state(
         session, user_id=user_id, state=JobQueueState.SAVED
     )
@@ -303,6 +314,11 @@ async def build_discover_ctx(
     for d in drafts:
         auto_apply_views.append(up_next_dict(d))
 
+    # Empty-state honesty: with no target titles configured nothing will
+    # ever land in the queue — point the user at the profile prefs section
+    # instead of "check back soon" (docs/design/JOB_SEARCH_PREFERENCES.md).
+    search_prefs_ready = bool(getattr(profile, "target_titles", None))
+
     return {
         "current_card": (
             swipe_card_dict(current, warm_intro_label=warm_label) if current else None
@@ -316,6 +332,7 @@ async def build_discover_ctx(
         "filters": effective_filters,
         "filters_active": _active_chip_count(effective_filters),
         "auto_apply_dry_run": auto_apply_dry_run,
+        "search_prefs_ready": search_prefs_ready,
     }
 
 

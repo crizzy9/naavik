@@ -55,6 +55,10 @@
     {% include "components/discover_stats_strip.html" %}
   {% endwith %}
 
+  {# Live scrape-run status — queued → running → found N → done/failed.
+     Lazy-loads then self-polls while active (JOB_SEARCH_PREFERENCES.md § G). #}
+  <div hx-get="/_fragments/scrape-status" hx-trigger="load" hx-swap="outerHTML"></div>
+
   {# Plan 09a · Issue 8D — #discover-main is the swap target that the Review &
      apply button expands into the full workspace. The "Back to queue" button
      inside the expanded fragment swaps it back via /_fragments/discover/queue. #}

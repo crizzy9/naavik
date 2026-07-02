@@ -129,6 +129,11 @@
       {% endwith %}
       </form>
 
+      {# Job-search preferences — sibling of #profile-edit-form (own forms;
+         HTML forbids nesting). Drives ALL scrapers; see
+         docs/design/JOB_SEARCH_PREFERENCES.md. #}
+      {% include "components/_search_prefs_editor.html" %}
+
       {# Raw resume text — source-of-truth for what the parser saw.
          Sibling of #profile-edit-form (not nested) because it carries its own
          <form hx-post="/api/v1/extraction/upload"> and HTML forbids nested forms. #}
