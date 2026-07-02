@@ -228,106 +228,6 @@ DATA_DIR=.naavik
 
 ---
 
-## Workflow (canonical lifecycle for non-trivial change)
-
-Every meaningful change — features, models, screens, refactors, doc surgery — follows the same lifecycle. The agent (Claude) authors the artifacts; the user (you) reviews, approves, and drives implementation by using the prompts.
-
-```
-ROADMAP.md       →  Plan         →  user review  →  Design doc       →  Prompt           →  Implementation  →  Document deviations  →  Archive + roadmap mark
-(scope source)      docs/plans/      (approval)      docs/design/        docs/prompts/        (user runs it)      (in the plan, pre-      (agent files away)
-                                                                                                                   archive)
-```
-
-### The nine steps
-
-1. **Scope** — read `ROADMAP.md`, pick a coherent unit of work (one phase task, one feature, one refactor). Larger items get split.
-
-2. **Plan** *(agent → `docs/plans/NN-name.md`)* — agent authors a plan with required front-matter (`Status`, `Type`, `Authored`, `Last updated`, `Depends on`) and an explicit approval checklist at the bottom. One plan per coherent unit. Conventions live in `docs/plans/README.md`.
-
-3. **Review** *(user)* — user reads the plan, ticks the approval checklist, calls out any open questions inline. Agent revises until APPROVED.
-
-4. **Design doc** *(agent → `docs/design/NAME.md`)* — for **design plans** (those that propose a new contract — components, routes, data model, interactions, etc.), the approved plan content graduates into a permanent design doc with a semantic name (e.g. `COMPONENTS.md`, `DATA_MODEL.md`). For **execution plans** (housekeeping, doc surgery, config), this step is skipped.
-
-5. **Implementation prompt** *(agent → `docs/prompts/NN-name.md`)* — for plans whose execution actually writes code, agent authors a self-contained kickoff prompt. The prompt references the relevant design doc(s), the plan, any mockups, and lists concrete deliverables. This prompt is what the user pastes into a fresh Claude Code session (or runs in the current one). For plan-01-style doc-only execution, no prompt is needed — agent executes inline.
-
-6. **Implement** *(user drives, agent or fresh agent executes)* — user uses the prompt to start implementation. Code, tests, migrations, templates, etc. land. Implementation can iterate; the design doc is the contract that survives.
-
-7. **Document deviations** *(agent → in the plan, before archive)* — implementation never lands exactly as the plan describes. Before archiving the plan, the agent **MUST** add a `## Deviations from plan` section to `docs/plans/NN-name.md` capturing every place the shipped code diverged from the plan's spec. One bullet per deviation:
-   - **What** changed (one-line)
-   - **Why** (root cause / constraint that forced the change — e.g. "SQLModel 0.0.22 forward-ref resolution failed under circular FK graph")
-   - **Impact** on dependent plans / phases (does this need to be backported into a future plan? Is a follow-up issue needed?)
-   - **Surface** any new env var, CLI command, on-disk artifact, or operational requirement that the plan didn't anticipate but the implementation introduced. **Each of those MUST also propagate to user-facing docs** (`README.md`, `CLAUDE.md`, `docs/plans/POST_PHASE_1.md`) before archive — not "we'll do it later". Drift on operational surfaces is the source of self-hoster bugs we don't get to debug.
-
-   This section is the contract for future-you (or future-them) — without it, plan archives become "what we hoped to ship" not "what we actually shipped", and reviewers chasing a regression have to read every commit instead of one section. Keep it terse and honest. **Plans without a Deviations section may not be archived** (use "no material deviations" if the plan really shipped exactly as spec'd, but that's rare).
-
-   **Plan archive happens via `naavik-ops plan archive`, never manual `git mv`** (codified plan 39 / `0.7.0.21`). The command lifts every matching `DEVIATION` line from `traces/<run-id>/engineer-deviations.log` into the section using the canonical bullet shape, flips `Status: EXECUTED`, performs the `git mv` (plan + matching prompt), and reports surfaces needing propagation. Refuses with exit 2 when the resulting section would be empty unless `--no-material-deviations "<rationale>"` is passed (explicit-bypass surface).
-
-8. **Archive** *(agent)* — once implementation is verified AND deviations are documented, invoke:
-   ```bash
-   .claude/naavik-ops plan archive docs/plans/<NN-name>.md
-   ```
-   The command atomically: lifts log entries, flips `Status: EXECUTED`, `git mv`s plan → `docs/plans/archive/NN-name.md`, `git mv`s matching `docs/prompts/NN-name.md` → `docs/prompts/archive/NN-name.md`. Design doc (if any) stays at `docs/design/NAME.md` (canonical, permanent; not moved).
-
-9. **Roadmap update** *(agent)* — mark the corresponding `ROADMAP.md` task(s) `[x]` with a one-line deliverable note. Bump "Last updated" if the change is meaningful. See § Roadmap Maintenance Rules below.
-
-### Naming convention
-
-`NN` is a two-digit ordinal shared across plan / prompt (and referenced from the design doc). The design doc itself uses a SEMANTIC name because it's permanent and gets cross-referenced widely.
-
-| Artifact | Active path | Archived path | Naming |
-|---|---|---|---|
-| Plan | `docs/plans/03-component-catalog.md` | `docs/plans/archive/03-component-catalog.md` | `NN-kebab-name` |
-| Design doc | `docs/design/COMPONENTS.md` | (stays canonical, never archived) | `SEMANTIC_NAME.md` |
-| Prompt | `docs/prompts/03-component-catalog.md` | `docs/prompts/archive/03-component-catalog.md` | `NN-kebab-name` (matches plan) |
-
-### When to skip parts of the lifecycle
-
-- **Trivial typos / one-line clarifications** — just edit. No plan needed. Use a `TaskCreate` to track if it helps.
-- **Bug fixes that don't change architecture** — `TaskCreate` for tracking; skip plan/prompt unless the fix is non-obvious or touches >2 files.
-- **Doc realignments / config tweaks** — plan + execute inline; no design doc, no prompt.
-- **Emergencies** — fix first, document the workflow cleanup after.
-
-When unsure, default to authoring a plan. Plans are cheap to write and prevent rework.
-
-### What goes in a prompt (`docs/prompts/NN-name.md`)
-
-A kickoff prompt is self-contained for a fresh agent session. Required sections:
-
-1. **Goal** — one sentence
-2. **Required reading** — paths to the design doc, plan, AGENTS.md, DESIGN.md, SCREENS.md, etc. in the order they should be read
-3. **Deliverables** — concrete files to write/modify with one-line descriptions
-4. **Quality bar** — `uv run ruff check`, `uv run pytest`, Playwright screenshots, etc.
-5. **Forbidden patterns** — copy from HANDOFF_PROMPT-style § 7 (no React/Vue, no inline styles, no non-Lucide icons, no `console.log`, etc.)
-6. **Hand-back format** — what to report when done (file list, screenshot paths, follow-up notes, **deviations summary**)
-
-The hand-back **MUST** include a deviations summary that the agent will then promote into the plan's `## Deviations from plan` section (see § Workflow step 7). Do not let the kickoff prompt's hand-back section omit deviations — that's how plans get archived as "this is what we shipped" when really it's "this is what we wished we shipped".
-
-### Documenting deviations — what counts, what doesn't
-
-Step 7 forces the implementer to land a `## Deviations from plan` section in `docs/plans/NN-name.md` before archive. Use this filter:
-
-**Deviation (record it):**
-- A spec field, file, or behavior the plan called for that didn't ship as written.
-- An on-disk artifact, env var, CLI command, or operational invariant that exists now but wasn't in the plan.
-- A test the plan promised that's now skipped, gated, or restructured.
-- A library version, dependency, or runtime constraint discovered during implementation.
-- A scope reduction (e.g. "Wave 4 implements 12 of 50 accessors; rest fall back to memory").
-- An infrastructure decision (e.g. NullPool engine, sequence-bumping after seed) that future plans will care about.
-
-**Not a deviation (don't clutter the section):**
-- Routine commit-level cleanups (variable rename, comment fixes).
-- Test fixtures added beyond the plan's count, when the plan said "≥ N".
-- Lint fixes that don't change behavior.
-
-**Anything that lands as a new operational surface (env var, CLI, on-disk path, secret-handling rule, port, schedule)** must ALSO be added to:
-- `README.md` § Configuration (if user-facing) or § Development (if dev-facing)
-- `CLAUDE.md` and/or `docs/plans/POST_PHASE_1.md` (whichever is the right home for the operational guidance)
-- `ROADMAP.md` "Last updated" line if the deviation changes a phase deliverable
-
-Operational drift is the leading source of self-hoster pain. The deviations section is your one-time chance to catch it before the plan archives.
-
----
-
 ## Roadmap Maintenance Rules
 
 `ROADMAP.md` is the **single source of truth** for project progress. It must always be kept in sync with reality:
@@ -425,9 +325,9 @@ The plan stays rich; ROADMAP stays current.
 
 ---
 
-## Design pipeline (sub-process within step 6 of the workflow)
+## Design pipeline
 
-UI work plugs into the broader workflow above. The design pipeline (`docs/design/WORKFLOW.md`) is the per-screen sub-process that runs inside step 6 (Implement) for screens:
+UI work plugs into the broader workflow above. The design pipeline (`docs/design/WORKFLOW.md`) is the per-screen sub-process for screens:
 
 **Phase A — Design System (Claude Design, one-time, ✅ done):** design system published in claude.ai/design with `DESIGN.md` as source material.
 
@@ -455,27 +355,6 @@ UI work plugs into the broader workflow above. The design pipeline (`docs/design
 
 ---
 
-## Agent-Specific Notes
-
-### Claude Code
-- Reads `CLAUDE.md` for additional conventions specific to Claude
-- Uses Playwright for visual QA when implementing UI
-- Can run `ruff check` and `uv run pytest` for validation
-
-### OpenCode / Other Agents
-- This file (`AGENTS.md`) is your canonical guide
-- If something conflicts between AGENTS.md and another file, AGENTS.md wins
-- When in doubt, check `ROADMAP.md` for current priorities
-
-### Design Agents
-- The visual contract is `DESIGN.md`
-- When generating mockups, use realistic sample data from the Owner Profile section above
-- Dark mode is primary; light mode is Phase 6
-- Export mockups at 1440×900 (desktop) and 375×812 (mobile)
-- Commit mockups to `docs/design/mockups/` with naming: `{number}-{slug}-{desktop|mobile}.png`
-
----
-
 ## Decision Log
 
 | Date | Decision | Context |
@@ -491,31 +370,7 @@ UI work plugs into the broader workflow above. The design pipeline (`docs/design
 
 ## Agent System
 
-Naavik uses 6 specialized Claude Code subagents and 13 slash commands at project scope.
-
-> **Operational guide:** `docs/AGENT_OPS.md` — single source for first-time setup, daily workflow, GitHub Mirror conventions, troubleshooting, extending the system. Read once; reference as needed.
-> **Reference guides loaded by agents on cold start:**
-> - `ROADMAP.md` — phase state at a glance
-> - `docs/ARCHITECTURE.md` — layer responsibilities + cross-cutting concerns + pattern catalog
-> - `DESIGN.md` (root) — visual contract (tokens, type, icons, voice; frozen)
-> - `docs/design/WORKFLOW.md` — UI sub-process (skill routing, per-screen checklist, accessibility, common patterns, anti-patterns)
-> - `docs/DEPLOYMENT.md` — 4 deployment paths (NixOS / Docker / Cloud / Dev) + config + ops checklist
-> - `docs/RUNBOOK.md` — known failure modes + diagnostic recipes + recovery procedures
-> - `docs/plans/POST_PHASE_1.md` — testing playbook + monitoring + "when something goes wrong"
->
-> **Mirror tracking:** `ROADMAP.md` § Phase A: Agent System (task ledger A.1–A.10) and § Agent System (mirror conventions).
-> **Full prompts:** `.claude/agents/<name>.md`. Slash commands: `.claude/commands/<name>.md`.
-
-| Agent | Color | Model | Role |
-|---|---|---|---|
-| manager | pink | opus-4-7 | Orchestrator, GitHub Projects + ROADMAP owner |
-| architect | blue | opus-4-7 | Planner, design docs, technology research |
-| engineer | green | sonnet-4-6 | Implementer (escalates to opus on tagged tasks) |
-| devops | orange | sonnet-4-6 | Debugger, log diver, quality gates |
-| hacker | red | opus-4-7 | Security reviews, threat modeling |
-| designer | yellow | sonnet-4-6 | UI/UX, mockups, DESIGN.md guardian |
-
-**Operational invariant** (codifies § Single-doc-tracking): `ROADMAP.md` is authoritative; the GitHub Project board is a one-way operational mirror. Manager syncs FROM ROADMAP TO Projects, never the reverse. If they drift, the Project board is wrong — run `/sync-roadmap --apply` to reconcile.
+Slash commands at project scope (see `.claude/commands/<name>.md`):
 
 ### Slash commands
 
