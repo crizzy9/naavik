@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -140,7 +140,12 @@ async def get_overview(
     now = datetime.now().astimezone()
     profile = await profile_service.get_profile(session, user_id)
     actions = await overview_service.compose_priority_actions(session, user_id)
-    threads = await email_service.recent_signals(session, user_id, limit=6)
+    email_connected = bool(await email_service.list_accounts(session, user_id))
+    threads = (
+        await email_service.recent_signals(session, user_id, limit=6)
+        if email_connected
+        else []
+    )
     counts = await overview_service.pipeline_strip_counts(session, user_id)
     return templates.TemplateResponse(
         request,
@@ -157,6 +162,7 @@ async def get_overview(
             "date_pill": _date_pill(now),
             "kpis": await _build_kpis(session, user_id),
             "priority_actions": actions,
+            "email_connected": email_connected,
             "email_signals": [_signal_view(t) for t in threads],
             "pipeline_counts": counts,
             "active_count": sum(counts.values()) - counts.get("CLOSED", 0),
@@ -234,9 +240,16 @@ async def get_email_signals_stream(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
-    """SSE — emits an email-signal-row partial periodically."""
+    """SSE — emits an email-signal-row partial periodically.
 
+    Gated on a real EmailAccount: with no inbox connected there is nothing
+    to stream, so return 204 instead of an empty 200 stream (P6.1 — the
+    Overview template also skips sse-connect entirely when unconfigured).
+    """
     user_id = _effective_user_id(user)
+    if not await email_service.list_accounts(session, user_id):
+        return Response(status_code=204)
+
     threads = await email_service.recent_signals(session, user_id, limit=10)
 
     async def gen():

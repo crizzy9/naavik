@@ -124,6 +124,16 @@ def _patch_services_to_sample_data(request, monkeypatch):
 
     app.dependency_overrides[get_session] = _fake_get_session
 
+    # P6.4 — the model dropdown now asks provider list-models APIs at
+    # request time; tests must never hit the network. Pin to the static
+    # fallback catalog.
+    from services import llm_models
+
+    async def _static_models(provider_id: str) -> list[str]:
+        return list(llm_models.FALLBACK_MODELS.get(provider_id, []))
+
+    monkeypatch.setattr(llm_models, "list_models", _static_models)
+
     # ── profile_service ─────────────────────────────────────────────────
     async def _get_profile(_session, _user_id):
         return sd.PROFILE
@@ -229,11 +239,6 @@ def _patch_services_to_sample_data(request, monkeypatch):
         job.queue_state = state
         return job
 
-    async def _create_scraped_job_stub(_session, *, user_id, url, company, role):
-        # Mirror `sd._append_scraped_job` so tests asserting Job count
-        # increments still see the row.
-        return await sd._append_scraped_job(url=url, company=company, role=role)
-
     async def _list_recent_scrape_runs(_session, *, user_id, limit=50):
         return list(sd.JOB_SCRAPE_RUNS)[:limit]
 
@@ -269,7 +274,6 @@ def _patch_services_to_sample_data(request, monkeypatch):
         )
 
     monkeypatch.setattr(job_service, "set_queue_state", _set_queue_state)
-    monkeypatch.setattr(job_service, "create_scraped_job_stub", _create_scraped_job_stub)
     monkeypatch.setattr(job_service, "list_recent_scrape_runs", _list_recent_scrape_runs)
     monkeypatch.setattr(job_service, "get_scrape_run", _get_scrape_run)
     monkeypatch.setattr(

@@ -393,31 +393,133 @@ async def get_jobs(
 
 @router.post("/api/v1/jobs/by-url", name="jobs_by_url")
 async def post_job_by_url(
-    payload: Annotated[dict[str, Any], Body()],
+    request: Request,
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    """Stub `+ Add by URL` — append a synthetic Job + return it.
+    """`+ Add by URL` — fetch the REAL posting, extract, score, enqueue.
 
-    Plan 56 / 0.2.7.19 — CSRF-gated. The `+ Add by URL` modal in Discover
-    wires this via HTMX form post; `X-CSRF-Token` rides on every HTMX
-    request via the `base.html` Jinja context-processor.
+    Replaces the plan-56 stub that fabricated a job ("Stable Inc", score
+    0.84, San Francisco) and dumped raw JSON into the modal. Pipeline:
+    SSRF guard → Crawl4AI fetch → LLM extraction (graceful degrade to
+    <title> heuristics without a provider) → upsert (dedup on URL hash)
+    → immediate layered scoring → honest HTML result fragment + queue
+    refresh via HX-Trigger. Errors return 422 fragments the modal shows
+    via hx-target-error.
     """
-    url = payload.get("url", "").strip()
+    import hashlib
+    import json as _json
+    import re as _re
+
+    from llm import LLMProviderError, get_provider
+    from models.enums import ApplicationBoard, JobSource
+    from scraper.crawl4ai_client import Crawl4AIClient
+    from scraper.types import RawJob
+    from scraper.url_guard import is_safe_destination
+    from services.job_extractor import enrich_raw_job
+
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            body = {}
+        url = str((body or {}).get("url") or "").strip()
+    else:
+        form = await request.form()
+        url = str(form.get("url") or "").strip()
+
+    def _error(msg: str) -> HTMLResponse:
+        return HTMLResponse(f'<span class="text-rose-300">{msg}</span>', status_code=422)
+
     if not url:
-        raise HTTPException(status_code=422, detail="URL required")
-    company = "Stable Inc"
-    role = "Senior Software Engineer"
-    job = await job_service.create_scraped_job_stub(
-        session,
-        user_id=_effective_user_id(user),
-        url=url,
-        company=company,
-        role=role,
+        return _error("URL required.")
+    safe, reason = is_safe_destination(url)
+    if not safe:
+        return _error(f"URL rejected: {reason or 'unsafe destination'}.")
+
+    user_id = _effective_user_id(user)
+    client = Crawl4AIClient(rate_limit_per_minute=30.0, random_delay_seconds=(0.0, 0.1))
+    html = await client.fetch_html(url)
+    if not html:
+        return _error("Could not fetch that URL — the site may block bots or be unreachable.")
+
+    # Seed identity from <title> ("Role - Company" patterns); the LLM
+    # extraction below overwrites with the authoritative read when available.
+    title_match = _re.search(r"<title[^>]*>(.*?)</title>", html, _re.IGNORECASE | _re.DOTALL)
+    page_title = (title_match.group(1).strip()[:160] if title_match else "") or "Unknown role"
+    seed_role, seed_company = page_title, "Unknown"
+    for sep in (" | ", " – ", " — ", " - ", " · "):
+        if sep in page_title:
+            left, right = page_title.split(sep, 1)
+            seed_role = left.strip() or "Unknown role"
+            seed_company = right.strip() or "Unknown"
+            break
+
+    external_id = f"manual-{hashlib.sha1(url.encode()).hexdigest()[:12]}"
+    raw_job = RawJob(
+        source=JobSource.MANUAL,
+        external_id=external_id,
+        source_url=url,
+        board=ApplicationBoard.MANUAL,
+        url_type="manual",
+        company_name=seed_company,
+        position_title=seed_role,
+        description_html=html,
     )
+
+    settings = await settings_service.get_or_create(session, user_id=user_id)
+    try:
+        provider = get_provider(settings)
+        raw_job = await enrich_raw_job(
+            session, user_id=user_id, provider=provider, raw_job=raw_job
+        )
+    except LLMProviderError as exc:
+        log.info("add-by-url enrichment skipped (no provider): %s", exc)
+
+    job, created = await job_service.upsert_job(
+        session,
+        user_id=user_id,
+        source=JobSource.MANUAL,
+        external_id=external_id,
+        raw=raw_job.to_upsert_payload(),
+    )
+
+    # Score immediately so the card lands with a real score, not a blank.
+    score_note = "unscored — no profile yet"
+    from services import profile_service
+    from services.scorer import score_job_layered
+
+    profile = await profile_service.get_profile(session, user_id)
+    if profile is not None:
+        try:
+            result = await score_job_layered(
+                session, user_id=user_id, job=job, profile=profile, settings=settings
+            )
+            score_note = f"score {int(round(result.score * 100))}"
+        except Exception as exc:  # noqa: BLE001 — job creation must survive scorer issues
+            log.warning("add-by-url scoring failed for job %s: %s", job.id, exc)
+            score_note = "scoring failed — will retry on the next cron"
+
     await session.commit()
-    return JobRead.model_validate(job).model_dump(mode="json")
+
+    response = HTMLResponse(
+        '<span class="text-emerald-300">'
+        f"{'Added' if created else 'Already tracked — refreshed'}: "
+        f"{job.role} at {job.company} · {score_note}</span>"
+    )
+    response.headers["HX-Trigger"] = _json.dumps(
+        {
+            "closeModal": True,
+            "queue-refresh": True,
+            "showToast": {
+                "tone": "success",
+                "text": f"{job.role} at {job.company} added to the queue ({score_note}).",
+            },
+        }
+    )
+    return response
 
 
 @router.post("/api/v1/jobs/{job_id}/rescore", name="jobs_rescore")

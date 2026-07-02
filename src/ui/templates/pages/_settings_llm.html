@@ -190,6 +190,27 @@
         </div>
       </div>
 
+      {# P6.3 — visible connection test wired to POST /api/v1/settings/llm/test. #}
+      <div class="mt-4 flex items-center gap-3 flex-wrap">
+        <button type="button"
+                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 text-xs font-medium transition"
+                hx-post="/api/v1/settings/llm/test"
+                hx-target="#llm-test-result"
+                hx-target-error="#llm-test-result"
+                hx-swap="innerHTML"
+                hx-indicator="#llm-test-indicator"
+                hx-disabled-elt="this"
+                data-testid="llm-test-connection">
+          <i data-lucide="plug-zap" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Test connection
+        </button>
+        <span id="llm-test-indicator" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-indigo-300">
+          <span class="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+          pinging…
+        </span>
+        <span id="llm-test-result" aria-live="polite"></span>
+      </div>
+
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
         {% with label="THIS MONTH",
                 value="$" ~ ("%.2f" | format(cost_summary.month_cost_usd)),

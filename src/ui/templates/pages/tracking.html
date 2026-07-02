@@ -7,15 +7,24 @@
     <div class="min-w-0">
       <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Tracking</h1>
       <p class="mt-1 text-sm text-slate-400">
-        {{ active_count }} active · {{ closed_count }} closed · pulled from gmail every 10 min
+        {{ active_count }} active · {{ closed_count }} closed{% if email_connected %} · inbox synced every 10 min{% endif %}
       </p>
     </div>
     <div class="flex items-center gap-2 flex-wrap shrink-0">
+      {% if email_connected %}
       <span class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs">
-        <i data-lucide="mail" class="h-3.5 w-3.5 text-rose-400" stroke-width="1.5"></i>
-        gmail
-        <span class="text-slate-500">· synced 2m ago</span>
+        <i data-lucide="mail" class="h-3.5 w-3.5 text-emerald-400" stroke-width="1.5"></i>
+        {{ email_account_label }}
+        <span class="text-slate-500">{% if email_last_sync_label %}· synced {{ email_last_sync_label }}{% else %}· not synced yet{% endif %}</span>
       </span>
+      {% else %}
+      <a href="/integrations/email"
+         class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800">
+        <i data-lucide="mail-x" class="h-3.5 w-3.5 text-slate-500" stroke-width="1.5"></i>
+        no inbox connected
+        <span class="text-indigo-300">· connect →</span>
+      </a>
+      {% endif %}
       {% with current_view=current_view %}
         {% include "components/view_toggle.html" %}
       {% endwith %}

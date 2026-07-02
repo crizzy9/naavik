@@ -66,16 +66,25 @@ def test_get_jobs_list_uses_jobread_projection(client):
 # ── POST /api/v1/jobs/by-url (post_job_by_url) ───────────────────────────
 
 
-def test_post_job_by_url_uses_jobread_projection(client):
+def test_post_job_by_url_returns_fragment_not_json(client, monkeypatch):
+    """P6.2 rewired by-url to the real fetch/extract/score pipeline; the
+    response is an HTML fragment for the modal (raw_meta can never leak
+    because no JSON body is returned at all)."""
+    from scraper.crawl4ai_client import Crawl4AIClient
+
+    async def _fake_fetch(self, url):
+        return None  # unreachable URL → error fragment path (no network in tests)
+
+    monkeypatch.setattr(Crawl4AIClient, "fetch_html", _fake_fetch)
     r = client.post(
         "/api/v1/jobs/by-url",
         json={"url": "https://example.com/jobs/projection-test"},
         cookies=_CSRF_COOKIES,
         headers=_CSRF_HEADERS,
     )
-    assert r.status_code == 200, r.text
-    body = r.json()
-    _assert_no_raw_meta_and_has_id(body)
+    assert r.status_code == 422
+    assert "raw_meta" not in r.text
+    assert r.headers["content-type"].startswith("text/html")
 
 
 # ── POST /api/v1/jobs/{id}/rescore (post_rescore) ────────────────────────

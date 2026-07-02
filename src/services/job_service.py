@@ -576,50 +576,6 @@ async def auto_apply_queue(session: AsyncSession, *, user_id: int) -> list[Job]:
     return list(rows)
 
 
-async def create_scraped_job_stub(
-    session: AsyncSession,
-    *,
-    user_id: int,
-    url: str,
-    company: str,
-    role: str,
-) -> Job:
-    """Land a placeholder Job from Discover · `+ Add by URL` modal.
-
-    Stub for the 0.2.7.10 ATS-adapter follow-up. Until then, this synthesizes
-    a high-score Job from the URL + (company, role) the operator supplied so
-    Discover can render it immediately.
-    """
-    import hashlib
-
-    now = datetime.now(UTC)
-    ext = hashlib.sha1(url.encode()).hexdigest()[:12]
-    job = Job(
-        user_id=user_id,
-        source=JobSource.MANUAL,
-        board=ApplicationBoard.MANUAL,
-        external_id=f"manual-{ext}",
-        url=url,
-        url_type="manual",
-        company=company,
-        role=role,
-        team=None,
-        location="San Francisco, CA",
-        remote_policy=RemotePolicy.UNKNOWN,
-        description="Scraped via + Add by URL.",
-        visa_restrictions=VisaRestriction.NOT_MENTIONED,
-        score=0.84,
-        score_explanation="Auto-scored from manual URL submit.",
-        queue_state=JobQueueState.UNSWIPED,
-        found_at=now,
-        created_at=now,
-        updated_at=now,
-    )
-    session.add(job)
-    await session.flush()
-    return job
-
-
 async def record_scrape_run(
     session: AsyncSession,
     *,

@@ -73,6 +73,7 @@
         </span>
       </header>
 
+      {% if email_connected %}
       <div id="overview-email-signal"
            hx-ext="sse"
            sse-connect="/api/v1/tracking/email-signals"
@@ -90,6 +91,15 @@
         See all signals in tracking
         <i data-lucide="arrow-right" class="h-3 w-3" stroke-width="1.5"></i>
       </a>
+      {% else %}
+      {# P6.1 honesty — no EmailAccount configured: no SSE stream, no
+         implied inbox. Point at the real IMAP connect surface. #}
+      {% with icon="mail-x",
+              line="No inbox connected. Connect IMAP to auto-detect interview invites, rejections, and offers from your email.",
+              cta_label="Connect email", cta_url="/integrations/email" %}
+        {% include "components/empty_state.html" %}
+      {% endwith %}
+      {% endif %}
     </aside>
   </section>
 

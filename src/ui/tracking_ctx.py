@@ -8,7 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import Application
 from models.enums import AppEventKind, ApplicationStatus, RecruiterState, ReferralState
-from services import application_service, contact_tracker
+from services import application_service, contact_tracker, email_service
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",
@@ -161,24 +161,20 @@ async def build_tracking_ctx(
             }
         )
 
+    # Honest email-integration state: derived from real EmailAccount rows
+    # (plan 90 IMAP foundation) — the prior hardcoded "Gmail connected ·
+    # shyam@gmail.com" card implied a connection that never existed.
+    email_accounts = await email_service.list_accounts(session, user_id)
+    primary_account = email_accounts[0] if email_accounts else None
     integrations = [
         {
-            "name": "Gmail",
+            "name": "Email (IMAP)",
             "icon": "mail",
-            "state": "connected",
-            "account": "[email protected]",
-            "connect_url": "/api/v1/integrations/gmail/connect",
-            "disconnect_url": "/api/v1/integrations/gmail/disconnect",
-            "description": None,
-        },
-        {
-            "name": "Outlook",
-            "icon": "mail",
-            "state": "not_connected",
-            "account": None,
-            "connect_url": "/api/v1/integrations/outlook/connect",
-            "disconnect_url": None,
-            "description": None,
+            "state": "connected" if primary_account else "not_connected",
+            "account": primary_account.account_email if primary_account else None,
+            "connect_url": "/integrations/email",
+            "disconnect_url": "/integrations/email" if primary_account else None,
+            "description": None if primary_account else "connect an inbox to track replies",
         },
         {
             "name": "Calendar",
@@ -192,6 +188,13 @@ async def build_tracking_ctx(
     ]
 
     return {
+        "email_connected": primary_account is not None,
+        "email_account_label": (primary_account.account_email if primary_account else None),
+        "email_last_sync_label": (
+            _relative_label(primary_account.last_sync_at)
+            if primary_account and primary_account.last_sync_at
+            else None
+        ),
         "current_view": view,
         "show_closed": show_closed,
         "show_drafts": show_drafts,

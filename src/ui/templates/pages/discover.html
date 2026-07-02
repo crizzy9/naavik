@@ -62,7 +62,10 @@
   {# Plan 09a · Issue 8D — #discover-main is the swap target that the Review &
      apply button expands into the full workspace. The "Back to queue" button
      inside the expanded fragment swaps it back via /_fragments/discover/queue. #}
-  <div id="discover-main">
+  <div id="discover-main"
+       hx-get="/_fragments/discover/queue"
+       hx-trigger="queue-refresh from:body"
+       hx-swap="innerHTML">
     {% include "pages/_discover_queue.html" %}
   </div>
 </div>

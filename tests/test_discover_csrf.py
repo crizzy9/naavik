@@ -190,12 +190,18 @@ def test_post_job_by_url_rejects_mismatched_csrf() -> None:
     assert "CSRF" in r.text or "csrf" in r.text
 
 
-def test_post_job_by_url_accepts_matching_csrf() -> None:
+def test_post_job_by_url_accepts_matching_csrf(monkeypatch) -> None:
     """POST /api/v1/jobs/by-url with matching cookie + header → not 403.
 
-    The gate accepts; the body short-circuits at sample_data with a 200
-    JSON return (stub `_append_scraped_job`).
+    The gate accepts; the fetch is stubbed to fail so the body
+    short-circuits at the 422 error fragment (no network in tests).
     """
+    from scraper.crawl4ai_client import Crawl4AIClient
+
+    async def _fake_fetch(self, url):
+        return None
+
+    monkeypatch.setattr(Crawl4AIClient, "fetch_html", _fake_fetch)
     app, client = _build_csrf_test_client()
     try:
         matching = "matching-token-llllllllllllllllllllllllllllllllll"

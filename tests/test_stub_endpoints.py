@@ -252,15 +252,73 @@ def test_jobs_get_by_id(client, monkeypatch):
     assert "raw_meta" not in body
 
 
-def test_jobs_by_url(client):
-    # Plan 56 / 0.2.7.19 — `Depends(require_csrf)` added; thread the matching header.
+def test_jobs_by_url_real_pipeline(client, monkeypatch):
+    """P6.2 — the by-url endpoint fetches the REAL page, extracts, upserts,
+    scores, and returns an HTML result fragment + queue-refresh trigger
+    (the old stub fabricated 'Stable Inc' / score 0.84 and dumped JSON)."""
+    from types import SimpleNamespace
+
+    from llm.base import LLMProviderError
+    from scraper.crawl4ai_client import Crawl4AIClient
+    from services import job_service, profile_service
+
+    async def _fake_fetch(self, url):
+        return "<html><title>Staff Engineer - Acme</title><body>JD text</body></html>"
+
+    monkeypatch.setattr(Crawl4AIClient, "fetch_html", _fake_fetch)
+
+    import llm as llm_module
+
+    def _no_provider(_settings):
+        raise LLMProviderError("no provider", kind="auth_required")
+
+    monkeypatch.setattr(llm_module, "get_provider", _no_provider)
+
+    captured = {}
+
+    async def _fake_upsert(session, *, user_id, source, external_id, raw, scrape_run_id=None):
+        captured["raw"] = raw
+        job = SimpleNamespace(
+            id=999, role=raw["role"], company=raw["company"], url=raw["url"], score=0.0
+        )
+        return job, True
+
+    monkeypatch.setattr(job_service, "upsert_job", _fake_upsert)
+
+    async def _no_profile(session, user_id):
+        return None
+
+    monkeypatch.setattr(profile_service, "get_profile", _no_profile)
+
     r = client.post(
         "/api/v1/jobs/by-url",
         json={"url": "https://example.com/job/123"},
         headers=_CSRF_HEADERS,
     )
-    assert r.status_code == 200
-    assert r.json()["url"] == "https://example.com/job/123"
+    assert r.status_code == 200, r.text
+    # HTML fragment, not JSON — real extracted identity from the <title>.
+    assert "Added" in r.text
+    assert "Staff Engineer" in r.text and "Acme" in r.text
+    assert "queue-refresh" in r.headers.get("HX-Trigger", "")
+    # Nothing fabricated: no fake score / SF location in the payload.
+    assert captured["raw"].get("score") is None
+    assert captured["raw"].get("location") is None
+
+
+def test_jobs_by_url_unfetchable_returns_error_fragment(client, monkeypatch):
+    from scraper.crawl4ai_client import Crawl4AIClient
+
+    async def _fake_fetch(self, url):
+        return None
+
+    monkeypatch.setattr(Crawl4AIClient, "fetch_html", _fake_fetch)
+    r = client.post(
+        "/api/v1/jobs/by-url",
+        json={"url": "https://example.com/job/456"},
+        headers=_CSRF_HEADERS,
+    )
+    assert r.status_code == 422
+    assert "Could not fetch" in r.text
 
 
 def test_discover_skip_returns_swipe_card(client):

@@ -105,27 +105,16 @@ _PROVIDERS_DISPLAY = [
 ]
 
 
-# Plan 10b (item 6, 2026-05-03): per-provider model catalog driving the
-# Settings · LLM Provider model dropdown. Kept inline (not in DB) — these
-# are SDK-supported model IDs at the time of release, not user-managed data.
-_LLM_MODEL_OPTIONS: dict[str, list[str]] = {
-    "anthropic": [
-        "claude-opus-4-8",
-        "claude-sonnet-4-6",
-        "claude-haiku-4-5",
-    ],
-    "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-    "ollama": ["llama3.1:70b", "llama3.1:8b", "qwen2.5:32b"],
-}
+# P6.4 (2026-07-02): the model dropdown is populated from each provider's
+# list-models API at request time (10-min cache) so new models appear
+# without code changes; `services/llm_models.py` owns fetch + fallback.
+# The old inline `_LLM_MODEL_OPTIONS` dict is the fallback catalog there.
 
 
-def _llm_model_options_for(provider_id: str) -> list[str]:
-    return list(_LLM_MODEL_OPTIONS.get(provider_id, []))
+async def _llm_model_options_for(provider_id: str) -> list[str]:
+    from services import llm_models
 
-
-def _llm_default_model_for(provider_id: str) -> str:
-    options = _LLM_MODEL_OPTIONS.get(provider_id, [])
-    return options[0] if options else ""
+    return await llm_models.list_models(provider_id)
 
 
 # Deployment-tab log tail was a hardcoded fake-activity seed (0.7.0-era stub).
@@ -243,6 +232,9 @@ async def _ctx_for_tab(
     pref_has_env = env_indicators.get(saved_provider_id, False)
     provider_id = saved_provider_id if pref_has_env or active_provider is None else active_provider
     deployment_info = await _deployment_render_info(settings)
+    # P6.4 — live model catalog only matters on the LLM tab; other tabs
+    # skip the (cached) provider API roundtrip.
+    model_options = await _llm_model_options_for(provider_id) if tab == "llm-provider" else []
 
     ctx: dict[str, object] = {
         "current_tab": tab,
@@ -258,7 +250,7 @@ async def _ctx_for_tab(
         # endpoint below builds the same context for HTMX swaps.
         "provider_id": provider_id,
         "saved_provider_id": saved_provider_id,
-        "model_options": _llm_model_options_for(provider_id),
+        "model_options": model_options,
         # Select the SAVED model whenever it belongs to the rendered
         # provider's catalog. Comparing provider ids instead used to drop
         # the user's saved choice on every reload when the preference
@@ -266,8 +258,8 @@ async def _ctx_for_tab(
         # said "Saved" but the dropdown silently reverted.
         "selected_model": (
             settings.llm_model
-            if settings and settings.llm_model in _llm_model_options_for(provider_id)
-            else _llm_default_model_for(provider_id)
+            if settings and settings.llm_model in model_options
+            else (model_options[0] if model_options else "")
         ),
         "env_indicators": env_indicators,
         "notify_env_indicators": env_secrets.env_indicators_for_notifications_tab(),
@@ -1272,17 +1264,18 @@ async def get_settings_llm_model_options(
     if provider not in _VALID_PROVIDER_IDS:
         raise HTTPException(status_code=400, detail="unknown provider")
     settings = await settings_service.get_or_create(session, user_id=_effective_user_id(user))
+    model_options = await _llm_model_options_for(provider)
     selected = (
         settings.llm_model
-        if (settings and settings.llm_model in _llm_model_options_for(provider))
-        else _llm_default_model_for(provider)
+        if (settings and settings.llm_model in model_options)
+        else (model_options[0] if model_options else "")
     )
     return templates.TemplateResponse(
         request,
         "pages/_settings_llm_model_field.html",
         {
             "provider_id": provider,
-            "models": _llm_model_options_for(provider),
+            "models": model_options,
             "selected": selected,
         },
     )

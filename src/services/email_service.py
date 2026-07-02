@@ -15,6 +15,24 @@ from models import EmailThread
 from models.enums import EmailClassification
 
 
+async def list_accounts(session: AsyncSession, user_id: int) -> list:
+    """Live (non-deleted) EmailAccount rows for the user.
+
+    Single honest source for "is an inbox connected?" across Tracking,
+    Overview, and the email-signals SSE gate (P6.1 — the UI used to
+    hardcode a connected-Gmail chip regardless of state).
+    """
+    from models import EmailAccount
+
+    stmt = (
+        select(EmailAccount)
+        .where(EmailAccount.user_id == user_id, EmailAccount.deleted_at.is_(None))
+        .order_by(EmailAccount.created_at)
+    )
+    rows = (await session.exec(stmt)).all()
+    return list(rows)
+
+
 async def list_threads(
     session: AsyncSession,
     user_id: int,

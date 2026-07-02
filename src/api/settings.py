@@ -169,6 +169,7 @@ async def put_llm(
 
 @router.post("/api/v1/settings/llm/test", name="api_settings_llm_test")
 async def post_llm_test(
+    request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
 ):
@@ -176,18 +177,36 @@ async def post_llm_test(
 
     Plan 26 (0.2.0.01): the "no api_key configured" guard now consults
     env-presence indicators instead of `Settings.llm_api_key_fingerprint`.
+    P6.3: HTMX callers (HX-Request header) get an HTML fragment for the
+    visible "Test connection" button on Settings · LLM Provider; JSON
+    callers keep the machine shape.
     """
     from llm import get_provider
     from ui.routes.settings import _effective_user_id
 
+    def _respond(payload: dict) -> object:
+        if request.headers.get("hx-request") != "true":
+            return payload
+        if payload["ok"]:
+            return HTMLResponse(
+                '<span class="inline-flex items-center gap-1.5 text-emerald-300 text-xs">'
+                '<i data-lucide="check-circle-2" class="h-3.5 w-3.5" stroke-width="1.5"></i>'
+                f"ok · {payload['latency_ms']}ms · {payload['model']}</span>"
+            )
+        return HTMLResponse(
+            '<span class="inline-flex items-center gap-1.5 text-rose-300 text-xs">'
+            '<i data-lucide="x-circle" class="h-3.5 w-3.5" stroke-width="1.5"></i>'
+            f"failed · {payload['error']}</span>"
+        )
+
     s = await settings_service.get_or_create(session, user_id=_effective_user_id(_user))
     if not env_secrets.llm_provider_configured(s.llm_provider) and s.llm_provider.value != "ollama":
-        return {"ok": False, "error": "no api_key configured", "model": s.llm_model}
+        return _respond({"ok": False, "error": "no api_key configured", "model": s.llm_model})
 
     try:
         provider = get_provider(s)
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc), "model": s.llm_model}
+        return _respond({"ok": False, "error": str(exc), "model": s.llm_model})
 
     import time
 
@@ -195,13 +214,15 @@ async def post_llm_test(
     try:
         result = await provider.complete("ping", max_tokens=8)
         latency_ms = int((time.perf_counter() - t0) * 1000)
-        return {
-            "ok": True,
-            "latency_ms": latency_ms,
-            "model": result.model,
-        }
+        return _respond(
+            {
+                "ok": True,
+                "latency_ms": latency_ms,
+                "model": result.model,
+            }
+        )
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc), "model": s.llm_model}
+        return _respond({"ok": False, "error": str(exc), "model": s.llm_model})
 
 
 @router.put("/api/v1/settings/auto-apply", name="api_settings_auto_apply_put")
