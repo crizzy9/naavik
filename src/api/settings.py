@@ -200,9 +200,10 @@ async def post_llm_test(
         )
 
     s = await settings_service.get_or_create(session, user_id=_effective_user_id(_user))
-    if not env_secrets.llm_provider_configured(s.llm_provider) and s.llm_provider.value != "ollama":
-        return _respond({"ok": False, "error": "no api_key configured", "model": s.llm_model})
-
+    # Test the provider LLM calls will ACTUALLY use — `get_provider` falls
+    # back to the env-resolved active provider when the saved preference
+    # lacks its env key (the old preference-only guard reported "no api_key
+    # configured" while real calls were succeeding via the fallback).
     try:
         provider = get_provider(s)
     except Exception as exc:  # noqa: BLE001
