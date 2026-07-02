@@ -824,9 +824,10 @@ async def post_settings_source_run(
 
     user_id = _effective_user_id(user)
     user_settings = await settings_service.get_or_create(session, user_id=user_id)
-    if not env_secrets.scraper_source_configured(JobSource(source), user_settings):
+    user_profile = await profile_service.get_profile(session, user_id)
+    if not env_secrets.scraper_source_configured(JobSource(source), user_settings, user_profile):
         hint = (
-            "set keywords via Configure"
+            "add target titles to your profile (or set an override via Configure)"
             if source in ("linkedin", "indeed")
             else "set its company list first (see Configure)"
         )

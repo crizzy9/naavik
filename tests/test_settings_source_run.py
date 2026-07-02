@@ -77,7 +77,7 @@ def test_run_unconfigured_source_422(client, auth_cookies, csrf_headers, _settin
     )
     assert r.status_code == 422
     assert "not configured" in r.text
-    assert "keywords" in r.text
+    assert "target titles" in r.text
 
 
 def test_run_configured_but_scheduler_down_503(

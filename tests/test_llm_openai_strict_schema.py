@@ -122,3 +122,28 @@ def test_unresolvable_ref_with_siblings_collapses_to_bare_ref():
     }
     OpenAIProvider._to_strict_schema(schema)
     assert schema["properties"]["x"] == {"$ref": "#/definitions/External"}
+
+
+def test_strict_compatible_schemas_report_true():
+    assert OpenAIProvider._to_strict_schema(JobExtraction.model_json_schema()) is True
+    assert OpenAIProvider._to_strict_schema(ExtractedResume.model_json_schema()) is True
+
+
+def test_map_schema_preserved_and_reports_non_strict():
+    """Regression (live 400): `JobScore.per_dimension: dict[str, float]` is a
+    map schema — strict mode can't express it, and the old transform clobbered
+    `additionalProperties: {"type": "number"}` to `false` (plus invented
+    `required: []`), so every judge call 400'd with
+    "Extra required key 'per_dimension' supplied". Map nodes must survive
+    untouched and the caller must send strict=false."""
+    from llm.prompts.score_job import JobScore
+
+    schema = JobScore.model_json_schema()
+    strict_ok = OpenAIProvider._to_strict_schema(schema)
+    assert strict_ok is False
+    per_dim = schema["properties"]["per_dimension"]
+    assert per_dim["additionalProperties"] == {"type": "number"}
+    assert "required" not in per_dim
+    # The rest of the schema is still tightened (root object strictified).
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == list(schema["properties"].keys())

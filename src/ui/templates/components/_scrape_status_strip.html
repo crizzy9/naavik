@@ -3,9 +3,12 @@
    body-level `scrape-status-changed` event fired by run triggers.
    Context: runs=[{source_label, status, new_jobs, listings, started_label,
    error}], any_active=bool, poll=bool. Rendered on Discover + Settings·Sources. #}
+{# Poll fast while active; slow idle poll covers the race where the
+   scrape-status-changed refresh lands before the RUNNING row commits
+   (otherwise an idle-rendered strip would never re-check). #}
 <div id="scrape-status-strip"
      hx-get="/_fragments/scrape-status"
-     hx-trigger="{% if poll %}every 3s, {% endif %}scrape-status-changed from:body"
+     hx-trigger="every {% if poll %}3s{% else %}15s{% endif %}, scrape-status-changed from:body"
      hx-swap="outerHTML"
      class="{% if runs %}flex{% else %}hidden{% endif %} flex-col gap-1.5"
      data-testid="scrape-status-strip">

@@ -75,7 +75,7 @@ class OpenAIProvider(LLMProvider):
         )
 
     @staticmethod
-    def _to_strict_schema(root: dict) -> None:
+    def _to_strict_schema(root: dict) -> bool:
         """Make a Pydantic JSON schema OpenAI-strict, in place.
 
         `strict: true` json_schema mode requires every object to carry
@@ -92,8 +92,17 @@ class OpenAIProvider(LLMProvider):
         which the API rejects with `$ref cannot have keywords {'default'}`.
         We strip every `default` and inline any `$ref` that still carries
         siblings (siblings win over the resolved target on key conflicts).
+
+        Returns True when the transformed schema is strict-compatible.
+        Map-style objects (`dict[str, X]` → schema-valued
+        `additionalProperties`, no fixed `properties` — e.g.
+        `JobScore.per_dimension`) are fundamentally inexpressible in strict
+        mode; those nodes are left intact and the caller must send
+        `strict: false` (best-effort JSON schema; Pydantic re-validates
+        downstream).
         """
         defs = root.get("$defs", {})
+        strict_ok = True
 
         def _resolve(ref: str) -> dict | None:
             name = ref.removeprefix("#/$defs/")
@@ -101,6 +110,7 @@ class OpenAIProvider(LLMProvider):
             return target if isinstance(target, dict) else None
 
         def _walk(node: object) -> None:
+            nonlocal strict_ok
             if isinstance(node, dict):
                 node.pop("default", None)
                 ref = node.get("$ref")
@@ -115,7 +125,10 @@ class OpenAIProvider(LLMProvider):
                         # Unresolvable ref (non-$defs pointer): a bare $ref is
                         # the only strict-legal form, so drop the siblings.
                         node["$ref"] = ref
-                if node.get("type") == "object" or "properties" in node:
+                if isinstance(node.get("additionalProperties"), dict):
+                    # dict[str, X] map — keep the map schema, drop strict.
+                    strict_ok = False
+                elif node.get("type") == "object" or "properties" in node:
                     props = node.get("properties", {})
                     node["additionalProperties"] = False
                     node["required"] = list(props.keys())
@@ -126,6 +139,7 @@ class OpenAIProvider(LLMProvider):
                     _walk(value)
 
         _walk(root)
+        return strict_ok
 
     async def structured(
         self,
@@ -137,11 +151,11 @@ class OpenAIProvider(LLMProvider):
         cache_system: bool = False,  # noqa: ARG002 — accepted for interface parity; OpenAI doesn't cache
     ) -> StructuredResult:
         strict_schema = schema.model_json_schema()
-        self._to_strict_schema(strict_schema)
+        strict_ok = self._to_strict_schema(strict_schema)
         json_schema = {
             "name": schema.__name__,
             "schema": strict_schema,
-            "strict": True,
+            "strict": strict_ok,
         }
         messages: list[dict] = []
         if system is not None:
