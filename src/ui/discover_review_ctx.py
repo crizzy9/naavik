@@ -212,10 +212,13 @@ async def build_review_ctx(
     selected_count = sum(1 for r in all_rows if r["selected"])
 
     resume_pdf_url = None
+    cover_pdf_url = None
     if application is not None:
         docs = await application_service.latest_documents(session, application.id)
         if any(getattr(d, "kind", None) and str(d.kind.value) == "resume" for d in docs):
             resume_pdf_url = f"/api/v1/applications/{application.id}/resume.pdf"
+        if any(getattr(d, "kind", None) and str(d.kind.value) == "cover_letter" for d in docs):
+            cover_pdf_url = f"/api/v1/applications/{application.id}/cover-letter.pdf"
 
     return {
         "job": {
@@ -249,6 +252,7 @@ async def build_review_ctx(
         "selected_bullet_count": selected_count,
         "total_bullet_count": len(all_rows),
         "resume_pdf_url": resume_pdf_url,
+        "cover_pdf_url": cover_pdf_url,
         "cover_sections": sections,
         "cover_generated": cover_generated,
         "screener_answers": screener_views,

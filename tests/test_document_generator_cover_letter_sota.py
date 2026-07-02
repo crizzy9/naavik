@@ -234,4 +234,4 @@ async def test_generate_cover_letter_settings_override_pins_format():
 
     # Standard template, not pain-letter
     assert "PAIN-LETTER" not in captured["prompt"]
-    assert "Hook / Match / Close" in captured["prompt"]
+    assert 'format_chosen="standard"' in captured["prompt"]

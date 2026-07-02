@@ -996,13 +996,12 @@ async def generate_cover_letter(
             cache_system=cache_system,
         )
         sota_value = result.value
-        # CoverLetterSota → cover_letter.typt payload shape (T10 mapping).
-        # `hook` → intro; `match` → body; `close` → close; `why_company` empty
-        # (already folded into match).
+        # CoverLetterSota → cover_letter.typ payload shape (T10 mapping).
+        # hook → intro; match → body; why_company + close map 1:1.
         letter_dict = {
             "intro": str(sota_value.get("hook", "")),
             "body": str(sota_value.get("match", "")),
-            "why_company": "",
+            "why_company": str(sota_value.get("why_company", "")),
             "close": str(sota_value.get("close", "")),
             "_sota_format_chosen": str(sota_value.get("format_chosen", format_chosen)),
             "_sota_verbatim_phrases": list(sota_value.get("verbatim_phrases", []) or []),
@@ -1026,6 +1025,17 @@ async def generate_cover_letter(
     # only consumes {intro, body, why_company, close}).
     typst_letter = {k: v for k, v in letter_dict.items() if not k.startswith("_sota_")}
 
+    # Recipient block + greeting — a real letter addresses a person when we
+    # know one (hiring-manager extraction, confidence-gated).
+    recipient_name = None
+    recipient_title = None
+    if hiring_manager and hiring_manager.get("name"):
+        confidence = float(hiring_manager.get("confidence") or 0.0)
+        if confidence >= 0.5:
+            recipient_name = str(hiring_manager["name"])
+            recipient_title = hiring_manager.get("title")
+    greeting = f"Dear {recipient_name}," if recipient_name else "Dear Hiring Team,"
+
     typst_data = {
         "profile": {
             "full_name": snap.profile.full_name,
@@ -1034,6 +1044,8 @@ async def generate_cover_letter(
             "location": snap.profile.location,
         },
         "job": {"company": job.company, "role": job.role},
+        "recipient": {"name": recipient_name, "title": recipient_title},
+        "greeting": greeting,
         "letter": typst_letter,
         "today": today_str,
     }
@@ -1120,21 +1132,18 @@ def _render_cover_letter_sota_prompt(
         f"{job.get('company', '')} — {job.get('role', '')}\n{(job.get('description') or '')[:1500]}"
     )
 
+    kwargs = {
+        "profile": profile_str,
+        "job": job_str,
+        "hiring_manager": hm_str,
+        "matched_tags": ", ".join(matched_tags),
+        "company": job.get("company", ""),
+        "name": profile.get("full_name", ""),
+    }
     if format_chosen == "pain_letter":
-        pain_signals = _PAIN_POINT_RE.findall(job.get("description", ""))[:5]
-        return PROMPT_PAIN_LETTER.format(
-            profile=profile_str,
-            job=job_str,
-            hiring_manager=hm_str,
-            matched_tags=", ".join(matched_tags),
-            pain_signals=", ".join(pain_signals),
-        )
-    return PROMPT_STANDARD.format(
-        profile=profile_str,
-        job=job_str,
-        hiring_manager=hm_str,
-        matched_tags=", ".join(matched_tags),
-    )
+        kwargs["pain_signals"] = ", ".join(_PAIN_POINT_RE.findall(job.get("description", ""))[:5])
+        return PROMPT_PAIN_LETTER.format(**kwargs)
+    return PROMPT_STANDARD.format(**kwargs)
 
 
 def _render_cover_letter_prompt(profile: dict, job: dict, tone: str) -> str:

@@ -226,13 +226,37 @@
                   hx-target="#apply-cover-letter-text"
                   hx-swap="innerHTML"
                   hx-indicator="#apply-cover-regen"
+                  hx-on::after-request="const f = document.querySelector('[data-testid=cover-letter-embed]'); if (f) f.src = f.src;"
                   hx-disabled-elt="this">
             <i data-lucide="refresh-cw" class="h-3.5 w-3.5 inline" stroke-width="1.5"></i> Regen
           </button>
         </header>
+        {% if application.docs_state == "generating" %}
+        <div class="flex flex-col items-center text-center gap-2 px-6 py-8">
+          <span class="h-6 w-6 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+          <p class="text-xs text-slate-500">Drafting the letter…</p>
+        </div>
+        {% elif cover_pdf_url and cover_generated %}
+        <div class="px-5 py-3 flex flex-col gap-3">
+          <iframe src="{{ cover_pdf_url }}#toolbar=0&navpanes=0"
+                  title="Cover letter PDF"
+                  class="w-full rounded-md border border-slate-800 bg-white"
+                  style="height: 640px"
+                  data-testid="cover-letter-embed"></iframe>
+          <details class="group">
+            <summary class="cursor-pointer text-xs text-slate-400 hover:text-slate-200 select-none">
+              Edit the letter section by section
+            </summary>
+            <div id="apply-cover-letter-text" class="flex flex-col gap-1 pt-2">
+              {% include "pages/_apply_cover_letter_text.html" with context %}
+            </div>
+          </details>
+        </div>
+        {% else %}
         <div id="apply-cover-letter-text" class="flex flex-col gap-1 px-3 py-3">
           {% include "pages/_apply_cover_letter_text.html" with context %}
         </div>
+        {% endif %}
 
         <div class="px-5 pt-2 pb-3 border-t border-slate-800/50">
           <header class="flex items-baseline justify-between mb-2">

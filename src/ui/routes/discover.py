@@ -928,6 +928,30 @@ async def get_resume_pdf(
     return FileResponse(resume.path, media_type="application/pdf")
 
 
+@router.get("/api/v1/applications/{application_id}/cover-letter.pdf", name="apply_cover_letter_pdf")
+async def get_cover_letter_pdf(
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Serve the latest generated cover-letter PDF (IDOR-guarded) — the
+    workspace embeds it inline, same treatment as the resume."""
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+
+    user_id = _effective_user_id(user)
+    application = await application_service.get_application(session, application_id)
+    if application is None or application.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    docs = await application_service.latest_documents(session, application_id)
+    cover = next((d for d in docs if str(d.kind.value) == "cover_letter"), None)
+    if cover is None or not cover.path or not Path(cover.path).is_file():
+        raise HTTPException(status_code=404, detail="No generated cover letter PDF yet")
+    return FileResponse(cover.path, media_type="application/pdf")
+
+
 @router.post(
     "/api/v1/applications/{application_id}/cover-letter/generate", name="apply_cover_generate"
 )

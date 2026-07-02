@@ -92,6 +92,8 @@ def _minimal_letter_data() -> dict:
             "location": "Boston, MA",
         },
         "job": {"company": "Stripe", "role": "Senior Backend Engineer"},
+        "recipient": {"name": "Jane Doe", "title": "Engineering Manager"},
+        "greeting": "Dear Jane Doe,",
         "letter": {
             "intro": "I'm excited to apply for the Senior Backend Engineer role at Stripe.",
             "body": ("At Intuit I led the personalization platform that served 100M+ users."),
