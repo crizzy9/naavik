@@ -44,6 +44,32 @@ def _provider_has_env_key(provider: LLMProviderEnum) -> bool:
     return False
 
 
+_CLOUD_MODEL_PREFIXES: dict[LLMProviderEnum, tuple[str, ...]] = {
+    LLMProviderEnum.ANTHROPIC: ("claude",),
+    LLMProviderEnum.OPENAI: ("gpt-", "chatgpt", "o1", "o3", "o4"),
+}
+
+
+def _model_belongs_to(model: str | None, provider: LLMProviderEnum) -> bool:
+    """Namespace check: does `model` plausibly belong to `provider`?
+
+    Model ids are namespaced by vendor ("claude-*", "gpt-*"/"o*"); Ollama
+    tags are free-form ("llama3.1:70b"), so anything that isn't obviously a
+    cloud id counts as Ollama's. Used to decide whether the user's saved
+    `Settings.llm_model` survives provider resolution — passing a foreign
+    model id to a provider 404s on every call, while dropping a model the
+    provider DOES serve silently downgrades to the provider default (the
+    "Settings says gpt-5.4-mini, ApiUsage says gpt-4o" bug).
+    """
+    if not model:
+        return False
+    if provider is LLMProviderEnum.OLLAMA:
+        cloud = _CLOUD_MODEL_PREFIXES[LLMProviderEnum.ANTHROPIC]
+        cloud += _CLOUD_MODEL_PREFIXES[LLMProviderEnum.OPENAI]
+        return not model.startswith(cloud)
+    return model.startswith(_CLOUD_MODEL_PREFIXES.get(provider, ()))
+
+
 def _build_provider(target: LLMProviderEnum, model: str | None) -> LLMProvider:
     """Construct the concrete provider; assumes caller verified env key."""
     if target is LLMProviderEnum.ANTHROPIC:
@@ -85,7 +111,12 @@ def get_provider(
     """
     target = user_settings.llm_fallback_provider if fallback else user_settings.llm_provider
     if target is not None and _provider_has_env_key(target):
-        return _build_provider(target, user_settings.llm_model)
+        # Guard the saved model against the target's namespace — a foreign
+        # model id (e.g. provider=OPENAI + model="llama3.1:70b" left over
+        # from an earlier preference) 404s on every call; the provider
+        # default is the honest degradation.
+        model = user_settings.llm_model
+        return _build_provider(target, model if _model_belongs_to(model, target) else None)
 
     # Preferred provider lacks env key — fall back to whichever provider IS
     # env-configured. Avoids the silent "auth_required" path operators hit
@@ -102,13 +133,16 @@ def get_provider(
         )
 
     active_enum = LLMProviderEnum(active_id)
-    # The stored llm_model was chosen for the *preferred* provider — passing
-    # it to a different provider 404s on every call (e.g. Settings said
-    # ANTHROPIC + "llama3.1:70b", only OPENAI_API_KEY set → OpenAI rejected
-    # the Ollama model name). Cross-provider fallback uses the fallback
-    # provider's own default model instead.
-    model = user_settings.llm_model if active_enum == target else None
-    return _build_provider(active_enum, model)
+    # Keep the stored llm_model across the cross-provider fallback IFF it
+    # belongs to the active provider's namespace. The model dropdown renders
+    # the env-active provider's catalog, so a user whose preference stayed
+    # on a keyless provider still picked a model the active provider serves
+    # — discarding it silently routed every call to the provider default
+    # ("Settings says gpt-5.4-mini, ApiUsage says gpt-4o"). A foreign model
+    # id (e.g. ANTHROPIC + "llama3.1:70b", only OPENAI_API_KEY set) still
+    # drops to the provider default — passing it through 404s on every call.
+    model = user_settings.llm_model
+    return _build_provider(active_enum, model if _model_belongs_to(model, active_enum) else None)
 
 
 def get_embedding_provider(

@@ -177,6 +177,58 @@ def test_factory_anthropic_missing_env_key_falls_back_to_env_resolved(monkeypatc
     assert isinstance(provider, OpenAIProvider)
 
 
+def test_factory_cross_provider_fallback_keeps_model_when_it_belongs(monkeypatch) -> None:
+    """Item 10 (2026-07): Settings said gpt-5.4-mini but every call hit gpt-4o.
+
+    User keeps the default ANTHROPIC preference (no key set) + an OpenAI
+    model chosen from the dropdown (which renders the env-active provider's
+    catalog). The cross-provider fallback used to discard `llm_model`
+    whenever the active provider differed from the preference — even when
+    the model belonged to the active provider — so OpenAI ran on its
+    hardcoded DEFAULT_MODEL.
+    """
+    from config import settings as app_settings
+    from llm import get_provider
+    from llm.openai import OpenAIProvider
+
+    monkeypatch.setattr(app_settings, "anthropic_api_key", None)
+    monkeypatch.setattr(app_settings, "openai_api_key", "sk-openai-fallback")
+    settings = Settings(
+        user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="gpt-5.4-mini"
+    )
+    provider = get_provider(settings)
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.model_name == "gpt-5.4-mini"
+
+
+def test_factory_cross_provider_fallback_drops_foreign_model(monkeypatch) -> None:
+    """Anthropic model + only-OpenAI env → fallback must NOT pass claude-* to OpenAI."""
+    from config import settings as app_settings
+    from llm import get_provider
+    from llm.openai import OpenAIProvider
+
+    monkeypatch.setattr(app_settings, "anthropic_api_key", None)
+    monkeypatch.setattr(app_settings, "openai_api_key", "sk-openai-fallback")
+    settings = Settings(
+        user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="claude-sonnet-4-6"
+    )
+    provider = get_provider(settings)
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.model_name == OpenAIProvider.DEFAULT_MODEL
+
+
+def test_factory_primary_path_drops_foreign_model(env_keys) -> None:
+    """Preference has its env key but the saved model is another vendor's —
+    passing it through would 404 every call; provider default is honest."""
+    from llm import get_provider
+    from llm.openai import OpenAIProvider
+
+    settings = Settings(user_id=1, llm_provider=LLMProviderEnum.OPENAI, llm_model="llama3.1:70b")
+    provider = get_provider(settings)
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.model_name == OpenAIProvider.DEFAULT_MODEL
+
+
 def test_factory_raises_when_nothing_configured(monkeypatch) -> None:
     """0.7.0.48 fold-in: when NO provider has env keys, factory raises
     `auth_required` with operator-actionable guidance. Ollama is normally

@@ -159,8 +159,13 @@ def test_llm_tab_renders_form_wrap(client: TestClient, auth_cookies):
     # Plan 70 (0.3.3.13): "Active provider" radio surface deleted; the
     # `/_fragments/settings/llm/model-options?provider=...` fragment is
     # no longer wired via radio change. Endpoint remains usable; the LLM
-    # tab itself just doesn't trigger it on render.
-    assert 'name="llm_provider"' not in body
+    # tab itself just doesn't trigger it on render. Item 10 (2026-07)
+    # reintroduced `llm_provider` as a HIDDEN field only — saving a model
+    # must persist the provider whose catalog the dropdown rendered, or the
+    # preference stays on a provider the user never uses and the factory
+    # falls back to the provider-default model.
+    assert '<input type="hidden" name="llm_provider"' in body
+    assert 'type="radio" name="llm_provider"' not in body
     # Model dropdown swap target survives.
     assert 'id="llm-model-container"' in body
     # Old api-key container is GONE.
