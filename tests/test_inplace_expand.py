@@ -53,8 +53,8 @@ def test_expanded_fragment_returns_workspace_with_back_button(
     assert "Back to queue" in body
     assert "/_fragments/discover/queue" in body
     assert 'hx-target="#discover-main"' in body
-    # Workspace content — item 2 retired the WHAT THEY WANT column; the
-    # two-column analysis is the canonical workspace marker now.
+    # Workspace content — the three-column match analysis (WHAT THEY WANT
+    # restored 2026-07 round 2) is the canonical workspace marker.
     assert "YOUR STRENGTHS" in body
 
 

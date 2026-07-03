@@ -80,11 +80,31 @@
     </div>
   </div>
 
-  {# ── Row 2: Strengths ↔ What's missing ───────────────────────────── #}
-  {# The old third "WHAT THEY WANT" column restated the JD and regularly
-     contradicted the other two — dropped (item 2). The full JD lives right
-     below the panel; these two columns are the analysis. #}
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-800 border-t border-slate-800">
+  {# ── Row 2: What they want ↔ Strengths ↔ What's missing ──────────── #}
+  {# WHAT THEY WANT is the JD's own requirements with ✓/○ coverage marks —
+     restored (2026-07) next to the judge's strengths/gaps analysis so the
+     posting's asks and our verdict sit side by side. #}
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-slate-800 border-t border-slate-800">
+    <div class="bg-slate-900 px-5 py-4" data-testid="match-what-they-want">
+      <div class="text-[10px] uppercase tracking-wide text-indigo-300 font-mono mb-2">WHAT THEY WANT</div>
+      {% if job.requirements %}
+        <ul class="flex flex-col gap-1.5 text-xs text-slate-200 leading-relaxed">
+          {% for req in job.requirements %}
+            <li class="flex gap-2">
+              {% if req.matched %}
+                <span class="text-emerald-400 shrink-0" title="covered by your profile" aria-hidden="true">✓</span>
+              {% else %}
+                <span class="text-slate-500 shrink-0" title="not clearly covered" aria-hidden="true">○</span>
+              {% endif %}
+              <span>{{ req.text }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-xs text-slate-500 italic">no explicit requirements extracted from the posting</p>
+      {% endif %}
+    </div>
+
     <div class="bg-slate-900 px-5 py-4">
       <div class="text-[10px] uppercase tracking-wide text-emerald-300 font-mono mb-2">YOUR STRENGTHS</div>
       {% if _strengths %}
