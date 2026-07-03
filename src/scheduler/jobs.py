@@ -422,6 +422,7 @@ async def resolve_apply_sites() -> None:
     async with async_session() as session:
         n = await apply_site_resolver.resolve_pending(session)
         await session.commit()
+    await _maybe_alert_linkedin_session()
     async with async_session() as session:
         enriched = await jd_enrichment.enrich_thin_descriptions(session)
         await session.commit()
@@ -429,6 +430,41 @@ async def resolve_apply_sites() -> None:
         reextracted = await jd_enrichment.reextract_signals(session)
         await session.commit()
     log.info("resolve_apply_sites definite=%d enriched=%d reextracted=%d", n, enriched, reextracted)
+
+
+async def _maybe_alert_linkedin_session() -> None:
+    """One Discord admin alert when the Tier-B LinkedIn session dies.
+
+    Edge-triggered like scraping's consecutive-fail alert: the health file's
+    `alerted` flag latches after the first notification and clears on the
+    next "ok" recording, re-arming the alert for the next expiry.
+    """
+    from models import Settings
+    from services import linkedin_resolver
+    from services.notifications import notify_admin_error
+
+    health = linkedin_resolver.read_session_health()
+    if not health or health.get("status") != "not_logged_in" or health.get("alerted"):
+        return
+    async with async_session() as session:
+        # The session profile is deployment-global — alert the first operator.
+        settings = (
+            await session.exec(select(Settings).order_by(Settings.user_id).limit(1))
+        ).one_or_none()
+    if settings is None:
+        return
+    await notify_admin_error(
+        settings=settings,
+        message=(
+            "LinkedIn session not logged in — Tier-B apply-target resolution is "
+            "degraded (offsite jobs stay unresolved). If this is a rapid-hit "
+            "soft-block (authwall) it clears on its own after a cooldown; "
+            "otherwise refresh via "
+            "`scripts/linkedin_login.py --from-firefox <cookies.sqlite>` or set "
+            "LINKEDIN_SESSION_COOKIE and restart."
+        ),
+    )
+    linkedin_resolver.mark_health_alerted()
 
 
 # ── Registration ──────────────────────────────────────────────────────

@@ -103,8 +103,21 @@ def _job(
         apply_url=None,
         apply_kind=None,
         apply_resolved_at=None,
+        apply_resolved_via=None,
+        apply_resolve_attempts=0,
+        apply_next_resolve_at=None,
         updated_at=None,
     )
+
+
+def _sweep_exec(*, due_count: int, fresh: list, retries: list | None = None) -> AsyncMock:
+    """session.exec stub for resolve_pending's count → fresh → retry selects."""
+    count_result = MagicMock()
+    count_result.one = lambda: due_count
+    results = [count_result, MagicMock(all=lambda: fresh)]
+    if due_count:
+        results.append(MagicMock(all=lambda: retries or []))
+    return AsyncMock(side_effect=results)
 
 
 @pytest.mark.asyncio
@@ -534,7 +547,7 @@ async def test_resolve_pending_stamps_and_counts():
     session = MagicMock()
     session.add = MagicMock()
     session.flush = AsyncMock()
-    session.exec = AsyncMock(return_value=MagicMock(all=lambda: [job]))
+    session.exec = _sweep_exec(due_count=0, fresh=[job])
 
     resolved = resolver.ResolvedApply(kind="ashby", apply_url="https://jobs.ashbyhq.com/perk/x")
     with (
@@ -557,7 +570,7 @@ async def test_resolve_pending_survives_per_job_failure():
     session = MagicMock()
     session.add = MagicMock()
     session.flush = AsyncMock()
-    session.exec = AsyncMock(return_value=MagicMock(all=lambda: [bad_job, ok_job]))
+    session.exec = _sweep_exec(due_count=0, fresh=[bad_job, ok_job])
 
     calls = {"n": 0}
 
@@ -577,5 +590,267 @@ async def test_resolve_pending_survives_per_job_failure():
     ):
         n = await resolver.resolve_pending(session)
     assert n == 1
-    assert bad_job.apply_kind is None  # failure leaves the row untouched
+    # A crashed attempt is bookkept, not silently skipped — the job leaves the
+    # fresh queue and walks the retry ladder instead of eating budget forever.
+    assert bad_job.apply_kind == "unknown"
+    assert bad_job.apply_resolved_via == "unresolved"
+    assert bad_job.apply_resolve_attempts == 1
+    assert bad_job.apply_next_resolve_at is not None
     assert ok_job.apply_kind == "easy_apply"
+
+
+# ── Retry regime — backoff ladder, terminal states, sweep ordering ────────
+
+
+def _hours_from_now(dt) -> float:
+    from datetime import UTC, datetime
+
+    return (dt - datetime.now(UTC)).total_seconds() / 3600
+
+
+def test_apply_resolution_unresolved_schedules_first_retry():
+    job = _job()
+    resolver.apply_resolution(job, resolver.ResolvedApply(kind="external", via="unresolved"))
+    assert job.apply_resolve_attempts == 1
+    assert job.apply_next_resolve_at is not None
+    assert 0.9 < _hours_from_now(job.apply_next_resolve_at) <= 1.01
+
+
+@pytest.mark.parametrize(("prior_attempts", "expect_hours"), [(1, 4), (2, 24), (3, 72)])
+def test_apply_resolution_backoff_progression(prior_attempts, expect_hours):
+    job = _job()
+    job.apply_resolve_attempts = prior_attempts
+    resolver.apply_resolution(job, resolver.ResolvedApply(kind="external", via="unresolved"))
+    assert job.apply_resolve_attempts == prior_attempts + 1
+    assert expect_hours - 0.1 < _hours_from_now(job.apply_next_resolve_at) <= expect_hours + 0.01
+
+
+def test_apply_resolution_exhausts_at_max_attempts():
+    job = _job()
+    job.apply_resolve_attempts = resolver.MAX_RESOLVE_ATTEMPTS - 1
+    resolver.apply_resolution(job, resolver.ResolvedApply(kind="external", via="unresolved"))
+    assert job.apply_resolve_attempts == resolver.MAX_RESOLVE_ATTEMPTS
+    assert job.apply_resolved_via == "exhausted"
+    assert job.apply_next_resolve_at is None
+    assert job.apply_kind == "external"  # honest kind survives terminalization
+
+
+def test_apply_resolution_success_clears_retry_state():
+    job = _job()
+    job.apply_resolve_attempts = 2
+    from datetime import UTC, datetime
+
+    job.apply_next_resolve_at = datetime.now(UTC)
+    resolver.apply_resolution(
+        job,
+        resolver.ResolvedApply(
+            kind="greenhouse",
+            apply_url="https://job-boards.greenhouse.io/acme/jobs/1",
+            via="linkedin_auth",
+        ),
+    )
+    assert job.apply_next_resolve_at is None
+    assert job.apply_resolved_via == "linkedin_auth"
+
+
+def test_apply_resolution_manual_does_not_count_attempt_and_is_sticky():
+    job = _job()
+    resolver.apply_resolution(
+        job,
+        resolver.ResolvedApply(
+            kind="workday",
+            apply_url="https://acme.wd5.myworkdayjobs.com/x",
+            via="manual",
+        ),
+        count_attempt=False,
+    )
+    assert job.apply_resolve_attempts == 0
+    assert job.apply_resolved_via == "manual"
+    # Automation never overwrites the operator's ground truth.
+    resolver.apply_resolution(job, resolver.ResolvedApply(kind="external", via="unresolved"))
+    assert job.apply_kind == "workday"
+    assert job.apply_resolved_via == "manual"
+    assert job.apply_resolve_attempts == 0
+
+
+def test_note_failed_attempt_terminalizes_at_max():
+    job = _job()
+    job.apply_kind = "external"
+    job.apply_resolved_via = "unresolved"
+    job.apply_resolve_attempts = resolver.MAX_RESOLVE_ATTEMPTS - 1
+    resolver.note_failed_attempt(job)
+    assert job.apply_resolved_via == "exhausted"
+    assert job.apply_next_resolve_at is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_pending_fresh_before_due_retries():
+    """Fresh rows get the batch minus the retry reserve; retries fill the rest."""
+    fresh = [_job() for _ in range(3)]
+    retries = [_job() for _ in range(2)]
+    for r_job in retries:
+        r_job.apply_kind = "external"
+        r_job.apply_resolved_via = "unresolved"
+        r_job.apply_resolve_attempts = 1
+    session = MagicMock()
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+    session.exec = _sweep_exec(due_count=2, fresh=fresh, retries=retries)
+
+    seen: list = []
+
+    async def _resolve(job, **kwargs):
+        seen.append(job)
+        return resolver.ResolvedApply(kind="easy_apply", apply_url="https://x")
+
+    with (
+        patch.object(resolver, "resolve_job", new=AsyncMock(side_effect=_resolve)),
+        patch.object(resolver.asyncio, "sleep", new=AsyncMock()),
+        patch(
+            "services.application_service.resync_draft_apply_target",
+            new=AsyncMock(return_value=0),
+        ),
+    ):
+        n = await resolver.resolve_pending(session)
+    assert n == 5
+    assert seen[:3] == fresh  # fresh first
+    assert seen[3:] == retries  # then due retries
+    for r_job in retries:
+        assert r_job.apply_kind == "easy_apply"
+        assert r_job.apply_next_resolve_at is None
+
+
+@pytest.mark.asyncio
+async def test_resolver_stats_counts():
+    session = MagicMock()
+    via_result = MagicMock()
+    via_result.all = lambda: [("direct", 3), ("linkedin_auth", 1), (None, 2), ("exhausted", 1)]
+    counts = iter([2, 1, 4, 5])
+
+    def _count_result():
+        value = next(counts)
+        m = MagicMock()
+        m.one = lambda: value
+        return m
+
+    session.exec = AsyncMock(
+        side_effect=[via_result, _count_result(), _count_result(), _count_result(), _count_result()]
+    )
+    stats = await resolver.resolver_stats(session, user_id=1)
+    assert stats["by_via"] == {"direct": 3, "linkedin_auth": 1, "never": 2, "exhausted": 1}
+    assert stats["pending"] == 2
+    assert stats["retry_due"] == 1
+    assert stats["retry_scheduled"] == 4
+    assert stats["exhausted"] == 1
+    assert stats["resolved"] == 5
+
+
+# ── URL normalization — wrapper unwrap + redirect walking ─────────────────
+
+
+@pytest.mark.parametrize(
+    ("wrapped", "expected"),
+    [
+        (
+            "https://click.appcast.io/track/abc?url=https%3A%2F%2Facme.wd5.myworkdayjobs.com%2Fj%2F1",
+            "https://acme.wd5.myworkdayjobs.com/j/1",
+        ),
+        (
+            "https://www.linkedin.com/jobs/view/externalApply/123?url=https%3A%2F%2Fjobs.lever.co%2Facme%2Fx",
+            "https://jobs.lever.co/acme/x",
+        ),
+        # Nested wrappers peel layer by layer (bounded).
+        (
+            "https://t.example.com/r?dest=https%3A%2F%2Fclick.appcast.io%2Ft%3Furl%3Dhttps%253A%252F%252Fjobs.ashbyhq.com%252Facme%252F1",
+            "https://jobs.ashbyhq.com/acme/1",
+        ),
+        # Plain URLs (no URL-valued wrapper param) pass through untouched.
+        (
+            "https://www.linkedin.com/jobs/view/4434079004",
+            "https://www.linkedin.com/jobs/view/4434079004",
+        ),
+        (
+            "https://acme.com/careers?utm_source=linkedin&ref=jobs",
+            "https://acme.com/careers?utm_source=linkedin&ref=jobs",
+        ),
+    ],
+)
+def test_unwrap_tracking_url_variants(wrapped, expected):
+    assert resolver.unwrap_tracking_url(wrapped) == expected
+
+
+@pytest.mark.asyncio
+async def test_normalize_apply_url_early_exit_no_network_for_known_ats():
+    probe = AsyncMock(side_effect=AssertionError("network probe must not run"))
+    with patch.object(resolver, "_redirect_probe", new=probe):
+        final, kind = await resolver.normalize_apply_url(
+            "https://click.appcast.io/t?url=https%3A%2F%2Fjob-boards.greenhouse.io%2Facme%2Fjobs%2F1"
+        )
+    assert final == "https://job-boards.greenhouse.io/acme/jobs/1"
+    assert kind == "greenhouse"
+
+
+@pytest.mark.asyncio
+async def test_normalize_apply_url_follows_redirect_chain_to_workday():
+    hops = {
+        "https://careers.acme.com/j/1": "https://careers.acme.com/redirect/1",
+        "https://careers.acme.com/redirect/1": "https://acme.wd5.myworkdayjobs.com/en-US/j/1",
+    }
+
+    async def _probe(client, url, headers):
+        location = hops.get(url)
+        if location is None:
+            return MagicMock(status_code=200, headers={})
+        return MagicMock(status_code=302, headers={"location": location})
+
+    with (
+        patch.object(resolver, "is_safe_destination", return_value=(True, "")),
+        patch.object(resolver, "_redirect_probe", new=_probe),
+    ):
+        final, kind = await resolver.normalize_apply_url("https://careers.acme.com/j/1")
+    assert final == "https://acme.wd5.myworkdayjobs.com/en-US/j/1"
+    assert kind == "workday"
+
+
+@pytest.mark.asyncio
+async def test_normalize_apply_url_ssrf_blocked_hop_stops():
+    with (
+        patch.object(resolver, "is_safe_destination", return_value=(False, "private ip")),
+        patch.object(
+            resolver,
+            "_redirect_probe",
+            new=AsyncMock(side_effect=AssertionError("must not probe unsafe URL")),
+        ),
+    ):
+        final, kind = await resolver.normalize_apply_url("https://internal.local/j/1")
+    assert final == "https://internal.local/j/1"
+    assert kind is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_linkedin_auth_company_site_normalizes_to_ats():
+    """A Tier-B careers-page URL that redirects onto Workday upgrades the kind."""
+    from services import linkedin_resolver
+
+    job = _job()
+    guest = linkedin_resolver.GuestDetail(
+        is_offsite=True, company_slug=None, description_html=None, description_text=None
+    )
+    auth_hit = resolver.ResolvedApply(
+        kind="company_site", apply_url="https://careers.acme.com/j/1", via="linkedin_auth"
+    )
+    with (
+        patch.object(resolver, "_fetch_guest_detail", new=AsyncMock(return_value=guest)),
+        patch.object(resolver, "discover_ats_posting", new=AsyncMock(return_value=None)),
+        patch.object(linkedin_resolver, "resolve_via_auth", new=AsyncMock(return_value=auth_hit)),
+        patch.object(
+            resolver,
+            "normalize_apply_url",
+            new=AsyncMock(return_value=("https://acme.wd5.myworkdayjobs.com/j/1", "workday")),
+        ),
+    ):
+        out = await resolver.resolve_job(job, auth=object())
+    assert out.kind == "workday"
+    assert out.apply_url == "https://acme.wd5.myworkdayjobs.com/j/1"
+    assert out.original_apply_url == "https://careers.acme.com/j/1"
+    assert out.via == "linkedin_auth"

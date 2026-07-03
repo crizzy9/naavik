@@ -463,6 +463,11 @@
     </div>
   </section>
 
+  {# ── Apply-target resolution ops (read-only) ── #}
+  {% if apply_resolver is defined %}
+    {% include "components/_apply_resolver_card.html" %}
+  {% endif %}
+
   {# ── Submission failures (read-only; from the old Submissions tab) ── #}
   {% if submission_failures is defined %}
     {% include "pages/_settings_submissions.html" %}

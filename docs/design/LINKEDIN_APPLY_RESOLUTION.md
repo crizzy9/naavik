@@ -61,6 +61,9 @@ produce the same `ResolvedApply` the resolver already stamps onto `Job`. Order:
 
 `Job.apply_resolved_via` (migration `0034`) records which path produced the
 result, making "authoritative vs guessed" a queryable row-level property.
+Two more values joined the vocabulary in the 2026-07-03 retry rework:
+`"manual"` (operator-pasted target — ground truth, never overwritten by
+automation) and `"exhausted"` (the retry ladder ran dry — see below).
 
 A resolved kind promotes `Job.board` (`easy_apply`→LINKEDIN,
 `greenhouse`→GREENHOUSE, …), so Submit dispatch and `SUPPORTED_AUTO_SUBMIT_BOARDS`
@@ -126,6 +129,52 @@ against this by design — one serialized session, jittered, budgeted to 3
 authenticated fetches per sweep, on the 20-minute cron. Do **not** loop the
 verification scripts rapidly; a burst of headless hits will trip the block even
 with a valid cookie (it clears after a cooldown).
+
+## Retry regime — no silent dead ends (2026-07-03)
+
+Resolution used to run exactly once per job: the sweep selected
+`apply_kind IS NULL`, so anything stamped `external`/`unknown` with no
+`apply_url` (every pre-two-tier row — 46% of LinkedIn jobs at the time)
+stayed a dead end forever. Now (`migration 0035`):
+
+- `Job.apply_resolve_attempts` counts attempts; `Job.apply_next_resolve_at`
+  non-NULL schedules the next retry (partial index `ix_job_apply_retry_due`).
+- **Backoff ladder** (`apply_site_resolver.MAX_RESOLVE_ATTEMPTS = 5`):
+  attempt 1 → +1h, 2 → +4h, 3 → +24h, 4 → +72h; the 5th failed attempt
+  terminalizes as `via="exhausted"` (≈4.2 days total). A crashed attempt
+  (`note_failed_attempt`) walks the same ladder — a persistently-failing job
+  can't eat sweep budget forever.
+- `resolve_pending` drains **fresh first** (`apply_kind IS NULL`, newest
+  first — those are what the operator is swiping) minus a 2-slot reserve for
+  due retries, so heavy scrape days can't starve the retry queue. Tier B
+  stays budgeted at 3 authenticated fetches/sweep regardless.
+- The invariant lives in `apply_resolution`: any stamp that leaves
+  `external`/`unknown` with no URL either schedules the next rung or
+  terminalizes — never a silent dead end. Migration 0035 backfilled the
+  existing dead ends as due-now.
+- Tier-B URLs get **normalized** before classification
+  (`normalize_apply_url`): tracking wrappers unwrap (`?url=` families),
+  redirect chains are followed (SSRF-guarded, early-exit on the first hop
+  that classifies), so `careers.x.com → x.wdX.myworkdayjobs.com` upgrades
+  `company_site` → `workday`. The pre-normalization URL persists in
+  `raw_meta["apply_url_original"]`. An unrecognized host **with a URL in
+  hand** is `company_site`; `external` strictly means "offsite, target
+  unknown".
+
+**Operator surfaces.** The Job-detail right rail (`_apply_target_card.html`)
+shows kind + URL + via/attempts/next-retry, a "Re-resolve now" button
+(`POST /api/v1/jobs/{id}/resolve-apply`, Tier-B budget of one, serialized
+behind the module auth lock), and — while unresolved — a paste-URL form
+(`POST /api/v1/jobs/{id}/apply-url`, stamped `via="manual"`, doesn't count
+as an attempt). Settings · AI & Automation (`_apply_resolver_card.html`)
+shows session health + pipeline counts (`resolver_stats`).
+
+**Session health.** Every Tier-B attempt records its outcome
+(`ok` / `not_logged_in` / `error`) to `DATA_DIR/linkedin/session_health.json`
+(atomic write, colocated with the profile it describes). The
+`resolve_apply_sites` cron sends ONE Discord admin alert when the session
+goes not-logged-in (edge-triggered via the file's `alerted` latch; recovery
+to `ok` re-arms it).
 
 ## Extending to other sites
 

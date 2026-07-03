@@ -41,10 +41,11 @@ import random
 import re
 from collections import Counter
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from config import settings
-from services.apply_site_resolver import ResolvedApply, classify_apply_url
+from services.apply_site_resolver import ResolvedApply, ats_org_from_url, classify_apply_url
 
 log = logging.getLogger(__name__)
 
@@ -61,10 +62,6 @@ _TOPCARD_SLUG_RE = re.compile(
     r"/company/([a-z0-9][a-z0-9\-]*)/?\?trk=[^\"']*topcard", re.IGNORECASE
 )
 _SLUG_OK_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{1,60}$")
-
-# Chrome, when logged in, stores the offsite target in the authenticated
-# Voyager posting; the greenhouse/lever/ashby org sits in the URL path.
-_ATS_ORG_RE = re.compile(r"(?:greenhouse\.io|lever\.co|ashbyhq\.com)/([^/?#]+)")
 
 
 @dataclass
@@ -228,24 +225,19 @@ def extract_apply_from_voyager(payload: dict) -> VoyagerApply:
     )
 
 
-def _org_from_url(url: str, kind: str) -> str | None:
-    if kind not in ("greenhouse", "lever", "ashby"):
-        return None
-    m = _ATS_ORG_RE.search(url)
-    return m.group(1) if m else None
-
-
 def resolved_from_fetch(job, fetch: AuthFetch | None) -> ResolvedApply | None:
     """Turn a raw authenticated fetch into a `ResolvedApply` (pure)."""
     if fetch is None or not fetch.logged_in or not fetch.voyager:
         return None
     parsed = extract_apply_from_voyager(fetch.voyager)
     if parsed.apply_url:
-        kind = classify_apply_url(parsed.apply_url) or "external"
+        # An unrecognized host with a URL in hand is a company careers page —
+        # "external" is reserved for offsite-with-no-target.
+        kind = classify_apply_url(parsed.apply_url) or "company_site"
         return ResolvedApply(
             kind=kind,
             apply_url=parsed.apply_url,
-            ats_org=_org_from_url(parsed.apply_url, kind),
+            ats_org=ats_org_from_url(parsed.apply_url, kind),
             description_html=parsed.description_html,
             description_text=parsed.description_text,
             via="linkedin_auth",
@@ -304,6 +296,55 @@ def auth_available() -> bool:
         return True
     prof = profile_dir()
     return prof.is_dir() and any(prof.iterdir())
+
+
+# ── Session health — the latest Tier-B outcome, queryable without a browser ──
+# A JSON file next to the profile it describes (deployment-global, like the
+# profile itself; no DB session exists inside resolve_via_auth). `alerted`
+# latches the one-time Discord notification; recovery to "ok" clears it.
+
+
+def _health_path() -> Path:
+    return (Path(settings.data_dir).expanduser() / "linkedin" / "session_health.json").resolve()
+
+
+def read_session_health() -> dict | None:
+    """Latest recorded Tier-B outcome, or None when never attempted."""
+    try:
+        payload = json.loads(_health_path().read_text())
+    except (OSError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _write_health(payload: dict) -> None:
+    path = _health_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(payload))
+        tmp.replace(path)
+    except OSError as exc:
+        log.info("could not write linkedin session health: %s", exc)
+
+
+def record_session_health(status: str, *, landing_url: str | None = None) -> None:
+    """Persist the outcome of a Tier-B attempt: ok / not_logged_in / error."""
+    prev = read_session_health() or {}
+    _write_health(
+        {
+            "status": status,
+            "at": datetime.now(UTC).isoformat(),
+            "landing_url": landing_url,
+            "alerted": bool(prev.get("alerted")) and status != "ok",
+        }
+    )
+
+
+def mark_health_alerted() -> None:
+    health = read_session_health()
+    if health:
+        _write_health({**health, "alerted": True})
 
 
 def _chromium_executable() -> str | None:
@@ -394,6 +435,14 @@ async def _open_and_fetch(job) -> AuthFetch:
                         voyager = json.loads(result["body"])
                     except (ValueError, TypeError):
                         voyager = None
+                if voyager is None and isinstance(result, dict):
+                    # Distinguish "Voyager refused" (403 = soft-block, 404 =
+                    # posting gone) from "payload had no target" in the logs.
+                    log.info(
+                        "linkedin voyager fetch yielded nothing for job %s (status=%s)",
+                        job.id,
+                        result.get("status"),
+                    )
             return AuthFetch(landing_url=landing, logged_in=logged_in, voyager=voyager)
         finally:
             await ctx.close()
@@ -412,7 +461,13 @@ async def resolve_via_auth(job, auth: AuthContext | None, *, _fetcher=None) -> R
             fetch = await fetcher(job)
         except Exception as exc:  # noqa: BLE001 — a browser hiccup must not kill the sweep
             log.warning("linkedin auth resolve failed for job %s: %s", job.id, exc)
+            record_session_health("error")
             return None
+        if fetch is not None:
+            record_session_health(
+                "ok" if fetch.logged_in else "not_logged_in",
+                landing_url=fetch.landing_url,
+            )
     if fetch is not None and not fetch.logged_in:
         log.warning(
             "linkedin auth session not logged in (landing=%s) — refresh the profile",
@@ -430,8 +485,11 @@ __all__ = [
     "auth_available",
     "cookie_payload",
     "extract_apply_from_voyager",
+    "mark_health_alerted",
     "parse_guest_detail",
     "profile_dir",
+    "read_session_health",
+    "record_session_health",
     "resolve_via_auth",
     "resolved_from_fetch",
 ]

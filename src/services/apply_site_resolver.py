@@ -27,10 +27,11 @@ import logging
 import random
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from urllib.parse import urlparse
+from datetime import UTC, datetime, timedelta
+from urllib.parse import parse_qsl, unquote, urlparse
 
 import httpx
+from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -46,6 +47,21 @@ _TITLE_MATCH_THRESHOLD = 0.72
 # Two postings scoring within this of the winner is a tie the title match can't
 # break — the caller should prefer an authoritative source over the guess.
 _AMBIGUITY_EPS = 0.02
+
+# Unresolved targets ("external"/"unknown" with no apply_url) walk this backoff
+# ladder instead of dying silently: attempt N schedules retry N+1 after
+# _RETRY_BACKOFF[N-1]; the attempt that hits MAX and still can't resolve
+# terminalizes as via="exhausted" (surfaced in the UI with a manual-paste path).
+MAX_RESOLVE_ATTEMPTS = 5
+_RETRY_BACKOFF = (
+    timedelta(hours=1),
+    timedelta(hours=4),
+    timedelta(hours=24),
+    timedelta(hours=72),
+)
+# Sweep slots held back from fresh jobs when retries are due, so a heavy
+# scrape day can't starve the retry queue indefinitely.
+_RETRY_RESERVE = 2
 
 # UI labels double as the closed vocabulary for `Job.apply_kind`.
 APPLY_KIND_LABELS: dict[str, str] = {
@@ -114,8 +130,13 @@ class ResolvedApply:
     description_text: str | None = None
     posting_title: str | None = None
     # Provenance — how we got here. Authoritative ("direct", "linkedin_guest_slug",
-    # "linkedin_auth", "board_trust") vs guessed ("ats_discovery") vs "unresolved".
+    # "linkedin_auth", "board_trust", "manual") vs guessed ("ats_discovery") vs
+    # "unresolved" (retry-scheduled) / "exhausted" (retries spent).
     via: str | None = None
+    # When normalization rewrote the URL (tracking wrapper unwrapped, redirect
+    # chain followed), the pre-normalization URL — persisted to
+    # raw_meta["apply_url_original"] for provenance.
+    original_apply_url: str | None = None
     # Discovery tie: >=2 postings scored within an epsilon of the winner, so the
     # title match can't pick THE posting (e.g. two near-identical Boston SWE
     # roles). Transient signal — the LinkedIn branch prefers the authoritative
@@ -148,6 +169,117 @@ def classify_apply_url(url: str | None) -> str | None:
         if pattern.search(host):
             return kind
     return None
+
+
+# The greenhouse/lever/ashby org slug sits in the URL path.
+_ATS_ORG_RE = re.compile(r"(?:greenhouse\.io|lever\.co|ashbyhq\.com)/([^/?#]+)")
+
+
+def ats_org_from_url(url: str | None, kind: str | None) -> str | None:
+    """Org slug from a Greenhouse/Lever/Ashby posting URL; None otherwise."""
+    if not url or kind not in ("greenhouse", "lever", "ashby"):
+        return None
+    m = _ATS_ORG_RE.search(url)
+    return m.group(1) if m else None
+
+
+# Query-param names tracking wrappers stash the real destination in
+# (appcast/jibe/LinkedIn externalApply style `?url=…`). Only values that are
+# themselves complete http(s) URLs count — a plain path never rewrites.
+_WRAPPER_QUERY_KEYS = frozenset(
+    {
+        "url",
+        "u",
+        "redirect",
+        "redirect_url",
+        "redirect_uri",
+        "dest",
+        "destination",
+        "target",
+        "joburl",
+        "job_url",
+    }
+)
+
+
+def unwrap_tracking_url(url: str, *, max_depth: int = 3) -> str:
+    """Peel tracking-wrapper layers whose query carries the real URL. Pure."""
+    current = url
+    for _ in range(max_depth):
+        try:
+            parsed = urlparse(current)
+        except ValueError:
+            return current
+        inner: str | None = None
+        for key, value in parse_qsl(parsed.query):
+            if key.lower() not in _WRAPPER_QUERY_KEYS:
+                continue
+            candidate = value if value.startswith(("http://", "https://")) else unquote(value)
+            if candidate.startswith(("http://", "https://")):
+                inner = candidate
+                break
+        if inner is None or inner == current:
+            return current
+        current = inner
+    return current
+
+
+async def _redirect_probe(
+    client: httpx.AsyncClient, url: str, headers: dict[str, str]
+) -> httpx.Response | None:
+    """HEAD, falling back to a body-less GET — we only want status + Location."""
+    try:
+        resp = await client.head(url, headers=headers)
+        if resp.status_code not in (405, 501):
+            return resp
+    except (httpx.HTTPError, OSError):
+        pass
+    try:
+        req = client.build_request("GET", url, headers=headers)
+        resp = await client.send(req, stream=True)
+        await resp.aclose()
+        return resp
+    except (httpx.HTTPError, OSError):
+        return None
+
+
+async def normalize_apply_url(
+    url: str, *, max_hops: int = 5, timeout: float = 8.0
+) -> tuple[str, str | None]:
+    """(final_url, kind|None) — unwrap wrappers, follow redirects, classify.
+
+    Tier B's `companyApplyUrl` (and manual pastes) can be a tracking wrapper or
+    a careers page that 302s onto the real ATS (`careers.x.com` →
+    `x.wdX.myworkdayjobs.com`). Zero network when unwrapping alone classifies;
+    otherwise each hop is SSRF-guarded and the walk early-exits the moment any
+    hop's URL classifies. Network failure degrades to the best-known URL —
+    never raises.
+    """
+    current = unwrap_tracking_url(url)
+    kind = classify_apply_url(current)
+    if kind is not None:
+        return current, kind
+    headers = {"User-Agent": pick_user_agent()}
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+            for _ in range(max_hops):
+                safe, reason = is_safe_destination(current)
+                if not safe:
+                    log.info("apply-url normalize blocked (%s): %s", reason, current[:120])
+                    break
+                resp = await _redirect_probe(client, current, headers)
+                if resp is None or resp.status_code not in (301, 302, 303, 307, 308):
+                    break
+                location = resp.headers.get("location")
+                if not location:
+                    break
+                current = unwrap_tracking_url(str(httpx.URL(current).join(location)))
+                kind = classify_apply_url(current)
+                if kind is not None:
+                    return current, kind
+    except (httpx.HTTPError, OSError) as exc:
+        log.info("apply-url normalize failed for %s: %s", url[:120], exc)
+    return current, classify_apply_url(current)
 
 
 def slug_candidates(company: str) -> list[str]:
@@ -494,6 +626,17 @@ async def _resolve_linkedin(
     if auth is not None and guest.is_offsite is not False:
         resolved = await linkedin_resolver.resolve_via_auth(job, auth)
         if resolved is not None:
+            # Voyager's companyApplyUrl can be a tracking wrapper or a careers
+            # page that redirects onto the real ATS — normalize before trusting
+            # the "company_site" classification.
+            if resolved.kind == "company_site" and resolved.apply_url:
+                final, kind = await normalize_apply_url(resolved.apply_url)
+                if final != resolved.apply_url:
+                    resolved.original_apply_url = resolved.apply_url
+                    resolved.apply_url = final
+                if kind is not None:
+                    resolved.kind = kind
+                    resolved.ats_org = ats_org_from_url(final, kind)
             return resolved
 
     # Auth unavailable / yielded nothing — fall back to the best-effort Tier-A
@@ -557,8 +700,37 @@ async def resolve_job(
     return ResolvedApply(kind="unknown", apply_url=None, via="unresolved")
 
 
-def apply_resolution(job: Job, resolved: ResolvedApply) -> None:
-    """Stamp resolution onto the Job row (caller flushes/commits)."""
+def _schedule_or_settle(job: Job) -> None:
+    """Enforce the no-silent-dead-end invariant after any stamp.
+
+    An unresolved target (external/unknown with no URL) is either scheduled
+    for the next backoff rung or terminalized as "exhausted"; anything else
+    clears the retry schedule.
+    """
+    unresolved = job.apply_url is None and job.apply_kind in ("external", "unknown")
+    if not unresolved:
+        job.apply_next_resolve_at = None
+        return
+    attempts = job.apply_resolve_attempts or 0
+    if attempts >= MAX_RESOLVE_ATTEMPTS:
+        job.apply_resolved_via = "exhausted"
+        job.apply_next_resolve_at = None
+        return
+    delay = _RETRY_BACKOFF[min(max(attempts - 1, 0), len(_RETRY_BACKOFF) - 1)]
+    job.apply_next_resolve_at = datetime.now(UTC) + delay
+
+
+def apply_resolution(job: Job, resolved: ResolvedApply, *, count_attempt: bool = True) -> None:
+    """Stamp resolution onto the Job row (caller flushes/commits).
+
+    `count_attempt=False` for stamps that aren't resolution attempts (the
+    operator's manual paste). An operator-pasted target is ground truth —
+    automation never overwrites `via="manual"`.
+    """
+    if job.apply_resolved_via == "manual" and resolved.via != "manual":
+        return
+    if count_attempt:
+        job.apply_resolve_attempts = (job.apply_resolve_attempts or 0) + 1
     job.apply_url = resolved.apply_url
     job.apply_kind = resolved.kind
     job.apply_resolved_at = datetime.now(UTC)
@@ -568,6 +740,24 @@ def apply_resolution(job: Job, resolved: ResolvedApply) -> None:
         job.board = board
     if resolved.ats_org:
         job.raw_meta = {**(job.raw_meta or {}), "ats_org": resolved.ats_org}
+    if resolved.original_apply_url and resolved.original_apply_url != resolved.apply_url:
+        job.raw_meta = {**(job.raw_meta or {}), "apply_url_original": resolved.original_apply_url}
+    _schedule_or_settle(job)
+    job.updated_at = datetime.now(UTC)
+
+
+def note_failed_attempt(job: Job) -> None:
+    """Bookkeeping when a resolution attempt CRASHED (vs resolving to unknown).
+
+    Counts the attempt and walks the same backoff ladder, so a persistently
+    crashing job leaves the fresh queue instead of eating sweep budget forever.
+    """
+    job.apply_resolve_attempts = (job.apply_resolve_attempts or 0) + 1
+    if job.apply_kind is None:
+        job.apply_kind = "unknown"
+        job.apply_resolved_via = "unresolved"
+    job.apply_resolved_at = datetime.now(UTC)
+    _schedule_or_settle(job)
     job.updated_at = datetime.now(UTC)
 
 
@@ -577,19 +767,38 @@ async def resolve_pending(
     batch_size: int = 12,
     jitter: tuple[float, float] = (2.0, 5.0),
 ) -> int:
-    """Cron sweep: resolve jobs never attempted (`apply_kind IS NULL`).
+    """Cron sweep: resolve fresh jobs (`apply_kind IS NULL`), then due retries.
 
-    Newest first — fresh discoveries are the ones the operator is swiping.
+    Fresh discoveries come first, newest first — those are the ones the
+    operator is swiping — minus a small reserve so due retries can't be
+    starved on heavy scrape days. Retries drain oldest-due first.
     Jittered sleeps keep the LinkedIn guest endpoint + board APIs polite.
     Returns the number of jobs resolved to a definite kind (not unknown).
     """
-    stmt = (
+    now = datetime.now(UTC)
+    due_clause = (
+        Job.apply_next_resolve_at.is_not(None),  # type: ignore[union-attr]
+        Job.apply_next_resolve_at <= now,
+        Job.deleted_at.is_(None),
+    )
+    due_count = (await session.exec(select(func.count()).select_from(Job).where(*due_clause))).one()
+    reserve = min(int(due_count), _RETRY_RESERVE)
+
+    fresh_stmt = (
         select(Job)
         .where(Job.apply_kind.is_(None), Job.deleted_at.is_(None))
         .order_by(Job.found_at.desc())
-        .limit(batch_size)
+        .limit(max(batch_size - reserve, 0))
     )
-    jobs = (await session.exec(stmt)).all()
+    jobs = list((await session.exec(fresh_stmt)).all())
+    if len(jobs) < batch_size and due_count:
+        retry_stmt = (
+            select(Job)
+            .where(*due_clause)
+            .order_by(Job.apply_next_resolve_at.asc(), Job.found_at.desc())
+            .limit(batch_size - len(jobs))
+        )
+        jobs.extend((await session.exec(retry_stmt)).all())
     if not jobs:
         return 0
 
@@ -612,6 +821,9 @@ async def resolve_pending(
             resolved = await resolve_job(job, _cache=cache, auth=auth)
         except Exception as exc:  # noqa: BLE001 — sweep must not die on one job
             log.warning("apply-site resolution failed for job %s: %s", job.id, exc)
+            note_failed_attempt(job)
+            session.add(job)
+            await session.flush()
             continue
         apply_resolution(job, resolved)
         # Discovery already carried the canonical JD — enrich for free while
@@ -639,14 +851,55 @@ async def resolve_pending(
     return definite
 
 
+async def resolver_stats(session: AsyncSession, *, user_id: int) -> dict:
+    """Resolution counts for the Settings ops card. Alive rows only."""
+    now = datetime.now(UTC)
+    base = (Job.user_id == user_id, Job.deleted_at.is_(None))
+    via_rows = (
+        await session.exec(
+            select(Job.apply_resolved_via, func.count())
+            .where(*base)
+            .group_by(Job.apply_resolved_via)
+        )
+    ).all()
+    by_via = {via or "never": int(n) for via, n in via_rows}
+
+    async def _count(*clauses) -> int:
+        value = (
+            await session.exec(select(func.count()).select_from(Job).where(*base, *clauses))
+        ).one()
+        return int(value or 0)  # `or 0`: the sample-data noop session yields None
+
+    return {
+        "by_via": by_via,
+        "pending": await _count(Job.apply_kind.is_(None)),
+        "retry_due": await _count(
+            Job.apply_next_resolve_at.is_not(None),  # type: ignore[union-attr]
+            Job.apply_next_resolve_at <= now,
+        ),
+        "retry_scheduled": await _count(
+            Job.apply_next_resolve_at.is_not(None),  # type: ignore[union-attr]
+            Job.apply_next_resolve_at > now,
+        ),
+        "exhausted": by_via.get("exhausted", 0),
+        "resolved": await _count(Job.apply_url.is_not(None)),  # type: ignore[union-attr]
+    }
+
+
 __all__ = [
     "APPLY_KIND_LABELS",
+    "MAX_RESOLVE_ATTEMPTS",
     "ResolvedApply",
     "apply_resolution",
+    "ats_org_from_url",
     "classify_apply_url",
     "discover_ats_posting",
+    "normalize_apply_url",
+    "note_failed_attempt",
     "resolve_job",
     "resolve_pending",
+    "resolver_stats",
     "slug_candidates",
     "title_match_score",
+    "unwrap_tracking_url",
 ]

@@ -284,6 +284,20 @@ async def _ctx_for_tab(
         # Plan 63 / 0.2.7.10 § C.6 — ATS adapter credential presence indicators.
         ctx["ats_credential_indicators"] = env_secrets.ats_credential_indicators()
         ctx["cost_projection"] = await _build_generation_cost_projection(session, user_id=user_id)
+        # Apply-target resolution ops — Tier-B session health + pipeline counts.
+        from services import apply_site_resolver, linkedin_resolver
+
+        # hasattr guard: legacy test fixtures inject minimal session fakes
+        # without `.exec`; the card renders health-only when stats are absent.
+        ctx["apply_resolver"] = {
+            "stats": (
+                await apply_site_resolver.resolver_stats(session, user_id=user_id)
+                if session is not None and hasattr(session, "exec")
+                else None
+            ),
+            "session_health": linkedin_resolver.read_session_health(),
+            "auth_available": linkedin_resolver.auth_available(),
+        }
 
     if tab == "ai-automation":
         today_cost, cap = await _llm_cost_cap_view(session, settings, user_id=user_id)

@@ -12,6 +12,7 @@ on mutating ops (plan 36 fold-in of 0.7.0.15).
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated
 
@@ -34,6 +35,8 @@ from services import job_service
 from services.auth import require_authed_session
 from ui import jobs_ctx
 from ui.templates_setup import templates
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -182,3 +185,97 @@ async def post_job_manual(
     response = Response(status_code=204)
     response.headers["HX-Redirect"] = "/tracking"
     return response
+
+
+# ── Apply-target resolution affordances (job detail right rail) ──────────
+
+
+async def _apply_target_card_response(request: Request, session: AsyncSession, job):
+    ctx = await jobs_ctx.build_job_detail_ctx(session, job=job)
+    return templates.TemplateResponse(
+        request, "components/_apply_target_card.html", {"j": ctx["job"]}
+    )
+
+
+@router.post(
+    "/api/v1/jobs/{job_id}/resolve-apply",
+    response_class=HTMLResponse,
+    name="jobs_resolve_apply",
+)
+async def post_job_resolve_apply(
+    request: Request,
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Re-run apply-target resolution for one job, inline.
+
+    The verification affordance: runs the full ladder with a Tier-B budget of
+    ONE authenticated fetch; the resolver's module-level auth lock serializes
+    this against a concurrent cron sweep, so the LinkedIn politeness
+    invariants hold. Can take up to ~a minute when the browser step runs.
+    Returns the refreshed card fragment.
+    """
+    job = await _job_or_404(session, job_id, _effective_user_id(user))
+    from services import application_service, apply_site_resolver, jd_enrichment, linkedin_resolver
+
+    auth = (
+        linkedin_resolver.AuthContext(remaining=1) if linkedin_resolver.auth_available() else None
+    )
+    try:
+        resolved = await apply_site_resolver.resolve_job(job, auth=auth)
+    except Exception as exc:  # noqa: BLE001 — surface as a counted failed attempt
+        log.warning("inline apply-site resolution failed for job %s: %s", job.id, exc)
+        apply_site_resolver.note_failed_attempt(job)
+    else:
+        apply_site_resolver.apply_resolution(job, resolved)
+        if resolved.description_html or resolved.description_text:
+            jd_enrichment.maybe_apply_discovered_description(job, resolved)
+        await application_service.resync_draft_apply_target(session, job)
+    session.add(job)
+    await session.commit()
+    return await _apply_target_card_response(request, session, job)
+
+
+@router.post(
+    "/api/v1/jobs/{job_id}/apply-url",
+    response_class=HTMLResponse,
+    name="jobs_set_apply_url",
+)
+async def post_job_apply_url(
+    request: Request,
+    job_id: int,
+    apply_url: Annotated[str, Form()],
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Operator-pasted apply target — the terminal escape hatch (via="manual").
+
+    Normalized (wrapper unwrap + redirect follow) and classified like any
+    resolved URL; a manual stamp never counts as a resolution attempt and is
+    never overwritten by automation.
+    """
+    job = await _job_or_404(session, job_id, _effective_user_id(user))
+    cleaned = (apply_url or "").strip()
+    # Same navigability rule as models.job._validate_job_url, minus the
+    # synthetic manual:// scheme — an apply target must be a real http(s) link.
+    if not cleaned.lower().startswith(("http://", "https://")):
+        raise HTTPException(status_code=422, detail="Enter a full http(s) URL")
+
+    from services import application_service, apply_site_resolver
+
+    final, kind = await apply_site_resolver.normalize_apply_url(cleaned)
+    resolved = apply_site_resolver.ResolvedApply(
+        kind=kind or "company_site",
+        apply_url=final,
+        ats_org=apply_site_resolver.ats_org_from_url(final, kind),
+        via="manual",
+        original_apply_url=cleaned if final != cleaned else None,
+    )
+    apply_site_resolver.apply_resolution(job, resolved, count_attempt=False)
+    await application_service.resync_draft_apply_target(session, job)
+    session.add(job)
+    await session.commit()
+    return await _apply_target_card_response(request, session, job)

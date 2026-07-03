@@ -16,6 +16,7 @@ from types import SimpleNamespace  # noqa: E402
 
 import pytest  # noqa: E402
 
+from services import apply_site_resolver as asr  # noqa: E402
 from services import linkedin_resolver as lr  # noqa: E402
 
 # ── fixtures ─────────────────────────────────────────────────────────────
@@ -149,11 +150,13 @@ def test_resolved_from_fetch_offsite_greenhouse():
     assert out.description_text
 
 
-def test_resolved_from_fetch_external_when_non_ats_host():
+def test_resolved_from_fetch_company_site_when_non_ats_host():
+    # A URL in hand on an unrecognized host is a company careers page —
+    # "external" is reserved for offsite-with-no-target.
     url = "https://careers.example.com/apply/123"
     fetch = lr.AuthFetch(landing_url="x", logged_in=True, voyager=_voyager_offsite(url))
     out = lr.resolved_from_fetch(_job(), fetch)
-    assert out.kind == "external"
+    assert out.kind == "company_site"
     assert out.ats_org is None
     assert out.apply_url == url
 
@@ -230,9 +233,75 @@ def test_cookie_payload_strips_quotes_and_scopes_domain():
     assert payload[0]["httpOnly"] is True
 
 
-def test_org_from_url():
+def test_ats_org_from_url():
     assert (
-        lr._org_from_url("https://job-boards.greenhouse.io/catapultsports/jobs/1", "greenhouse")
+        asr.ats_org_from_url("https://job-boards.greenhouse.io/catapultsports/jobs/1", "greenhouse")
         == "catapultsports"
     )
-    assert lr._org_from_url("https://careers.example.com/x", "external") is None
+    assert asr.ats_org_from_url("https://careers.example.com/x", "company_site") is None
+
+
+# ── Session health recording ──────────────────────────────────────────────
+
+
+@pytest.fixture
+def _tmp_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(lr.settings, "data_dir", str(tmp_path))
+    return tmp_path
+
+
+def test_session_health_roundtrip_and_alert_latch(_tmp_data_dir):
+    assert lr.read_session_health() is None  # never attempted
+    lr.record_session_health("not_logged_in", landing_url="https://www.linkedin.com/authwall")
+    health = lr.read_session_health()
+    assert health["status"] == "not_logged_in"
+    assert health["alerted"] is False
+    lr.mark_health_alerted()
+    assert lr.read_session_health()["alerted"] is True
+    # A repeat failure keeps the latch (no alert spam)…
+    lr.record_session_health("not_logged_in")
+    assert lr.read_session_health()["alerted"] is True
+    # …and recovery clears it, re-arming the next alert.
+    lr.record_session_health("ok", landing_url="https://www.linkedin.com/jobs/view/1/")
+    health = lr.read_session_health()
+    assert health["status"] == "ok"
+    assert health["alerted"] is False
+
+
+@pytest.mark.asyncio
+async def test_resolve_via_auth_records_health(_tmp_data_dir):
+    job = _job()
+    auth = lr.AuthContext(remaining=2, jitter=(0.0, 0.0))
+
+    async def _ok_fetch(j):
+        return lr.AuthFetch(
+            landing_url="https://www.linkedin.com/jobs/view/1/",
+            logged_in=True,
+            voyager=_voyager_offsite(),
+        )
+
+    out = await lr.resolve_via_auth(job, auth, _fetcher=_ok_fetch)
+    assert out is not None
+    assert lr.read_session_health()["status"] == "ok"
+
+    async def _authwall_fetch(j):
+        return lr.AuthFetch(
+            landing_url="https://www.linkedin.com/authwall", logged_in=False, voyager=None
+        )
+
+    out = await lr.resolve_via_auth(job, auth, _fetcher=_authwall_fetch)
+    assert out is None
+    assert lr.read_session_health()["status"] == "not_logged_in"
+
+
+@pytest.mark.asyncio
+async def test_resolve_via_auth_records_error_health(_tmp_data_dir):
+    job = _job()
+    auth = lr.AuthContext(remaining=1, jitter=(0.0, 0.0))
+
+    async def _boom(j):
+        raise RuntimeError("browser crashed")
+
+    out = await lr.resolve_via_auth(job, auth, _fetcher=_boom)
+    assert out is None
+    assert lr.read_session_health()["status"] == "error"

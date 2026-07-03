@@ -1,6 +1,7 @@
 # Naavik Component Catalog
 
-> **Last updated:** 2026-05-21 (plan 86 R3 round 2 / `0.4.5.06+07` — registers 2 net-new Analytics-group partials [`kpis_by_role_family.html`, `kpis_by_tag.html`] wiring the `kpis_by_role_family` + `kpis_by_tag` analytics helpers into `/tracking/analytics`. Net total: 102 partials across 13 groups.)
+> **Last updated:** 2026-07-03 (apply-target resolution ops — registers 2 net-new partials: `_apply_target_card.html` (Job detail right rail — resolved apply site + provenance + "Re-resolve now" + manual paste-URL escape hatch, swapped whole via `#apply-target-card`) and `_apply_resolver_card.html` (Settings · AI & Automation — Tier-B LinkedIn session-health chip + resolver pipeline counts from `apply_site_resolver.resolver_stats`). Net total: 104 partials across 13 groups.)
+> Earlier line: 2026-05-21 (plan 86 R3 round 2 / `0.4.5.06+07` — registers 2 net-new Analytics-group partials [`kpis_by_role_family.html`, `kpis_by_tag.html`] wiring the `kpis_by_role_family` + `kpis_by_tag` analytics helpers into `/tracking/analytics`. Net total: 102 partials across 13 groups.)
 > Earlier line: 2026-05-21 (plan 86 / `0.4.5.12` — reconciles catalog count after plan 81 chain. Registers 5 net-new partials from plan 81: `postmortem_modal.html` (Tracking — postmortem detail overlay), `_application_timeline_full.html` (Tracking — full AppEvent history expansion), `analytics_kpi_strip.html` + `analytics_funnel_card.html` + `analytics_company_table.html` (new Analytics group). Net total: 100 partials across 13 groups.)
 > Earlier line: 2026-05-21 (plan 80 / `0.4.0.09` — registers 1 net-new Tracking-group partial [`tracking_bulk_action_bar.html`] — sticky toolbar surfaced when one or more `_tracking_list.html` per-row checkboxes are checked. Carries move-stage `<select>` + Archive `<button>` (HTMX) + Export CSV (JS-driven `window.location.href` to GET `/api/v1/applications/export.csv`). Toggled visible by `trackingBulkSelectionChange()` in `base.js`. Net total: 95 partials.)
 > Earlier line: 2026-05-21 (plan 78 / `0.4.0.15` — registers 1 net-new Discover-group partial [`visa_status_chip.html`] surfacing `Job.visa_restrictions` as a 3-state chip (sponsors cyan / no-sponsorship rose / unknown slate). Mounts on `swipe_card.html` between meta_items. Net total: 94 partials.)
@@ -18,7 +19,7 @@
 
 ## A · Inventory
 
-The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 102 components** across 13 groups.
+The library lives at `src/ui/templates/components/`. Components grouped by responsibility for navigation; the directory itself is flat (no subdirectories) so includes stay simple. **Total: 104 components** across 13 groups.
 
 | Group | Count | Components |
 |---|---|---|
@@ -28,14 +29,14 @@ The library lives at `src/ui/templates/components/`. Components grouped by respo
 | Onboarding | 5 | `step_indicator.html`, `dropzone.html`, `extraction_checklist.html`, `extracted_field_row.html`, `progress_bar.html` |
 | Profile / Bullet | 11 | `profile_hero.html`, `contact_chip.html`, `experience_card.html`, `bullet_row.html`, `section_anchor_nav.html`, `application_readiness_card.html`, `application_qs_form.html`, `bullet_edit_row.html`, `tag_picker.html`, `selection_override.html`, `bullet_textarea.html` |
 | Overview | 4 | `kpi_card.html`, `priority_action_row.html`, `email_signal_row.html`, `pipeline_strip.html` |
-| Discover | 13 | `swipe_card.html`, `match_breakdown.html`, `discover_action_bar.html`, `swipe_action_btn.html`, `discover_stats_strip.html`, `up_next_card.html`, `tip_card.html`, `keyboard_hints.html`, `filter_toolbar.html` (plan 36), `_filter_hidden_inputs.html` (plan 36), `job_topbar.html` (plan 36), `score_card.html` (plan 72), `visa_status_chip.html` (plan 78) |
+| Discover | 14 | `swipe_card.html`, `match_breakdown.html`, `discover_action_bar.html`, `swipe_action_btn.html`, `discover_stats_strip.html`, `up_next_card.html`, `tip_card.html`, `keyboard_hints.html`, `filter_toolbar.html` (plan 36), `_filter_hidden_inputs.html` (plan 36), `job_topbar.html` (plan 36), `score_card.html` (plan 72), `visa_status_chip.html` (plan 78), `_apply_target_card.html` (2026-07 — Job detail right rail) |
 | Discover · review & apply | 7 | `apply_topbar.html`, `warm_intro_card.html`, `tailored_bullet_row.html`, `cover_letter_section.html`, `screener_question_card.html`, `apply_action_bar.html`, `apply_preview_card.html` (plan 75) |
 | Tracking | 11 | `view_toggle.html`, `provider_chip.html`, `integration_card.html`, `followup_banner.html`, `stage_column.html`, `tracking_card.html`, `tracking_list_row.html`, `tracking_board.html`, `tracking_bulk_action_bar.html` (plan 80), `postmortem_modal.html` (plan 81), `_application_timeline_full.html` (plan 81) |
 | Analytics | 5 | `analytics_kpi_strip.html` (plan 81), `analytics_funnel_card.html` (plan 81), `analytics_company_table.html` (plan 81), `kpis_by_role_family.html` (plan 86 R3), `kpis_by_tag.html` (plan 86 R3) |
 | Outreach | 6 | `outreach_app_row.html`, `recommended_move_card.html`, `outreach_message_card.html`, `contact_card.html`, `linkedin_status_chip.html`, `outreach_timeline.html` |
-| Settings | 10 | `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `deployment_status_card.html`, `log_tail.html`, `on_disk_card.html`, `connection_status_card.html`, `_source_row.html` (plan 49), `_rate_limit_editor.html` (plan 58), `_keywords_editor.html` (plan 58) |
+| Settings | 11 | `settings_tabs.html`, `provider_card.html`, `cost_card.html`, `deployment_status_card.html`, `log_tail.html`, `on_disk_card.html`, `connection_status_card.html`, `_source_row.html` (plan 49), `_rate_limit_editor.html` (plan 58), `_keywords_editor.html` (plan 58), `_apply_resolver_card.html` (2026-07 — resolver ops) |
 | Skeletons | 5 | `swipe_card_skeleton.html`, `tracking_card_skeleton.html`, `priority_action_row_skeleton.html`, `email_signal_row_skeleton.html`, `bullet_edit_row_skeleton.html` |
-| **Total** | **102** | |
+| **Total** | **104** | |
 
 Cover letter generation lives inside Discover · review & apply (no standalone screen) — its components (`cover_letter_section.html`, `screener_question_card.html`) are listed under that group. The standalone Cover Letter generator's earlier components (`letter_editor.html`, `tone_picker.html`, `output_mode_card.html`, `model_attribution_chip.html`) are NOT in MVP and dropped.
 
@@ -2321,6 +2322,6 @@ Add per-domain macros only when a domain grows past ~10 macros.
 | 9 Tracking | `sidebar`, `tracking_board`, `tracking_card`, `tracking_list_row`, `integration_card`, `provider_chip`, `followup_banner`, `stage_column`, `view_toggle`, `tracking_card_skeleton`, `status_badge`, `score_circle`, `avatar`, `empty_state` |
 | 10 Outreach | `sidebar`, `outreach_app_row`, `outreach_message_card`, `contact_card`, `recommended_move_card`, `linkedin_status_chip`, `provider_chip`, `outreach_timeline`, `ai_badge`, `avatar`, `confirm_modal` (Disconnect LinkedIn) |
 | 11 Settings | `sidebar`, `settings_tabs`, `provider_card`, `cost_card`, `deployment_status_card`, `log_tail`, `on_disk_card`, `connection_status_card`, `_source_row` (plan 49), `integration_card`, `deployment_badge`, `confirm_modal` (Delete account / Disconnect Gmail) |
-| 12 Job detail (plan 36) | `sidebar`, `job_topbar` (plan 36), `avatar`, `tag_chip`, `chip` macro, `empty_state` (when applicable), Lucide icons (`arrow-left`, `external-link`, `sparkles`, `bookmark`, `x`, `copy`). See `docs/design/JOB_UI.md` § D for the composition contract. |
+| 12 Job detail (plan 36) | `sidebar`, `job_topbar` (plan 36), `_apply_target_card` (2026-07), `avatar`, `tag_chip`, `chip` macro, `empty_state` (when applicable), Lucide icons (`arrow-left`, `external-link`, `sparkles`, `bookmark`, `x`, `copy`, `radar`, `link`). See `docs/design/JOB_UI.md` § D for the composition contract. |
 
 Common across every authenticated screen: `sidebar`, `button`, `card`, `tag_chip`, `status_dot`, `toast` (OOB region). Common across all screens: `spinner` (in-button), `toast`.

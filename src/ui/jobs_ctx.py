@@ -45,6 +45,23 @@ def _human_when(when: datetime | None) -> str:
     return f"{hours // 24}d ago"
 
 
+def _human_until(when: datetime | None) -> str | None:
+    """Render a future datetime as "in Nh" / "in Nd" ("due now" once past)."""
+    if when is None:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    minutes = int((when - datetime.now(UTC)).total_seconds() // 60)
+    if minutes <= 0:
+        return "due now"
+    if minutes < 60:
+        return f"in {minutes}m"
+    hours = minutes // 60
+    if hours < 24:
+        return f"in {hours}h"
+    return f"in {hours // 24}d"
+
+
 def apply_kind_label(kind: str | None) -> str | None:
     """Human chip text for Job.apply_kind; None = render no chip."""
     from services.apply_site_resolver import APPLY_KIND_LABELS
@@ -111,6 +128,16 @@ async def build_job_detail_ctx(
             "apply_url": job.apply_url,
             "apply_kind": job.apply_kind,
             "apply_kind_label": apply_kind_label(job.apply_kind),
+            "apply_resolved_via": job.apply_resolved_via,
+            "apply_resolve_attempts": job.apply_resolve_attempts,
+            "apply_resolved_at_human": (
+                _human_when(job.apply_resolved_at) if job.apply_resolved_at else None
+            ),
+            "apply_next_resolve_human": _human_until(job.apply_next_resolve_at),
+            "apply_exhausted": job.apply_resolved_via == "exhausted",
+            "apply_unresolved": (
+                job.apply_url is None and job.apply_kind in (None, "external", "unknown")
+            ),
             "source": source_value,
             "source_tone": _SOURCE_TONE.get(source_value, "slate"),
             "board": job.board.value if hasattr(job.board, "value") else str(job.board),

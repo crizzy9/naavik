@@ -645,10 +645,14 @@ def test_sample_data_30plus_applications_with_status_chains() -> None:
 
 
 def test_components_md_count_matches_plan_86_reconciliation() -> None:
-    """COMPONENTS.md must declare Total: 102 + carry the plan-81 + plan-86 R3 partials."""
+    """COMPONENTS.md must declare Total: 104 + carry the plan-81 + plan-86 R3 partials.
+
+    (102 after plan 86 R3; +2 on 2026-07-03 for the apply-target resolution
+    ops cards `_apply_target_card.html` + `_apply_resolver_card.html`.)
+    """
     text = Path("docs/design/COMPONENTS.md").read_text()
-    assert "**Total: 102 components**" in text
-    assert "| **Total** | **102** | |" in text
+    assert "**Total: 104 components**" in text
+    assert "| **Total** | **104** | |" in text
     # 5 plan-81 partials + 2 plan-86 R3 partials must be referenced.
     for new_partial in (
         "postmortem_modal.html",

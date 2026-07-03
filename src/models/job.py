@@ -92,6 +92,18 @@ class Job(SQLModel, table=True):
     # row level. NULL until resolution runs; "unresolved" when it ran but the
     # target stayed unknown/external. Closed vocabulary in apply_site_resolver.
     apply_resolved_via: str | None = Field(default=None, max_length=32)
+    # Retry bookkeeping — an unresolved target ("external"/"unknown" with no
+    # apply_url) is retried on a backoff ladder instead of dying silently.
+    # `apply_next_resolve_at` non-NULL = retry scheduled (due at that time);
+    # NULL = resolved, terminal ("exhausted"/"manual"), or never attempted.
+    apply_resolve_attempts: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default="0"),
+    )
+    apply_next_resolve_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
 
     company: str
     role: str
@@ -289,6 +301,8 @@ class JobRead(BaseModel):
     apply_kind: str | None = None
     apply_resolved_at: datetime | None = None
     apply_resolved_via: str | None = None
+    apply_resolve_attempts: int = 0
+    apply_next_resolve_at: datetime | None = None
     company: str
     role: str
     team: str | None
