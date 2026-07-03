@@ -51,7 +51,10 @@ def _apply_description(job: Job, *, text: str, html: str | None) -> None:
     job.match_breakdown = {}
     job.score = 0.0
     job.score_explanation = None
-    job.raw_meta = {**(job.raw_meta or {}), "jd_enriched": True}
+    # `jd_tags_pending`: the new text needs its scorer signals (tags /
+    # criteria / skills) re-extracted — without that, layer 1 sees Job.tags
+    # == [] and gates the job below the tag floor forever.
+    job.raw_meta = {**(job.raw_meta or {}), "jd_enriched": True, "jd_tags_pending": True}
     job.updated_at = datetime.now(UTC)
 
 
@@ -167,9 +170,88 @@ async def enrich_thin_descriptions(
     return enriched
 
 
+async def reextract_signals(session: AsyncSession, *, batch_size: int = 15) -> int:
+    """Re-run the LLM job extractor over freshly enriched descriptions.
+
+    Enrichment replaces `description`, but the scorer's layer 1 keys on
+    `Job.tags` — stale/empty tags gate an enriched job below the tag floor
+    forever. Runs as part of the same cron; skips silently when no LLM
+    provider is configured (flag stays pending, retried next tick).
+    """
+    from llm import LLMProviderError, get_provider
+    from models import Settings
+    from scraper.types import RawJob
+    from services.job_extractor import enrich_raw_job
+
+    stmt = (
+        select(Job)
+        .where(
+            Job.deleted_at.is_(None),
+            Job.match_breakdown.op("->>")("scored_at").is_(None),
+            Job.raw_meta.op("->>")("jd_tags_pending") == "true",
+        )
+        .limit(batch_size)
+    )
+    jobs = (await session.exec(stmt)).all()
+
+    providers: dict[int, object] = {}
+    extracted = 0
+    for job in jobs:
+        if job.user_id not in providers:
+            settings = (
+                await session.exec(select(Settings).where(Settings.user_id == job.user_id))
+            ).one_or_none()
+            try:
+                providers[job.user_id] = get_provider(settings) if settings else None
+            except LLMProviderError:
+                providers[job.user_id] = None
+        provider = providers[job.user_id]
+        if provider is None:
+            continue  # leave the flag pending — retried when a provider exists
+
+        raw_job = RawJob(
+            source=job.source,
+            external_id=job.external_id,
+            source_url=job.apply_url or job.url,
+            board=job.board,
+            url_type=job.url_type,
+            company_name=job.company or "Unknown",
+            position_title=job.role or "Unknown",
+            location_raw=job.location,
+            description_text=job.description,
+            description_html=job.description_html,
+        )
+        try:
+            enriched_raw = await enrich_raw_job(
+                session, user_id=job.user_id, provider=provider, raw_job=raw_job
+            )
+        except Exception as exc:  # noqa: BLE001 — sweep must not die on one job
+            log.warning("signal re-extraction failed for job %s: %s", job.id, exc)
+            continue
+        payload = enriched_raw.to_upsert_payload()
+        for key in ("tags", "skills_required", "criteria"):
+            if payload.get(key):
+                setattr(job, key, payload[key])
+        for key in ("salary_min", "salary_max"):
+            if payload.get(key) is not None and getattr(job, key) is None:
+                setattr(job, key, payload[key])
+        if payload.get("visa_restrictions") is not None:
+            job.visa_restrictions = payload["visa_restrictions"]
+        if payload.get("seniority_level") is not None:
+            job.seniority_level = payload["seniority_level"]
+        job.raw_meta = {**(job.raw_meta or {}), "jd_tags_pending": False}
+        job.updated_at = datetime.now(UTC)
+        session.add(job)
+        await session.flush()
+        extracted += 1
+        log.info("jd signals re-extracted job=%s tags=%s", job.id, payload.get("tags"))
+    return extracted
+
+
 __all__ = [
     "THIN_JD_CHARS",
     "enrich_thin_descriptions",
     "html_to_text",
     "maybe_apply_discovered_description",
+    "reextract_signals",
 ]

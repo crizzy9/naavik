@@ -425,7 +425,12 @@ async def resolve_apply_sites() -> None:
     async with async_session() as session:
         enriched = await jd_enrichment.enrich_thin_descriptions(session)
         await session.commit()
-    log.info("resolve_apply_sites definite=%d enriched=%d", n, enriched)
+    async with async_session() as session:
+        reextracted = await jd_enrichment.reextract_signals(session)
+        await session.commit()
+    log.info(
+        "resolve_apply_sites definite=%d enriched=%d reextracted=%d", n, enriched, reextracted
+    )
 
 
 # ── Registration ──────────────────────────────────────────────────────

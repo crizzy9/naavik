@@ -151,3 +151,77 @@ async def test_enrich_sweep_applies_fetched_description():
     assert job.description == long_text
     assert job.match_breakdown == {}
     assert job.score == 0.0
+
+
+@pytest.mark.asyncio
+async def test_reextract_signals_populates_tags_and_clears_flag():
+    job = _job(raw_meta={"jd_enriched": True, "jd_tags_pending": True})
+    job.user_id = 1
+    job.external_id = "x1"
+    job.url_type = "external"
+    job.role = "Engineer"
+    job.location = None
+    job.tags = []
+    job.skills_required = []
+    job.criteria = []
+    job.salary_min = None
+    job.salary_max = None
+    job.visa_restrictions = None
+    job.seniority_level = None
+
+    settings_row = SimpleNamespace(user_id=1)
+    session = MagicMock()
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+    session.exec = AsyncMock(
+        side_effect=[
+            MagicMock(all=lambda: [job]),
+            MagicMock(one_or_none=lambda: settings_row),
+        ]
+    )
+
+    enriched_raw = SimpleNamespace(
+        to_upsert_payload=lambda: {
+            "tags": ["backend", "ai-ml"],
+            "skills_required": ["python"],
+            "criteria": ["5+ years"],
+            "salary_min": 150000,
+            "salary_max": None,
+            "visa_restrictions": None,
+            "seniority_level": None,
+        }
+    )
+    with (
+        patch("llm.get_provider", return_value=SimpleNamespace(provider_id="openai")),
+        patch(
+            "services.job_extractor.enrich_raw_job",
+            new=AsyncMock(return_value=enriched_raw),
+        ),
+    ):
+        n = await jd_enrichment.reextract_signals(session)
+    assert n == 1
+    assert job.tags == ["backend", "ai-ml"]
+    assert job.salary_min == 150000
+    assert job.raw_meta["jd_tags_pending"] is False
+
+
+@pytest.mark.asyncio
+async def test_reextract_signals_waits_for_provider():
+    """No provider configured → flag stays pending for the next tick."""
+    from llm import LLMProviderError
+
+    job = _job(raw_meta={"jd_enriched": True, "jd_tags_pending": True})
+    job.user_id = 1
+    session = MagicMock()
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+    session.exec = AsyncMock(
+        side_effect=[
+            MagicMock(all=lambda: [job]),
+            MagicMock(one_or_none=lambda: SimpleNamespace(user_id=1)),
+        ]
+    )
+    with patch("llm.get_provider", side_effect=LLMProviderError("none")):
+        n = await jd_enrichment.reextract_signals(session)
+    assert n == 0
+    assert job.raw_meta["jd_tags_pending"] is True
