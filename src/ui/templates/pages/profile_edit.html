@@ -72,7 +72,10 @@
 
       {# Summary #}
       {% set _summary_body %}
-        {% with label="SUMMARY", name="summary_full", type="textarea", value=profile.summary_full, autosave_enabled=false %}
+        {# Same fallback as the view page — parsed resumes often fill only
+           summary_short, and an empty edit box next to a populated view
+           reads as data loss. Saving writes the text back to summary_full. #}
+        {% with label="SUMMARY", name="summary_full", type="textarea", value=profile.summary_full or profile.summary_short, autosave_enabled=false %}
           {% include "components/editor_field.html" %}
         {% endwith %}
       {% endset %}

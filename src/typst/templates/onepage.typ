@@ -67,13 +67,15 @@
 // LaTeX \titleformat: \scshape\large title, black \titlerule under, tight
 // vertical spacing (-8pt above via \vspace, -5pt after the rule).
 #let sectitle(name) = {
-  v(0.3em)
+  v(0.22em)
   block(spacing: 0pt)[
     #text(size: 12pt)[#sc(name)]
-    #v(-0.45em)
+    // -0.45em let the rule clip letter bottoms (J/y descenders sat on it);
+    // -0.30em leaves a hairline gap. Pre/post spacing shrunk to compensate.
+    #v(-0.30em)
     #line(length: 100%, stroke: 0.5pt + black)
   ]
-  v(0.05em)
+  v(0.02em)
 }
 
 // \setlist[itemize]{leftmargin=0.15in, noitemsep, nolistsep} with $\circ$.
