@@ -64,9 +64,8 @@ def test_discover_review_page_renders_expanded_score_card(
     assert 'data-testid="match-panel"' in html, "match panel missing in review page"
     assert "YOUR STRENGTHS" in html
     assert "WHAT&#39;S MISSING" in html or "WHAT'S MISSING" in html
-    # Only the swipe card's JD-bullets section may carry this label — the
-    # match panel's third column is retired.
-    assert html.count("WHAT THEY WANT") == 0, "match panel must not render WHAT THEY WANT"
+    # 2026-07 round 2: the WHAT THEY WANT requirements column is restored.
+    assert 'data-testid="match-what-they-want"' in html
 
 
 def test_apply_tailored_bullets_renders_without_rationale(

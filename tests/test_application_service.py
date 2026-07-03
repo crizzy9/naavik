@@ -132,6 +132,8 @@ def _make_job(jid: int = 100, **kw):
         "description_html": None,
         "skills_required": ["python", "go"],
         "visa_restrictions": None,
+        "apply_url": None,
+        "apply_kind": None,
         "updated_at": datetime.now(UTC),
     }
     base.update(kw)

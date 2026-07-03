@@ -38,6 +38,8 @@ def _job_with_breakdown(visa_concern: bool):
         tags=["ai-ml"],
         match_breakdown={"visa_concern": visa_concern},
         visa_restrictions=None,
+        apply_url=None,
+        apply_kind=None,
     )
 
 

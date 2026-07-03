@@ -46,14 +46,14 @@ def test_dispatch_resolves_each_board_to_a_concrete_class(board, expected_cls):
 
 def test_greenhouse_can_submit_uses_url_pattern():
     """Existing production adapter — URL pattern is the tie-break per plan § D.10."""
-    job_ok = SimpleNamespace(url="https://boards.greenhouse.io/foo/jobs/1")
-    job_bad = SimpleNamespace(url="https://example.com/jobs/1")
+    job_ok = SimpleNamespace(url="https://boards.greenhouse.io/foo/jobs/1", apply_url=None)
+    job_bad = SimpleNamespace(url="https://example.com/jobs/1", apply_url=None)
     assert GreenhouseAdapter().can_submit(job_ok) is True
     assert GreenhouseAdapter().can_submit(job_bad) is False
 
 
 def test_skeleton_can_submit_false_for_any_url():
     """Skeleton adapters never claim to submit — auto-apply queue skips."""
-    job = SimpleNamespace(url="https://workday.salesforce.com/anything")
+    job = SimpleNamespace(url="https://workday.salesforce.com/anything", apply_url=None)
     for adapter_cls in (WorkdayAdapter, LinkedInAdapter, IndeedAdapter, GenericAdapter):
         assert adapter_cls().can_submit(job) is False
