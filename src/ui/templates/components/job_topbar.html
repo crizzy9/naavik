@@ -32,6 +32,9 @@
   </div>
   <div class="flex items-center gap-2 shrink-0">
     {{ chip("source · " ~ j.source | upper, tone=j.source_tone) }}
+    {% if j.apply_kind_label %}
+      {{ chip("apply · " ~ j.apply_kind_label, tone="cyan") }}
+    {% endif %}
     {% if j.unscored %}
       {{ chip("unscored", tone="slate") }}
     {% else %}

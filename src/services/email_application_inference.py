@@ -334,6 +334,24 @@ async def _create_job_from_receipt(
             ),
         },
     )
+
+    # No posting URL in the receipt — probe the company's public ATS board
+    # (the receipt names the board) for the real posting: canonical link +
+    # full JD instead of a one-sentence stub. Best-effort; the row above is
+    # already a valid fallback.
+    try:
+        from services import apply_site_resolver, jd_enrichment
+
+        resolved = await apply_site_resolver.resolve_job(job)
+        apply_site_resolver.apply_resolution(job, resolved)
+        if resolved.apply_url and (resolved.description_html or resolved.description_text):
+            jd_enrichment.maybe_apply_discovered_description(job, resolved)
+            job.url = resolved.apply_url
+            job.url_type = "ats"
+        session.add(job)
+        await session.flush()
+    except Exception as exc:  # noqa: BLE001 — enrichment must not sink the receipt
+        log.info("inferred-job ATS discovery failed for job %s: %s", job.id, exc)
     return job
 
 

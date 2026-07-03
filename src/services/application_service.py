@@ -316,7 +316,9 @@ async def get_or_create_draft(
         salary_max=job.salary_max,
         equity_pct=job.equity_pct,
         board=job.board,
-        external_url=job.url,
+        # Resolved apply target when known — adapters build their form URL
+        # from external_url, and an aggregator listing can't take a form.
+        external_url=job.apply_url or job.url,
         status=ApplicationStatus.DRAFT,
         docs_state=DocsState.NONE,
         referral_state=ReferralState.NONE,

@@ -393,7 +393,9 @@ async def build_application_detail_ctx(
                 score = int(round(raw * 100)) if raw <= 1.0 else int(round(raw))
             if job is not None:
                 auto_apply = application_service.auto_apply_phase(application, job)
-                job_url = getattr(job, "url", None)
+                # Manual-submit link: the RESOLVED apply site beats the
+                # aggregator listing the scraper found the job on.
+                job_url = getattr(job, "apply_url", None) or getattr(job, "url", None)
         except Exception:  # noqa: BLE001 — defensive; chip optional
             score = None
 

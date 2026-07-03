@@ -208,6 +208,9 @@ class Job(_Base):
     external_id: str
     url: str
     url_type: str
+    apply_url: str | None = None
+    apply_kind: str | None = None
+    apply_resolved_at: datetime | None = None
 
     company: str
     role: str

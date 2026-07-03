@@ -88,6 +88,9 @@
       {% if j.visa_concern %}
         {{ chip("VISA · sponsorship blocked", tone="rose") }}
       {% endif %}
+      {% if j.apply_kind_label %}
+        {{ chip("apply · " ~ j.apply_kind_label, tone="cyan") }}
+      {% endif %}
       {% for t in j.tags or [] %}{{ tag_chip(t) }}{% endfor %}
     </div>
 

@@ -45,6 +45,15 @@ def _human_when(when: datetime | None) -> str:
     return f"{hours // 24}d ago"
 
 
+def apply_kind_label(kind: str | None) -> str | None:
+    """Human chip text for Job.apply_kind; None = render no chip."""
+    from services.apply_site_resolver import APPLY_KIND_LABELS
+
+    if not kind:
+        return None
+    return APPLY_KIND_LABELS.get(kind) or None
+
+
 def _salary_range(job: Job) -> str | None:
     if job.salary_min and job.salary_max:
         equity = f" + {job.equity_pct}%" if job.equity_pct else ""
@@ -99,6 +108,9 @@ async def build_job_detail_ctx(
             ),
             "url": job.url,
             "url_type": job.url_type,
+            "apply_url": job.apply_url,
+            "apply_kind": job.apply_kind,
+            "apply_kind_label": apply_kind_label(job.apply_kind),
             "source": source_value,
             "source_tone": _SOURCE_TONE.get(source_value, "slate"),
             "board": job.board.value if hasattr(job.board, "value") else str(job.board),

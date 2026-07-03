@@ -7,6 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from models import Application, Job
 from services import application_service, contact_tracker, profile_service
 from ui.discover_ctx import _initial_color, _salary_range
+from ui.jobs_ctx import apply_kind_label
 
 COVER_LABELS = {
     "intro": "INTRO",
@@ -382,6 +383,9 @@ async def build_review_ctx(
             "salary_range": _salary_range(job),
             "equity_pct": job.equity_pct,
             "jd_url": job.url,
+            "apply_url": job.apply_url,
+            "apply_kind": job.apply_kind,
+            "apply_kind_label": apply_kind_label(job.apply_kind),
             "score": int(round(job.score * 100)),
             "match_breakdown": job.match_breakdown,
             "match_overall": job.score,

@@ -75,6 +75,18 @@ class Job(SQLModel, table=True):
     url: str = Field(index=True)
     url_type: str
 
+    # Where the application ACTUALLY happens — resolved after scraping, since
+    # aggregator listings (LinkedIn/Indeed) usually hand off to an external
+    # ATS. NULL apply_kind = not resolved yet; "unknown" = resolution ran and
+    # couldn't classify. `board` gets promoted to match a resolved known ATS
+    # so adapter dispatch + auto-apply gating follow the real apply site.
+    apply_url: str | None = Field(default=None)
+    apply_kind: str | None = Field(default=None, max_length=20)
+    apply_resolved_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+
     company: str
     role: str
     team: str | None = None
@@ -267,6 +279,9 @@ class JobRead(BaseModel):
     external_id: str
     url: str
     url_type: str
+    apply_url: str | None = None
+    apply_kind: str | None = None
+    apply_resolved_at: datetime | None = None
     company: str
     role: str
     team: str | None

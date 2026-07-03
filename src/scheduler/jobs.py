@@ -408,6 +408,26 @@ async def sync_calendars() -> None:
     )
 
 
+async def resolve_apply_sites() -> None:
+    """`jobs.resolve_apply_sites` — every 20min (apply-site resolver, 2026-07).
+
+    Resolves the REAL application target (ATS kind + URL) for jobs the
+    scrapers stamped with an aggregator board. Promotes `Job.board` so
+    adapter dispatch and auto-apply gating follow the truth. A second pass
+    swaps thin Indeed/email descriptions for the canonical ATS posting so
+    `score_pending` re-scores against the real JD.
+    """
+    from services import apply_site_resolver, jd_enrichment
+
+    async with async_session() as session:
+        n = await apply_site_resolver.resolve_pending(session)
+        await session.commit()
+    async with async_session() as session:
+        enriched = await jd_enrichment.enrich_thin_descriptions(session)
+        await session.commit()
+    log.info("resolve_apply_sites definite=%d enriched=%d", n, enriched)
+
+
 # ── Registration ──────────────────────────────────────────────────────
 
 
@@ -573,6 +593,17 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         IntervalTrigger(minutes=45),
         id="tracking.sync_calendars",
         name="tracking.sync_calendars",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # Apply-site resolver (2026-07): real application target per job.
+    scheduler.add_job(
+        resolve_apply_sites,
+        IntervalTrigger(minutes=20),
+        id="jobs.resolve_apply_sites",
+        name="jobs.resolve_apply_sites",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

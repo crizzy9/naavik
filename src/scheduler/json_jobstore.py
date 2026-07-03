@@ -70,6 +70,7 @@ FUNC_REF_ALLOWLIST: frozenset[str] = frozenset(
         "scheduler.jobs:sync_emails",
         "scheduler.jobs:classify_emails",
         "scheduler.jobs:sync_calendars",
+        "scheduler.jobs:resolve_apply_sites",
         # src/scheduler/scraping.py
         "scheduler.scraping:scrape_linkedin",
         "scheduler.scraping:scrape_workday",

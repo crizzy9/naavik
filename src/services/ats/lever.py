@@ -67,4 +67,4 @@ class LeverAdapter(PlaywrightFormFiller):
         return f"https://jobs.lever.co/{site}/{posting_id}/apply"
 
     def can_submit(self, job: Job) -> bool:
-        return parse_url(job.url) is not None
+        return parse_url(job.apply_url or job.url) is not None

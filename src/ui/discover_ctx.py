@@ -16,6 +16,7 @@ from models import Job as SQLJob
 from models import JobFilter, JobQueueState
 from models.enums import VisaRestriction
 from services import application_service, contact_tracker, job_service
+from ui.jobs_ctx import apply_kind_label
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",
@@ -117,6 +118,9 @@ def swipe_card_dict(j: SQLJob, *, warm_intro_label: str | None = None) -> dict[s
         "salary_range": _salary_range(j),
         "work_mode": work_mode,
         "posted_relative": _relative_label(j.posted_at or j.found_at),
+        "apply_kind": j.apply_kind,
+        "apply_kind_label": apply_kind_label(j.apply_kind),
+        "apply_url": j.apply_url,
         "jd_bullets": _jd_bullets(j),
         "warm_intro_label": warm_intro_label,
         "tags": _tag_labels(j),
