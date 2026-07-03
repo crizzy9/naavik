@@ -269,6 +269,15 @@ async def put_auto_apply(
 
     immediate = _tri_state("auto_apply_immediate_dispatch")
     dry_run = _tri_state("auto_apply_dry_run")
+    enabled = _tri_state("auto_apply_enabled")
+
+    # 2026-07 consolidation — the AI & Automation page posts ONE radio
+    # (`auto_apply_mode`: off / dry_run / live) instead of two stacked
+    # toggles. The mode wins over the legacy checkbox fields when present.
+    mode = str(payload.get("auto_apply_mode") or "").strip()
+    if mode in ("off", "dry_run", "live"):
+        enabled = mode != "off"
+        dry_run = mode == "dry_run"
 
     # Plan 78 § D.3 — assemble per-board caps from either flat form fields
     # (`<board>_cap`) or a pre-shaped `auto_apply_per_board_daily_caps` dict
@@ -319,7 +328,7 @@ async def put_auto_apply(
     s = await settings_service.update_auto_apply(
         session,
         user_id=_effective_user_id(_user),
-        auto_apply_enabled=_tri_state("auto_apply_enabled"),
+        auto_apply_enabled=enabled,
         auto_apply_score_threshold=_opt_num("auto_apply_score_threshold", float),
         auto_apply_daily_cap=_opt_num("auto_apply_daily_cap", int),
         eager_review_generation=_tri_state("eager_review_generation"),
@@ -343,6 +352,29 @@ async def put_auto_apply(
         "auto_apply_per_board_daily_caps": s.auto_apply_per_board_daily_caps,
         "auto_apply_dry_run": s.auto_apply_dry_run,
     }
+
+
+@router.put("/api/v1/settings/ai-automation", name="api_settings_ai_automation_put")
+async def put_ai_automation(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Union save for the consolidated AI & Automation page (2026-07).
+
+    The merged form carries LLM, generation, and auto-apply fields in one
+    submit. Starlette caches `request.form()`, so re-dispatching the same
+    Request through the three real handlers parses each field family with
+    its own (subtle) semantics — tri-state checkboxes, per-board caps,
+    key-rotation sentinels — without duplicating any of it. First 4xx wins.
+    """
+    for handler in (put_llm, put_generation, put_auto_apply):
+        response = await handler(request, session=session, _user=_user, _csrf=None)
+        status = getattr(response, "status_code", 200)
+        if status >= 400:
+            return response
+    return HTMLResponse('<span class="text-emerald-300">Saved · AI &amp; automation</span>')
 
 
 @router.post(

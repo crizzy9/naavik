@@ -45,17 +45,19 @@ from ui.templates_setup import templates
 router = APIRouter()
 
 
+# 2026-07 consolidation: LLM Provider + Generation + Auto-Apply +
+# Submissions merged into ONE "AI & Automation" tab. The old tab URLs
+# 307-redirect to /settings/ai-automation.
 _TAB_TEMPLATES: dict[str, str] = {
-    "llm-provider": "pages/_settings_llm.html",
-    "generation": "pages/_settings_generation.html",
+    "ai-automation": "pages/_settings_ai_automation.html",
     "deployment": "pages/_settings_deployment.html",
     "account": "pages/_settings_account.html",
     "notifications": "pages/_settings_notifications.html",
-    "auto-apply": "pages/_settings_auto_apply.html",
     "sources": "pages/_settings_sources.html",
-    "submissions": "pages/_settings_submissions.html",
     "security": "pages/_settings_security.html",
 }
+
+_MERGED_TAB_REDIRECTS = {"llm-provider", "generation", "auto-apply", "submissions"}
 
 _VALID_TABS = set(_TAB_TEMPLATES.keys())
 
@@ -66,12 +68,9 @@ _VALID_TABS = set(_TAB_TEMPLATES.keys())
 # dedicated sub-action like "Rotate JWT key").
 _SAVE_ENDPOINT_FOR_TAB: dict[str, str | None] = {
     "account": "/api/v1/settings/account",
-    "llm-provider": "/api/v1/settings/llm",
-    "generation": "/api/v1/settings/generation",
+    "ai-automation": "/api/v1/settings/ai-automation",
     "notifications": "/api/v1/settings/notifications",
-    "auto-apply": "/api/v1/settings/auto-apply",
     "sources": None,
-    "submissions": None,
     "security": None,
     "deployment": None,
 }
@@ -234,7 +233,7 @@ async def _ctx_for_tab(
     deployment_info = await _deployment_render_info(settings)
     # P6.4 — live model catalog only matters on the LLM tab; other tabs
     # skip the (cached) provider API roundtrip.
-    model_options = await _llm_model_options_for(provider_id) if tab == "llm-provider" else []
+    model_options = await _llm_model_options_for(provider_id) if tab == "ai-automation" else []
 
     ctx: dict[str, object] = {
         "current_tab": tab,
@@ -270,7 +269,7 @@ async def _ctx_for_tab(
         "save_status": None,
         "deployment": deployment_info,
         "active_sidebar": "settings",
-        "active_template_path": "/settings/:tab" if tab != "llm-provider" else "/settings",
+        "active_template_path": "/settings/:tab" if tab != "ai-automation" else "/settings",
     }
 
     if tab == "deployment":
@@ -280,12 +279,13 @@ async def _ctx_for_tab(
         ctx["sources_view"] = await _build_sources_view(session, user_id=user_id)
         ctx["recent_scrape_runs"] = await _recent_scrape_runs_view(session, user_id=user_id)
 
-    if tab == "submissions":
+    if tab == "ai-automation":
         ctx["submission_failures"] = await _submission_failures_view(session, user_id=user_id)
         # Plan 63 / 0.2.7.10 § C.6 — ATS adapter credential presence indicators.
         ctx["ats_credential_indicators"] = env_secrets.ats_credential_indicators()
+        ctx["cost_projection"] = await _build_generation_cost_projection(session, user_id=user_id)
 
-    if tab == "llm-provider":
+    if tab == "ai-automation":
         today_cost, cap = await _llm_cost_cap_view(session, settings, user_id=user_id)
         ctx["today_cost_usd"] = today_cost
         ctx["cost_cap_usd"] = cap
@@ -303,12 +303,6 @@ async def _ctx_for_tab(
 
     if tab == "security":
         ctx["security"] = await _build_security_view(session, user_id=user_id)
-
-    if tab == "generation":
-        ctx["cost_projection"] = await _build_generation_cost_projection(session, user_id=user_id)
-        ctx["recent_generation_traces"] = await _build_recent_generation_traces(
-            session, user_id=user_id
-        )
 
     return ctx
 
@@ -750,7 +744,7 @@ async def get_settings(
     user: User | None = Depends(require_authed_session),
 ):
     ctx = await _ctx_for_tab(
-        request, "llm-provider", session=session, user_id=_effective_user_id(user)
+        request, "ai-automation", session=session, user_id=_effective_user_id(user)
     )
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
@@ -857,65 +851,23 @@ async def post_settings_source_run(
     return _chip("emerald", "check", "queued — see Recent scraper runs")
 
 
-@router.get("/settings/submissions", response_class=HTMLResponse, name="settings_submissions")
-async def get_settings_submissions(
-    request: Request,
-    session: AsyncSession = Depends(get_session),
-    _user: User | None = Depends(require_authed_session),
-):
-    """Settings · Submissions sub-tab — plan 54 / 0.2.5.02.
-
-    Aggregated failure-kind dashboard per ATS adapter. Gated by
-    `require_authed_session` mirroring the Sources sub-tab pattern;
-    `Depends(get_session)` is the canonical entry. Plan 57 / 0.2.7.23 —
-    threads `_effective_user_id` to close sibling IDOR.
-    """
-    ctx = await _ctx_for_tab(
-        request, "submissions", session=session, user_id=_effective_user_id(_user)
-    )
-    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+# ── 2026-07 consolidation: old tab URLs serve the merged page ────────────
+# Rendered in place (not redirected): httpx/TestClient drops per-request
+# cookies across redirects, and a bookmark that bounces through /login is
+# worse than an alias URL. The nav only links /settings/ai-automation.
 
 
-@router.get(
-    "/settings/llm-provider",
-    response_class=HTMLResponse,
-    name="settings_llm_provider",
-)
-async def get_settings_llm_provider(
-    request: Request,
-    session: AsyncSession = Depends(get_session),
-    _user: User | None = Depends(require_authed_session),
-):
-    """Settings · LLM Provider tab with daily cost-cap widget — plan 54 / 0.2.5.03.
-
-    Dedicated route (vs. catch-all `/settings/{tab}`) so we can `Depends(get_session)`
-    without changing the catch-all's signature (existing tests rely on it being
-    DB-free). Plan 56 / 0.2.7.20 — gated by `require_authed_session` matching the
-    Sources + Submissions sub-tabs; the daily-cost widget aggregates per-user
-    ApiUsage rows and shouldn't leak unauth. Plan 57 / 0.2.7.23 — threads
-    `_effective_user_id` to close sibling IDOR.
-    """
-    ctx = await _ctx_for_tab(
-        request, "llm-provider", session=session, user_id=_effective_user_id(_user)
-    )
-    return templates.TemplateResponse(request, "pages/settings.html", ctx)
-
-
+@router.get("/settings/llm-provider", response_class=HTMLResponse, name="settings_llm_provider")
 @router.get("/settings/generation", response_class=HTMLResponse, name="settings_generation")
-async def get_settings_generation(
+@router.get("/settings/auto-apply", response_class=HTMLResponse, name="settings_auto_apply")
+@router.get("/settings/submissions", response_class=HTMLResponse, name="settings_submissions")
+async def get_settings_merged_alias(
     request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
 ):
-    """Settings · Generation sub-tab — plan 67 (0.3.4) § C.6.
-
-    Carries tier toggle (FREE / PREMIUM), per-app cost projection,
-    TIER-2 evasion opt-in, Originality.ai API key, audit-trail viewer.
-    Gated by `require_authed_session`; `Depends(get_session)` so the
-    cost-projection query + audit-trail query can hit the DB.
-    """
     ctx = await _ctx_for_tab(
-        request, "generation", session=session, user_id=_effective_user_id(_user)
+        request, "ai-automation", session=session, user_id=_effective_user_id(_user)
     )
     return templates.TemplateResponse(request, "pages/settings.html", ctx)
 

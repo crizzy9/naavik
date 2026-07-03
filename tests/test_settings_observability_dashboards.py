@@ -174,6 +174,12 @@ def _make_sources_settings(**overrides):
         "auto_apply_daily_cap": None,
         "auto_apply_immediate_dispatch": False,
         "auto_apply_adapter_confidence_threshold": 0.7,
+        # 2026-07 consolidation: the merged AI & Automation tab reads these.
+        "auto_apply_dry_run": False,
+        "auto_apply_per_board_daily_caps": {},
+        "generation_tier": "free",
+        "tier_2_evasion_enabled": False,
+        "originality_api_key": None,
         "eager_review_generation": False,
         "consecutive_scrape_failures": {},
         "notify_threshold": 0.80,
@@ -311,13 +317,14 @@ def test_submissions_tab_under_hx_request_returns_full_page(client: TestClient, 
 
 
 def test_settings_tab_nav_includes_submissions(client: TestClient, auth_cookies):
-    """Tab nav strip renders the new SUBMISSIONS tab label."""
+    """2026-07 consolidation: /settings/submissions serves the merged
+    AI & Automation page; the nav links the merged tab, and the submission
+    failures dashboard renders inside it."""
     r = client.get("/settings/submissions", cookies=auth_cookies)
     assert r.status_code == 200, r.text
     body = r.text
-    # The settings_tabs.html nav renders a link to each tab.
-    assert 'href="/settings/submissions"' in body
-    assert "Submissions" in body
+    assert 'href="/settings/ai-automation"' in body
+    assert "Submission failures" in body
 
 
 # ── 0.2.5.03 — LLM cost-cap widget ─────────────────────────────────────

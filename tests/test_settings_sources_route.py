@@ -69,6 +69,17 @@ def _make_settings(**overrides):
         "embedding_provider": None,
         "semantic_match_sync_on_upsert": False,
         "daily_llm_cost_cap_usd": None,
+        # 2026-07 consolidation: the merged AI & Automation tab reads these.
+        "auto_apply_enabled": False,
+        "auto_apply_dry_run": False,
+        "auto_apply_score_threshold": 0.85,
+        "auto_apply_daily_cap": None,
+        "auto_apply_immediate_dispatch": False,
+        "auto_apply_per_board_daily_caps": {},
+        "generation_tier": "free",
+        "tier_2_evasion_enabled": False,
+        "originality_api_key": None,
+        "eager_review_generation": False,
     }
     base.update(overrides)
     return SimpleNamespace(**base)

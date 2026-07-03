@@ -90,14 +90,18 @@ def _patch_db_dependencies(monkeypatch):
 
 
 # Per dispatch: tab-id → expected save endpoint (or None for read-only).
+# 2026-07 consolidation: llm-provider / generation / auto-apply / submissions
+# are now URL aliases for the merged AI & Automation page — all writable via
+# the union endpoint.
 _TAB_EXPECTATIONS = [
     ("account", "/api/v1/settings/account"),
-    ("llm-provider", "/api/v1/settings/llm"),
-    ("generation", "/api/v1/settings/generation"),
+    ("ai-automation", "/api/v1/settings/ai-automation"),
+    ("llm-provider", "/api/v1/settings/ai-automation"),
+    ("generation", "/api/v1/settings/ai-automation"),
+    ("auto-apply", "/api/v1/settings/ai-automation"),
+    ("submissions", "/api/v1/settings/ai-automation"),
     ("notifications", "/api/v1/settings/notifications"),
-    ("auto-apply", "/api/v1/settings/auto-apply"),
     ("sources", None),
-    ("submissions", None),
     ("security", None),
     ("deployment", None),
 ]

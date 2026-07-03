@@ -146,7 +146,9 @@ def test_llm_tab_renders_form_wrap(client: TestClient, auth_cookies):
     r = client.get("/settings/llm-provider", cookies=auth_cookies)
     assert r.status_code == 200
     body = r.text
-    assert 'hx-put="/api/v1/settings/llm"' in body
+    # 2026-07 consolidation: the merged AI & Automation form saves through
+    # the union endpoint (which re-dispatches to /api/v1/settings/llm).
+    assert 'hx-put="/api/v1/settings/ai-automation"' in body
     # 0.7.0.48 W4 — common Save button posts to /api/v1/settings/llm via the
     # `form="settings-active-form"` attr; LLM form targets the shared
     # `#settings-save-result` aria-live region instead of swapping the
