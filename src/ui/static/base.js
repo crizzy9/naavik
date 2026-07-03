@@ -325,13 +325,33 @@
   // ---------------------------------------------------------------- //
   function _reloadPdfEmbed(testid) {
     var f = document.querySelector('[data-testid="' + testid + '"]');
-    if (f && f.tagName === 'IFRAME') { f.src = f.src; }
+    if (!f || f.tagName !== 'IFRAME') { return; }
+    // `f.src = f.src` is a no-op here: the URL carries a `#toolbar=0` hash, so
+    // re-assigning the identical string is a fragment-only change (no reload),
+    // and the browser serves the recompiled PDF from cache anyway. Bust the
+    // cache with a fresh `?v=<ts>` BEFORE the hash so the recompiled document
+    // actually loads.
+    var raw = f.getAttribute('src') || f.src;
+    var hash = '';
+    var hashAt = raw.indexOf('#');
+    if (hashAt !== -1) { hash = raw.slice(hashAt); raw = raw.slice(0, hashAt); }
+    var path = raw.split('?')[0];
+    f.src = path + '?v=' + Date.now() + hash;
   }
   document.body.addEventListener('resumePdfUpdated', function () {
     _reloadPdfEmbed('tailored-resume-embed');
   });
   document.body.addEventListener('coverPdfUpdated', function () {
     _reloadPdfEmbed('cover-letter-embed');
+  });
+
+  // openApplyUrl → honest-submit fallback: when a job's real application site
+  // can't be auto-submitted, the server sends the posting URL so clicking
+  // "Submit" opens it in a new tab (alongside the explanatory toast) instead
+  // of failing with a misleading "auth required".
+  document.body.addEventListener('openApplyUrl', function (e) {
+    var url = e && e.detail && e.detail.url;
+    if (url) { window.open(url, '_blank', 'noopener'); }
   });
 
   // ---------------------------------------------------------------- //

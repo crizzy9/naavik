@@ -58,6 +58,52 @@ async def submit(
     if application is None or application.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Application not found")
     user_settings = await settings_service.get_or_create(session, user_id=current_user.id)
+
+    # Honest-submit guard (2026-07): boards without a working auto-submit
+    # adapter (LinkedIn Easy Apply, Indeed, unresolved-external, Workday, …)
+    # used to dispatch to a stub that always returned FAILURE_AUTH_REQUIRED —
+    # so a Greenhouse posting scraped off LinkedIn (apply site unresolved)
+    # reported "auth required" as if it were LinkedIn. Refuse cleanly and
+    # point the user at the real posting instead of pretending.
+    from services.ats import board_supports_auto_submit
+
+    # board=None falls through to submit_draft's explicit `no_board` error.
+    if application.board is not None and not board_supports_auto_submit(application.board):
+        from services import job_service
+
+        job = (
+            await job_service.get_job(session, application.job_id)
+            if application.job_id is not None
+            else None
+        )
+        apply_kind = getattr(job, "apply_kind", None)
+        apply_url = getattr(job, "apply_url", None) or application.external_url
+        if apply_kind == "easy_apply":
+            text = (
+                "This is a LinkedIn Easy Apply posting — Naavik can't auto-submit "
+                "those yet. Use the “Apply on LinkedIn” button to apply directly."
+            )
+        elif apply_kind in (None, "external", "unknown") and not getattr(job, "apply_url", None):
+            text = (
+                "Couldn't pin down the exact application site — this job was found "
+                "on an aggregator but applies elsewhere. Use the “Apply on …” "
+                "button to open the posting and apply directly."
+            )
+        else:
+            from services.apply_site_resolver import APPLY_KIND_LABELS
+
+            site = APPLY_KIND_LABELS.get(apply_kind or "", "") or "the company site"
+            text = (
+                f"This posting applies on {site}, which Naavik can't auto-submit "
+                "yet. Use the “Apply on …” button to open it and apply directly."
+            )
+        response = Response(status_code=204)
+        payload: dict[str, Any] = {"showToast": {"tone": "info", "text": text}}
+        if apply_url:
+            payload["openApplyUrl"] = {"url": apply_url}
+        response.headers["HX-Trigger"] = _json.dumps(payload)
+        return response
+
     # Item 7 — dry-run is honored on MANUAL submits too: the adapter fills
     # the real form, screenshots it, and stops before the submit click.
     dry_run = bool(getattr(user_settings, "auto_apply_dry_run", False))

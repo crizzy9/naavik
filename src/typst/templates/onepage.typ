@@ -35,7 +35,10 @@
 
 #set document(title: data.profile.full_name + " — Resume")
 
-#set page(paper: "us-letter", margin: (x: 0.3in, top: 0.25in, bottom: 0.25in))
+// Side margins widened 0.3in → 0.5in (2026-07): the cv.tex-tight 0.3in read
+// as cramped. The density add-back loop refills to the (slightly narrower)
+// page, so one-page contract holds.
+#set page(paper: "us-letter", margin: (x: 0.5in, top: 0.3in, bottom: 0.3in))
 
 #set text(
   font: ("Helvetica", "Arial", "Liberation Sans"),

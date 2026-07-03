@@ -57,7 +57,9 @@
        data-testid="apply-manually-link"
        class="inline-flex items-center gap-2 text-sm text-slate-100 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 transition">
       <i data-lucide="external-link" class="h-4 w-4" stroke-width="1.5"></i>
-      Apply on {{ "LinkedIn" if job.apply_kind == "easy_apply" else (job.apply_kind_label or board_label) }}
+      {% if job.apply_kind == "easy_apply" %}Apply on LinkedIn
+      {%- elif job.apply_kind in ("external", "unknown") or not job.apply_kind_label %}Open posting to apply
+      {%- else %}Apply on {{ job.apply_kind_label }}{% endif %}
     </a>
     {% endif %}
     <button type="button"
