@@ -53,9 +53,9 @@ def test_expanded_fragment_returns_workspace_with_back_button(
     assert "Back to queue" in body
     assert "/_fragments/discover/queue" in body
     assert 'hx-target="#discover-main"' in body
-    # Workspace content (apply_topbar contributes "Submit application" wording elsewhere;
-    # WHAT THEY WANT is the canonical workspace marker)
-    assert "WHAT THEY WANT" in body
+    # Workspace content — item 2 retired the WHAT THEY WANT column; the
+    # two-column analysis is the canonical workspace marker now.
+    assert "YOUR STRENGTHS" in body
 
 
 def test_queue_fragment_returns_swipe_grid(client: TestClient, auth_cookies) -> None:
@@ -83,7 +83,7 @@ def test_full_page_route_still_works(client: TestClient, auth_cookies) -> None:
     assert "<html" in body
     assert "<body" in body
     # And the workspace
-    assert "WHAT THEY WANT" in body
+    assert "YOUR STRENGTHS" in body
 
 
 def test_inline_fragment_links_to_full_page(client: TestClient, auth_cookies) -> None:

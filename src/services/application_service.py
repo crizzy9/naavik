@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func
@@ -495,11 +496,16 @@ async def _build_bundle(session: AsyncSession, application: Application) -> Appl
             )
         )
     ).all()
+    from services import profile_service
+
     return ApplicationBundle(
         application=application,
         resume=resume,
         cover_letter=cover,
         screener_answers=list(screeners),
+        # Item 7 — form fillers take identity from the Profile, never from
+        # the board's PDF parsing.
+        profile=await profile_service.get_profile(session, application.user_id),
     )
 
 
@@ -575,6 +581,7 @@ async def submit_draft(
     *,
     triggered_by: StatusChangeTrigger = StatusChangeTrigger.DRAFT_SUBMITTED,
     notify_fn=None,
+    dry_run: bool = False,
 ) -> Application:
     """DRAFT → APPLIED. Validates, dispatches via ATS, flips state.
 
@@ -605,7 +612,7 @@ async def submit_draft(
     adapter = ats_dispatch(application.board)
 
     try:
-        result: SubmissionResult = await adapter.submit(application, bundle)
+        result: SubmissionResult = await adapter.submit(application, bundle, dry_run=dry_run)
     except ATSError as exc:
         await _record_failure(
             session,
@@ -635,6 +642,9 @@ async def submit_draft(
             raw=result.raw,
             settings=user_settings,
         )
+        if result.artifacts:
+            _stamp_auto_apply_artifacts(application, result.artifacts, key="failure_artifacts")
+            session.add(application)
         await _emit_event(
             session,
             user_id=application.user_id,
@@ -642,6 +652,34 @@ async def submit_draft(
             kind=AppEventKind.DOCS_FAILED,
             payload={"kind": kind, "message": message},
         )
+        return application
+
+    # Item 7 — dry-run outcome: the adapter filled the REAL form and
+    # screenshotted it, then stopped short of the submit click. Keep DRAFT,
+    # stamp the evidence, and let the caller hand the job to the user.
+    if result.dry_run:
+        artifacts = dict(application.submission_artifacts or {})
+        auto = dict(artifacts.get("auto_apply") or {})
+        auto["dry_run_at"] = datetime.now(UTC).isoformat()
+        auto["dry_run_artifacts"] = [Path(p).name for p in result.artifacts if p]
+        artifacts["auto_apply"] = auto
+        artifacts["dry_run_at"] = auto["dry_run_at"]  # legacy key some views read
+        application.submission_artifacts = artifacts
+        application.updated_at = datetime.now(UTC)
+        session.add(application)
+        await _emit_event(
+            session,
+            user_id=application.user_id,
+            application_id=application.id,
+            kind=AppEventKind.AUTO_APPLY_DRY_RUN,
+            payload={
+                "board": application.board.value if application.board else None,
+                "artifacts": auto["dry_run_artifacts"],
+                "fields_filled": (result.raw or {}).get("fields_filled"),
+                "captcha_present": (result.raw or {}).get("captcha_present"),
+            },
+        )
+        await session.flush()
         return application
 
     # Plan 78 § D.2 — adapter-confidence gate. HTTP adapters always emit
@@ -681,6 +719,16 @@ async def submit_draft(
     application.applied_at = now
     application.updated_at = now
     await _record_success(session, application, board_application_id=result.board_application_id)
+    if result.artifacts or (result.raw or {}).get("confirmation_text"):
+        artifacts = dict(application.submission_artifacts or {})
+        auto = dict(artifacts.get("auto_apply") or {})
+        if result.artifacts:
+            auto["submission_artifacts_files"] = [Path(p).name for p in result.artifacts if p]
+        confirmation = (result.raw or {}).get("confirmation_text")
+        if confirmation:
+            auto["confirmation_text"] = confirmation
+        artifacts["auto_apply"] = auto
+        application.submission_artifacts = artifacts
     session.add(application)
 
     if application.job_id:
@@ -920,6 +968,14 @@ def _stamp_auto_apply(application: Application, **fields: Any) -> None:
     artifacts["auto_apply"] = blob
     application.submission_artifacts = artifacts
     application.updated_at = datetime.now(UTC)
+
+
+def _stamp_auto_apply_artifacts(application: Application, paths: list[str], *, key: str) -> None:
+    """Record adapter screenshot evidence (filenames only — served via the
+    guarded artifacts route) under `submission_artifacts.auto_apply.<key>`."""
+    names = [Path(p).name for p in paths if p]
+    if names:
+        _stamp_auto_apply(application, **{key: names})
 
 
 async def _hand_to_user(
@@ -1206,32 +1262,30 @@ async def process_auto_apply_queue(
                 out.handed_to_user += 1
             continue
 
-        # Plan 78 § D.5 — dry-run mode short-circuits BEFORE submit_draft so no
-        # ATS network call ever fires. Stamps `submission_artifacts.dry_run_at`,
-        # then hands the job over — leaving it queued re-stamped it forever.
+        # Plan 78 § D.5, rebuilt by item 7 (2026-07): dry-run now produces
+        # REAL evidence — `submit_draft(dry_run=True)` drives the actual
+        # apply form (navigate + fill + upload + screenshot) and stops
+        # short of the final submit click. The stamp-only short-circuit
+        # proved nothing about field correctness.
         if getattr(s, "auto_apply_dry_run", False):
-            artifacts = dict(application.submission_artifacts or {})
-            artifacts["dry_run_at"] = datetime.now(UTC).isoformat()
-            application.submission_artifacts = artifacts
-            application.updated_at = datetime.now(UTC)
-            session.add(application)
-            await _emit_event(
-                session,
-                user_id=application.user_id,
-                application_id=application.id,
-                kind=AppEventKind.AUTO_APPLY_DRY_RUN,
-                payload={
-                    "score": float(job_score) if job_score is not None else None,
-                    "board": application.board.value if application.board else None,
-                },
-            )
+            try:
+                await submit_draft(
+                    session,
+                    application.id,
+                    triggered_by=StatusChangeTrigger.AUTO_APPLY_SUBMITTED,
+                    notify_fn=None,
+                    dry_run=True,
+                )
+            except ApplicationServiceError as exc:
+                log.warning("dry-run fill errored on %s: %s", application.id, exc)
             await _hand_to_user(
                 session,
                 application,
                 job,
                 reason=(
-                    "dry-run — everything validated but no real submission "
-                    "was made; submit manually or turn dry-run off"
+                    "dry-run — the form was filled and screenshotted but NOT "
+                    "submitted; inspect the artifacts, then submit manually or "
+                    "turn dry-run off"
                 ),
             )
             out.handed_to_user += 1

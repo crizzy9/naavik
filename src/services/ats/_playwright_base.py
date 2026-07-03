@@ -55,7 +55,14 @@ class _PlaywrightATSAdapter(ATSAdapter):
     def requires_credential(self) -> bool:
         return True
 
-    async def submit(self, application: Application, bundle: ApplicationBundle) -> SubmissionResult:
+    async def submit(
+        self,
+        application: Application,
+        bundle: ApplicationBundle,
+        *,
+        dry_run: bool = False,
+    ) -> SubmissionResult:
+        del dry_run  # skeleton boards hand off before any submission attempt
         if self._pool is None:
             return SubmissionResult(
                 ok=False,

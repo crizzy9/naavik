@@ -193,9 +193,7 @@ def test_factory_cross_provider_fallback_keeps_model_when_it_belongs(monkeypatch
 
     monkeypatch.setattr(app_settings, "anthropic_api_key", None)
     monkeypatch.setattr(app_settings, "openai_api_key", "sk-openai-fallback")
-    settings = Settings(
-        user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="gpt-5.4-mini"
-    )
+    settings = Settings(user_id=1, llm_provider=LLMProviderEnum.ANTHROPIC, llm_model="gpt-5.4-mini")
     provider = get_provider(settings)
     assert isinstance(provider, OpenAIProvider)
     assert provider.model_name == "gpt-5.4-mini"

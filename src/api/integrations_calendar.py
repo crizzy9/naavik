@@ -59,7 +59,7 @@ async def connect_calendar(
     # as the Gmail connect.
     try:
         body = await calendar_sync.fetch_ics(url)
-        events = calendar_sync.parse_ics(body)
+        calendar_sync.parse_ics(body)  # parse errors → honest connect failure
     except Exception as exc:  # noqa: BLE001 — user-facing connect must not 500
         log.info("calendar connect fetch failed for user %s: %s", user_id, exc)
         return _error_fragment(

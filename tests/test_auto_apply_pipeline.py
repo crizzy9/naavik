@@ -141,10 +141,16 @@ async def test_dry_run_hands_over_instead_of_requeueing_forever():
         _exec_count(0),  # validate: screener count
         _exec_one(None),  # validate: sponsorship profile
     ]
-    result = await process_auto_apply_queue(session)
+    # Item 7: dry-run now calls submit_draft(dry_run=True) for real
+    # filled-form evidence; the stamp happens inside submit_draft (mocked
+    # here), and the hand-off still fires afterwards.
+    fake_submit = AsyncMock(return_value=app_row)
+    with patch("services.application_service.submit_draft", new=fake_submit):
+        result = await process_auto_apply_queue(session)
+    fake_submit.assert_awaited_once()
+    assert fake_submit.await_args.kwargs.get("dry_run") is True
     assert result.handed_to_user == 1
     assert job_row.queue_state == JobQueueState.READY_TO_SUBMIT
-    assert (app_row.submission_artifacts or {}).get("dry_run_at")
 
 
 @pytest.mark.asyncio

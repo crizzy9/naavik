@@ -64,6 +64,14 @@ class SubmissionResult:
     retry_after: int | None = None  # seconds before next attempt (rate_limit)
     raw: dict | None = None
     confidence: float | None = None
+    # Item 7 (2026-07) — dry-run evidence contract. `dry_run=True` means the
+    # adapter did everything up to (not including) the final submit click;
+    # `artifacts` carries filesystem paths of filled-form / confirmation
+    # screenshots saved under the application's documents dir. On REAL
+    # submissions `ok=True` requires positive confirmation evidence
+    # (`raw["confirmation_text"]`) — a 2xx alone is not success.
+    dry_run: bool = False
+    artifacts: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -75,6 +83,9 @@ class ApplicationBundle:
     cover_letter: GeneratedDocument | None
     screener_answers: list[ApplicationScreenerAnswer] = field(default_factory=list)
     submitted_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # Item 7 — canonical identity for form filling (name/email/phone/links)
+    # comes from the Profile, not from the board's PDF parsing.
+    profile: object | None = None
 
 
 class ATSAdapter(ABC):
@@ -83,9 +94,18 @@ class ATSAdapter(ABC):
     board_name: str = "abstract"
 
     @abstractmethod
-    async def submit(self, application: Application, bundle: ApplicationBundle) -> SubmissionResult:
+    async def submit(
+        self,
+        application: Application,
+        bundle: ApplicationBundle,
+        *,
+        dry_run: bool = False,
+    ) -> SubmissionResult:
         """Submit the bundle to the board. Never raises for predictable failures —
         return SubmissionResult(ok=False, error=<FAILURE_*>) instead.
+
+        `dry_run=True` performs the full navigate + fill flow, screenshots
+        the filled form, and returns WITHOUT clicking submit.
 
         Raises ATSError only for adapter-internal bugs.
         """

@@ -181,7 +181,6 @@ async def session():
 async def _seed_message(session, *, subject: str, sender: str, snippet: str = ""):
     from models import EmailThread
     from models.email_message import EmailMessage
-
     from models.enums import EmailClassification
 
     thread = EmailThread(
@@ -213,18 +212,18 @@ def _make_job(**overrides):
     from models import Job
     from models.enums import ApplicationBoard, JobSource
 
-    base = dict(
-        user_id=1,
-        source=JobSource.MANUAL,
-        external_id=f"x-{overrides.get('company', 'c')}",
-        board=ApplicationBoard.MANUAL,
-        url=f"https://example.com/{overrides.get('company', 'c')}",
-        url_type="manual",
-        company="Acme",
-        role="Software Engineer",
-        description="d",
-        found_at=datetime(2026, 6, 1, tzinfo=UTC),
-    )
+    base = {
+        "user_id": 1,
+        "source": JobSource.MANUAL,
+        "external_id": f"x-{overrides.get('company', 'c')}",
+        "board": ApplicationBoard.MANUAL,
+        "url": f"https://example.com/{overrides.get('company', 'c')}",
+        "url_type": "manual",
+        "company": "Acme",
+        "role": "Software Engineer",
+        "description": "d",
+        "found_at": datetime(2026, 6, 1, tzinfo=UTC),
+    }
     base.update(overrides)
     return Job(**base)
 

@@ -50,11 +50,19 @@ async def submit(
     Mirrors plan 75 row 1 screener-IDOR pattern; matches `generate_bundle_route`
     + `get_postmortem` precedent in this module.
     """
+    import json as _json
+
+    from services import settings_service
+
     application = await svc.get_application(session, application_id)
     if application is None or application.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Application not found")
+    user_settings = await settings_service.get_or_create(session, user_id=current_user.id)
+    # Item 7 — dry-run is honored on MANUAL submits too: the adapter fills
+    # the real form, screenshots it, and stops before the submit click.
+    dry_run = bool(getattr(user_settings, "auto_apply_dry_run", False))
     try:
-        out = await svc.submit_draft(session, application_id)
+        out = await svc.submit_draft(session, application_id, dry_run=dry_run)
     except svc.ValidationError as exc:
         raise HTTPException(
             status_code=409, detail={"code": exc.code, "message": str(exc)}
@@ -69,13 +77,42 @@ async def submit(
         response.headers["HX-Redirect"] = "/tracking"
         return response
 
+    artifacts_blob = out.submission_artifacts or {}
+    dry_stamp = (artifacts_blob.get("auto_apply") or {}).get("dry_run_at")
+    if dry_run and dry_stamp:
+        await session.commit()
+        n = len((artifacts_blob.get("auto_apply") or {}).get("dry_run_artifacts") or [])
+        response = Response(status_code=204)
+        response.headers["HX-Trigger"] = _json.dumps(
+            {
+                "showToast": {
+                    "tone": "info",
+                    "text": (
+                        f"Dry-run: the form was filled and {n} screenshot"
+                        f"{'s' if n != 1 else ''} saved — nothing was submitted. "
+                        "See Tracking → application detail to inspect."
+                    ),
+                }
+            }
+        )
+        return response
+
     # Persistent failure — caller renders banner from submission_artifacts.
-    last_failure = (out.submission_artifacts or {}).get("last_failure", {})
-    return {
-        "id": out.id,
-        "status": out.status.value,
-        "last_failure": last_failure,
-    }
+    await session.commit()
+    last_failure = artifacts_blob.get("last_failure", {})
+    response = Response(status_code=204)
+    response.headers["HX-Trigger"] = _json.dumps(
+        {
+            "showToast": {
+                "tone": "danger",
+                "text": (
+                    f"Submission failed ({last_failure.get('kind', 'unknown')}): "
+                    f"{last_failure.get('message', 'see application detail')}"
+                ),
+            }
+        }
+    )
+    return response
 
 
 @router.delete("/{application_id}/discard", name="api_applications_discard")
@@ -225,6 +262,48 @@ async def get_postmortem(
     trace = json.loads(trace_file.read_text(encoding="utf-8"))
     analysis_md = analysis_file.read_text(encoding="utf-8")
     return {"trace": trace, "analysis_markdown": analysis_md}
+
+
+_ARTIFACT_NAME_RE = re.compile(r"^[\w][\w.-]{0,120}\.png$")
+
+
+@router.get(
+    "/{application_id}/auto-apply-artifacts/{filename}",
+    name="api_applications_auto_apply_artifact",
+)
+async def get_auto_apply_artifact(
+    application_id: int,
+    filename: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(require_password_complete),
+):
+    """Serve one dry-run / submission screenshot (item 7 evidence).
+
+    IDOR: 404 on cross-user. Path traversal: strict filename regex +
+    resolve().relative_to() against the application's auto_apply dir.
+    """
+    from fastapi.responses import FileResponse
+
+    app = await svc.get_application(session, application_id)
+    if app is None or app.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Application not found")
+    if not _ARTIFACT_NAME_RE.match(filename):
+        raise HTTPException(status_code=400, detail="invalid artifact name")
+    base = (
+        Path(app_settings.data_dir).expanduser().resolve()
+        / "data"
+        / "documents"
+        / str(application_id)
+        / "auto_apply"
+    )
+    target = (base / filename).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invalid path") from exc
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="artifact not found")
+    return FileResponse(target, media_type="image/png")
 
 
 @router.post("/{application_id}/generate-bundle", name="api_applications_generate_bundle")

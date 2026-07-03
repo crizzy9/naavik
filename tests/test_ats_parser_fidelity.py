@@ -130,9 +130,10 @@ def test_validate_parse_fidelity_on_real_onepage_pdf(tmp_path):
 
     template_dir = Path(__file__).resolve().parent.parent / "src" / "typst" / "templates"
     template = template_dir / "onepage.typ"
+    # Item 2 (2026-07): payload matches the cv.tex-conversion template shape
+    # (structured jobentry/educationentry fields; no headline).
     data = {
         "profile": {"full_name": "Test Candidate"},
-        "headline": "Software Engineer",
         "contact_links": [
             {"text": "test@example.com", "href": "mailto:test@example.com"},
             {"text": "+1 555 0100", "href": None},
@@ -142,17 +143,21 @@ def test_validate_parse_fidelity_on_real_onepage_pdf(tmp_path):
         "summary": "Engineer with experience.",
         "experiences": [
             {
-                "heading": "Senior Engineer · Acme",
-                "meta": "City",
+                "company": "Acme",
+                "title": "Senior Engineer",
+                "location": "City",
                 "dates": "Jan 2022 – Present",
                 "bullets": ["Shipped a feature.", "Cut costs by half."],
             }
         ],
         "education": [
             {
-                "heading": "University",
-                "meta": "BS CS",
+                "institution": "University",
+                "school": None,
+                "location": "City",
                 "dates": "Sep 2014 – May 2018",
+                "degree": "BS CS",
+                "gpa": None,
             }
         ],
         "skills": [{"category": "Languages", "items": ["Python"]}],
@@ -164,6 +169,8 @@ def test_validate_parse_fidelity_on_real_onepage_pdf(tmp_path):
                 "link": "https://example.com/sideproject",
             }
         ],
+        "open_source": [],
+        "certifications": [],
     }
     out_pdf = tmp_path / "out.pdf"
     cmd = [

@@ -36,9 +36,10 @@ def tmp_output_dir() -> Path:
 
 
 def _minimal_resume_data() -> dict:
+    # Item 2 (2026-07): the cv.tex-conversion template shape — structured
+    # jobentry/educationentry fields, no headline, + certs/open-source lists.
     return {
         "profile": {"full_name": "Shyam Padia"},
-        "headline": "Senior Software Engineer",
         "contact_links": [
             {"text": "shyam.padia930@gmail.com", "href": "mailto:shyam.padia930@gmail.com"},
             {"text": "+1 555 555 0100", "href": None},
@@ -52,8 +53,9 @@ def _minimal_resume_data() -> dict:
         ),
         "experiences": [
             {
-                "heading": "Senior Software Engineer · Intuit",
-                "meta": "Mountain View, CA",
+                "company": "Intuit, Personalization",
+                "title": "Senior Software Engineer",
+                "location": "Mountain View, CA",
                 "dates": "Jul 2020 – Present",
                 "bullets": [
                     "Built ML personalization platform serving 100M+ users; +23% homepage CTR",
@@ -63,9 +65,12 @@ def _minimal_resume_data() -> dict:
         ],
         "education": [
             {
-                "heading": "Northeastern University",
-                "meta": "MS Computer Science · GPA 3.8",
+                "institution": "Northeastern University",
+                "school": "Khoury CCIS",
+                "location": "Boston, MA",
                 "dates": "2017 – 2019",
+                "degree": "MS Computer Science",
+                "gpa": "3.8",
             }
         ],
         "skills": [
@@ -79,6 +84,12 @@ def _minimal_resume_data() -> dict:
                 "text": "Open-source career automation platform",
                 "link": "https://github.com/crizzy9/naavik",
             }
+        ],
+        "certifications": [
+            {"title": "AWS Solutions Architect - Associate", "date": "Oct 2019", "text": None}
+        ],
+        "open_source": [
+            {"title": "Mopidy - Python Music Server", "date": "2024", "text": None, "link": None}
         ],
     }
 

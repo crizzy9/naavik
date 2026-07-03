@@ -856,9 +856,7 @@ async def fragment_cover_section_save(
     user_settings = await settings_service.get_or_create(session, user_id=user_id)
     toast = {"tone": "success", "text": "Section saved — letter PDF updated."}
     try:
-        await dg.recompile_cover_letter_from_sections(
-            session, application, settings=user_settings
-        )
+        await dg.recompile_cover_letter_from_sections(session, application, settings=user_settings)
     except Exception as exc:  # noqa: BLE001 — save must survive a compile hiccup
         log.warning("cover-letter recompile after edit failed: %s", exc)
         toast = {

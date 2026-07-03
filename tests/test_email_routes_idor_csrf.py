@@ -58,6 +58,7 @@ def _email_test_tables():
     from sqlalchemy import CheckConstraint
 
     from models import (
+        CalendarConnection,
         EmailAccount,
         EmailMessage,
         EmailThread,
@@ -69,6 +70,8 @@ def _email_test_tables():
         EmailThread.__table__,
         EmailAccount.__table__,
         EmailMessage.__table__,
+        # The Integrations page ctx reads the calendar connection (item 11).
+        CalendarConnection.__table__,
     ]
     for table in tables:
         for c in list(table.constraints):

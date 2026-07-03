@@ -31,7 +31,10 @@ def test_settings_llm_tab_active_provider_radio_section_deleted(client: TestClie
     assert r.status_code == 200
     body = r.text
     # The radio surface from `components/provider_card.html` is gone.
-    assert 'name="llm_provider"' not in body
+    # (Item 10 reintroduced `llm_provider` as a HIDDEN field so saving a
+    # model aligns the stored provider — only the radio stays banned.)
+    assert 'type="radio" name="llm_provider"' not in body
+    assert '<input type="hidden" name="llm_provider"' in body
     # The redundant "Active provider" section header is gone too.
     assert "Active provider" not in body
 

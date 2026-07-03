@@ -414,6 +414,7 @@ async def test_submit_draft_success_flips_state_and_job_queue_state():
         _exec_one(None),  # resume lookup
         _exec_one(None),  # cover lookup
         _exec_all([]),  # screeners
+        _exec_one(None),  # _build_bundle: profile (item 7 identity source)
         _exec_one(job_row),  # post-success
     ]
 
@@ -1054,6 +1055,7 @@ async def test_submit_draft_default_notify_fn_fires_when_settings_configured():
         _exec_one(None),
         _exec_one(None),
         _exec_all([]),
+        _exec_one(None),  # _build_bundle: profile (item 7 identity source)
         _exec_one(job_row),
     ]
 
@@ -1140,6 +1142,7 @@ async def test_submit_draft_explicit_notify_fn_overrides_default():
         _exec_one(None),
         _exec_one(None),
         _exec_all([]),
+        _exec_one(None),  # _build_bundle: profile (item 7 identity source)
         _exec_one(job_row),
     ]
 
@@ -1288,11 +1291,13 @@ async def test_process_auto_apply_queue_per_board_cap_skipped_when_unset():
 
 
 @pytest.mark.asyncio
-async def test_process_auto_apply_queue_dry_run_short_circuits_before_submit():
-    """Plan 78 § D.5 — dry-run flag stamps submission_artifacts.dry_run_at
-    and emits AUTO_APPLY_DRY_RUN event WITHOUT calling submit_draft.
+async def test_process_auto_apply_queue_dry_run_calls_submit_with_dry_run_flag():
+    """Item 7 (2026-07) rebuild of plan 78 § D.5 — dry-run now produces REAL
+    evidence: the queue calls `submit_draft(dry_run=True)` (which drives the
+    actual form and stops before the submit click), THEN hands the job to
+    the user. The old stamp-only short-circuit proved nothing.
     """
-    from models import AppEventKind, JobQueueState
+    from models import JobQueueState
 
     app_row = _make_app()
     job_row = _make_job(queue_state=JobQueueState.QUEUED_FOR_AUTO_APPLY, score=0.9)
@@ -1306,18 +1311,16 @@ async def test_process_auto_apply_queue_dry_run_short_circuits_before_submit():
         # validate_submittable: sponsorship-gate Profile → None (short-circuits)
         _exec_one(None),
     ]
-    fake_submit = AsyncMock()
+    fake_submit = AsyncMock(return_value=app_row)
     with patch("services.application_service.submit_draft", new=fake_submit):
         result = await process_auto_apply_queue(session)
 
-    fake_submit.assert_not_awaited()
+    fake_submit.assert_awaited_once()
+    assert fake_submit.await_args.kwargs.get("dry_run") is True
     assert result.processed == 1
     assert result.submitted == 0
-    artifacts = app_row.submission_artifacts or {}
-    assert artifacts.get("dry_run_at") is not None
-    # AppEvent emitted with kind=AUTO_APPLY_DRY_RUN
-    events = [obj for obj in session.added if hasattr(obj, "kind")]
-    assert any(e.kind == AppEventKind.AUTO_APPLY_DRY_RUN for e in events)
+    assert result.handed_to_user == 1
+    assert job_row.queue_state == JobQueueState.READY_TO_SUBMIT
 
 
 @pytest.mark.asyncio
@@ -1431,6 +1434,7 @@ async def test_submit_draft_full_confidence_proceeds():
         _exec_one(None),
         _exec_one(None),
         _exec_all([]),
+        _exec_one(None),  # _build_bundle: profile (item 7 identity source)
         _exec_one(job_row),
     ]
     fake_adapter = SimpleNamespace(

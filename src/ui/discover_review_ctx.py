@@ -81,9 +81,7 @@ async def _latest_resume_blob(
         return None
     from services import document_generator as dg
 
-    doc = await dg._latest_error_free_doc(
-        session, application.id, dg.GeneratedDocumentKind.RESUME
-    )
+    doc = await dg._latest_error_free_doc(session, application.id, dg.GeneratedDocumentKind.RESUME)
     if doc is None or not doc.bullet_selection:
         return None
     return dict(doc.bullet_selection)

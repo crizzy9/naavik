@@ -83,7 +83,8 @@ class _ManualFallbackAdapter(ATSAdapter):
         self.board = board
         self.board_name = board.value
 
-    async def submit(self, application, bundle):  # type: ignore[override]
+    async def submit(self, application, bundle, *, dry_run: bool = False):  # type: ignore[override]
+        del dry_run
         return SubmissionResult(
             ok=False,
             error=FAILURE_AUTH_REQUIRED,

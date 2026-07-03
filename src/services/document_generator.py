@@ -1002,7 +1002,9 @@ async def generate_resume(
                 tailored_summary=tailored_summary,
             )
             try:
-                result = await typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
+                result = await typst_compile(
+                    template_name, data, out_pdf, pdf_standard=pdf_standard
+                )
             except TypstError as exc:
                 log.warning("add-back compile failed; keeping fitted page: %s", exc)
                 disk_pdf_overflows = True  # disk state unknown — recompile below
@@ -1023,7 +1025,9 @@ async def generate_resume(
                 tailored_summary=tailored_summary,
             )
             try:
-                final_result = await typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
+                final_result = await typst_compile(
+                    template_name, data, out_pdf, pdf_standard=pdf_standard
+                )
             except TypstError as exc:  # pragma: no cover — compiled moments ago
                 log.warning("post-add-back recompile failed: %s", exc)
         if added_back:
@@ -1176,9 +1180,7 @@ async def recompile_cover_letter_from_sections(
     """Recompile the cover-letter PDF from the latest doc's (edited)
     `sections` blob so the embed matches what the user saved. No LLM calls.
     """
-    doc = await _latest_error_free_doc(
-        session, application.id, GeneratedDocumentKind.COVER_LETTER
-    )
+    doc = await _latest_error_free_doc(session, application.id, GeneratedDocumentKind.COVER_LETTER)
     if doc is None or not doc.bullet_selection:
         return None
     sections = doc.bullet_selection.get("sections")

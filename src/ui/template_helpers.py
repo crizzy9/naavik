@@ -15,6 +15,11 @@ matching enum addition in `models/enums.py`.
 
 from __future__ import annotations
 
+import re
+from html import escape as _html_escape
+
+from markupsafe import Markup
+
 # Each list is the option set for a `<select>`; first item = "no answer" sentinel.
 # An empty `value` lets the read-only view fall back to "—" when nothing's set.
 
@@ -107,11 +112,6 @@ def app_q_label(field: str, value: str | None) -> str:
 # into real structure — section headings, bullet lists, paragraphs — with
 # every piece of input HTML-escaped first (no raw HTML injection; scraped
 # markup renders inert as text).
-
-import re
-from html import escape as _html_escape
-
-from markupsafe import Markup
 
 _JD_BULLET_RE = re.compile(r"^\s*(?:[-–—*•·◦▪‣]|\d{1,2}[.)])\s+(.*)$")
 # Known JD section names — matched case-insensitively when a short line is

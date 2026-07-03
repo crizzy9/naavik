@@ -397,6 +397,25 @@ async def build_application_detail_ctx(
         except Exception:  # noqa: BLE001 — defensive; chip optional
             score = None
 
+    # Item 7 — dry-run / submission screenshot evidence (filenames under the
+    # application's auto_apply dir, served by the guarded artifact route).
+    auto_apply_artifacts: list[dict[str, str]] = []
+    _auto_blob = (application.submission_artifacts or {}).get("auto_apply") or {}
+    for _key, _label in (
+        ("dry_run_artifacts", "dry-run"),
+        ("submission_artifacts_files", "submission"),
+        ("failure_artifacts", "failure"),
+    ):
+        for _name in _auto_blob.get(_key) or []:
+            if isinstance(_name, str) and _name:
+                auto_apply_artifacts.append(
+                    {
+                        "label": _label,
+                        "name": _name,
+                        "url": f"/api/v1/applications/{application.id}/auto-apply-artifacts/{_name}",
+                    }
+                )
+
     # Item 11 — calendar events fuzzy-matched to this application.
     from services import calendar_sync
 
@@ -442,6 +461,8 @@ async def build_application_detail_ctx(
         "job_url": job_url,
         # Plan 86 / 0.4.5.08
         "bullets_used": bullets_used_rows,
+        # Item 7 (2026-07)
+        "auto_apply_artifacts": auto_apply_artifacts,
         # Item 11 (2026-07)
         "calendar_events": calendar_events,
     }

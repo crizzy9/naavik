@@ -42,13 +42,13 @@ _DATE_RE = re.compile(
 )
 
 # Required canonical section header strings (research § B.4 allowlist).
-# "Experience" alone is equally canonical across ATS parsers — the
-# consolidated onepage.typ template uses it.
+# "Work Experience" / "Technical Skills" joined the allowlist with the
+# item-2 cv.tex template conversion — both are ATS-canonical vocabulary.
 _HEAD_PROFESSIONAL_EXPERIENCE = re.compile(
-    r"^\s*(?:Professional\s+)?Experience\s*$", re.MULTILINE | re.IGNORECASE
+    r"^\s*(?:Professional\s+|Work\s+)?Experience\s*$", re.MULTILINE | re.IGNORECASE
 )
 _HEAD_EDUCATION = re.compile(r"^\s*Education\s*$", re.MULTILINE | re.IGNORECASE)
-_HEAD_SKILLS = re.compile(r"^\s*Skills\s*$", re.MULTILINE | re.IGNORECASE)
+_HEAD_SKILLS = re.compile(r"^\s*(?:Technical\s+)?Skills\s*$", re.MULTILINE | re.IGNORECASE)
 
 
 # Smart-default tier thresholds.

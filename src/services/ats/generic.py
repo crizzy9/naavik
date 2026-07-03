@@ -32,8 +32,13 @@ class GenericAdapter(_PlaywrightATSAdapter):
         return False
 
     async def submit(  # type: ignore[override]
-        self, application: Application, bundle: ApplicationBundle
+        self,
+        application: Application,
+        bundle: ApplicationBundle,
+        *,
+        dry_run: bool = False,
     ) -> SubmissionResult:
+        del dry_run  # honest hand-off boards never reach a submit click
         return SubmissionResult(
             ok=False,
             error=FAILURE_AUTH_REQUIRED,

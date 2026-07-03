@@ -237,6 +237,18 @@
             </a>
           {% endif %}
         {% endif %}
+        {# Item 7 — filled-form / confirmation screenshot evidence. #}
+        {% if auto_apply_artifacts %}
+          <div class="mt-2 flex flex-wrap gap-1.5" data-testid="auto-apply-artifacts">
+            {% for art in auto_apply_artifacts %}
+              <a href="{{ art.url }}" target="_blank" rel="noopener" hx-boost="false"
+                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-300 hover:bg-slate-700 hover:text-slate-100">
+                <i data-lucide="image" class="h-3 w-3" stroke-width="1.5"></i>
+                {{ art.label }} · {{ art.name | truncate(34, true) }}
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
       </section>
     {% endif %}
 
