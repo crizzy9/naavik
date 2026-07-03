@@ -119,13 +119,63 @@ async def test_resolve_direct_ats_url_short_circuits():
     assert out.apply_url == job.url
 
 
+def _guest(*, is_offsite, company_slug=None, description_text=None, posting_title=None):
+    from services import linkedin_resolver
+
+    return linkedin_resolver.GuestDetail(
+        is_offsite=is_offsite,
+        company_slug=company_slug,
+        description_html=None,
+        description_text=description_text,
+        posting_title=posting_title,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_linkedin_uses_full_guest_title_for_discovery():
+    """The guest page's full title ("... (GO)") is what discovery matches on,
+    not the scraper's truncated role."""
+    job = _job(company="Catapult", role="Senior Software Engineer")
+    seen_roles: list[str] = []
+
+    async def _discover(*, company, role, location, extra_slugs, _cache):
+        seen_roles.append(role)
+        return resolver.ResolvedApply(
+            kind="greenhouse",
+            apply_url="https://job-boards.greenhouse.io/catapultsports/jobs/7960837",
+            ats_org="catapultsports",
+            via="ats_discovery",
+        )
+
+    with (
+        patch.object(
+            resolver,
+            "_fetch_guest_detail",
+            new=AsyncMock(
+                return_value=_guest(
+                    is_offsite=True,
+                    company_slug="catapultsports",
+                    posting_title="Senior Software Engineer (GO)",
+                )
+            ),
+        ),
+        patch.object(resolver, "discover_ats_posting", new=_discover),
+    ):
+        out = await resolver.resolve_job(job)
+    assert seen_roles == ["Senior Software Engineer (GO)"]
+    assert out.apply_url.endswith("/7960837")
+
+
 @pytest.mark.asyncio
 async def test_resolve_linkedin_easy_apply():
     job = _job()
-    with patch.object(resolver, "_linkedin_is_offsite", new=AsyncMock(return_value=False)):
+    with patch.object(
+        resolver, "_fetch_guest_detail", new=AsyncMock(return_value=_guest(is_offsite=False))
+    ):
         out = await resolver.resolve_job(job)
     assert out.kind == "easy_apply"
     assert out.apply_url == job.url
+    assert out.via == "linkedin_guest"
 
 
 @pytest.mark.asyncio
@@ -135,9 +185,12 @@ async def test_resolve_linkedin_offsite_discovers_ats():
         kind="ashby",
         apply_url="https://jobs.ashbyhq.com/perk/23477eaa",
         ats_org="perk",
+        via="ats_discovery",
     )
     with (
-        patch.object(resolver, "_linkedin_is_offsite", new=AsyncMock(return_value=True)),
+        patch.object(
+            resolver, "_fetch_guest_detail", new=AsyncMock(return_value=_guest(is_offsite=True))
+        ),
         patch.object(resolver, "discover_ats_posting", new=AsyncMock(return_value=discovered)),
     ):
         out = await resolver.resolve_job(job)
@@ -146,15 +199,126 @@ async def test_resolve_linkedin_offsite_discovers_ats():
 
 
 @pytest.mark.asyncio
+async def test_resolve_linkedin_guest_slug_wins_and_marks_provenance():
+    """The guest company slug feeds discovery and stamps an authoritative via."""
+    job = _job(company="Catapult")
+    discovered = resolver.ResolvedApply(
+        kind="greenhouse",
+        apply_url="https://job-boards.greenhouse.io/catapultsports/jobs/7960837",
+        ats_org="catapultsports",
+        via="ats_discovery",
+    )
+    with (
+        patch.object(
+            resolver,
+            "_fetch_guest_detail",
+            new=AsyncMock(return_value=_guest(is_offsite=True, company_slug="catapultsports")),
+        ),
+        patch.object(resolver, "discover_ats_posting", new=AsyncMock(return_value=discovered)),
+    ):
+        out = await resolver.resolve_job(job)
+    assert out.kind == "greenhouse"
+    assert out.ats_org == "catapultsports"
+    assert out.via == "linkedin_guest_slug"
+
+
+@pytest.mark.asyncio
 async def test_resolve_linkedin_offsite_unresolved_is_external():
     job = _job()
     with (
-        patch.object(resolver, "_linkedin_is_offsite", new=AsyncMock(return_value=True)),
+        patch.object(
+            resolver, "_fetch_guest_detail", new=AsyncMock(return_value=_guest(is_offsite=True))
+        ),
         patch.object(resolver, "discover_ats_posting", new=AsyncMock(return_value=None)),
     ):
+        # auth=None (default) → Tier B skipped, honest external.
         out = await resolver.resolve_job(job)
     assert out.kind == "external"
     assert out.apply_url is None
+    assert out.via == "unresolved"
+
+
+@pytest.mark.asyncio
+async def test_resolve_linkedin_ambiguous_discovery_prefers_auth():
+    """Two near-identical postings tie → defer to the authoritative auth path."""
+    from services import linkedin_resolver
+
+    job = _job(company="Catapult")
+    auth = linkedin_resolver.AuthContext(remaining=1)
+    ambiguous = resolver.ResolvedApply(
+        kind="greenhouse",
+        apply_url="https://job-boards.greenhouse.io/catapultsports/jobs/7979941",
+        ats_org="catapultsports",
+        via="ats_discovery",
+        ambiguous=True,
+    )
+    authed = resolver.ResolvedApply(
+        kind="greenhouse",
+        apply_url="https://job-boards.greenhouse.io/catapultsports/jobs/7960837",
+        ats_org="catapultsports",
+        via="linkedin_auth",
+    )
+    with (
+        patch.object(
+            resolver,
+            "_fetch_guest_detail",
+            new=AsyncMock(return_value=_guest(is_offsite=True, company_slug="catapultsports")),
+        ),
+        patch.object(resolver, "discover_ats_posting", new=AsyncMock(return_value=ambiguous)),
+        patch.object(linkedin_resolver, "resolve_via_auth", new=AsyncMock(return_value=authed)),
+    ):
+        out = await resolver.resolve_job(job, auth=auth)
+    assert out.via == "linkedin_auth"
+    assert out.apply_url.endswith("/7960837")
+
+
+@pytest.mark.asyncio
+async def test_resolve_linkedin_ambiguous_discovery_best_effort_without_auth():
+    """No auth → keep the ambiguous Tier-A guess (right company + board)."""
+    job = _job(company="Catapult")
+    ambiguous = resolver.ResolvedApply(
+        kind="greenhouse",
+        apply_url="https://job-boards.greenhouse.io/catapultsports/jobs/7979941",
+        ats_org="catapultsports",
+        via="ats_discovery",
+        ambiguous=True,
+    )
+    with (
+        patch.object(
+            resolver,
+            "_fetch_guest_detail",
+            new=AsyncMock(return_value=_guest(is_offsite=True, company_slug="catapultsports")),
+        ),
+        patch.object(resolver, "discover_ats_posting", new=AsyncMock(return_value=ambiguous)),
+    ):
+        out = await resolver.resolve_job(job, auth=None)
+    assert out.kind == "greenhouse"
+    assert out.via == "linkedin_guest_slug"  # slug still drove the discovery
+
+
+@pytest.mark.asyncio
+async def test_resolve_linkedin_auth_fallback_when_discovery_misses():
+    """Discovery misses → the authenticated resolver supplies the offsite URL."""
+    from services import linkedin_resolver
+
+    job = _job(company="Weirdco")
+    auth = linkedin_resolver.AuthContext(remaining=1)
+    authed = resolver.ResolvedApply(
+        kind="greenhouse",
+        apply_url="https://job-boards.greenhouse.io/weirdco/jobs/42",
+        ats_org="weirdco",
+        via="linkedin_auth",
+    )
+    with (
+        patch.object(
+            resolver, "_fetch_guest_detail", new=AsyncMock(return_value=_guest(is_offsite=True))
+        ),
+        patch.object(resolver, "discover_ats_posting", new=AsyncMock(return_value=None)),
+        patch.object(linkedin_resolver, "resolve_via_auth", new=AsyncMock(return_value=authed)),
+    ):
+        out = await resolver.resolve_job(job, auth=auth)
+    assert out.kind == "greenhouse"
+    assert out.via == "linkedin_auth"
 
 
 @pytest.mark.asyncio
@@ -190,13 +354,17 @@ def test_apply_resolution_promotes_board():
     resolver.apply_resolution(
         job,
         resolver.ResolvedApply(
-            kind="ashby", apply_url="https://jobs.ashbyhq.com/perk/x", ats_org="perk"
+            kind="ashby",
+            apply_url="https://jobs.ashbyhq.com/perk/x",
+            ats_org="perk",
+            via="linkedin_guest_slug",
         ),
     )
     assert job.board == ApplicationBoard.ASHBY
     assert job.apply_kind == "ashby"
     assert job.apply_url == "https://jobs.ashbyhq.com/perk/x"
     assert job.apply_resolved_at is not None
+    assert job.apply_resolved_via == "linkedin_guest_slug"
     assert job.raw_meta["ats_org"] == "perk"
 
 
@@ -274,6 +442,60 @@ async def test_discover_region_hint_breaks_city_tie():
 
 
 @pytest.mark.asyncio
+async def test_discover_extra_slug_tried_before_name_guess():
+    """The guest company slug ("catapultsports") resolves what the display
+    name ("Catapult" → "catapult") never could."""
+    hit = resolver._BoardPosting(
+        title="Senior Software Engineer (GO)",
+        url="https://job-boards.greenhouse.io/catapultsports/jobs/7960837",
+        location="Boston, MA",
+        kind="greenhouse",
+        org="catapultsports",
+    )
+
+    async def _gh(slug):
+        # The board only exists under the LinkedIn slug, not the name guess.
+        return [hit] if slug == "catapultsports" else []
+
+    with (
+        patch.object(resolver, "_greenhouse_postings", new=AsyncMock(side_effect=_gh)),
+        patch.object(resolver, "_lever_postings", new=AsyncMock(return_value=[])),
+        patch.object(resolver, "_ashby_postings", new=AsyncMock(return_value=[])),
+    ):
+        out = await resolver.discover_ats_posting(
+            company="Catapult",
+            role="Senior Software Engineer",
+            location="Boston",
+            extra_slugs=["catapultsports"],
+        )
+    assert out is not None
+    assert out.kind == "greenhouse"
+    assert out.ats_org == "catapultsports"
+    assert out.apply_url == "https://job-boards.greenhouse.io/catapultsports/jobs/7960837"
+    assert out.via == "ats_discovery"
+
+
+@pytest.mark.asyncio
+async def test_discover_sanitizes_bad_extra_slug():
+    """A malformed guest slug is dropped, not passed to the board API."""
+    seen: list[str] = []
+
+    async def _gh(slug):
+        seen.append(slug)
+        return []
+
+    with (
+        patch.object(resolver, "_greenhouse_postings", new=AsyncMock(side_effect=_gh)),
+        patch.object(resolver, "_lever_postings", new=AsyncMock(return_value=[])),
+        patch.object(resolver, "_ashby_postings", new=AsyncMock(return_value=[])),
+    ):
+        await resolver.discover_ats_posting(
+            company="Perk", role="x", extra_slugs=["evil.com/../v0"]
+        )
+    assert "evil.com/../v0" not in seen  # sanitized out
+
+
+@pytest.mark.asyncio
 async def test_discover_prefers_location_match():
     postings = [
         resolver._BoardPosting(
@@ -315,7 +537,13 @@ async def test_resolve_pending_stamps_and_counts():
     session.exec = AsyncMock(return_value=MagicMock(all=lambda: [job]))
 
     resolved = resolver.ResolvedApply(kind="ashby", apply_url="https://jobs.ashbyhq.com/perk/x")
-    with patch.object(resolver, "resolve_job", new=AsyncMock(return_value=resolved)):
+    with (
+        patch.object(resolver, "resolve_job", new=AsyncMock(return_value=resolved)),
+        patch(
+            "services.application_service.resync_draft_apply_target",
+            new=AsyncMock(return_value=0),
+        ),
+    ):
         n = await resolver.resolve_pending(session)
     assert n == 1
     assert job.apply_kind == "ashby"
@@ -342,6 +570,10 @@ async def test_resolve_pending_survives_per_job_failure():
     with (
         patch.object(resolver, "resolve_job", new=AsyncMock(side_effect=_resolve)),
         patch.object(resolver.asyncio, "sleep", new=AsyncMock()),
+        patch(
+            "services.application_service.resync_draft_apply_target",
+            new=AsyncMock(return_value=0),
+        ),
     ):
         n = await resolver.resolve_pending(session)
     assert n == 1

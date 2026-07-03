@@ -43,6 +43,9 @@ log = logging.getLogger(__name__)
 _FETCH_TIMEOUT = 12.0
 _MAX_REDIRECTS = 5
 _TITLE_MATCH_THRESHOLD = 0.72
+# Two postings scoring within this of the winner is a tie the title match can't
+# break — the caller should prefer an authoritative source over the guess.
+_AMBIGUITY_EPS = 0.02
 
 # UI labels double as the closed vocabulary for `Job.apply_kind`.
 APPLY_KIND_LABELS: dict[str, str] = {
@@ -91,7 +94,6 @@ _KIND_TO_BOARD: dict[str, ApplicationBoard] = {
     "company_site": ApplicationBoard.COMPANY_DIRECT,
 }
 
-_OFFSITE_MARKER = "apply-link-offsite"
 _LINKEDIN_DETAIL_BASE = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/"
 
 # Legal/noise suffixes stripped before slug candidates are built.
@@ -111,6 +113,14 @@ class ResolvedApply:
     description_html: str | None = None
     description_text: str | None = None
     posting_title: str | None = None
+    # Provenance — how we got here. Authoritative ("direct", "linkedin_guest_slug",
+    # "linkedin_auth", "board_trust") vs guessed ("ats_discovery") vs "unresolved".
+    via: str | None = None
+    # Discovery tie: >=2 postings scored within an epsilon of the winner, so the
+    # title match can't pick THE posting (e.g. two near-identical Boston SWE
+    # roles). Transient signal — the LinkedIn branch prefers the authoritative
+    # authenticated path over an ambiguous guess. Not persisted.
+    ambiguous: bool = False
 
 
 @dataclass
@@ -333,37 +343,64 @@ async def _ashby_postings(org: str) -> list[_BoardPosting]:
     return out
 
 
+def _sanitize_slug(value: str | None) -> str | None:
+    """Accept a slug only if it's a clean org token (guest HTML can be noisy)."""
+    if not value:
+        return None
+    slug = value.strip().lower()
+    return slug if re.fullmatch(r"[a-z0-9][a-z0-9-]{0,60}", slug) else None
+
+
+async def _fetch_slug_boards(slug: str) -> list[_BoardPosting]:
+    """First non-empty of the Greenhouse/Lever/Ashby boards for one slug."""
+    for fetcher in (_greenhouse_postings, _lever_postings, _ashby_postings):
+        try:
+            postings = await fetcher(slug)
+        except (httpx.HTTPError, OSError) as exc:
+            log.info("ATS discovery fetch failed for %s: %s", slug, exc)
+            postings = []
+        if postings:
+            return postings
+    return []
+
+
 async def discover_ats_posting(
     *,
     company: str,
     role: str,
     location: str | None = None,
+    extra_slugs: list[str] | None = None,
     _cache: dict[str, list[_BoardPosting]] | None = None,
 ) -> ResolvedApply | None:
     """Probe public Greenhouse/Lever/Ashby board APIs for this company+role.
 
-    Strict title matching (>= 0.72 similarity or containment) keeps us from
-    attaching the WRONG posting — no hit beats a guessed hit. `_cache` lets a
-    sweep reuse board fetches across same-company jobs.
+    `extra_slugs` (e.g. the LinkedIn company-page slug parsed from the guest
+    detail) are tried BEFORE the company-name guesses — they close the gap
+    where the display name ("Catapult") never derives the ATS slug
+    ("catapultsports"). Strict title matching (>= 0.72 similarity or
+    containment) keeps us from attaching the WRONG posting — no hit beats a
+    guessed hit. `_cache` reuses board fetches across a sweep, keyed by slug.
     """
+    candidates: list[str] = []
+    for raw in extra_slugs or []:
+        slug = _sanitize_slug(raw)
+        if slug and slug not in candidates:
+            candidates.append(slug)
+    for slug in slug_candidates(company):
+        if slug not in candidates:
+            candidates.append(slug)
+
     postings: list[_BoardPosting] = []
-    cache_key = (company or "").strip().lower()
-    if _cache is not None and cache_key in _cache:
-        postings = _cache[cache_key]
-    else:
-        for slug in slug_candidates(company):
-            for fetcher in (_greenhouse_postings, _lever_postings, _ashby_postings):
-                try:
-                    postings = await fetcher(slug)
-                except (httpx.HTTPError, OSError) as exc:
-                    log.info("ATS discovery fetch failed for %s: %s", slug, exc)
-                    postings = []
-                if postings:
-                    break
-            if postings:
-                break
-        if _cache is not None:
-            _cache[cache_key] = postings
+    for slug in candidates:
+        if _cache is not None and slug in _cache:
+            hit = _cache[slug]
+        else:
+            hit = await _fetch_slug_boards(slug)
+            if _cache is not None:
+                _cache[slug] = hit
+        if hit:
+            postings = hit
+            break
     if not postings:
         return None
 
@@ -375,6 +412,12 @@ async def discover_ats_posting(
     best_score, best = scored[0]
     if best_score < _TITLE_MATCH_THRESHOLD:
         return None
+    # Ambiguous when a runner-up ties the winner within epsilon — the title
+    # match landed on a near-duplicate (common when the scraper dropped a
+    # discriminator like "(GO)" from the role).
+    ambiguous = any(
+        p.url != best.url and score >= best_score - _AMBIGUITY_EPS for score, p in scored[1:]
+    )
     return ResolvedApply(
         kind=best.kind,
         apply_url=best.url,
@@ -382,52 +425,118 @@ async def discover_ats_posting(
         description_html=best.description_html,
         description_text=best.description_text,
         posting_title=best.title,
+        via="ats_discovery",
+        ambiguous=ambiguous,
     )
 
 
-async def _linkedin_is_offsite(job: Job) -> bool | None:
-    """True = external apply, False = native Easy Apply, None = can't tell."""
+async def _fetch_guest_detail(job: Job):
+    """Fetch + parse the LinkedIn guest job-detail page (offsite marker + slug + JD)."""
+    from services import linkedin_resolver
+
     detail_url = (job.raw_meta or {}).get("detail_endpoint") or (
         f"{_LINKEDIN_DETAIL_BASE}{job.external_id}"
     )
     try:
         resp = await _fetch(detail_url, accept="text/html")
     except (httpx.HTTPError, OSError) as exc:
-        log.info("linkedin offsite probe failed for job %s: %s", job.id, exc)
-        return None
+        log.info("linkedin guest fetch failed for job %s: %s", job.id, exc)
+        return linkedin_resolver.parse_guest_detail(None)
     if resp is None or resp.status_code != 200 or not resp.text:
-        return None
-    return _OFFSITE_MARKER in resp.text
+        return linkedin_resolver.parse_guest_detail(None)
+    return linkedin_resolver.parse_guest_detail(resp.text)
+
+
+async def _resolve_linkedin(
+    job: Job,
+    *,
+    _cache: dict[str, list[_BoardPosting]] | None,
+    auth,
+) -> ResolvedApply:
+    """Two-tier LinkedIn resolution: guest-slug discovery, then authenticated."""
+    from services import linkedin_resolver
+
+    guest = await _fetch_guest_detail(job)
+    if guest.is_offsite is False:
+        return ResolvedApply(
+            kind="easy_apply",
+            apply_url=job.url,
+            description_html=guest.description_html,
+            description_text=guest.description_text,
+            via="linkedin_guest",
+        )
+
+    # Tier A — the guest company slug is the real ATS org more often than not.
+    # Prefer the guest page's FULL title over the scraper's normalized role —
+    # the extra discriminator ("(GO)") is what disambiguates near-duplicate
+    # postings on the same board.
+    guest_slugs = [guest.company_slug] if guest.company_slug else []
+    role_for_match = guest.posting_title or job.role
+    discovered = await discover_ats_posting(
+        company=job.company,
+        role=role_for_match,
+        location=job.location,
+        extra_slugs=guest_slugs,
+        _cache=_cache,
+    )
+    if discovered is not None and discovered.ats_org and discovered.ats_org in guest_slugs:
+        discovered.via = "linkedin_guest_slug"
+
+    # A confident Tier-A hit wins immediately (cheap, no browser). But an
+    # AMBIGUOUS one — the title match couldn't pick THE posting among
+    # near-duplicates — defers to the authoritative authenticated path when
+    # available: "never a guess when the authenticated path is available".
+    confident = discovered is not None and not discovered.ambiguous
+    if confident:
+        return discovered
+
+    # Tier B — authenticated LinkedIn exposes the real offsite apply URL.
+    if auth is not None and guest.is_offsite is not False:
+        resolved = await linkedin_resolver.resolve_via_auth(job, auth)
+        if resolved is not None:
+            return resolved
+
+    # Auth unavailable / yielded nothing — fall back to the best-effort Tier-A
+    # guess (right company + board, possibly the wrong near-duplicate posting).
+    if discovered is not None:
+        return discovered
+
+    # Unresolvable-external: keep the honest kind, but carry the guest JD so
+    # thin descriptions still get enriched.
+    return ResolvedApply(
+        kind="external" if guest.is_offsite else "unknown",
+        apply_url=None,
+        description_html=guest.description_html,
+        description_text=guest.description_text,
+        via="unresolved",
+    )
 
 
 async def resolve_job(
     job: Job,
     *,
     _cache: dict[str, list[_BoardPosting]] | None = None,
+    auth=None,
 ) -> ResolvedApply:
-    """Resolve one job's real application target. Pure of session writes."""
+    """Resolve one job's real application target. Pure of session writes.
+
+    `auth` (a `linkedin_resolver.AuthContext`) enables the expensive
+    authenticated LinkedIn fallback; `None` (the default, e.g. email
+    inference) keeps resolution to the cheap guest + public-API tiers.
+    """
     # 1. The listing URL itself already lives on an ATS host (direct ATS
     #    scrapes, some MANUAL pastes, email receipts with posting links).
     direct = classify_apply_url(job.url)
     if direct is not None:
-        return ResolvedApply(kind=direct, apply_url=job.url)
+        return ResolvedApply(kind=direct, apply_url=job.url, via="direct")
 
     posting_url = (job.raw_meta or {}).get("posting_url")
     direct = classify_apply_url(posting_url)
     if direct is not None:
-        return ResolvedApply(kind=direct, apply_url=posting_url)
+        return ResolvedApply(kind=direct, apply_url=posting_url, via="direct")
 
     if job.source == JobSource.LINKEDIN:
-        offsite = await _linkedin_is_offsite(job)
-        if offsite is False:
-            return ResolvedApply(kind="easy_apply", apply_url=job.url)
-        discovered = await discover_ats_posting(
-            company=job.company, role=job.role, location=job.location, _cache=_cache
-        )
-        if discovered is not None:
-            return discovered
-        # Known-external but target unresolvable (LinkedIn gates the URL).
-        return ResolvedApply(kind="external" if offsite else "unknown", apply_url=None)
+        return await _resolve_linkedin(job, _cache=_cache, auth=auth)
 
     if job.source in (JobSource.INDEED, JobSource.EMAIL, JobSource.MANUAL):
         discovered = await discover_ats_posting(
@@ -435,7 +544,7 @@ async def resolve_job(
         )
         if discovered is not None:
             return discovered
-        return ResolvedApply(kind="unknown", apply_url=None)
+        return ResolvedApply(kind="unknown", apply_url=None, via="unresolved")
 
     # Direct ATS scrape whose URL didn't pattern-match (rare) — trust board.
     if job.board in (
@@ -444,8 +553,8 @@ async def resolve_job(
         ApplicationBoard.ASHBY,
         ApplicationBoard.WORKDAY,
     ):
-        return ResolvedApply(kind=job.board.value, apply_url=job.url)
-    return ResolvedApply(kind="unknown", apply_url=None)
+        return ResolvedApply(kind=job.board.value, apply_url=job.url, via="board_trust")
+    return ResolvedApply(kind="unknown", apply_url=None, via="unresolved")
 
 
 def apply_resolution(job: Job, resolved: ResolvedApply) -> None:
@@ -453,6 +562,7 @@ def apply_resolution(job: Job, resolved: ResolvedApply) -> None:
     job.apply_url = resolved.apply_url
     job.apply_kind = resolved.kind
     job.apply_resolved_at = datetime.now(UTC)
+    job.apply_resolved_via = resolved.via
     board = _KIND_TO_BOARD.get(resolved.kind)
     if board is not None and job.board != board:
         job.board = board
@@ -483,13 +593,23 @@ async def resolve_pending(
     if not jobs:
         return 0
 
+    # Authenticated LinkedIn fallback — only when a session is configured, and
+    # budgeted so one sweep never opens a long train of authenticated tabs.
+    from services import linkedin_resolver
+
+    auth = (
+        linkedin_resolver.AuthContext(remaining=3, jitter=jitter)
+        if (linkedin_resolver.auth_available())
+        else None
+    )
+
     cache: dict[str, list[_BoardPosting]] = {}
     definite = 0
     for i, job in enumerate(jobs):
         if i > 0:
             await asyncio.sleep(random.uniform(*jitter))
         try:
-            resolved = await resolve_job(job, _cache=cache)
+            resolved = await resolve_job(job, _cache=cache, auth=auth)
         except Exception as exc:  # noqa: BLE001 — sweep must not die on one job
             log.warning("apply-site resolution failed for job %s: %s", job.id, exc)
             continue
@@ -500,6 +620,11 @@ async def resolve_pending(
             from services import jd_enrichment
 
             jd_enrichment.maybe_apply_discovered_description(job, resolved)
+        # A DRAFT created before resolution snapshotted the aggregator board —
+        # re-point it at the resolved target so Submit dispatches correctly.
+        from services import application_service
+
+        await application_service.resync_draft_apply_target(session, job)
         session.add(job)
         await session.flush()
         if resolved.kind not in ("unknown", "external"):

@@ -86,6 +86,12 @@ class Job(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),
     )
+    # How the apply target was resolved — the redesign's honesty marker. A
+    # guessed result ("ats_discovery") and an authoritative one ("direct",
+    # "linkedin_guest_slug", "linkedin_auth") are now distinguishable at the
+    # row level. NULL until resolution runs; "unresolved" when it ran but the
+    # target stayed unknown/external. Closed vocabulary in apply_site_resolver.
+    apply_resolved_via: str | None = Field(default=None, max_length=32)
 
     company: str
     role: str
@@ -282,6 +288,7 @@ class JobRead(BaseModel):
     apply_url: str | None = None
     apply_kind: str | None = None
     apply_resolved_at: datetime | None = None
+    apply_resolved_via: str | None = None
     company: str
     role: str
     team: str | None

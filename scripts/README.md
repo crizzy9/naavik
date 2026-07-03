@@ -4,10 +4,18 @@ This directory is reserved for **project-wide user-runnable scripts** — build
 wrappers, deploy helpers, test orchestrators that the maintainer or end-users
 invoke directly. It is NOT for agent-system tooling.
 
-After `0.1.1` shipped (plan 25), this directory is empty except for this
-README. The agent-system tooling that previously lived here
-(`gh-project.sh`, `agent-memory.sh`, `roadmap_parser.py`) has been ported to
-native Python under `.claude/naavik_ops/`. Invoke through the dispatcher:
+After `0.1.1` shipped (plan 25), the agent-system tooling that previously lived
+here (`gh-project.sh`, `agent-memory.sh`, `roadmap_parser.py`) was ported to
+native Python under `.claude/naavik_ops/`.
+
+## Current maintainer scripts
+
+| Script | Purpose |
+|---|---|
+| `eval_generation.py` | Standalone generation-quality eval over generated applications. |
+| `linkedin_login.py` | Seed/refresh the LinkedIn session profile for the authenticated apply-target resolver (`docs/design/LINKEDIN_APPLY_RESOLUTION.md`). |
+
+Agent-system tooling is invoked through the dispatcher instead:
 
 ```bash
 .claude/naavik-ops gh next-unblocked

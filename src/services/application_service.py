@@ -355,6 +355,44 @@ async def get_or_create_draft(
     return draft
 
 
+async def resync_draft_apply_target(session: AsyncSession, job: Job) -> int:
+    """Re-point a job's DRAFT applications at its freshly resolved apply target.
+
+    `get_or_create_draft` snapshots `board` + `external_url` from the Job at
+    creation. Apply-site resolution can promote `job.board` (LinkedIn →
+    Greenhouse) and set `job.apply_url` AFTER a draft exists — without this,
+    the draft keeps the aggregator board and Submit refuses ("auth required")
+    even though the real target is now known. Only DRAFT rows are touched; a
+    submitted application is history and must never be rewritten. Returns the
+    number of applications updated (caller flushes/commits).
+    """
+    stmt = select(Application).where(
+        Application.job_id == job.id,
+        Application.status == ApplicationStatus.DRAFT,
+        Application.deleted_at.is_(None),
+    )
+    apps = (await session.exec(stmt)).all()
+    target_url = job.apply_url or job.url
+    changed = 0
+    for app in apps:
+        if app.board != job.board or app.external_url != target_url:
+            app.board = job.board
+            app.external_url = target_url
+            # A submit failure recorded against the OLD target ("auth required"
+            # on the aggregator board) is stale once we re-point — drop it so
+            # the review UI doesn't show a contradictory banner. New dict so
+            # SQLAlchemy flags the JSON column dirty.
+            artifacts = app.submission_artifacts
+            if isinstance(artifacts, dict) and "last_failure" in artifacts:
+                app.submission_artifacts = {
+                    k: v for k, v in artifacts.items() if k != "last_failure"
+                } or None
+            app.updated_at = datetime.now(UTC)
+            session.add(app)
+            changed += 1
+    return changed
+
+
 async def queue_auto_apply(
     session: AsyncSession,
     *,

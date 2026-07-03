@@ -29,6 +29,7 @@ from services.application_service import (
     discard_draft,
     get_or_create_draft,
     process_auto_apply_queue,
+    resync_draft_apply_target,
     submit_draft,
     update_status,
     validate_submittable,
@@ -273,6 +274,57 @@ async def test_get_or_create_draft_integrity_error_without_live_row_reraises():
     session.flush_raises = [_integrity_error()]
     with pytest.raises(IntegrityError):
         await get_or_create_draft(session, user_id=1, job_id=100, settings=settings)
+
+
+# ── resync_draft_apply_target ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_resync_draft_repoints_stale_board():
+    """A LinkedIn draft created before resolution follows the promoted board."""
+    from models import ApplicationBoard, ApplicationStatus
+
+    job = _make_job(
+        board=ApplicationBoard.GREENHOUSE,
+        apply_url="https://job-boards.greenhouse.io/catapultsports/jobs/7960837",
+        url="https://www.linkedin.com/jobs/view/4422894549",
+    )
+    app = _make_app(
+        board=ApplicationBoard.LINKEDIN,
+        external_url="https://www.linkedin.com/jobs/view/4422894549",
+        status=ApplicationStatus.DRAFT,
+        submission_artifacts={"last_failure": {"kind": "auth_required"}, "keep": 1},
+    )
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([app])]
+    changed = await resync_draft_apply_target(session, job)
+    assert changed == 1
+    assert app.board == ApplicationBoard.GREENHOUSE
+    assert app.external_url == "https://job-boards.greenhouse.io/catapultsports/jobs/7960837"
+    # The stale aggregator-board failure banner is cleared; other keys survive.
+    assert app.submission_artifacts == {"keep": 1}
+    assert app in session.added
+
+
+@pytest.mark.asyncio
+async def test_resync_draft_noop_when_already_synced():
+    from models import ApplicationBoard, ApplicationStatus
+
+    job = _make_job(
+        board=ApplicationBoard.GREENHOUSE,
+        apply_url="https://job-boards.greenhouse.io/stripe/jobs/123456",
+        url="https://boards.greenhouse.io/stripe/jobs/123456",
+    )
+    app = _make_app(
+        board=ApplicationBoard.GREENHOUSE,
+        external_url="https://job-boards.greenhouse.io/stripe/jobs/123456",
+        status=ApplicationStatus.DRAFT,
+    )
+    session = _FakeSession()
+    session.exec_queue = [_exec_all([app])]
+    changed = await resync_draft_apply_target(session, job)
+    assert changed == 0
+    assert app not in session.added
 
 
 # ── validate_submittable ────────────────────────────────────────────
