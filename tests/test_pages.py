@@ -85,7 +85,13 @@ _PAGES = [
         "/discover/113",
         # 2026-07 round 2: WHAT THEY WANT restored as the JD-requirements
         # column beside the judge's strengths/gaps verdict.
-        ["Tailored resume", "Cover letter", "Submit application", "YOUR STRENGTHS", "WHAT THEY WANT"],
+        [
+            "Tailored resume",
+            "Cover letter",
+            "Submit application",
+            "YOUR STRENGTHS",
+            "WHAT THEY WANT",
+        ],
         ["/generate/cover-letter", "/generate/resume"],
     ),
     (

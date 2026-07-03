@@ -205,9 +205,7 @@ async def create_manual_job(
 # ── Scraper-pipeline upsert ──────────────────────────────────────────────
 
 
-async def list_external_ids(
-    session: AsyncSession, *, user_id: int, source: JobSource
-) -> set[str]:
+async def list_external_ids(session: AsyncSession, *, user_id: int, source: JobSource) -> set[str]:
     """All external_ids this user already has for `source` (incl. soft-deleted
     — a job the operator deleted must not resurrect on the next scrape)."""
     rows = (
