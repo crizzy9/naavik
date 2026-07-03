@@ -242,12 +242,16 @@ async def score_pending() -> None:
     `Settings.semantic_match_enabled = True`. Idempotent: a job that's
     already scored has `Job.score != 0.0` so the next run skips it.
     """
-    from services.scorer.orchestrator import score_unscored_jobs
+    from services.scorer.orchestrator import heal_judge_skipped_jobs, score_unscored_jobs
 
     async with async_session() as session:
         n = await score_unscored_jobs(session)
         await session.commit()
-    log.info("score_pending scored=%d", n)
+    # Separate session/commit: a heal failure must not roll back fresh scores.
+    async with async_session() as session:
+        healed = await heal_judge_skipped_jobs(session)
+        await session.commit()
+    log.info("score_pending scored=%d healed=%d", n, healed)
 
 
 async def score_recompute_stale() -> None:

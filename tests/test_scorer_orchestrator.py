@@ -286,6 +286,10 @@ async def test_orchestrator_happy_path_persists_llm_score():
             "_llm_judge_score",
             new=AsyncMock(return_value=(judge, None)),
         ),
+        patch(
+            "llm.get_provider",
+            return_value=SimpleNamespace(provider_id="anthropic", model_name="claude-sonnet-4-6"),
+        ),
     ):
         out = await orchestrator.score_job_layered(
             session,
@@ -299,6 +303,52 @@ async def test_orchestrator_happy_path_persists_llm_score():
     assert job.match_breakdown["judge_skipped"] is False
     assert job.match_breakdown["layer_4_provider"] == "anthropic"
     assert job.match_breakdown["per_dimension"]["ai-ml"] == 0.95
+
+
+@pytest.mark.asyncio
+async def test_layer4_stamp_follows_resolved_provider_not_saved_pref():
+    """Pref says anthropic but the factory resolves OpenAI → stamp the truth.
+
+    Regression: jobs scored 2026-07-02 carried layer_4_provider="anthropic"
+    + layer_4_model="gpt-5.4-mini" while ApiUsage showed the call actually
+    went to OPENAI/gpt-4o.
+    """
+    profile = _profile_stub()
+    job = _job_stub(tags=["ai-ml", "platform"])
+    settings = _settings_stub()  # llm_provider="anthropic"
+
+    profile_emb = SimpleNamespace(embedding=[0.1] * 768, user_id=1)
+    judge = JobScore(score=0.8, explanation="Fit")
+    session = _mock_session(
+        [
+            MagicMock(all=lambda: [["ai-ml", "platform"]]),
+            MagicMock(one_or_none=lambda: profile_emb),
+            MagicMock(all=lambda: []),
+        ]
+    )
+
+    with (
+        patch.object(orchestrator, "_semantic_score", new=AsyncMock(return_value=0.9)),
+        patch.object(orchestrator, "cost_cap_exhausted", new=AsyncMock(return_value=False)),
+        patch.object(
+            orchestrator,
+            "_llm_judge_score",
+            new=AsyncMock(return_value=(judge, None)),
+        ),
+        patch(
+            "llm.get_provider",
+            return_value=SimpleNamespace(provider_id="openai", model_name="gpt-5.4-mini"),
+        ),
+    ):
+        await orchestrator.score_job_layered(
+            session,
+            user_id=1,
+            job=job,
+            profile=profile,
+            settings=settings,
+        )
+    assert job.match_breakdown["layer_4_provider"] == "openai"
+    assert job.match_breakdown["layer_4_model"] == "gpt-5.4-mini"
 
 
 # ── Persistence schema (T7) ──────────────────────────────────────────
@@ -541,6 +591,123 @@ def test_lazy_orchestrator_re_export():
     from services.scorer import score_job_layered
 
     assert callable(score_job_layered)
+
+
+# ── heal_judge_skipped_jobs sweep (2026-07 outage follow-up) ─────────
+
+
+def _skipped_job(reason: str = "llm_failed", retries: int | None = None):
+    job = _job_stub()
+    breakdown = {
+        "scored_at": "2026-07-02T21:39:52+00:00",
+        "judge_skipped": True,
+        "judge_skipped_reason": reason,
+        "strengths": [],
+        "gaps": [],
+    }
+    if retries is not None:
+        breakdown["judge_retry_count"] = retries
+    job.match_breakdown = breakdown
+    return job
+
+
+def _heal_session(jobs: list):
+    """Session mock for the heal sweep: Settings → Profile → jobs query."""
+    settings_row = SimpleNamespace(
+        user_id=1,
+        daily_llm_cost_cap_usd=None,
+        llm_provider="openai",
+        llm_model="gpt-5.4-mini",
+        score_per_dim_weights={},
+    )
+    return _mock_session(
+        [
+            MagicMock(all=lambda: [settings_row]),
+            MagicMock(one_or_none=lambda: _profile_stub()),
+            MagicMock(all=lambda: jobs),
+        ]
+    )
+
+
+@pytest.mark.asyncio
+async def test_heal_skips_user_when_no_provider():
+    from llm import LLMProviderError
+
+    session = _heal_session([_skipped_job()])
+    rescore = AsyncMock()
+    with (
+        patch("llm.get_provider", side_effect=LLMProviderError("none")),
+        patch.object(orchestrator, "score_job_layered", new=rescore),
+    ):
+        healed = await orchestrator.heal_judge_skipped_jobs(session)
+    assert healed == 0
+    rescore.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_heal_skips_user_when_cost_capped():
+    session = _heal_session([_skipped_job()])
+    rescore = AsyncMock()
+    with (
+        patch("llm.get_provider", return_value=SimpleNamespace(provider_id="openai")),
+        patch.object(orchestrator, "cost_cap_exhausted", new=AsyncMock(return_value=True)),
+        patch.object(orchestrator, "score_job_layered", new=rescore),
+    ):
+        healed = await orchestrator.heal_judge_skipped_jobs(session)
+    assert healed == 0
+    rescore.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_heal_counts_successful_judge_rescore():
+    job = _skipped_job()
+    session = _heal_session([job])
+
+    async def _rescore_ok(_session, *, user_id, job, profile, settings):
+        job.match_breakdown = {
+            "scored_at": "2026-07-03T00:00:00+00:00",
+            "judge_skipped": False,
+            "judge_skipped_reason": None,
+            "strengths": ["Strong backend"],
+            "gaps": ["k8s"],
+        }
+
+    with (
+        patch("llm.get_provider", return_value=SimpleNamespace(provider_id="openai")),
+        patch.object(orchestrator, "cost_cap_exhausted", new=AsyncMock(return_value=False)),
+        patch.object(orchestrator, "score_job_layered", new=AsyncMock(side_effect=_rescore_ok)),
+    ):
+        healed = await orchestrator.heal_judge_skipped_jobs(session)
+    assert healed == 1
+    assert "judge_retry_count" not in job.match_breakdown
+
+
+@pytest.mark.asyncio
+async def test_heal_increments_retry_count_when_still_failing():
+    job = _skipped_job(retries=1)
+    session = _heal_session([job])
+
+    async def _rescore_still_broken(_session, *, user_id, job, profile, settings):
+        job.match_breakdown = {
+            "scored_at": "2026-07-03T00:00:00+00:00",
+            "judge_skipped": True,
+            "judge_skipped_reason": "llm_failed",
+            "strengths": [],
+            "gaps": [],
+        }
+
+    with (
+        patch("llm.get_provider", return_value=SimpleNamespace(provider_id="openai")),
+        patch.object(orchestrator, "cost_cap_exhausted", new=AsyncMock(return_value=False)),
+        patch.object(
+            orchestrator,
+            "score_job_layered",
+            new=AsyncMock(side_effect=_rescore_still_broken),
+        ),
+    ):
+        healed = await orchestrator.heal_judge_skipped_jobs(session)
+    assert healed == 0
+    assert job.match_breakdown["judge_retry_count"] == 2
 
 
 # unused-import placeholders

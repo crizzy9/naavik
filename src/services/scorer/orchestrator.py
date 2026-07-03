@@ -59,6 +59,32 @@ log = logging.getLogger(__name__)
 
 _SCHEMA_VERSION = 1
 
+# Judge fallbacks that a later sweep can heal — transient (llm_failed) or
+# deterministic-but-unblockable (cap resets daily; a provider can appear).
+# `below_llm_gate` / `below_tag_floor` / `visa_zeroed` are final verdicts.
+_HEALABLE_SKIP_REASONS = ("llm_failed", "cost_cap_exhausted", "no_provider")
+_MAX_JUDGE_RETRIES = 3
+
+
+def _resolved_judge_identity(settings: Settings) -> tuple[str | None, str | None]:
+    """(provider_id, model_name) of the provider the judge ACTUALLY used.
+
+    The old stamp copied `settings.llm_provider` / `settings.llm_model` —
+    the operator's saved intent — which lied whenever the factory fell back
+    to another provider (e.g. pref=anthropic with only OPENAI_API_KEY in
+    env). The factory is a pure function of settings + env, so re-resolving
+    here matches what `_llm_judge_score` resolved internally.
+    """
+    from llm import LLMProviderError, get_provider
+
+    try:
+        provider = get_provider(settings)
+    except LLMProviderError:
+        return None, None
+    if provider is None:
+        return None, None
+    return provider.provider_id, provider.model_name
+
 
 def _build_breakdown(
     *,
@@ -422,6 +448,8 @@ async def score_job_layered(
     # Belt-and-suspenders visa filter even after LLM (LLM may miss).
     final_score = apply_visa_filter(judge_result, profile, job)
 
+    judge_provider_id, judge_model_name = _resolved_judge_identity(settings)
+
     # source_trust_weight already applied to composite; multiply LLM score too.
     weighted_value = max(0.0, min(1.0, final_score.score * source_trust_weight))
     final_score = final_score.model_copy(update={"score": weighted_value})
@@ -438,12 +466,8 @@ async def score_job_layered(
         layers_run=layers_run + ["llm_judge"],
         judge_skipped=False,
         judge_skipped_reason=None,
-        layer_4_provider=(
-            settings.llm_provider.value
-            if hasattr(settings.llm_provider, "value")
-            else str(settings.llm_provider)
-        ),
-        layer_4_model=settings.llm_model,
+        layer_4_provider=judge_provider_id,
+        layer_4_model=judge_model_name,
         tag_score=tag_score,
         semantic_score=semantic,
         composite_pre_llm=composite,
@@ -517,6 +541,95 @@ async def score_unscored_jobs(
                     settings_row.user_id,
                     exc,
                 )
+    return total
+
+
+async def heal_judge_skipped_jobs(
+    session: AsyncSession,
+    *,
+    batch_size: int = _BATCH_SIZE,
+) -> int:
+    """Re-score jobs whose LLM judge never ran for a healable reason.
+
+    A judge fallback (`llm_failed` / `cost_cap_exhausted` / `no_provider`)
+    stamps `scored_at`, so `score_unscored_jobs` never revisits it — the
+    2026-07-02 batch scored during the `max_tokens` outage kept composite
+    scores and EMPTY strengths/gaps forever. This sweep (called by the same
+    15-min cron) retries them:
+
+    - Per user, probe once: provider resolvable AND cost cap open —
+      otherwise skip the user entirely WITHOUT burning retry budget
+      (deterministic blocks aren't failures).
+    - Each job gets `_MAX_JUDGE_RETRIES` attempts; a still-failing rescore
+      increments `match_breakdown.judge_retry_count` so the sweep converges.
+      A successful judge writes a fresh breakdown (no retry key) — healed.
+    """
+    from sqlalchemy import Integer, cast, func
+
+    from llm import LLMProviderError, get_provider
+
+    users = (await session.exec(select(Settings))).all()
+
+    total = 0
+    for settings_row in users:
+        profile = (
+            await session.exec(select(Profile).where(Profile.user_id == settings_row.user_id))
+        ).one_or_none()
+        if profile is None:
+            continue
+
+        try:
+            if get_provider(settings_row) is None:
+                continue
+        except LLMProviderError:
+            continue
+        if await cost_cap_exhausted(session, user_id=settings_row.user_id, settings=settings_row):
+            continue
+
+        retry_count = func.coalesce(
+            cast(Job.match_breakdown.op("->>")("judge_retry_count"), Integer), 0
+        )
+        jobs_stmt = (
+            select(Job)
+            .where(
+                Job.user_id == settings_row.user_id,
+                Job.deleted_at.is_(None),
+                Job.match_breakdown.op("->>")("judge_skipped_reason").in_(_HEALABLE_SKIP_REASONS),
+                retry_count < _MAX_JUDGE_RETRIES,
+            )
+            .limit(batch_size)
+        )
+        jobs = (await session.exec(jobs_stmt)).all()
+        for job in jobs:
+            prior_retries = int((job.match_breakdown or {}).get("judge_retry_count") or 0)
+            try:
+                await score_job_layered(
+                    session,
+                    user_id=settings_row.user_id,
+                    job=job,
+                    profile=profile,
+                    settings=settings_row,
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "heal_judge_skipped_jobs error rescoring job %s for user %s: %s",
+                    job.id,
+                    settings_row.user_id,
+                    exc,
+                )
+                continue
+            new_reason = (job.match_breakdown or {}).get("judge_skipped_reason")
+            if new_reason in _HEALABLE_SKIP_REASONS:
+                # Still blocked — burn one retry so the sweep converges.
+                # Reassign (don't mutate) so SQLAlchemy sees the JSONB change.
+                job.match_breakdown = {
+                    **job.match_breakdown,
+                    "judge_retry_count": prior_retries + 1,
+                }
+                session.add(job)
+                await session.flush()
+            else:
+                total += 1
     return total
 
 
