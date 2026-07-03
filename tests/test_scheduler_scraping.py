@@ -782,3 +782,42 @@ async def test_scrape_source_only_user_id_scopes_run(monkeypatch):
 
     await scraping._scrape_source(JobSource.LINKEDIN, only_user_id=2)
     assert calls == [2]
+
+
+# ── 2026-07 volume rework: rotation + cron budget ───────────────────────
+
+
+def test_compose_queries_rotates_title_window(monkeypatch):
+    """With >3 titles, the window slides by the rotation offset instead of
+    pinning to the first three forever."""
+    s = _make_settings(linkedin_keywords=[])
+    profile = _make_profile(target_titles=[f"Title {i}" for i in range(5)])
+    monkeypatch.setattr(scraping, "_rotation_offset", lambda n, **kw: 3 % n)
+    queries = scraping._compose_queries(JobSource.LINKEDIN, s, profile)
+    assert [q.keywords[0] for q in queries] == ["Title 3", "Title 4", "Title 0"]
+
+
+def test_compose_queries_rotates_target_cities(monkeypatch):
+    """Multiple target cities take turns as the query location."""
+    s = _make_settings(linkedin_keywords=[])
+    profile = _make_profile(
+        target_titles=["SWE"],
+        target_cities=["Boston, MA", "Austin, TX", "Seattle, WA"],
+    )
+    monkeypatch.setattr(scraping, "_rotation_offset", lambda n, **kw: 1 % n)
+    (q,) = scraping._compose_queries(JobSource.LINKEDIN, s, profile)
+    assert q.location == "Austin, TX"
+
+
+def test_compose_queries_cron_listing_budget():
+    """Cron-derived queries carry the moderate per-title listing budget."""
+    s = _make_settings(linkedin_keywords=[])
+    profile = _make_profile(target_titles=["SWE"], target_cities=["Boston, MA"])
+    (q,) = scraping._compose_queries(JobSource.LINKEDIN, s, profile)
+    assert q.max_listings == scraping._CRON_MAX_LISTINGS_PER_QUERY
+
+
+def test_rotation_offset_is_modular():
+    assert scraping._rotation_offset(1) == 0
+    for n in (2, 3, 7):
+        assert 0 <= scraping._rotation_offset(n) < n

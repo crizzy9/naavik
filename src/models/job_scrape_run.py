@@ -59,6 +59,9 @@ class JobScrapeRun(SQLModel, table=True):
     listings_returned: int = Field(default=0)
     new_jobs: int = Field(default=0)
     updated_jobs: int = Field(default=0)
+    # Listings recognized from the library BEFORE the detail fetch — the
+    # known-ID skip's receipt (2026-07 volume rework).
+    duplicates_skipped: int = Field(default=0)
 
     # Bounded by anti-detection budget; typical 0-5 entries per run.
     # Plain strings (not JSONB) — operator-grep-able in logs / admin views.

@@ -134,3 +134,38 @@ async def test_indeed_provider_none_short_circuits_extraction():
         )
     ]
     assert "services.job_extractor" not in sys.modules
+
+
+# ── 2026-07 volume rework: pagination + known-ID skip ───────────────────
+
+
+@pytest.mark.asyncio
+async def test_indeed_known_ids_skip_detail_fetch():
+    client = FakeClient(
+        responses={
+            "https://www.indeed.com/jobs": load_fixture("indeed_listing.html"),
+            "https://www.indeed.com/viewjob": load_fixture("indeed_detail.html"),
+        }
+    )
+    scraper = IndeedScraper(client=client)  # type: ignore[arg-type]
+    scraper.set_known_external_ids({"abc123def456"})
+    jobs = [j async for j in scraper.scrape(ScrapeQuery(keywords=["swe"], location="Boston"))]
+    assert all(j.external_id != "abc123def456" for j in jobs)
+    assert scraper._skipped_known == 1
+    assert not any("jk=abc123def456" in u for u in client.fetch_calls)
+
+
+@pytest.mark.asyncio
+async def test_indeed_pagination_stops_when_serp_repeats():
+    """Same cards on every page → exactly one extra page fetch, no dupes."""
+    client = FakeClient(
+        responses={
+            "https://www.indeed.com/jobs": load_fixture("indeed_listing.html"),
+            "https://www.indeed.com/viewjob": load_fixture("indeed_detail.html"),
+        }
+    )
+    scraper = IndeedScraper(client=client)  # type: ignore[arg-type]
+    jobs = [j async for j in scraper.scrape(ScrapeQuery(keywords=["swe"], location="Boston"))]
+    ids = [j.external_id for j in jobs]
+    assert len(ids) == len(set(ids))  # no duplicate yields across pages
+    assert any("start=10" in u for u in client.fetch_calls)  # page 2 probed

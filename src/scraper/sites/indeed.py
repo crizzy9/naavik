@@ -51,64 +51,81 @@ class IndeedScraper(_BaseSiteScraper):
     _LIST_BASE = "https://www.indeed.com/jobs"
     _DETAIL_BASE = "https://www.indeed.com/viewjob"
 
+    # SERP pages carry ~15 cards; step by 10 (Indeed's own paging unit).
+    _PAGE_STEP = 10
+    _MAX_PAGES = 8
+
     async def scrape(self, query: ScrapeQuery) -> AsyncIterator[RawJob]:
-        list_url = self._compose_listing_url(query)
-        safe, reason = is_safe_destination(list_url)
-        if not safe:
-            self._errors.append(
-                f"stage=list url={safe_url(list_url)} kind=url_guard_blocked msg={reason}"
-            )
-            return
-
-        try:
-            listing_html = await self._client.fetch_html(list_url)
-        except Exception as exc:  # noqa: BLE001 — tier-1
-            self._errors.append(
-                f"stage=list url={safe_url(list_url)} kind=list_fetch_failure msg={safe_exc(exc)}"
-            )
-            return
-        if not listing_html:
-            return
-
-        cards = self._parse_listing_cards(listing_html)
         yielded = 0
-        for card in cards:
+        seen_this_run: set[str] = set()
+
+        for page in range(self._MAX_PAGES):
             if yielded >= query.max_listings:
                 return
-            jk = card.get("jk")
-            if not jk:
-                continue
-            detail_url = f"{self._DETAIL_BASE}?jk={jk}"
-            safe_d, reason_d = is_safe_destination(detail_url)
-            if not safe_d:
+            list_url = self._compose_listing_url(query, start=page * self._PAGE_STEP)
+            safe, reason = is_safe_destination(list_url)
+            if not safe:
                 self._errors.append(
-                    f"stage=detail url={safe_url(detail_url)} kind=url_guard_blocked msg={reason_d}"
+                    f"stage=list url={safe_url(list_url)} kind=url_guard_blocked msg={reason}"
                 )
-                continue
-            try:
-                detail_html = await self._client.fetch_html(detail_url)
-            except Exception as exc:  # noqa: BLE001 — per-listing tolerance
-                self._errors.append(
-                    f"stage=detail url={safe_url(detail_url)} "
-                    f"kind=detail_fetch_failure msg={safe_exc(exc)}"
-                )
-                continue
-            raw_job = self._build_raw_job(
-                jk=jk, detail_url=detail_url, card=card, detail_html=detail_html
-            )
-            if raw_job is None:
-                continue
-            enriched = await self._maybe_enrich(raw_job)
-            yielded += 1
-            yield enriched
+                return
 
-    def _compose_listing_url(self, query: ScrapeQuery) -> str:
+            try:
+                listing_html = await self._client.fetch_html(list_url)
+            except Exception as exc:  # noqa: BLE001 — tier-1
+                self._errors.append(
+                    f"stage=list url={safe_url(list_url)} "
+                    f"kind=list_fetch_failure msg={safe_exc(exc)}"
+                )
+                return
+            if not listing_html:
+                return
+
+            cards = self._parse_listing_cards(listing_html)
+            fresh_cards = [c for c in cards if c.get("jk") and c["jk"] not in seen_this_run]
+            if not fresh_cards:
+                return  # SERP repeats itself past the end — exhausted
+            for card in fresh_cards:
+                if yielded >= query.max_listings:
+                    return
+                jk = card["jk"]
+                seen_this_run.add(jk)
+                # Already in the library → don't spend a detail request.
+                if self._skip_known(jk):
+                    continue
+                detail_url = f"{self._DETAIL_BASE}?jk={jk}"
+                safe_d, reason_d = is_safe_destination(detail_url)
+                if not safe_d:
+                    self._errors.append(
+                        f"stage=detail url={safe_url(detail_url)} "
+                        f"kind=url_guard_blocked msg={reason_d}"
+                    )
+                    continue
+                try:
+                    detail_html = await self._client.fetch_html(detail_url)
+                except Exception as exc:  # noqa: BLE001 — per-listing tolerance
+                    self._errors.append(
+                        f"stage=detail url={safe_url(detail_url)} "
+                        f"kind=detail_fetch_failure msg={safe_exc(exc)}"
+                    )
+                    continue
+                raw_job = self._build_raw_job(
+                    jk=jk, detail_url=detail_url, card=card, detail_html=detail_html
+                )
+                if raw_job is None:
+                    continue
+                enriched = await self._maybe_enrich(raw_job)
+                yielded += 1
+                yield enriched
+
+    def _compose_listing_url(self, query: ScrapeQuery, *, start: int = 0) -> str:
         # Plan 43 (`0.2.0.07a`): `q` + `l` are `quote_plus`'d query params;
         # `jk` is vendor-extracted from card HTML. No operator-controlled slug
         # substitution in URL templates — slug validation does not apply here.
         kw = " ".join(query.keywords) if query.keywords else ""
         loc = query.location or ""
-        return f"{self._LIST_BASE}?q={quote_plus(kw)}&l={quote_plus(loc)}"
+        base = f"{self._LIST_BASE}?q={quote_plus(kw)}&l={quote_plus(loc)}"
+        return f"{base}&start={start}" if start else base
 
     @staticmethod
     def _parse_listing_cards(html: str) -> list[dict[str, str | None]]:

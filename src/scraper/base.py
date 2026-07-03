@@ -85,6 +85,24 @@ class ScraperBase(ABC):
         # Per-listing error buffer; service layer aggregates into
         # `JobScrapeRun.errors[]` after the run completes.
         self._errors: list[str] = []
+        # Known-ID skip set (2026-07 volume rework): the service layer seeds
+        # this with the user's existing external_ids so aggregator scrapers
+        # skip the EXPENSIVE per-listing detail fetch for jobs already in the
+        # library. `_skipped_known` feeds JobScrapeRun.duplicates_skipped.
+        self._known_ids: set[str] = set()
+        self._skipped_known: int = 0
+
+    def set_known_external_ids(self, ids: set[str]) -> None:
+        """Seed the dedup set before `scrape()` — service-layer contract."""
+        self._known_ids = set(ids)
+        self._skipped_known = 0
+
+    def _skip_known(self, external_id: str | None) -> bool:
+        """True (and count it) when this listing is already in the library."""
+        if external_id and external_id in self._known_ids:
+            self._skipped_known += 1
+            return True
+        return False
 
     @property
     def name(self) -> str:

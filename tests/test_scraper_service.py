@@ -120,6 +120,9 @@ def _setup_session_for_sample(scraper: SampleScraper, *, all_new: bool = True) -
     after each tier-1 None to keep the candidate filter benign.
     """
     session = _FakeSession()
+    # run_scraper's known-ID dedup seed (2026-07) issues one exec BEFORE the
+    # upsert stream — queue its empty result first so the rest stay aligned.
+    session.exec_queue.append(_exec_all_empty())
     n_yields = 3
     if all_new:
         for _ in range(n_yields):
@@ -395,6 +398,8 @@ async def test_run_scraper_skips_notify_when_no_new_jobs():
     """All upserts hit existing rows → new_jobs == 0 → no notify."""
     scraper = SampleScraper(client=_client_no_sleep())
     session = _FakeSession()
+    # Known-ID dedup seed exec first (2026-07), then the upsert stream.
+    session.exec_queue.append(_exec_all_empty())
     # 3 yields, each existence check returns an existing Job row → updated.
     for i in range(3):
         existing = SimpleNamespace(

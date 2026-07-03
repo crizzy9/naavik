@@ -56,81 +56,102 @@ class LinkedInScraper(_BaseSiteScraper):
 
     source = JobSource.LINKEDIN
     board = ApplicationBoard.LINKEDIN
-    # 0.4 req/min = effective <=24/hr per research § 5. Plan 38 § D.8
-    # promoted `rate_limit_per_minute` from `int` to `float`, so 0.4 no
-    # longer floors to 1.
-    rate_limit_per_minute = 0.4
+    # 2026-07 volume rework: 2.0 req/min (1 request per ~30s + jitter) —
+    # up from the launch-era 0.4. Still far politer than typical guest-API
+    # scrapers; combined with the known-ID skip (no detail fetch for jobs
+    # already in the library) steady-state runs spend most of their budget
+    # on genuinely NEW postings. Operator overrides via
+    # `Settings.scraper_rate_limits` still win.
+    rate_limit_per_minute = 2.0
     random_delay_seconds = (3.0, 7.0)
 
     _LIST_BASE = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
     _DETAIL_BASE = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/"
     _FALLBACK_VIEW_BASE = "https://www.linkedin.com/jobs/view/"
 
+    # Guest search pages carry 25 cards; LinkedIn stops serving past ~1000.
+    _PAGE_SIZE = 25
+    _MAX_PAGES = 10
+
     async def scrape(self, query: ScrapeQuery) -> AsyncIterator[RawJob]:
-        list_url = self._compose_listing_url(query)
-        safe, reason = is_safe_destination(list_url)
-        if not safe:
-            self._errors.append(
-                f"stage=list url={safe_url(list_url)} kind=url_guard_blocked msg={reason}"
-            )
-            return
-
-        listing_html: str | None = None
-        try:
-            listing_html = await self._client.fetch_html(list_url)
-        except Exception as exc:  # noqa: BLE001 — tier-1
-            self._errors.append(
-                f"stage=list url={safe_url(list_url)} kind=list_fetch_failure msg={safe_exc(exc)}"
-            )
-
-        cards = self._parse_listing_cards(listing_html) if listing_html else []
-
-        # RSShub fallback when nothing returned + operator configured a base URL.
-        if not cards and settings.scraper_rsshub_url:
-            async for raw in self._scrape_rsshub(query):
-                yield raw
-            return
-
         yielded = 0
-        for card in cards:
+        seen_this_run: set[str] = set()
+        any_cards = False
+
+        for page in range(self._MAX_PAGES):
             if yielded >= query.max_listings:
                 return
-            external_id = card.get("external_id")
-            if not external_id:
-                continue
-            detail_url = f"{self._DETAIL_BASE}{external_id}"
-            safe_d, reason_d = is_safe_destination(detail_url)
-            if not safe_d:
+            list_url = self._compose_listing_url(query, start=page * self._PAGE_SIZE)
+            safe, reason = is_safe_destination(list_url)
+            if not safe:
                 self._errors.append(
-                    f"stage=detail url={safe_url(detail_url)} kind=url_guard_blocked msg={reason_d}"
+                    f"stage=list url={safe_url(list_url)} kind=url_guard_blocked msg={reason}"
                 )
-                continue
-            try:
-                detail_html = await self._client.fetch_html(detail_url)
-            except Exception as exc:  # noqa: BLE001 — per-listing tolerance
-                self._errors.append(
-                    f"stage=detail url={safe_url(detail_url)} "
-                    f"kind=detail_fetch_failure msg={safe_exc(exc)}"
-                )
-                continue
-            raw_job = self._build_raw_job(
-                external_id=external_id,
-                detail_url=detail_url,
-                card=card,
-                detail_html=detail_html,
-            )
-            if raw_job is None:
-                continue
-            enriched = await self._maybe_enrich(raw_job)
-            yielded += 1
-            yield enriched
+                return
 
-    def _compose_listing_url(self, query: ScrapeQuery) -> str:
+            listing_html: str | None = None
+            try:
+                listing_html = await self._client.fetch_html(list_url)
+            except Exception as exc:  # noqa: BLE001 — tier-1
+                self._errors.append(
+                    f"stage=list url={safe_url(list_url)} "
+                    f"kind=list_fetch_failure msg={safe_exc(exc)}"
+                )
+
+            cards = self._parse_listing_cards(listing_html) if listing_html else []
+            if not cards:
+                break  # exhausted (or first-page failure → RSShub below)
+            any_cards = True
+
+            for card in cards:
+                if yielded >= query.max_listings:
+                    return
+                external_id = card.get("external_id")
+                if not external_id or external_id in seen_this_run:
+                    continue
+                seen_this_run.add(external_id)
+                # Already in the library → don't spend a detail request.
+                if self._skip_known(external_id):
+                    continue
+                detail_url = f"{self._DETAIL_BASE}{external_id}"
+                safe_d, reason_d = is_safe_destination(detail_url)
+                if not safe_d:
+                    self._errors.append(
+                        f"stage=detail url={safe_url(detail_url)} "
+                        f"kind=url_guard_blocked msg={reason_d}"
+                    )
+                    continue
+                try:
+                    detail_html = await self._client.fetch_html(detail_url)
+                except Exception as exc:  # noqa: BLE001 — per-listing tolerance
+                    self._errors.append(
+                        f"stage=detail url={safe_url(detail_url)} "
+                        f"kind=detail_fetch_failure msg={safe_exc(exc)}"
+                    )
+                    continue
+                raw_job = self._build_raw_job(
+                    external_id=external_id,
+                    detail_url=detail_url,
+                    card=card,
+                    detail_html=detail_html,
+                )
+                if raw_job is None:
+                    continue
+                enriched = await self._maybe_enrich(raw_job)
+                yielded += 1
+                yield enriched
+
+        # RSShub fallback when nothing returned + operator configured a base URL.
+        if not any_cards and settings.scraper_rsshub_url:
+            async for raw in self._scrape_rsshub(query):
+                yield raw
+
+    def _compose_listing_url(self, query: ScrapeQuery, *, start: int = 0) -> str:
         keywords = " ".join(query.keywords) if query.keywords else ""
         location = query.location or ""
         return (
             f"{self._LIST_BASE}?keywords={quote_plus(keywords)}"
-            f"&location={quote_plus(location)}&start=0&f_TPR=r604800"
+            f"&location={quote_plus(location)}&start={start}&f_TPR=r604800"
         )
 
     @staticmethod

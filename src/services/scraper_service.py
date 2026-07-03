@@ -72,6 +72,17 @@ async def run_scraper(
     errors: list[str] = []
     status = JobScrapeStatus.SUCCESS
 
+    # 2026-07 volume rework: seed the scraper with this user's existing
+    # external_ids so aggregator scrapers skip the per-listing detail fetch
+    # for jobs already in the library — the request budget goes to genuinely
+    # NEW postings. Trade-off: existing rows stop getting re-scrape refreshes
+    # (postings rarely change; JD enrichment owns description quality now).
+    try:
+        known = await job_service.list_external_ids(session, user_id=user_id, source=scraper.source)
+        scraper.set_known_external_ids(known)
+    except Exception:  # noqa: BLE001 — dedup seed is an optimization only
+        log.exception("known-id seed failed for %s; scraping without skip", scraper.name)
+
     try:
         async for raw_job in scraper.scrape(query):
             listings_returned += 1
@@ -120,6 +131,7 @@ async def run_scraper(
         run.listings_returned = listings_returned
         run.new_jobs = new_jobs
         run.updated_jobs = updated_jobs
+        run.duplicates_skipped = int(getattr(scraper, "_skipped_known", 0))
         run.errors = errors
         run.duration_ms = int((finished_at - started_at).total_seconds() * 1000)
         # Plan 38 § D.7: per-scrape RL + adapter telemetry into raw_meta.

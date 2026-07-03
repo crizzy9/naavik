@@ -205,6 +205,19 @@ async def create_manual_job(
 # ── Scraper-pipeline upsert ──────────────────────────────────────────────
 
 
+async def list_external_ids(
+    session: AsyncSession, *, user_id: int, source: JobSource
+) -> set[str]:
+    """All external_ids this user already has for `source` (incl. soft-deleted
+    — a job the operator deleted must not resurrect on the next scrape)."""
+    rows = (
+        await session.exec(
+            select(Job.external_id).where(Job.user_id == user_id, Job.source == source)
+        )
+    ).all()
+    return {str(r) for r in rows}
+
+
 async def upsert_job(
     session: AsyncSession,
     *,

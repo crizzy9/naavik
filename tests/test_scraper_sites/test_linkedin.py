@@ -186,3 +186,65 @@ async def test_linkedin_rsshub_fallback_when_primary_empty(monkeypatch):
     assert len(rawjobs) == 1
     assert rawjobs[0].external_id == "9999999999"
     assert rawjobs[0].raw_meta.get("via") == "rsshub"
+
+
+# ── 2026-07 volume rework: pagination + known-ID skip ───────────────────
+
+_PAGE2_URL = (
+    "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+    "?keywords=python+engineer&location=San+Francisco&start=25&f_TPR=r604800"
+)
+
+_PAGE2_HTML = """
+<ul><li data-entity-urn="urn:li:jobPosting:9990000001">
+  <div class="base-search-card__title">Staff Engineer</div>
+  <div class="base-search-card__subtitle">Acme</div>
+</li></ul>
+"""
+
+
+@pytest.mark.asyncio
+async def test_linkedin_paginates_past_first_page():
+    client = _make_client(
+        responses={
+            LIST_URL: load_fixture("linkedin_listing.html"),
+            _PAGE2_URL: _PAGE2_HTML,
+            "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/": load_fixture(
+                "linkedin_detail.html"
+            ),
+        }
+    )
+    scraper = LinkedInScraper(client=client)  # type: ignore[arg-type]
+    jobs = [
+        j
+        async for j in scraper.scrape(
+            ScrapeQuery(keywords=["python", "engineer"], location="San Francisco")
+        )
+    ]
+    ids = {j.external_id for j in jobs}
+    assert "9990000001" in ids  # page-2 card reached
+    assert any("start=25" in u for u in client.fetch_calls)
+
+
+@pytest.mark.asyncio
+async def test_linkedin_known_ids_skip_detail_fetch():
+    client = _make_client(
+        responses={
+            LIST_URL: load_fixture("linkedin_listing.html"),
+            "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/": load_fixture(
+                "linkedin_detail.html"
+            ),
+        }
+    )
+    scraper = LinkedInScraper(client=client)  # type: ignore[arg-type]
+    scraper.set_known_external_ids({"3729012345"})
+    jobs = [
+        j
+        async for j in scraper.scrape(
+            ScrapeQuery(keywords=["python", "engineer"], location="San Francisco")
+        )
+    ]
+    assert all(j.external_id != "3729012345" for j in jobs)
+    assert scraper._skipped_known == 1
+    # The known job's detail endpoint was never fetched.
+    assert not any(u.endswith("/jobPosting/3729012345") for u in client.fetch_calls)

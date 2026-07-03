@@ -23,6 +23,7 @@ BACKEND.md § I.1 defaults.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -76,10 +77,29 @@ _LINKEDIN_PROXY_WARNED: bool = False
 
 
 # Cap the per-firing fan-out for keyword sources: one ScrapeQuery per target
-# title, at most this many titles per firing. Later titles are NOT silently
-# dropped forever — the list is stable, so tightening the cap just means the
-# operator sees fewer parallel title queries; a log line records truncation.
+# title, at most this many titles per firing. Titles beyond the cap are NOT
+# starved — `_rotation_offset` slides the window across firings so every
+# title (and every target city) gets queried over a day.
 _MAX_TITLE_QUERIES = 3
+
+# Per-title listing budget for CRON firings (manual Run-now keeps its own
+# bounded budget). 3 titles × 60 ≈ 180 fresh listings per firing ceiling —
+# the "moderate" volume profile; with the known-ID skip, steady-state runs
+# spend far less than the ceiling.
+_CRON_MAX_LISTINGS_PER_QUERY = 60
+
+
+def _rotation_offset(slots: int, *, period_minutes: int = 30) -> int:
+    """Stateless rotation index — advances one step per cron period.
+
+    Time-derived instead of DB-persisted: survives restarts, needs no
+    migration, and two processes compute the same window.
+    """
+    if slots <= 1:
+        return 0
+    now = datetime.now(UTC)
+    step = (now.hour * 60 + now.minute) // max(period_minutes, 1)
+    return step % slots
 
 
 def _compose_queries(
@@ -110,19 +130,32 @@ def _compose_queries(
         if is_override:
             # Legacy behavior: the override keyword list is ONE query.
             return [ScrapeQuery(keywords=keywords, location=location)]
-        titles = keywords[:_MAX_TITLE_QUERIES]
-        if len(keywords) > len(titles):
+
+        # Rotate the title window so titles beyond _MAX_TITLE_QUERIES get
+        # their turn on later firings instead of never running.
+        titles = list(keywords)
+        if len(titles) > _MAX_TITLE_QUERIES:
+            off = _rotation_offset(len(titles))
+            titles = [titles[(off + i) % len(titles)] for i in range(_MAX_TITLE_QUERIES)]
             log.info(
-                "scraping.%s user=%s: %d target titles, querying first %d",
+                "scraping.%s user=%s: %d target titles, this firing queries %s",
                 source.value,
                 settings.user_id,
                 len(keywords),
-                len(titles),
+                titles,
             )
+
+        # Rotate target cities the same way — the old behavior pinned every
+        # scrape to the FIRST city forever.
+        cities = [c for c in (getattr(profile, "target_cities", None) or []) if c.strip()]
+        if len(cities) > 1:
+            location = cities[_rotation_offset(len(cities))]
+
         return [
             ScrapeQuery(
                 keywords=[title],
                 location=location,
+                max_listings=_CRON_MAX_LISTINGS_PER_QUERY,
                 raw_meta={"target_title": title},
             )
             for title in titles
