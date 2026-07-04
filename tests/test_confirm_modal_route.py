@@ -38,6 +38,10 @@ def test_confirm_modal_query_param_roundtrip() -> None:
     assert "Delete bullet" in body
     assert "This can&#39;t be undone." in body or "This can't be undone." in body
     assert 'hx-delete="/api/v1/bullets/42"' in body
+    # Viewport-fixed centering: #modal-region sits at the END of the body, so
+    # a non-fixed <dialog open> renders below the fold — the confirm dialog
+    # opened off-viewport on long pages and delete looked like it did nothing.
+    assert "fixed inset-0 m-auto h-fit" in body
     # Confirm + cancel labels — strip whitespace differences.
     collapsed = " ".join(body.split())
     assert ">Delete<" in collapsed or "Delete </button>" in collapsed

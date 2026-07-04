@@ -147,19 +147,52 @@ def test_bullets_post_get_put_delete_roundtrip(client):
     m = re.search(r'data-bullet-id="(\d+)"', r.text)
     assert m
     bid = int(m.group(1))
-    r2 = client.put(f"/api/v1/bullets/{bid}", data={"text": "Edited bullet"})
+    # Full editor-form save: text + tags + override all persist and the
+    # re-rendered row reflects them (the modal's Save path).
+    r2 = client.put(
+        f"/api/v1/bullets/{bid}",
+        data={
+            "editor_form": "1",
+            "text": "Edited bullet",
+            "tags[]": ["genai", "backend"],
+            "selection_override": "always_include",
+        },
+    )
     assert r2.status_code == 200
+    assert "Edited bullet" in r2.text
+    assert "genai" in r2.text
+    assert "pinned · always" in r2.text
     assert "closeModal" in r2.headers.get("hx-trigger", "")
-    # DELETE
+    assert "showToast" in r2.headers.get("hx-trigger", "")
+    # Editor form with no tags / no override clears both (unchecked inputs
+    # are absent from the submission).
+    r2b = client.put(
+        f"/api/v1/bullets/{bid}",
+        data={"editor_form": "1", "text": "Edited bullet"},
+    )
+    assert r2b.status_code == 200
+    assert "pinned" not in r2b.text
+    # Legacy partial PUT (no editor_form) keeps patch semantics.
+    r2c = client.put(f"/api/v1/bullets/{bid}", data={"text": "Patched bullet"})
+    assert r2c.status_code == 200
+    assert "Patched bullet" in r2c.text
+    # DELETE — must instruct the client to drop the row, not just 204.
     r3 = client.delete(f"/api/v1/bullets/{bid}")
     assert r3.status_code == 204
+    trigger = r3.headers.get("hx-trigger", "")
+    assert "removeElement" in trigger
+    assert f'data-bullet-id=\\"{bid}\\"' in trigger or f"data-bullet-id={bid}" in trigger
 
 
 def test_bullets_rewrite(client):
     _skip_if_no_db()
     r = client.post("/api/v1/bullets/1/rewrite")
-    assert r.status_code == 200
-    assert r.json().get("edited") is True
+    # 422 = no LLM provider configured (honest degradation); with a provider
+    # the route returns the refilled textarea fragment for the modal swap.
+    assert r.status_code in (200, 422)
+    if r.status_code == 200:
+        assert 'id="bullet-text"' in r.text
+        assert "<textarea" in r.text
 
 
 def test_bullets_reorder(client):

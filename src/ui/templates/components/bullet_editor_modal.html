@@ -7,11 +7,22 @@
     role_label  : "Intuit · Senior SWE" — for the modal subtitle
 #}
 {% set _bullet_body %}
+  {# hx-target must resolve to a real node — an unresolvable selector makes
+     htmx abort the PUT before it is sent (the old `#bullet-list-area` bug:
+     Save silently did nothing). The row swaps in place; closeModal +
+     showToast ride the response's HX-Trigger. #}
   <form
     id="bullet-editor-form"
     hx-put="/api/v1/bullets/{{ bullet.id }}"
-    hx-target="#bullet-list-area"
-    hx-swap="none">
+    hx-target='[data-bullet-id="{{ bullet.id }}"]'
+    hx-swap="outerHTML"
+    hx-indicator="#bullet-save-indicator"
+    hx-disabled-elt="#bullet-save-btn">
+
+    {# Full-form marker: tags[] / selection_override inputs are omitted by the
+       browser when unchecked, so the route needs this to distinguish "cleared"
+       from "not part of this request" (legacy text-only PUTs). #}
+    <input type="hidden" name="editor_form" value="1">
 
     {% with value=bullet.text %}
       {% include "components/bullet_textarea.html" %}
@@ -45,10 +56,17 @@
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm text-cyan-300 hover:text-cyan-200 hover:bg-cyan-400/10"
             hx-post="/api/v1/bullets/{{ bullet.id }}/rewrite"
             hx-target="#bullet-text"
-            hx-swap="none">
+            hx-swap="outerHTML"
+            hx-disabled-elt="this"
+            hx-indicator="#bullet-rewrite-indicator">
       <i data-lucide="sparkles" class="h-4 w-4" stroke-width="1.5"></i>
       Rewrite with AI
     </button>
+    <span id="bullet-rewrite-indicator"
+          class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-cyan-300">
+      <i data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin" stroke-width="1.5"></i>
+      rewriting…
+    </span>
     <button type="button"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
             hx-get="/_modal/confirm?title=Delete+bullet%3F&message=This+can%27t+be+undone.+The+bullet%27s+history+remains+in+audit+logs.&action=/api/v1/bullets/{{ bullet.id }}&label=Delete&tone=danger&method=delete"
@@ -59,14 +77,20 @@
     </button>
   </div>
   <div class="flex items-center gap-2">
+    <span id="bullet-save-indicator"
+          class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-indigo-300">
+      <i data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin" stroke-width="1.5"></i>
+      saving…
+    </span>
     <button type="button"
             class="inline-flex items-center gap-2 px-3 py-1.5 rounded text-sm text-slate-300 hover:text-slate-50 hover:bg-slate-800"
             hx-on:click="document.getElementById('bullet-editor-modal').close()">
       Cancel
     </button>
     <button type="submit"
+            id="bullet-save-btn"
             form="bullet-editor-form"
-            class="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium">
+            class="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium disabled:opacity-50">
       <i data-lucide="check" class="h-4 w-4" stroke-width="1.5"></i>
       Save bullet
     </button>

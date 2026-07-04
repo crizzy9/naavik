@@ -117,8 +117,19 @@ _PAGES = [
     (
         "bullet_modal",
         "/_modal/bullet-editor/1",
-        ["bullet-editor-modal", "BULLET", "TAGS", "SELECTION OVERRIDE", "Save bullet"],
-        [],
+        [
+            "bullet-editor-modal",
+            "BULLET",
+            "TAGS",
+            "SELECTION OVERRIDE",
+            "Save bullet",
+            # Save must target the real row node — an unresolvable hx-target
+            # makes htmx abort the PUT before it is even sent (the old
+            # #bullet-list-area bug: Save silently did nothing).
+            '[data-bullet-id="1"]',
+            'name="editor_form"',
+        ],
+        ["#bullet-list-area"],
     ),
 ]
 

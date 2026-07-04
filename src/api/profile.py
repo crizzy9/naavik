@@ -21,10 +21,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from api.auth import require_csrf
 from db.session import get_session
 from models import User
+from models.enums import BulletSelectionOverride
 from services import profile_service
 from services.auth import require_authed_session
 from ui.routes.profile import _effective_user_id
-from ui.templates_setup import templates
+from ui.templates_setup import TAG_VOCAB, templates
 
 router = APIRouter()
 
@@ -38,7 +39,7 @@ router = APIRouter()
 _ENTITY_FIELD_RE = re.compile(
     r"^(exp|edu|proj|oss|skill|cert)_"
     r"(company|title|team|location|start|end|institution|school|degree|gpa|"
-    r"date|text|link|tags|category|items|issuer|description)_(\d+)$"
+    r"date|text|link|tags|category|items|issuer|description|selection_override)_(\d+)$"
 )
 
 _DATE_FIELDS = {"start", "end", "date"}
@@ -75,6 +76,14 @@ def _collect_entity_edits(form_items) -> dict[tuple[str, int], dict[str, Any]]:
             parsed = raw
         edits.setdefault((prefix, entity_id), {})[field] = parsed
     return edits
+
+
+def _parse_override(raw: Any) -> BulletSelectionOverride | None:
+    """Empty string (the select's "AI decides" option) clears back to null."""
+    value = str(raw or "").strip()
+    if not value:
+        return None
+    return BulletSelectionOverride(value)  # ValueError bubbles → caller's 400
 
 
 async def _apply_entity_edit(
@@ -128,6 +137,11 @@ async def _apply_entity_edit(
             link=fields.get("link"),
             tags=fields.get("tags"),
             **({"date": fields["date"]} if "date" in fields else {}),
+            **(
+                {"selection_override": _parse_override(fields["selection_override"])}
+                if "selection_override" in fields
+                else {}
+            ),
         )
     elif prefix == "skill":
         if not await profile_service.owns_skill(session, skill_id=entity_id, user_id=user_id):
@@ -150,6 +164,11 @@ async def _apply_entity_edit(
             issuer=fields.get("issuer"),
             description=fields.get("description"),
             **({"date": fields["date"]} if "date" in fields else {}),
+            **(
+                {"selection_override": _parse_override(fields["selection_override"])}
+                if "selection_override" in fields
+                else {}
+            ),
         )
 
 
@@ -634,6 +653,9 @@ async def put_bullet(
     request: Request,
     bullet_id: int,
     text: Annotated[str | None, Form()] = None,
+    tags: Annotated[list[str] | None, Form(alias="tags[]")] = None,
+    selection_override: Annotated[str | None, Form()] = None,
+    editor_form: Annotated[str | None, Form()] = None,
     fail: Annotated[str | None, Query()] = None,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
@@ -644,14 +666,35 @@ async def put_bullet(
         session, bullet_id=bullet_id, user_id=_effective_user_id(_user)
     ):
         raise HTTPException(status_code=404, detail="Bullet not found")
+    override: BulletSelectionOverride | None = None
+    if selection_override:
+        try:
+            override = BulletSelectionOverride(selection_override)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Unknown selection_override") from exc
+    # The bullet-editor modal submits the whole form (`editor_form=1`), where
+    # unchecked tag checkboxes / cleared override radios are simply ABSENT —
+    # absence there means "cleared", not "leave unchanged". Partial (legacy)
+    # PUTs keep patch semantics: only provided fields change.
+    if editor_form:
+        tags = [t for t in (tags or []) if t in TAG_VOCAB]
+        kwargs: dict = {"text": text, "tags": tags, "selection_override": override}
+    else:
+        kwargs = {"text": text}
+        if tags is not None:
+            kwargs["tags"] = [t for t in tags if t in TAG_VOCAB]
+        if override is not None:
+            kwargs["selection_override"] = override
     try:
-        bullet = await profile_service.update_bullet(session, bullet_id, text=text)
+        bullet = await profile_service.update_bullet(session, bullet_id, **kwargs)
         await session.commit()
     except LookupError as exc:
         await session.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     response = _bullet_row_response(request, bullet)
-    response.headers["HX-Trigger"] = "closeModal"
+    response.headers["HX-Trigger"] = json.dumps(
+        {"closeModal": True, "showToast": {"tone": "success", "text": "Bullet saved."}}
+    )
     return response
 
 
@@ -669,13 +712,15 @@ async def delete_bullet(
     if not deleted:
         raise HTTPException(status_code=404, detail="Bullet not found")
     await session.commit()
-    response = Response(status_code=204)
-    response.headers["HX-Trigger"] = "closeModal, bulletDeleted"
-    return response
+    # Same pattern as the other dossier deletes: without `removeElement` the
+    # soft-deleted row stayed on screen until reload ("delete did nothing").
+    # Bullet rows carry data-bullet-id, not an id attribute.
+    return _remove_element_response(f'[data-bullet-id="{bullet_id}"]', "Bullet deleted.")
 
 
 @router.post("/api/v1/bullets/{bullet_id}/rewrite", name="api_bullets_rewrite")
 async def post_bullet_rewrite(
+    request: Request,
     bullet_id: int,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
@@ -734,12 +779,18 @@ async def post_bullet_rewrite(
         raise HTTPException(status_code=502, detail=f"LLM rewrite failed: {exc}") from exc
 
     trimmed = TrimmedBullet.model_validate(result.value)
-    return {
-        "id": bullet.id,
-        "text": trimmed.trimmed,
-        "tags": list(bullet.tags or []),
-        "edited": True,
-    }
+    # Return the refilled textarea fragment — the modal button swaps it in
+    # place (hx-target="#bullet-text" outerHTML). The old JSON body paired
+    # with hx-swap="none" meant the rewrite was fetched and then discarded.
+    response = templates.TemplateResponse(
+        request,
+        "components/input.html",
+        {"name": "text", "type": "textarea", "value": trimmed.trimmed, "id": "bullet-text"},
+    )
+    response.headers["HX-Trigger"] = json.dumps(
+        {"showToast": {"tone": "info", "text": "AI rewrite suggested — review, then Save."}}
+    )
+    return response
 
 
 @router.post("/api/v1/bullets/reorder", name="api_bullets_reorder")

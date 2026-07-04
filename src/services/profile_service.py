@@ -26,6 +26,10 @@ from models import (
     Skill,
 )
 
+# Distinguishes "kwarg omitted" from an explicit None (which is a real value
+# for nullable fields like Bullet.selection_override).
+_UNSET: Any = object()
+
 # Whitelist of profile fields that the per-field PUT endpoint may touch.
 # (Same set as the route handler's `_ALLOWED_FIELDS`; service-side gate is
 # the source of truth.)
@@ -406,7 +410,7 @@ async def update_bullet(
     *,
     text: str | None = None,
     tags: list[str] | None = None,
-    selection_override: Any | None = None,
+    selection_override: Any = _UNSET,
 ) -> Bullet:
     b = await get_bullet(session, bullet_id)
     if b is None:
@@ -415,7 +419,9 @@ async def update_bullet(
         b.text = text
     if tags is not None:
         b.tags = list(tags)
-    if selection_override is not None:
+    # None is a real value here (clear back to "AI decides"); omitting the
+    # kwarg means "leave unchanged" — hence the sentinel default.
+    if selection_override is not _UNSET:
         b.selection_override = selection_override
     now = datetime.now(UTC)
     b.edited_at = now
@@ -685,6 +691,9 @@ async def update_project(
         proj.tags = list(v)
     if "date" in fields:
         proj.date = fields["date"]
+    # None is a real value ("AI decides") — presence in `fields` is the signal.
+    if "selection_override" in fields:
+        proj.selection_override = fields["selection_override"]
     proj.updated_at = datetime.now(UTC)
     session.add(proj)
     await session.flush()
@@ -781,6 +790,9 @@ async def update_certification(
         cert.description = str(v).strip() or None
     if "date" in fields:
         cert.date = fields["date"]
+    # None is a real value ("AI decides") — presence in `fields` is the signal.
+    if "selection_override" in fields:
+        cert.selection_override = fields["selection_override"]
     cert.updated_at = datetime.now(UTC)
     session.add(cert)
     await session.flush()

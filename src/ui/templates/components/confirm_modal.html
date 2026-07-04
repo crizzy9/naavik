@@ -25,10 +25,14 @@
 } %}
 {% set _btn_class = _tone_btn.get(confirm_tone, _tone_btn["danger"]) %}
 
+{# `fixed inset-0 m-auto h-fit` — same lesson as modal.html: #modal-region
+   lives at the END of the body, so a non-fixed <dialog open> renders at its
+   flow position below the fold. The confirm dialog looked like "delete does
+   nothing" because it opened off-viewport. #}
 <dialog
   id="confirm-modal"
   open
-  class="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl shadow-black/45 p-0 w-full max-w-[520px] mx-auto my-auto">
+  class="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl shadow-black/45 p-0 w-full max-w-[520px] fixed inset-0 m-auto h-fit">
   <div class="fixed inset-0 -z-10 bg-black/40" aria-hidden="true"
        hx-on:click="this.closest('dialog').close()"></div>
 
