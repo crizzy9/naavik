@@ -58,7 +58,7 @@ from models.enums import ApplicationBoard, BulletSelectionOverride
 from services import llm_tracker
 from typst import compile as typst_compile
 from typst import overflows
-from typst.compiler import TypstError
+from typst.compiler import TypstError, template_path
 
 # Plan 66 (0.3.1) § T6 — auto-select the ATS-friendly template variant for
 # ATS-known boards; manual + company-direct stays on creative onepage.typ.
@@ -153,6 +153,7 @@ async def can_reuse_existing_resume(
       1. application.docs_state == READY
       2. for every selected bullet_id, Bullet.edited_at <= GeneratedDocument.compiled_at
       3. job.description_html hash matches the JD hash on the latest resume row
+      4. the doc was compiled from the current template source (template_version)
     """
     if application.docs_state != DocsState.READY:
         return False
@@ -161,6 +162,12 @@ async def can_reuse_existing_resume(
         return False
     selected_ids = latest.bullet_selection.get("selected_ids") or []
     if not selected_ids:
+        return False
+    # Compare template source — docs compiled from an older template must
+    # regenerate, never be reused as-is (pre-stamp docs have no version and
+    # therefore never qualify).
+    template_name, _ = _select_template(application, None)
+    if latest.bullet_selection.get("template_version") != _template_version(template_name):
         return False
     # Compare bullet edits
     stmt = select(Bullet).where(Bullet.id.in_(selected_ids))
@@ -749,7 +756,26 @@ async def _build_resume_data(
     }
 
 
-def _select_template(application: Application, settings: Settings) -> tuple[str, str | None]:
+def _template_version(template_name: str) -> str:
+    """Content hash of the packaged template source.
+
+    Stamped into `bullet_selection` at generation time and required to match
+    in `can_reuse_existing_resume`, so shipping a template change invalidates
+    previously generated documents instead of reusing stale layouts.
+    """
+    cached = _template_version_cache.get(template_name)
+    if cached is None:
+        cached = hashlib.sha256(template_path(template_name).read_bytes()).hexdigest()[:12]
+        _template_version_cache[template_name] = cached
+    return cached
+
+
+_template_version_cache: dict[str, str] = {}
+
+
+def _select_template(
+    application: Application, settings: Settings | None
+) -> tuple[str, str | None]:
     """One template (`onepage.typ`) for every board — it is both the dense
     recruiter-standard layout AND ATS-safe (single column, ligatures off,
     plain bullets). Returns ``(template_name, pdf_standard)``; ATS-known
@@ -792,7 +818,6 @@ def _application_bullet_overrides(application: Application) -> dict[int, str]:
 # Start the page-fit loop with this many bullets; the loop drops from the
 # tail until the page fits, which packs the page as densely as it will go.
 RESUME_MAX_START_BULLETS = 22
-RESUME_MAX_FIT_ATTEMPTS = 14
 # Density add-back cap — bounds LLM refine calls + typst compiles after the
 # fit loop when spare page room remains.
 RESUME_MAX_ADDBACK = 8
@@ -972,7 +997,12 @@ async def generate_resume(
     excluded_certs: set[int] = set()
     final_result = None
     result = None
-    for _attempt in range(RESUME_MAX_FIT_ATTEMPTS):
+    # Budget = the droppable inventory itself: every failing attempt removes
+    # one bullet or one section row, so the loop exits on "fits" or "nothing
+    # left to drop" — never by running out of attempts with droppable content
+    # remaining (the old fixed cap shipped silent 2-pagers that way).
+    max_fit_attempts = len(candidate_ids) + len(section_queue) + 1
+    for _attempt in range(max_fit_attempts):
         data = await _build_resume_data(
             snap=snap,
             selected_bullet_ids=candidate_ids,
@@ -1022,8 +1052,17 @@ async def generate_resume(
             continue
         final_result = result
         break
-    else:
+    else:  # pragma: no cover — budget spans the whole droppable inventory
         final_result = result
+
+    overflow_accepted = final_result is not None and overflows(final_result, max_pages=1)
+    if overflow_accepted:
+        log.warning(
+            "resume for application %d still overflows (%s pages) after exhausting "
+            "every droppable bullet and section — accepting, flagged in bullet_selection",
+            application.id,
+            final_result.page_count,
+        )
 
     # Density add-back pass: the fit loop stops at "fits"; a packed page
     # wants the NEXT-ranked bullets back in even when they're only
@@ -1097,6 +1136,20 @@ async def generate_resume(
     application.docs_state = DocsState.READY
     session.add(application)
 
+    selection_blob: dict[str, Any] = {
+        "selected_ids": candidate_ids,
+        "ranked_ids": ranked_ids,
+        "dropped_for_fit": dropped_for_fit,
+        "dropped_sections": dropped_sections,
+        "added_back": added_back,
+        "summary": tailored_summary,
+        "trimmed_lines": {str(k): v for k, v in trimmed.items()},
+        "jd_hash": _hash_jd(job.description_html or job.description),
+        "template_version": _template_version(template_name),
+    }
+    if overflow_accepted:
+        selection_blob["overflow_accepted"] = True
+
     doc = GeneratedDocument(
         application_id=application.id,
         kind=GeneratedDocumentKind.RESUME,
@@ -1105,16 +1158,7 @@ async def generate_resume(
         page_count=final_result.page_count,
         compiled_at=final_result.compiled_at,
         model=settings.llm_model,
-        bullet_selection={
-            "selected_ids": candidate_ids,
-            "ranked_ids": ranked_ids,
-            "dropped_for_fit": dropped_for_fit,
-            "dropped_sections": dropped_sections,
-            "added_back": added_back,
-            "summary": tailored_summary,
-            "trimmed_lines": {str(k): v for k, v in trimmed.items()},
-            "jd_hash": _hash_jd(job.description_html or job.description),
-        },
+        bullet_selection=selection_blob,
     )
     session.add(doc)
     await session.flush()
@@ -1880,8 +1924,35 @@ async def generate_generic_resume(
         trimmed=trimmed,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Same 1-page contract as the tailored path, LLM-free: drop the
+    # lowest-priority bullet (sections reclaim space once bullets hit the
+    # one-per-experience floor) and recompile until the page fits.
+    section_queue = _section_drop_queue(snap)
+    excluded_projects: set[int] = set()
+    excluded_certs: set[int] = set()
     try:
         result = await typst_compile("onepage", data, output_path)
+        while overflows(result, max_pages=1):
+            selected_ids, dropped = _drop_lowest_priority(
+                selected_ids, snap, allow_floor_drop=not section_queue
+            )
+            if dropped is None:
+                if not section_queue:
+                    log.warning(
+                        "generic resume still overflows (%s pages) with nothing left to drop",
+                        result.page_count,
+                    )
+                    break
+                kind_, sid = section_queue.pop(0)
+                (excluded_projects if kind_ == "project" else excluded_certs).add(sid)
+            data = await _build_resume_data(
+                snap=snap,
+                selected_bullet_ids=selected_ids,
+                trimmed=trimmed,
+                excluded_project_ids=excluded_projects,
+                excluded_certification_ids=excluded_certs,
+            )
+            result = await typst_compile("onepage", data, output_path)
     except TypstError:
         return None
     return GeneratedDocument(

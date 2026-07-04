@@ -179,10 +179,15 @@
 
 // ───────── Summary (optional; tailored per-JD) ─────────
 
+// Same 0.52em breathing rhythm as the rest of the page: other sections open
+// with bold grid rows whose ascenders read as whitespace, but a justified
+// 9.5pt paragraph hugs the rule — give it an explicit line-gap on both sides
+// and page-rhythm leading (0.55em × 9.5pt ≈ 0.52em × 10pt).
 #if data.at("summary", default: none) != none [
   #sectitle("Summary")
-  #text(size: 9.5pt, data.summary)
-  #v(0.1em)
+  #v(0.30em)
+  #par(leading: 0.55em)[#text(size: 9.5pt, data.summary)]
+  #v(0.22em)
 ]
 
 // ───────── Education ─────────

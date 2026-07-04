@@ -238,7 +238,11 @@ async def test_can_reuse_existing_resume_when_unchanged():
 
     latest_doc = SimpleNamespace(
         compiled_at=datetime.now(UTC),
-        bullet_selection={"selected_ids": [1, 2], "jd_hash": expected_hash},
+        bullet_selection={
+            "selected_ids": [1, 2],
+            "jd_hash": expected_hash,
+            "template_version": dg._template_version("onepage"),
+        },
     )
     bullets = [
         _make_bullet(1, 1, "old text", edited_at=datetime.now(UTC) - timedelta(days=5)),
@@ -251,6 +255,25 @@ async def test_can_reuse_existing_resume_when_unchanged():
     second = SimpleNamespace(one_or_none=lambda: None, all=lambda: bullets)
     fake_session.exec.side_effect = [first, second]
     assert await can_reuse_existing_resume(fake_session, application, job) is True
+
+
+@pytest.mark.asyncio
+async def test_reuse_disabled_when_template_version_stale():
+    """Docs compiled from an older (or unstamped) template never reuse."""
+    from models import DocsState
+
+    application = _make_application(docs_state=DocsState.READY)
+    job = _make_job(description_html="<p>JD</p>", description="JD")
+    for stale_version in ("deadbeef0000", None):
+        blob = {"selected_ids": [1], "jd_hash": dg._hash_jd("<p>JD</p>")}
+        if stale_version is not None:
+            blob["template_version"] = stale_version
+        latest_doc = SimpleNamespace(compiled_at=datetime.now(UTC), bullet_selection=blob)
+        fake_session = AsyncMock()
+        fake_session.exec = AsyncMock()
+        first = SimpleNamespace(one_or_none=lambda d=latest_doc: d, all=lambda: [])
+        fake_session.exec.side_effect = [first]
+        assert await can_reuse_existing_resume(fake_session, application, job) is False
 
 
 @pytest.mark.asyncio
@@ -531,6 +554,143 @@ async def test_generate_resume_honors_always_include(tmp_path):
     assert 2 not in selected, "never_include bullet must be skipped"
     assert (out_dir / "resume.pdf").exists()
     assert doc.page_count == 1
+
+
+def _make_project(pid: int, kind: str = "project", override=None):
+    return SimpleNamespace(
+        id=pid,
+        profile_id=1,
+        kind=kind,
+        title=f"Project {pid} — a decently long portfolio line for width",
+        date=datetime(2025, 1, 1, tzinfo=UTC),
+        text="Built and shipped a full-stack platform with FastAPI, HTMX, Typst and "
+        "Postgres; grew it to thousands of users while keeping p99 under 100ms.",
+        link="github.com/example/repo",
+        selection_override=override,
+        order_index=pid,
+        deleted_at=None,
+    )
+
+
+def _make_certification(cid: int, override=None):
+    return SimpleNamespace(
+        id=cid,
+        profile_id=1,
+        title=f"Certification {cid}",
+        issuer="Issuing Body",
+        date=datetime(2024, 1, 1, tzinfo=UTC),
+        description="Covered distributed systems, security and cost-aware architecture.",
+        selection_override=override,
+        order_index=cid,
+        deleted_at=None,
+    )
+
+
+def _overflowing_snapshot() -> dg.ProfileSnapshot:
+    """A profile that cannot fit on one page without heavy fit-loop dropping:
+    3 dense experiences + 10 projects + 6 certifications + 6 OSS rows."""
+    long_text = (
+        "Delivered a cross-team platform migration spanning ingestion, storage and "
+        "serving layers; profiled and removed the top latency hotspots, cutting p99 "
+        "from 480ms to 95ms while doubling request volume year over year."
+    )
+    experiences = [_make_experience(i) for i in (1, 2, 3)]
+    bullets_by_experience = {
+        eid: [_make_bullet(eid * 100 + i, eid, f"{long_text} (b{eid * 100 + i})") for i in range(8)]
+        for eid in (1, 2, 3)
+    }
+    skills = [
+        SimpleNamespace(
+            id=i,
+            profile_id=1,
+            category=f"Area {i}",
+            items=["Python", "Java", "Kafka", "Postgres", "AWS", "Kubernetes"],
+            order_index=i,
+        )
+        for i in range(4)
+    ]
+    education = [
+        SimpleNamespace(
+            institution="Northeastern University",
+            school="Khoury College",
+            location="Boston, MA",
+            start_date=datetime(2017, 9, 1, tzinfo=UTC),
+            end_date=datetime(2019, 5, 1, tzinfo=UTC),
+            degree="MS in Computer Science",
+            gpa="3.8",
+        )
+    ]
+    return dg.ProfileSnapshot(
+        profile=_make_profile(summary_short="A" * 400),
+        experiences=experiences,
+        bullets_by_experience=bullets_by_experience,
+        skills=skills,
+        education=education,
+        projects=[_make_project(i) for i in range(200, 210)],
+        open_source=[_make_project(i, kind="open_source") for i in range(300, 306)],
+        certifications=[_make_certification(i) for i in range(400, 406)],
+    )
+
+
+@pytest.mark.skipif(not _HAS_TYPST, reason="typst CLI not available")
+@pytest.mark.asyncio
+async def test_generate_resume_fit_loop_converges_to_one_page(tmp_path):
+    """The 1-page contract holds even when fitting needs more drops than the
+    retired fixed attempt cap (14) allowed — the budget now spans the whole
+    droppable inventory, so generation never ships a silent 2-pager."""
+    snap = _overflowing_snapshot()
+    settings = _make_settings()
+    application = _make_application()
+    job = _make_job()
+
+    fake_session = AsyncMock()
+    fake_session.add = lambda o: None
+    fake_session.flush = AsyncMock()
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    async def fake_llm(**kwargs):
+        # Rank returns nothing useful → profile-order fallback; refine falls
+        # back to truncation; summary falls back to profile summary.
+        return SimpleNamespace(value={})
+
+    with (
+        patch("services.document_generator._today_spend", new=AsyncMock(return_value=0.0)),
+        patch("services.document_generator.load_profile_snapshot", new=AsyncMock(return_value=snap)),
+        patch("services.document_generator._app_documents_dir", return_value=out_dir),
+        patch("services.document_generator.get_provider"),
+        patch("services.document_generator.llm_tracker.tracked_call", new=fake_llm),
+    ):
+        doc = await generate_resume(fake_session, application, settings=settings, job=job)
+
+    assert doc.error is None
+    assert doc.page_count == 1, "generation must never ship a multi-page resume"
+    assert "overflow_accepted" not in doc.bullet_selection
+    assert doc.bullet_selection["template_version"] == dg._template_version("onepage")
+    # The fit loop had to work for this page: something was dropped.
+    assert doc.bullet_selection["dropped_for_fit"] or doc.bullet_selection["dropped_sections"]
+
+
+@pytest.mark.skipif(not _HAS_TYPST, reason="typst CLI not available")
+@pytest.mark.asyncio
+async def test_generate_generic_resume_fits_one_page(tmp_path):
+    """The generic (no-JD) path honors the same 1-page contract — it used to
+    compile once and silently accept overflow."""
+    snap = _overflowing_snapshot()
+    settings = _make_settings()
+    fake_session = AsyncMock()
+
+    out_pdf = tmp_path / "portfolio" / "resume.pdf"
+    with patch(
+        "services.document_generator.load_profile_snapshot", new=AsyncMock(return_value=snap)
+    ):
+        doc = await dg.generate_generic_resume(
+            fake_session, user_id=1, settings=settings, output_path=out_pdf
+        )
+
+    assert doc is not None
+    assert out_pdf.exists()
+    assert doc.page_count == 1, "generic generation must fit one page"
 
 
 # ── Reuse-heuristic short-circuit in pre_generate ─────────────────────
