@@ -10,6 +10,8 @@ Education / Project rows persisted by `services.extraction._persist_profile`.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from llm.base import LLMProvider
@@ -36,13 +38,21 @@ Resume text:
 Return ExtractedResume with full_name, headline, location, email, phone,
 linkedin_handle, github_handle, portfolio_url, summary_full (the resume's
 summary/objective paragraph verbatim, if any), summary_short (<= 25 words),
-experiences[], skills[], educations[], and projects[].
+experiences[], skills[], educations[], projects[], and certifications[].
 
 Rules:
 - Each experience carries bullets[] — the FULL text of each achievement
   bullet, one entry per bullet, preserving numbers and verbs.
 - bullet_tags[] is parallel to bullets[]: for each bullet, choose 1-3 tags
   from exactly this vocabulary: {tag_vocab}.
+- projects[] covers BOTH a "Projects" section and an "Open Source
+  Contributions" (or similar) section. Set kind="project" for personal /
+  academic / work projects and kind="open_source" for entries under an
+  open-source / OSS-contributions heading. Keep each entry's one-line
+  description (if any) in text.
+- certifications[] captures a "Certifications" / "Licenses" section. Split
+  entries like "AWS Certified Solutions Architect - Amazon" into title and
+  issuer; leave issuer "" when the resume names none.
 - Dates are ISO strings: "YYYY-MM-DD", "YYYY-MM", or "YYYY". Use null for
   "Present"/current roles.
 - skills[] groups the resume's skill lines as {{category, items[]}}
@@ -88,6 +98,16 @@ class ExtractedProject(BaseModel):
     date: str | None = None  # ISO date string
     tags: list[str] = []
     link: str | None = None
+    # "project" | "open_source" — mirrors Project.kind; OSS-contribution
+    # sections land as kind="open_source" so they render as their own block.
+    kind: Literal["project", "open_source"] = "project"
+
+
+class ExtractedCertification(BaseModel):
+    title: str
+    issuer: str = ""
+    date: str | None = None  # ISO date string
+    description: str | None = None
 
 
 class ExtractedResume(BaseModel):
@@ -105,6 +125,7 @@ class ExtractedResume(BaseModel):
     skills: list[ExtractedSkillGroup] = []
     educations: list[ExtractedEducation] = []
     projects: list[ExtractedProject] = []
+    certifications: list[ExtractedCertification] = []
 
 
 async def extract_resume(

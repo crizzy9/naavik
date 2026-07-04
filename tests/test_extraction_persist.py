@@ -47,7 +47,16 @@ _sqlite3.register_adapter(list, _json.dumps)
 
 
 import models  # noqa: F401,E402 — registers metadata
-from models import Bullet, Education, Experience, Profile, Project, Skill, User  # noqa: E402
+from models import (  # noqa: E402
+    Bullet,
+    Certification,
+    Education,
+    Experience,
+    Profile,
+    Project,
+    Skill,
+    User,
+)
 from services.extraction import _parse_date, _persist_profile  # noqa: E402
 
 _TABLES = [
@@ -58,6 +67,7 @@ _TABLES = [
     Education.__table__,
     Skill.__table__,
     Project.__table__,
+    Certification.__table__,
 ]
 
 
@@ -108,7 +118,21 @@ _PAYLOAD = {
         }
     ],
     "skills": [{"category": "Languages", "items": ["Python", "Ada"]}],
-    "projects": [{"title": "Bernoulli Numbers", "text": "First program", "tags": ["ai-ml"]}],
+    "projects": [
+        {"title": "Bernoulli Numbers", "text": "First program", "tags": ["ai-ml"]},
+        {
+            "title": "Difference Engine",
+            "text": "Contributed gear improvements",
+            "kind": "open_source",
+        },
+    ],
+    "certifications": [
+        {
+            "title": "Analytical Engine Operator",
+            "issuer": "Royal Society",
+            "date": "1842",
+        }
+    ],
 }
 
 
@@ -176,8 +200,21 @@ async def test_persist_writes_all_sections(session):
     assert skill_rows[0][0] == "Languages"
     assert "Python" in skill_rows[0][1]
 
-    projects_rows = (await session.execute(text("SELECT title FROM project"))).all()
-    assert [r[0] for r in projects_rows] == ["Bernoulli Numbers"]
+    projects_rows = (
+        await session.execute(text("SELECT title, kind FROM project ORDER BY order_index"))
+    ).all()
+    assert [(r[0], r[1]) for r in projects_rows] == [
+        ("Bernoulli Numbers", "project"),
+        ("Difference Engine", "open_source"),
+    ]
+
+    certifications = (await session.exec(select(Certification))).all()
+    assert len(certifications) == 1
+    assert certifications[0].title == "Analytical Engine Operator"
+    assert certifications[0].issuer == "Royal Society"
+    # sqlite round-trips TIMESTAMPTZ as naive — compare the date parts only.
+    assert certifications[0].date is not None
+    assert certifications[0].date.replace(tzinfo=None) == datetime(1842, 1, 1)
 
 
 @pytest.mark.asyncio
@@ -188,7 +225,8 @@ async def test_reparse_replaces_sections_not_appends(session):
     assert len((await session.exec(select(Bullet))).all()) == 2
     assert len((await session.exec(select(Education))).all()) == 1
     assert len((await session.exec(select(Skill))).all()) == 1
-    assert len((await session.exec(select(Project))).all()) == 1
+    assert len((await session.exec(select(Project))).all()) == 2
+    assert len((await session.exec(select(Certification))).all()) == 1
 
 
 @pytest.mark.asyncio

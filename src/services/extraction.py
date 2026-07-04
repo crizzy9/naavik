@@ -178,7 +178,7 @@ async def _persist_profile(
     """
     from sqlmodel import delete, select
 
-    from models import Education, Project, Skill
+    from models import Certification, Education, Project, Skill
 
     existing = (
         await session.exec(
@@ -248,6 +248,7 @@ async def _persist_profile(
     await session.exec(delete(Education).where(Education.profile_id == profile.id))
     await session.exec(delete(Skill).where(Skill.profile_id == profile.id))
     await session.exec(delete(Project).where(Project.profile_id == profile.id))
+    await session.exec(delete(Certification).where(Certification.profile_id == profile.id))
     await session.flush()
 
     for order, exp_payload in enumerate(structured.get("experiences") or []):
@@ -335,14 +336,35 @@ async def _persist_profile(
         title = proj_payload.get("title") or proj_payload.get("name") or ""
         if not title:
             continue
+        kind = proj_payload.get("kind")
+        if kind not in ("project", "open_source"):
+            kind = "project"
         session.add(
             Project(
                 profile_id=profile.id,
+                kind=kind,
                 title=title,
                 date=_parse_date(proj_payload.get("date")),
                 text=proj_payload.get("text") or proj_payload.get("description") or "",
                 tags=list(proj_payload.get("tags") or []),
                 link=proj_payload.get("link") or proj_payload.get("url"),
+                order_index=order,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    for order, cert_payload in enumerate(structured.get("certifications") or []):
+        title = cert_payload.get("title") or cert_payload.get("name") or ""
+        if not title:
+            continue
+        session.add(
+            Certification(
+                profile_id=profile.id,
+                title=title,
+                issuer=cert_payload.get("issuer") or "",
+                date=_parse_date(cert_payload.get("date")),
+                description=cert_payload.get("description"),
                 order_index=order,
                 created_at=now,
                 updated_at=now,
