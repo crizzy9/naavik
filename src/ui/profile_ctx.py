@@ -389,9 +389,15 @@ def project_dicts(projects: list[Project]) -> list[dict[str, object]]:
             "tags_csv": ", ".join(_tag_values(p.tags)),
             "link": p.link,
             "date_value": p.date.strftime("%Y-%m-%d") if p.date else "",
+            "selection_override": _override_value(p),
         }
         for p in projects
     ]
+
+
+def _override_value(row: object) -> str:
+    override = getattr(row, "selection_override", None)
+    return str(getattr(override, "value", override) or "")
 
 
 def skill_dicts(skills: list[Skill]) -> list[dict[str, object]]:
@@ -415,6 +421,7 @@ def certification_dicts(certs: list[Certification]) -> list[dict[str, object]]:
             "date": c.date.strftime("%Y-%m-%d") if c.date else None,
             "date_value": c.date.strftime("%Y-%m-%d") if c.date else "",
             "description": c.description,
+            "selection_override": _override_value(c),
         }
         for c in certs
     ]

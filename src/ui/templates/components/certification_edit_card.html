@@ -21,7 +21,16 @@
     {% with label="ISSUER", name="cert_issuer_" ~ cert.id, value=cert.issuer, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
     {% with label="DATE", name="cert_date_" ~ cert.id, value=cert.date_value, type="date", autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
   </div>
-  <div class="mt-4">
+  <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
     {% with label="DESCRIPTION (OPTIONAL)", name="cert_description_" ~ cert.id, type="textarea", value=cert.description or "", autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
+    <div>
+      {% with label="RESUME INCLUSION", for_id="cert_selection_override_" ~ cert.id, hint="always/never wins · auto = fit by page space" %}
+        {% include "components/field_label.html" %}
+      {% endwith %}
+      {% with name="cert_selection_override_" ~ cert.id, type="select", value=cert.selection_override,
+              options=[("", "Auto (AI decides)"), ("always_include", "Always include"), ("never_include", "Never include")] %}
+        {% include "components/input.html" %}
+      {% endwith %}
+    </div>
   </div>
 </section>

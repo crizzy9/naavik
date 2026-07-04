@@ -282,6 +282,9 @@ class Project(SQLModel, table=True):
     portfolio_slug: str | None = None
     link: str | None = None
     order_index: int = Field(default=0)
+    # Same three-state semantics as Bullet.selection_override: always/never
+    # override wins; null → the tailoring step decides by remaining space.
+    selection_override: BulletSelectionOverride | None = None
 
     created_at: datetime = Field(
         default_factory=utcnow,
@@ -311,6 +314,8 @@ class Certification(SQLModel, table=True):
     )
     description: str | None = None
     order_index: int = Field(default=0)
+    # Three-state include control, mirroring Bullet.selection_override.
+    selection_override: BulletSelectionOverride | None = None
 
     created_at: datetime = Field(
         default_factory=utcnow,

@@ -172,6 +172,18 @@ _COLUMNS_ADDED_LATER: dict[str, frozenset[str]] = {
             "raw_resume_text",
         }
     ),
+    "project": frozenset(
+        {
+            # 0036 — three-state include control for resume tailoring.
+            "selection_override",
+        }
+    ),
+    "certification": frozenset(
+        {
+            # 0036 — three-state include control for resume tailoring.
+            "selection_override",
+        }
+    ),
 }
 
 

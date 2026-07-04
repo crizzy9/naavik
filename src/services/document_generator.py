@@ -442,11 +442,11 @@ async def _tailor_summary(
 # ── Resume generation ───────────────────────────────────────────────────
 
 
-# One printed line in `onepage.typ` (10pt Liberation Sans, 0.3in margins,
-# ○ + 0.15in list indent) holds ~118 characters; the refine TARGET is 112
-# so a refined bullet has headroom and NEVER wraps. Calibrated by compiling
-# the cv.tex-equivalent payload and bisecting the wrap point. The eval
-# harness checks against the true line capacity, not the target — a
+# One printed line in `onepage.typ` (10pt New Computer Modern, 0.3in
+# margins, ∘ + 0.15in list indent, justified) holds ~125+ characters — the
+# cv.tex reference's longest bullet (127 chars) fits on one line. The
+# refine TARGET stays 112 with capacity 118: both are safely under the true
+# wrap point, and the eval harness checks capacity, not the target — a
 # 115-char line renders fine and shouldn't be flagged.
 RESUME_BULLET_CHAR_BUDGET = 112
 RESUME_BULLET_LINE_CAPACITY = 118
@@ -609,28 +609,30 @@ def _normalize_handle(handle: str, domain_prefix: str) -> str:
     return h.strip("/")
 
 
-def _contact_links(p: Profile) -> list[dict[str, str | None]]:
-    """Ordered contact-line entries; empty fields are simply absent (no blank
-    separators — the template joins whatever it gets with `·`)."""
-    links: list[dict[str, str | None]] = []
-    if p.email:
-        links.append({"text": p.email, "href": f"mailto:{p.email}"})
+def _contact_lines(p: Profile) -> list[list[dict[str, str | None]]]:
+    """Two centered header lines, mirroring cv.tex's \\contactinfo pair:
+    phone | email | location, then portfolio | github | linkedin. Empty
+    fields are simply absent; an entirely empty line is dropped."""
+    line1: list[dict[str, str | None]] = []
     if p.phone:
-        links.append({"text": p.phone, "href": None})
+        line1.append({"text": p.phone, "href": None})
+    if p.email:
+        line1.append({"text": p.email, "href": f"mailto:{p.email}"})
     if p.location:
-        links.append({"text": p.location, "href": None})
-    if getattr(p, "linkedin_handle", None):
-        handle = _normalize_handle(p.linkedin_handle, "linkedin.com/in/")
-        links.append(
-            {"text": f"linkedin.com/in/{handle}", "href": f"https://linkedin.com/in/{handle}"}
-        )
-    if getattr(p, "github_handle", None):
-        handle = _normalize_handle(p.github_handle, "github.com/")
-        links.append({"text": f"github.com/{handle}", "href": f"https://github.com/{handle}"})
+        line1.append({"text": p.location, "href": None})
+    line2: list[dict[str, str | None]] = []
     if getattr(p, "portfolio_url", None):
         display = _strip_scheme(p.portfolio_url)
-        links.append({"text": display, "href": f"https://{display}"})
-    return links
+        line2.append({"text": display, "href": f"https://{display}"})
+    if getattr(p, "github_handle", None):
+        handle = _normalize_handle(p.github_handle, "github.com/")
+        line2.append({"text": f"github.com/{handle}", "href": f"https://github.com/{handle}"})
+    if getattr(p, "linkedin_handle", None):
+        handle = _normalize_handle(p.linkedin_handle, "linkedin.com/in/")
+        line2.append(
+            {"text": f"linkedin.com/in/{handle}", "href": f"https://linkedin.com/in/{handle}"}
+        )
+    return [line for line in (line1, line2) if line]
 
 
 def _date_range(start, end) -> str:
@@ -639,12 +641,27 @@ def _date_range(start, end) -> str:
     return f"{start_s} – {end_s}" if start_s else end_s
 
 
+def _section_included(row: Any, excluded: set[int]) -> bool:
+    """Three-state include for Project/Certification rows: `never_include`
+    never renders, `always_include` always renders, null renders unless the
+    page-fit loop excluded it for space."""
+    override = getattr(row, "selection_override", None)
+    value = getattr(override, "value", override)
+    if value == BulletSelectionOverride.NEVER_INCLUDE.value:
+        return False
+    if value == BulletSelectionOverride.ALWAYS_INCLUDE.value:
+        return True
+    return getattr(row, "id", None) not in excluded
+
+
 async def _build_resume_data(
     *,
     snap: ProfileSnapshot,
     selected_bullet_ids: list[int],
     trimmed: dict[int, str],
     tailored_summary: str | None = None,
+    excluded_project_ids: set[int] | None = None,
+    excluded_certification_ids: set[int] | None = None,
 ) -> dict[str, Any]:
     """Compose the payload consumed by `onepage.typ` (cv.tex-conversion shape).
 
@@ -654,9 +671,11 @@ async def _build_resume_data(
     them). Kept bullets are ordered by selection priority (bold tailoring:
     the most JD-relevant result leads each role).
 
-    There is deliberately no headline field — the header is name + one
-    contact line, nothing else.
+    There is deliberately no headline field — the header is name + two
+    contact lines, nothing else (cv.tex shape).
     """
+    excluded_projects = excluded_project_ids or set()
+    excluded_certs = excluded_certification_ids or set()
     selected = set(selected_bullet_ids)
     priority = {bid: i for i, bid in enumerate(selected_bullet_ids)}
     experiences_payload: list[dict] = []
@@ -695,6 +714,8 @@ async def _build_resume_data(
     def _project_payload(rows: list[Project]) -> list[dict]:
         out = []
         for pr in rows:
+            if not _section_included(pr, excluded_projects):
+                continue
             link = getattr(pr, "link", None)
             out.append(
                 {
@@ -713,10 +734,11 @@ async def _build_resume_data(
             "text": (c.description or None),
         }
         for c in snap.certifications
+        if _section_included(c, excluded_certs)
     ]
     return {
         "profile": {"full_name": p.full_name},
-        "contact_links": _contact_links(p),
+        "contact_lines": _contact_lines(p),
         "summary": summary if summary else None,
         "experiences": experiences_payload,
         "education": education_payload,
@@ -802,12 +824,15 @@ def _ensure_min_one_per_experience(
 
 
 def _drop_lowest_priority(
-    candidate_ids: list[int], snap: ProfileSnapshot
+    candidate_ids: list[int], snap: ProfileSnapshot, *, allow_floor_drop: bool = True
 ) -> tuple[list[int], int | None]:
     """Drop the lowest-priority bullet whose experience keeps ≥1 bullet.
 
-    Falls back to a plain tail-drop when every experience is down to its
-    last bullet (the page has to fit eventually).
+    With `allow_floor_drop` it falls back to a plain tail-drop when every
+    experience is down to its last bullet (the page has to fit eventually).
+    Callers pass False while cheaper space remains elsewhere (null-override
+    Projects / Certifications / Open-Source rows drop before an experience
+    is emptied).
     """
     exp_of = {b.id: exp_id for exp_id, bs in snap.bullets_by_experience.items() for b in bs}
     counts: dict[int, int] = {}
@@ -820,9 +845,27 @@ def _drop_lowest_priority(
         eid = exp_of.get(bid)
         if eid is None or counts.get(eid, 0) > 1:
             return candidate_ids[:i] + candidate_ids[i + 1 :], bid
-    if candidate_ids:
+    if allow_floor_drop and candidate_ids:
         return candidate_ids[:-1], candidate_ids[-1]
     return candidate_ids, None
+
+
+def _section_drop_queue(snap: ProfileSnapshot) -> list[tuple[str, int]]:
+    """Null-override section rows in drop order (least prominent first):
+    Open Source tail→head, then Certifications, then Projects. Rows pinned
+    `always_include` never enter the queue; `never_include` rows are already
+    filtered out of the payload."""
+    queue: list[tuple[str, int]] = []
+    for pr in reversed(snap.open_source):
+        if getattr(pr, "selection_override", None) is None and pr.id is not None:
+            queue.append(("project", pr.id))
+    for cert in reversed(snap.certifications):
+        if getattr(cert, "selection_override", None) is None and cert.id is not None:
+            queue.append(("certification", cert.id))
+    for pr in reversed(snap.projects):
+        if getattr(pr, "selection_override", None) is None and pr.id is not None:
+            queue.append(("project", pr.id))
+    return queue
 
 
 async def generate_resume(
@@ -919,8 +962,14 @@ async def generate_resume(
     template_name, pdf_standard = _select_template(application, settings)
 
     # Page-fit loop: pack the page, dropping the lowest-priority bullet on
-    # overflow — never emptying an experience.
+    # overflow — never emptying an experience. When bullets hit the
+    # one-per-experience floor, null-override section rows (OSS → certs →
+    # projects) become the remaining space to reclaim.
     dropped_for_fit: list[int] = []
+    section_queue = _section_drop_queue(snap)
+    dropped_sections: list[dict[str, Any]] = []
+    excluded_projects: set[int] = set()
+    excluded_certs: set[int] = set()
     final_result = None
     result = None
     for _attempt in range(RESUME_MAX_FIT_ATTEMPTS):
@@ -929,6 +978,8 @@ async def generate_resume(
             selected_bullet_ids=candidate_ids,
             trimmed=trimmed,
             tailored_summary=tailored_summary,
+            excluded_project_ids=excluded_projects,
+            excluded_certification_ids=excluded_certs,
         )
         try:
             result = await typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
@@ -956,15 +1007,21 @@ async def generate_resume(
         if not overflows(result, max_pages=1):
             final_result = result
             break
-        if not candidate_ids:
-            final_result = result
-            break
-        candidate_ids, dropped = _drop_lowest_priority(candidate_ids, snap)
-        if dropped is None:
-            final_result = result
-            break
-        dropped_for_fit.append(dropped)
-        log.info("resume overflowed page 1; dropped bullet %d (fit loop)", dropped)
+        candidate_ids, dropped = _drop_lowest_priority(
+            candidate_ids, snap, allow_floor_drop=not section_queue
+        )
+        if dropped is not None:
+            dropped_for_fit.append(dropped)
+            log.info("resume overflowed page 1; dropped bullet %d (fit loop)", dropped)
+            continue
+        if section_queue:
+            kind_, sid = section_queue.pop(0)
+            (excluded_projects if kind_ == "project" else excluded_certs).add(sid)
+            dropped_sections.append({"kind": kind_, "id": sid})
+            log.info("resume overflowed page 1; dropped %s %d (fit loop)", kind_, sid)
+            continue
+        final_result = result
+        break
     else:
         final_result = result
 
@@ -1000,6 +1057,8 @@ async def generate_resume(
                 selected_bullet_ids=attempt_ids,
                 trimmed=trimmed,
                 tailored_summary=tailored_summary,
+                excluded_project_ids=excluded_projects,
+                excluded_certification_ids=excluded_certs,
             )
             try:
                 result = await typst_compile(
@@ -1023,6 +1082,8 @@ async def generate_resume(
                 selected_bullet_ids=candidate_ids,
                 trimmed=trimmed,
                 tailored_summary=tailored_summary,
+                excluded_project_ids=excluded_projects,
+                excluded_certification_ids=excluded_certs,
             )
             try:
                 final_result = await typst_compile(
@@ -1048,6 +1109,7 @@ async def generate_resume(
             "selected_ids": candidate_ids,
             "ranked_ids": ranked_ids,
             "dropped_for_fit": dropped_for_fit,
+            "dropped_sections": dropped_sections,
             "added_back": added_back,
             "summary": tailored_summary,
             "trimmed_lines": {str(k): v for k, v in trimmed.items()},
@@ -1144,10 +1206,33 @@ async def recompile_resume_from_selection(
     ]
     effective.extend(sorted(forced_in))
 
+    if not effective:
+        # No live tailored line survives — the profile was re-extracted since
+        # generation (all selected ids orphaned) or every bullet is excluded.
+        # Compiling an empty-experience resume and calling it "updated" would
+        # be a lie; the caller surfaces the regenerate affordance instead.
+        log.warning(
+            "recompile for application %d has no usable selection (stale doc?)", application.id
+        )
+        return None
+
     by_id = {b.id: b for b in _bullet_inventory(snap)}
     texts: dict[int, str] = {}
     for bid in effective:
         texts[bid] = text_overrides.get(bid) or trimmed.get(bid) or by_id[bid].text
+
+    # Honor the generation pass's space-driven section drops so a selection
+    # recompile reproduces the same page (never_include rows are filtered by
+    # the payload builder from the live model state either way).
+    excluded_projects: set[int] = set()
+    excluded_certs: set[int] = set()
+    for entry in blob.get("dropped_sections") or []:
+        if not isinstance(entry, dict):
+            continue
+        kind_, sid = entry.get("kind"), entry.get("id")
+        if not isinstance(sid, int):
+            continue
+        (excluded_projects if kind_ == "project" else excluded_certs).add(sid)
 
     template_name, pdf_standard = _select_template(application, settings)
     out_pdf = _app_documents_dir(application.id) / "resume.pdf"
@@ -1156,6 +1241,8 @@ async def recompile_resume_from_selection(
         selected_bullet_ids=effective,
         trimmed=texts,
         tailored_summary=(blob.get("summary") or None),
+        excluded_project_ids=excluded_projects,
+        excluded_certification_ids=excluded_certs,
     )
     result = await typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
 

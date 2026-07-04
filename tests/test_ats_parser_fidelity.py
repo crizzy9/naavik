@@ -134,11 +134,13 @@ def test_validate_parse_fidelity_on_real_onepage_pdf(tmp_path):
     # (structured jobentry/educationentry fields; no headline).
     data = {
         "profile": {"full_name": "Test Candidate"},
-        "contact_links": [
-            {"text": "test@example.com", "href": "mailto:test@example.com"},
-            {"text": "+1 555 0100", "href": None},
-            {"text": "City", "href": None},
-            {"text": "linkedin.com/in/test", "href": "https://linkedin.com/in/test"},
+        "contact_lines": [
+            [
+                {"text": "+1 555 0100", "href": None},
+                {"text": "test@example.com", "href": "mailto:test@example.com"},
+                {"text": "City", "href": None},
+            ],
+            [{"text": "linkedin.com/in/test", "href": "https://linkedin.com/in/test"}],
         ],
         "summary": "Engineer with experience.",
         "experiences": [

@@ -9,7 +9,7 @@
 // `document_generator._build_resume_data`:
 //   {
 //     "profile": {"full_name": str},
-//     "contact_links": [{"text": str, "href": str | null}],   // ONE line
+//     "contact_lines": [[{"text": str, "href": str | null}]],  // TWO lines
 //     "summary": str | null,                    // JD-tailored, optional
 //     "experiences": [
 //       {"company": str,                        // "Intuit, Personalization"
@@ -35,22 +35,32 @@
 
 #set document(title: data.profile.full_name + " — Resume")
 
-// Side margins widened 0.3in → 0.5in (2026-07): the cv.tex-tight 0.3in read
-// as cramped. The density add-back loop refills to the (slightly narrower)
-// page, so one-page contract holds.
-#set page(paper: "us-letter", margin: (x: 0.5in, top: 0.3in, bottom: 0.3in))
+// cv.tex geometry exactly: \usepackage[margin=0.3in, top=0.25in,
+// bottom=0.25in]{geometry}. Do NOT widen these — the refine-bullet char
+// budget (112/118 in document_generator) is calibrated to this text width;
+// the 2026-07 0.5in experiment made calibrated one-liners wrap by a word.
+#set page(paper: "us-letter", margin: (x: 0.3in, top: 0.25in, bottom: 0.25in))
 
+// cv.tex's preamble asks for Helvetica, but the compiled reference PDF
+// actually embeds Computer Modern (CMR10/CMBX10/CMTI10 — the `sans` package
+// never takes effect). New Computer Modern is bundled inside the typst
+// binary, so it renders identically everywhere AND its narrower metrics are
+// what let cv.tex's ~127-char bullets fit on one printed line.
 #set text(
-  font: ("Helvetica", "Arial", "Liberation Sans"),
+  font: ("New Computer Modern", "Liberation Sans"),
   size: 10pt,
   fill: rgb("#111111"),
   features: ("liga": 0, "clig": 0, "dlig": 0),
 )
 // leading = intra-paragraph line height; spacing = inter-paragraph gap.
 // LaTeX source uses noitemsep/nolistsep — paragraph gaps collapse to the
-// line rhythm, which is what packs the page.
-#set par(leading: 0.42em, spacing: 0.42em, justify: false)
-#set block(spacing: 0.42em)
+// line rhythm, which is what packs the page. justify matches LaTeX's default
+// full justification: interword glue SHRINKS on tight lines, which is how
+// cv.tex fits its longest bullets on one printed line.
+// 0.52em ≈ cmr10's 12pt \baselineskip at 10pt — measured against the
+// pdflatex render; 0.42em packed noticeably tighter than the reference.
+#set par(leading: 0.52em, spacing: 0.52em, justify: true)
+#set block(spacing: 0.52em)
 
 #let linkcolor = rgb("#0000EE")
 
@@ -81,13 +91,18 @@
   v(0.02em)
 }
 
-// \setlist[itemize]{leftmargin=0.15in, noitemsep, nolistsep} with $\circ$.
+// \setlist[itemize]{leftmargin=0.15in, noitemsep, nolistsep} with $\circ$:
+// text starts exactly 0.15in from the margin (the char-budget calibration
+// width); the ∘ label sits right-aligned in the gutter with a small labelsep,
+// like LaTeX's list label box.
 #let bullet_items(items) = {
-  pad(left: 0.03in, {
-    for b in items {
-      par(hanging-indent: 0.12in)[#text(size: 8pt)[○] #h(3pt) #b]
-    }
-  })
+  for b in items {
+    grid(
+      columns: (0.15in, 1fr),
+      align(right, [∘#h(3.5pt)]),
+      par(hanging-indent: 0in)[#b],
+    )
+  }
 }
 
 // \jobentry{company}{title}{location}{dates}:
@@ -116,7 +131,7 @@
     emph(location),
     text(weight: "bold", dates),
   )
-  v(-0.35em)
+  v(-0.18em)
   grid(
     columns: (1fr, auto),
     emph(degree),
@@ -136,21 +151,29 @@
 
 // ───────── Header ─────────
 
+// \name{...} then two \contactinfo lines (phone|email|location and
+// portfolio|github|linkedin), all centered, links in the LaTeX link blue.
 #align(center)[
   #text(size: 14.4pt)[#sc(data.profile.full_name)]
-  #v(-0.55em)
-  #text(size: 9pt)[
-    #{
-      let parts = ()
-      for c in data.contact_links {
-        if c.href != none {
-          parts.push(link(c.href, text(fill: linkcolor, c.text)))
-        } else {
-          parts.push(text(c.text))
+  #v(-0.35em)
+  #for line in data.contact_lines [
+    // Explicit par() per line — plain content blocks would merge both
+    // \contactinfo lines into one centered paragraph.
+    #par(justify: false)[
+      #text(size: 9pt)[
+        #{
+          let parts = ()
+          for c in line {
+            if c.href != none {
+              parts.push(link(c.href, text(fill: linkcolor, c.text)))
+            } else {
+              parts.push(text(c.text))
+            }
+          }
+          parts.join([ #h(1.5pt) | #h(1.5pt) ])
         }
-      }
-      parts.join([ #h(1.5pt) | #h(1.5pt) ])
-    }
+      ]
+    ]
   ]
 ]
 

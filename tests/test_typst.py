@@ -40,13 +40,20 @@ def _minimal_resume_data() -> dict:
     # jobentry/educationentry fields, no headline, + certs/open-source lists.
     return {
         "profile": {"full_name": "Shyam Padia"},
-        "contact_links": [
-            {"text": "shyam.padia930@gmail.com", "href": "mailto:shyam.padia930@gmail.com"},
-            {"text": "+1 555 555 0100", "href": None},
-            {"text": "Boston, MA", "href": None},
-            {"text": "linkedin.com/in/shyampadia", "href": "https://linkedin.com/in/shyampadia"},
-            {"text": "github.com/crizzy9", "href": "https://github.com/crizzy9"},
-            {"text": "crypticsoul.dev", "href": "https://crypticsoul.dev"},
+        "contact_lines": [
+            [
+                {"text": "+1 555 555 0100", "href": None},
+                {"text": "shyam.padia930@gmail.com", "href": "mailto:shyam.padia930@gmail.com"},
+                {"text": "Boston, MA", "href": None},
+            ],
+            [
+                {"text": "crypticsoul.dev", "href": "https://crypticsoul.dev"},
+                {"text": "github.com/crizzy9", "href": "https://github.com/crizzy9"},
+                {
+                    "text": "linkedin.com/in/shyampadia",
+                    "href": "https://linkedin.com/in/shyampadia",
+                },
+            ],
         ],
         "summary": (
             "Backend + ML engineer with 8+ years building personalization platforms at scale."
