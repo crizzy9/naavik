@@ -393,6 +393,51 @@
     tgt.replaceChildren(p);
   });
 
+  // ---------------------------------------------------------------- //
+  // Chip inputs ([data-chip-input]) — push-based chip editor.        //
+  // Enter adds a chip (hidden input rides the surrounding form), ×   //
+  // removes one. Delegated: skill cards re-render via HTMX swaps.    //
+  // ---------------------------------------------------------------- //
+  document.body.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var entry = e.target;
+    if (!entry.matches || !entry.matches('[data-chip-entry]')) return;
+    e.preventDefault(); // Enter adds a chip — it must never submit the bulk form
+    var box = entry.closest('[data-chip-input]');
+    if (!box) return;
+    var value = entry.value.trim();
+    if (!value) return;
+    var dup = Array.prototype.some.call(
+      box.querySelectorAll('[data-chip] input[type="hidden"]'),
+      function (i) { return i.value.toLowerCase() === value.toLowerCase(); }
+    );
+    if (dup) { entry.value = ''; return; }
+    var chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.setAttribute('data-chip', '');
+    var hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.name = box.getAttribute('data-chip-name');
+    hidden.value = value;
+    var label = document.createElement('span');
+    label.textContent = value;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('data-chip-remove', '');
+    btn.setAttribute('aria-label', 'Remove ' + value);
+    btn.className = 'text-slate-400 hover:text-rose-300 leading-none';
+    btn.textContent = '×';
+    chip.append(hidden, label, btn);
+    box.insertBefore(chip, entry);
+    entry.value = '';
+  });
+  document.body.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-chip-remove]');
+    if (!btn) return;
+    var chip = btn.closest('[data-chip]');
+    if (chip) { chip.remove(); }
+  });
+
   // openApplyUrl → honest-submit fallback: when a job's real application site
   // can't be auto-submitted, the server sends the posting URL so clicking
   // "Submit" opens it in a new tab (alongside the explanatory toast) instead

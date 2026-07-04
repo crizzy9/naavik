@@ -68,13 +68,21 @@ def _collect_entity_edits(form_items) -> dict[tuple[str, int], dict[str, Any]]:
         prefix, field, entity_id = m.group(1), m.group(2), int(m.group(3))
         raw = str(value)
         parsed: Any
+        entity = edits.setdefault((prefix, entity_id), {})
         if field in _DATE_FIELDS:
             parsed = _parse_form_date(raw)  # raises ValueError — caller collects
         elif field in _CSV_FIELDS:
+            # Chip editors submit one input PER value under the same name
+            # (plus an empty sentinel so "no chips" still clears the field);
+            # legacy single CSV inputs keep working via the split. Repeated
+            # keys ACCUMULATE instead of last-one-wins.
             parsed = [t.strip() for t in raw.split(",") if t.strip()]
+            existing = entity.get(field)
+            if isinstance(existing, list):
+                parsed = existing + [t for t in parsed if t not in existing]
         else:
             parsed = raw
-        edits.setdefault((prefix, entity_id), {})[field] = parsed
+        entity[field] = parsed
     return edits
 
 
@@ -129,13 +137,18 @@ async def _apply_entity_edit(
     elif prefix in ("proj", "oss"):
         if not await profile_service.owns_project(session, project_id=entity_id, user_id=user_id):
             raise LookupError("project not found")
+        # Same gate as put_bullet: project tags are vocab chips now, and the
+        # job scorer depends on the 9-tag vocabulary — drop anything else.
+        tags = fields.get("tags")
+        if tags is not None:
+            tags = [t for t in tags if t in TAG_VOCAB]
         await profile_service.update_project(
             session,
             entity_id,
             title=fields.get("title"),
             text=fields.get("text"),
             link=fields.get("link"),
-            tags=fields.get("tags"),
+            tags=tags,
             **({"date": fields["date"]} if "date" in fields else {}),
             **(
                 {"selection_override": _parse_override(fields["selection_override"])}

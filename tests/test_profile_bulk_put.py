@@ -275,3 +275,76 @@ def test_bulk_put_csrf_enforced(client: TestClient, auth_cookies):
     )
     assert r.status_code == 403, f"expected 403, got {r.status_code}: {r.text[:200]}"
     assert "CSRF" in r.text
+
+
+# ── Chip editors (2026-07): repeated form keys accumulate ───────────────────
+# Project/OSS tags became vocab toggle-chips and skill items a push-chip
+# editor — both submit ONE input per value under the same
+# `<prefix>_<field>_<id>` name plus an empty sentinel (so zero chips still
+# clears). Legacy single-CSV inputs keep parsing.
+
+
+def test_collect_entity_edits_accumulates_repeated_chip_keys():
+    from api.profile import _collect_entity_edits
+
+    edits = _collect_entity_edits(
+        [
+            ("skill_items_7", ""),  # sentinel
+            ("skill_items_7", "Python"),
+            ("skill_items_7", "Go"),
+            ("skill_items_7", "Python"),  # dup collapses
+            ("proj_tags_3", ""),
+            ("proj_tags_3", "genai"),
+            ("proj_tags_3", "backend"),
+            ("oss_tags_4", "platform, devops"),  # legacy CSV still splits
+        ]
+    )
+    assert edits[("skill", 7)]["items"] == ["Python", "Go"]
+    assert edits[("proj", 3)]["tags"] == ["genai", "backend"]
+    assert edits[("oss", 4)]["tags"] == ["platform", "devops"]
+
+
+def test_collect_entity_edits_sentinel_only_clears():
+    from api.profile import _collect_entity_edits
+
+    edits = _collect_entity_edits([("skill_items_7", ""), ("proj_tags_3", "")])
+    assert edits[("skill", 7)]["items"] == []
+    assert edits[("proj", 3)]["tags"] == []
+
+
+def test_bulk_put_skill_items_chips_reach_service(client: TestClient, auth_cookies, monkeypatch):
+    """Repeated `skill_items_<id>` inputs (chip editor) arrive at
+    `update_skill` as ONE accumulated list, sentinel filtered out."""
+    from unittest.mock import AsyncMock
+
+    from services import profile_service
+
+    update = AsyncMock()
+    monkeypatch.setattr(profile_service, "owns_skill", AsyncMock(return_value=True))
+    monkeypatch.setattr(profile_service, "update_skill", update)
+    r = client.put(
+        "/api/v1/profile",
+        data={"skill_items_1": ["", "Rust", "Zig"]},
+        cookies=auth_cookies,
+    )
+    assert r.status_code == 200, r.text
+    assert update.call_args.kwargs["items"] == ["Rust", "Zig"]
+
+
+def test_bulk_put_project_tag_chips_enforce_vocab(client: TestClient, auth_cookies, monkeypatch):
+    """Checkbox-chip `proj_tags_<id>` submissions accumulate and are filtered
+    to the 9-tag vocabulary before reaching `update_project`."""
+    from unittest.mock import AsyncMock
+
+    from services import profile_service
+
+    update = AsyncMock()
+    monkeypatch.setattr(profile_service, "owns_project", AsyncMock(return_value=True))
+    monkeypatch.setattr(profile_service, "update_project", update)
+    r = client.put(
+        "/api/v1/profile",
+        data={"proj_tags_1": ["", "genai", "backend", "not-a-vocab-tag"]},
+        cookies=auth_cookies,
+    )
+    assert r.status_code == 200, r.text
+    assert update.call_args.kwargs["tags"] == ["genai", "backend"]

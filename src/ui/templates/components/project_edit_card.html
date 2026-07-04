@@ -3,7 +3,7 @@
 
   Args:
     proj : dict from profile_ctx.project_dicts (id, kind, title, text,
-           link, tags_csv, date_value)
+           link, tags, date_value)
 
   Field prefix is `proj_` for kind=project and `oss_` for kind=open_source
   — both parse identically in the bulk PUT; the split keeps section adds
@@ -32,7 +32,17 @@
     {% with label="DESCRIPTION", name=_prefix ~ "_text_" ~ proj.id, type="textarea", value=proj.text, autosave_enabled=false %}{% include "components/editor_field.html" %}{% endwith %}
   </div>
   <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-    {% with label="TAGS (COMMA-SEPARATED)", name=_prefix ~ "_tags_" ~ proj.id, value=proj.tags_csv, autosave_enabled=false, mono=true, placeholder="genai, backend" %}{% include "components/editor_field.html" %}{% endwith %}
+    <div data-testid="{{ _prefix }}-tags-{{ proj.id }}">
+      {% with label="TAGS", for_id=None, hint="9-tag vocab · click to toggle · drives job matching" %}
+        {% include "components/field_label.html" %}
+      {% endwith %}
+      {# Empty sentinel: with every chip unchecked the field still submits,
+         so "no tags" clears server-side instead of silently not changing. #}
+      <input type="hidden" name="{{ _prefix }}_tags_{{ proj.id }}" value="">
+      {% with selected=proj.tags, name=_prefix ~ "_tags_" ~ proj.id %}
+        {% include "components/tag_picker.html" %}
+      {% endwith %}
+    </div>
     <div>
       {% with label="RESUME INCLUSION", for_id=_prefix ~ "_selection_override_" ~ proj.id, hint="always/never wins · auto = fit by page space" %}
         {% include "components/field_label.html" %}
