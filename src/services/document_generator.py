@@ -773,9 +773,7 @@ def _template_version(template_name: str) -> str:
 _template_version_cache: dict[str, str] = {}
 
 
-def _select_template(
-    application: Application, settings: Settings | None
-) -> tuple[str, str | None]:
+def _select_template(application: Application, settings: Settings | None) -> tuple[str, str | None]:
     """One template (`onepage.typ`) for every board — it is both the dense
     recruiter-standard layout AND ATS-safe (single column, ligatures off,
     plain bullets). Returns ``(template_name, pdf_standard)``; ATS-known

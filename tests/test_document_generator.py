@@ -656,7 +656,9 @@ async def test_generate_resume_fit_loop_converges_to_one_page(tmp_path):
 
     with (
         patch("services.document_generator._today_spend", new=AsyncMock(return_value=0.0)),
-        patch("services.document_generator.load_profile_snapshot", new=AsyncMock(return_value=snap)),
+        patch(
+            "services.document_generator.load_profile_snapshot", new=AsyncMock(return_value=snap)
+        ),
         patch("services.document_generator._app_documents_dir", return_value=out_dir),
         patch("services.document_generator.get_provider"),
         patch("services.document_generator.llm_tracker.tracked_call", new=fake_llm),
