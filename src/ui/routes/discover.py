@@ -1253,7 +1253,13 @@ async def get_resume_pdf(
     resume = next((d for d in docs if str(d.kind.value) == "resume"), None)
     if resume is None or not resume.path or not Path(resume.path).is_file():
         raise HTTPException(status_code=404, detail="No generated resume PDF yet")
-    return FileResponse(resume.path, media_type="application/pdf")
+    # no-store: recompiles overwrite the SAME path, and FileResponse's default
+    # mtime-based validators (1s granularity) + browser heuristic freshness
+    # kept serving the pre-recompile bytes — the embed reloaded but showed the
+    # old render, and Regen on old applications looked like a no-op.
+    return FileResponse(
+        resume.path, media_type="application/pdf", headers={"Cache-Control": "no-store"}
+    )
 
 
 @router.get("/api/v1/applications/{application_id}/cover-letter.pdf", name="apply_cover_letter_pdf")
@@ -1277,7 +1283,10 @@ async def get_cover_letter_pdf(
     cover = next((d for d in docs if str(d.kind.value) == "cover_letter"), None)
     if cover is None or not cover.path or not Path(cover.path).is_file():
         raise HTTPException(status_code=404, detail="No generated cover letter PDF yet")
-    return FileResponse(cover.path, media_type="application/pdf")
+    # no-store for the same reason as the resume route above.
+    return FileResponse(
+        cover.path, media_type="application/pdf", headers={"Cache-Control": "no-store"}
+    )
 
 
 @router.post(

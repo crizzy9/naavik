@@ -193,3 +193,40 @@ def test_recompile_with_nothing_generated_is_honest(client_with_user):
     assert trig.get("resumePdfStale") is True
     # Both "never generated" and "stale selection" funnel to the Regen CTA.
     assert "regen" in trig["showToast"]["text"].lower()
+
+
+# ── PDF serving: recompiles overwrite the same path, so the routes must
+# forbid caching — default FileResponse validators (mtime, 1s granularity)
+# let browsers 304/heuristic-cache the pre-recompile bytes, which kept the
+# embed showing the OLD render after an honest recompile. ─────────────────
+
+
+def _pdf_get(client, tmp_path, url, kind):
+    pdf = tmp_path / f"{kind}.pdf"
+    pdf.write_bytes(b"%PDF-1.4 fake")
+    doc = SimpleNamespace(kind=SimpleNamespace(value=kind), path=str(pdf))
+    with (
+        patch(
+            "services.application_service.get_application",
+            new=AsyncMock(return_value=_application()),
+        ),
+        patch(
+            "services.application_service.latest_documents",
+            new=AsyncMock(return_value=[doc]),
+        ),
+    ):
+        return client.get(url)
+
+
+def test_resume_pdf_is_served_no_store(client_with_user, tmp_path):
+    r = _pdf_get(client_with_user, tmp_path, "/api/v1/applications/11/resume.pdf", "resume")
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-store"
+
+
+def test_cover_letter_pdf_is_served_no_store(client_with_user, tmp_path):
+    r = _pdf_get(
+        client_with_user, tmp_path, "/api/v1/applications/11/cover-letter.pdf", "cover_letter"
+    )
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-store"
