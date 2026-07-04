@@ -356,6 +356,43 @@
     _reloadPdfEmbed('cover-letter-embed');
   });
 
+  // ---------------------------------------------------------------- //
+  // Bullet editor: rewrite variant cards.                            //
+  // Clicking a [data-rewrite-variant] card loads its text into the   //
+  // #bullet-text textarea (delegated — cards arrive via HTMX swap).  //
+  // Nothing persists until the form's Save PUT.                      //
+  // ---------------------------------------------------------------- //
+  document.body.addEventListener('click', function (e) {
+    var card = e.target.closest && e.target.closest('[data-rewrite-variant]');
+    if (!card) return;
+    var ta = document.getElementById('bullet-text');
+    if (!ta) return;
+    ta.value = card.getAttribute('data-rewrite-variant');
+    ta.focus();
+    // Mark the picked card so the user sees which variant is loaded.
+    document.querySelectorAll('[data-rewrite-variant]').forEach(function (c) {
+      c.classList.remove('border-cyan-400', 'bg-cyan-400/10');
+    });
+    card.classList.add('border-cyan-400', 'bg-cyan-400/10');
+  });
+  // Rewrite failures (no provider → 422, LLM error → 502): htmx never swaps
+  // error responses, so surface the server's detail inside the results slot
+  // instead of leaving the block silently unchanged.
+  document.body.addEventListener('htmx:responseError', function (e) {
+    var tgt = e.detail && e.detail.target;
+    if (!tgt || tgt.id !== 'bullet-rewrite-results') return;
+    var xhr = e.detail.xhr;
+    var detail = '';
+    if (xhr && xhr.responseText) {
+      try { detail = JSON.parse(xhr.responseText).detail || ''; } catch (err) { detail = ''; }
+    }
+    var p = document.createElement('p');
+    p.className = 'text-xs text-rose-300';
+    p.setAttribute('data-testid', 'rewrite-error');
+    p.textContent = detail || ('Rewrite failed' + (xhr ? ' (' + xhr.status + ')' : '') + '.');
+    tgt.replaceChildren(p);
+  });
+
   // openApplyUrl → honest-submit fallback: when a job's real application site
   // can't be auto-submitted, the server sends the posting URL so clicking
   // "Submit" opens it in a new tab (alongside the explanatory toast) instead

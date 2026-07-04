@@ -186,13 +186,13 @@ def test_bullets_post_get_put_delete_roundtrip(client):
 
 def test_bullets_rewrite(client):
     _skip_if_no_db()
-    r = client.post("/api/v1/bullets/1/rewrite")
+    r = client.post("/api/v1/bullets/1/rewrite", data={"rewrite_style": "punchier"})
     # 422 = no LLM provider configured (honest degradation); with a provider
-    # the route returns the refilled textarea fragment for the modal swap.
+    # the route returns clickable variant cards for the modal's results slot.
     assert r.status_code in (200, 422)
     if r.status_code == 200:
-        assert 'id="bullet-text"' in r.text
-        assert "<textarea" in r.text
+        assert "data-rewrite-variant" in r.text
+        assert 'data-testid="rewrite-note"' in r.text
 
 
 def test_bullets_reorder(client):

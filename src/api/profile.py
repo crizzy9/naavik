@@ -722,24 +722,25 @@ async def delete_bullet(
 async def post_bullet_rewrite(
     request: Request,
     bullet_id: int,
+    text: Annotated[str | None, Form()] = None,
+    rewrite_style: Annotated[str | None, Form()] = None,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    """Rewrite a bullet with the configured LLM (tighten to one resume line,
-    preserving numbers + verbs).
+    """Style-directed rewrite: 2-3 variants + a one-line model note.
 
-    Was a stub that appended a literal " (rewritten by AI)" — a fake-success
-    state. Now calls the real provider via the `trim_bullet` prompt through
-    `llm_tracker.tracked_call` (so ApiUsage is recorded). Returns a friendly
-    422 when no LLM provider is configured instead of pretending it worked.
-    The rewrite is NOT persisted — the client shows it as a suggested edit the
-    user accepts via the normal bullet PUT.
+    The old wiring used trim_bullet@160 chars, so any already-short bullet
+    came back byte-identical ("Rewrite did nothing"). Now the modal submits
+    a `rewrite_style` chip and the CURRENT textarea text (so unsaved edits
+    are rewritten, not the stored row), and gets back clickable variant
+    cards (`components/bullet_rewrite_results.html`). Picking a card fills
+    the textarea client-side; nothing persists until the normal Save PUT.
+    Friendly 422 when no provider is configured.
     """
     from llm import get_provider
     from llm.base import LLMProviderError
-    from llm.prompts.trim_bullet import PROMPT as TRIM_PROMPT
-    from llm.prompts.trim_bullet import TrimmedBullet
+    from llm.prompts.rewrite_bullet import DEFAULT_STYLE, PROMPT, STYLES, BulletRewrite
     from services import llm_tracker, settings_service
 
     user_id = _effective_user_id(_user)
@@ -748,6 +749,11 @@ async def post_bullet_rewrite(
     bullet = await profile_service.get_bullet(session, bullet_id)
     if bullet is None:
         raise HTTPException(status_code=404, detail="Bullet not found")
+
+    style = rewrite_style if rewrite_style in STYLES else DEFAULT_STYLE
+    source_text = (text or "").strip() or bullet.text
+    if not source_text.strip():
+        raise HTTPException(status_code=422, detail="Nothing to rewrite — the bullet is empty.")
 
     s = await settings_service.get_or_create(session, user_id=user_id)
     try:
@@ -762,33 +768,37 @@ async def post_bullet_rewrite(
             ),
         ) from exc
 
-    rendered = TRIM_PROMPT.format(text=bullet.text, target_chars=160)
+    rendered = PROMPT.format(
+        style=style, style_guidance=STYLES[style], text=source_text, target_chars=160
+    )
     try:
         result = await llm_tracker.tracked_call(
             session=session,
             user_id=user_id,
             provider=provider,
             method="structured",
-            prompt_name="trim_bullet",
+            prompt_name="rewrite_bullet",
             prompt=rendered,
-            schema=TrimmedBullet,
+            schema=BulletRewrite,
         )
         await session.commit()
     except LLMProviderError as exc:
         await session.rollback()
         raise HTTPException(status_code=502, detail=f"LLM rewrite failed: {exc}") from exc
 
-    trimmed = TrimmedBullet.model_validate(result.value)
-    # Return the refilled textarea fragment — the modal button swaps it in
-    # place (hx-target="#bullet-text" outerHTML). The old JSON body paired
-    # with hx-swap="none" meant the rewrite was fetched and then discarded.
+    rewrite = BulletRewrite.model_validate(result.value)
+    variants = [v.strip() for v in rewrite.variants if v and v.strip()][:3]
+    if not variants:
+        raise HTTPException(
+            status_code=502, detail="The model returned no usable variants — try again."
+        )
     response = templates.TemplateResponse(
         request,
-        "components/input.html",
-        {"name": "text", "type": "textarea", "value": trimmed.trimmed, "id": "bullet-text"},
+        "components/bullet_rewrite_results.html",
+        {"variants": variants, "note": rewrite.note.strip(), "style": style},
     )
     response.headers["HX-Trigger"] = json.dumps(
-        {"showToast": {"tone": "info", "text": "AI rewrite suggested — review, then Save."}}
+        {"showToast": {"tone": "info", "text": "Variants ready — click one, review, then Save."}}
     )
     return response
 

@@ -28,6 +28,45 @@
       {% include "components/bullet_textarea.html" %}
     {% endwith %}
 
+    {# Rewrite with AI — style chips + variants. Lives INSIDE the form so the
+       chips ride hx-include="closest form" along with the live textarea text
+       (rewrites apply to unsaved edits, not the stored row). put_bullet
+       ignores the extra rewrite_style field on Save. #}
+    <div class="mt-4 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+         data-testid="bullet-rewrite-block">
+      {% with label="REWRITE WITH AI", for_id=None,
+              hint="pick a style — variants never save on their own" %}
+        {% include "components/field_label.html" %}
+      {% endwith %}
+      <div class="flex flex-wrap items-center gap-1.5 mt-1">
+        {% for s in ["punchier", "tighter", "more-technical", "metric-forward"] %}
+          <label class="tag-chip">
+            <input type="radio" name="rewrite_style" value="{{ s }}" class="sr-only"
+                   {% if loop.first %}checked{% endif %}>
+            <span>{{ s }}</span>
+          </label>
+        {% endfor %}
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs text-cyan-300 hover:text-cyan-200 hover:bg-cyan-400/10 border border-cyan-400/30"
+                hx-post="/api/v1/bullets/{{ bullet.id }}/rewrite"
+                hx-include="closest form"
+                hx-target="#bullet-rewrite-results"
+                hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                hx-indicator="#bullet-rewrite-indicator"
+                data-testid="bullet-rewrite-btn">
+          <i data-lucide="sparkles" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Rewrite
+        </button>
+        <span id="bullet-rewrite-indicator"
+              class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-cyan-300">
+          <i data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin" stroke-width="1.5"></i>
+          asking the model…
+        </span>
+      </div>
+      <div id="bullet-rewrite-results" class="mt-2" data-testid="bullet-rewrite-results"></div>
+    </div>
+
     <div class="mt-5">
       {% with label="TAGS · " ~ (bullet.tags | length) ~ " SELECTED",
               for_id=None,
@@ -52,21 +91,6 @@
 
 {% set _bullet_footer %}
   <div class="flex items-center gap-2">
-    <button type="button"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm text-cyan-300 hover:text-cyan-200 hover:bg-cyan-400/10"
-            hx-post="/api/v1/bullets/{{ bullet.id }}/rewrite"
-            hx-target="#bullet-text"
-            hx-swap="outerHTML"
-            hx-disabled-elt="this"
-            hx-indicator="#bullet-rewrite-indicator">
-      <i data-lucide="sparkles" class="h-4 w-4" stroke-width="1.5"></i>
-      Rewrite with AI
-    </button>
-    <span id="bullet-rewrite-indicator"
-          class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-cyan-300">
-      <i data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin" stroke-width="1.5"></i>
-      rewriting…
-    </span>
     <button type="button"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
             hx-get="/_modal/confirm?title=Delete+bullet%3F&message=This+can%27t+be+undone.+The+bullet%27s+history+remains+in+audit+logs.&action=/api/v1/bullets/{{ bullet.id }}&label=Delete&tone=danger&method=delete"
