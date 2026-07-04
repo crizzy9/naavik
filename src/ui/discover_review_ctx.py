@@ -119,6 +119,15 @@ async def tailored_bullet_groups(
         for k, v in (artifacts.get("bullet_text_overrides") or {}).items()
         if str(v).strip()
     }
+    # Include/exclude overrides win over the doc blob: the toggle endpoint
+    # commits the override and lets the debounced recompile refresh the blob
+    # later, so the ledger must read the override for the row to flip
+    # immediately after a toggle.
+    include_overrides = {
+        int(k): str(v)
+        for k, v in (artifacts.get("bullet_overrides") or {}).items()
+        if str(v) in ("always_include", "never_include")
+    }
 
     # One batched query for all bullets — the per-experience loop was an N+1
     # on every workspace render.
@@ -134,7 +143,9 @@ async def tailored_bullet_groups(
         rows = []
         for b in bullets:
             rationale = rationale_index.get(b.id)
-            if doc_selected is not None:
+            if b.id in include_overrides:
+                is_selected = include_overrides[b.id] == "always_include"
+            elif doc_selected is not None:
                 is_selected = b.id in doc_selected
             else:
                 is_selected = bool(rationale and rationale.get("selected"))

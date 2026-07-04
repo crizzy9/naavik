@@ -338,8 +338,19 @@
     var path = raw.split('?')[0];
     f.src = path + '?v=' + Date.now() + hash;
   }
+  // resumePdfStale → the debounced recompile failed; the embed still shows
+  // the previous render. Surface the stale badge instead of pretending the
+  // PDF refreshed; a successful recompile clears it again.
+  function _setResumePdfStale(stale) {
+    var badge = document.getElementById('resume-pdf-stale');
+    if (badge) { badge.classList.toggle('hidden', !stale); }
+  }
   document.body.addEventListener('resumePdfUpdated', function () {
+    _setResumePdfStale(false);
     _reloadPdfEmbed('tailored-resume-embed');
+  });
+  document.body.addEventListener('resumePdfStale', function () {
+    _setResumePdfStale(true);
   });
   document.body.addEventListener('coverPdfUpdated', function () {
     _reloadPdfEmbed('cover-letter-embed');

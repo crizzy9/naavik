@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -855,10 +855,12 @@ async def fragment_cover_section_save(
     application = await application_service.get_application(session, application_id)
     user_settings = await settings_service.get_or_create(session, user_id=user_id)
     toast = {"tone": "success", "text": "Section saved — letter PDF updated."}
+    compiled = True
     try:
         await dg.recompile_cover_letter_from_sections(session, application, settings=user_settings)
     except Exception as exc:  # noqa: BLE001 — save must survive a compile hiccup
         log.warning("cover-letter recompile after edit failed: %s", exc)
+        compiled = False
         toast = {
             "tone": "warning",
             "text": "Section saved, but the PDF recompile failed — Regen to refresh it.",
@@ -875,7 +877,12 @@ async def fragment_cover_section_save(
             "mode": "view",
         },
     )
-    response.headers["HX-Trigger"] = _json.dumps({"coverPdfUpdated": True, "showToast": toast})
+    # Only announce a fresh PDF when one was actually compiled — reloading
+    # the embed after a failed compile pretends the update happened.
+    payload = {"showToast": toast}
+    if compiled:
+        payload["coverPdfUpdated"] = True
+    response.headers["HX-Trigger"] = _json.dumps(payload)
     return response
 
 
@@ -897,9 +904,16 @@ async def _ledger_response(
     user_id: int,
     application,
     doc,
-    toast: dict,
+    toast: dict | None = None,
+    triggers: dict | None = None,
 ) -> HTMLResponse:
-    """Re-render the tailored-bullets ledger + announce the fresh resume PDF."""
+    """Re-render the tailored-bullets ledger, with caller-chosen HX-Triggers.
+
+    Callers own the trigger set so a selection change that merely SCHEDULES
+    a recompile fires `resumeSelectionChanged`, while a completed recompile
+    fires `resumePdfUpdated` — the embed only reloads when the PDF really
+    changed.
+    """
     import json as _json
 
     groups = await drctx.tailored_bullet_groups(session, user_id=user_id, application=application)
@@ -913,7 +927,11 @@ async def _ledger_response(
             "resume_page_count": page_count,
         },
     )
-    response.headers["HX-Trigger"] = _json.dumps({"resumePdfUpdated": True, "showToast": toast})
+    payload = dict(triggers or {})
+    if toast is not None:
+        payload["showToast"] = toast
+    if payload:
+        response.headers["HX-Trigger"] = _json.dumps(payload)
     return response
 
 
@@ -930,15 +948,18 @@ async def fragment_resume_bullet_toggle(
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    """Toggle a bullet in/out of THIS application's resume and recompile.
+    """Toggle a bullet in/out of THIS application's resume.
 
     Writes the per-app `bullet_overrides` map (same machinery the tracking
-    detail uses), then recompiles the PDF from the stored selection — no
-    LLM round-trip.
+    detail uses) and commits immediately. The Typst recompile is NOT inline:
+    the response fires `resumeSelectionChanged`, which the workspace's
+    debounced listener turns into one `/resume-pdf/{id}/recompile` call per
+    toggle burst — so rapid toggles cost one compile, and the "PDF updated"
+    toast only fires when the PDF really updated.
     """
     from models.enums import BulletSelectionOverride
     from services import document_generator as dg
-    from services import profile_service, settings_service
+    from services import profile_service
 
     user_id = _effective_user_id(user)
     application = await _application_owned_or_404(session, application_id, user_id)
@@ -950,9 +971,12 @@ async def fragment_resume_bullet_toggle(
     )
     if doc_before is None or not doc_before.bullet_selection:
         raise HTTPException(status_code=409, detail="Generate the resume first, then edit it.")
-    currently_in = bullet_id in {
-        int(b) for b in (doc_before.bullet_selection.get("selected_ids") or [])
-    }
+    selected_ids = {int(b) for b in (doc_before.bullet_selection.get("selected_ids") or [])}
+    overrides_before = dict((application.submission_artifacts or {}).get("bullet_overrides") or {})
+    prior = overrides_before.get(str(bullet_id))
+    currently_in = (
+        prior != BulletSelectionOverride.NEVER_INCLUDE.value if prior else bullet_id in selected_ids
+    )
 
     artifacts = dict(application.submission_artifacts or {})
     overrides = dict(artifacts.get("bullet_overrides") or {})
@@ -964,22 +988,89 @@ async def fragment_resume_bullet_toggle(
     artifacts["bullet_overrides"] = overrides
     application.submission_artifacts = artifacts
     session.add(application)
-    await session.flush()
-
-    user_settings = await settings_service.get_or_create(session, user_id=user_id)
-    doc = await dg.recompile_resume_from_selection(session, application, settings=user_settings)
     await session.commit()
 
     verb = "removed from" if currently_in else "added to"
-    toast = {"tone": "success", "text": f"Bullet {verb} this resume — PDF updated."}
-    if doc is not None and (doc.page_count or 1) > 1:
-        toast = {
-            "tone": "warning",
-            "text": f"Bullet {verb} the resume — now {doc.page_count} pages. Remove something to get back to one.",
-        }
+    toast = {"tone": "info", "text": f"Bullet {verb} this resume — recompiling the PDF…"}
     return await _ledger_response(
-        request, session, user_id=user_id, application=application, doc=doc, toast=toast
+        request,
+        session,
+        user_id=user_id,
+        application=application,
+        doc=doc_before,
+        toast=toast,
+        triggers={"resumeSelectionChanged": True},
     )
+
+
+@router.post(
+    "/_fragments/apply/resume-pdf/{application_id}/recompile",
+    name="apply_resume_pdf_recompile",
+)
+async def fragment_resume_pdf_recompile(
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+) -> Response:
+    """Recompile the tailored resume PDF from the stored selection + per-app
+    overrides. No LLM call — pure Typst.
+
+    Debounce target for `resumeSelectionChanged` (bullet toggles). Responds
+    with honest triggers only: `resumePdfUpdated` when a new PDF is on disk,
+    `resumePdfStale` + a warning toast when the compile failed or there is
+    nothing to recompile — never a success toast for work that didn't happen.
+    """
+    import json as _json
+
+    from services import document_generator as dg
+    from services import settings_service
+    from typst.compiler import TypstError
+
+    user_id = _effective_user_id(user)
+    application = await _application_owned_or_404(session, application_id, user_id)
+    user_settings = await settings_service.get_or_create(session, user_id=user_id)
+    try:
+        doc = await dg.recompile_resume_from_selection(session, application, settings=user_settings)
+    except TypstError as exc:
+        log.warning("resume recompile failed for application %d: %s", application_id, exc)
+        await session.rollback()
+        payload: dict[str, Any] = {
+            "resumePdfStale": True,
+            "showToast": {
+                "tone": "warning",
+                "text": "PDF recompile failed — the preview is stale. Use Regen to rebuild.",
+            },
+        }
+    else:
+        if doc is None:
+            # Covers both "never generated" and "saved selection no longer
+            # maps to the live profile" (e.g. resume re-uploaded since).
+            payload = {
+                "resumePdfStale": True,
+                "showToast": {
+                    "tone": "warning",
+                    "text": (
+                        "Couldn't recompile — no usable tailored selection. "
+                        "Use Regen to rebuild the documents."
+                    ),
+                },
+            }
+        else:
+            await session.commit()
+            toast = {"tone": "success", "text": "PDF updated."}
+            if (doc.page_count or 1) > 1:
+                toast = {
+                    "tone": "warning",
+                    "text": (
+                        f"PDF updated — now {doc.page_count} pages. "
+                        "Remove something to get back to one."
+                    ),
+                }
+            payload = {"resumePdfUpdated": True, "showToast": toast}
+    response = Response(status_code=204)
+    response.headers["HX-Trigger"] = _json.dumps(payload)
+    return response
 
 
 @router.post(
@@ -1020,8 +1111,28 @@ async def fragment_resume_bullet_save(
     session.add(application)
     await session.flush()
 
+    from typst.compiler import TypstError
+
     user_settings = await settings_service.get_or_create(session, user_id=user_id)
-    doc = await dg.recompile_resume_from_selection(session, application, settings=user_settings)
+    try:
+        doc = await dg.recompile_resume_from_selection(session, application, settings=user_settings)
+    except TypstError as exc:
+        # The edit must survive a compile hiccup — commit it, then say the
+        # preview is stale instead of claiming a recompile that didn't happen.
+        log.warning("resume recompile after bullet edit failed: %s", exc)
+        await session.commit()
+        return await _ledger_response(
+            request,
+            session,
+            user_id=user_id,
+            application=application,
+            doc=None,
+            toast={
+                "tone": "warning",
+                "text": "Line saved, but the PDF recompile failed — the preview is stale.",
+            },
+            triggers={"resumePdfStale": True},
+        )
     if doc is None:
         raise HTTPException(status_code=409, detail="Generate the resume first, then edit it.")
     await session.commit()
@@ -1033,7 +1144,13 @@ async def fragment_resume_bullet_save(
             "text": f"Bullet saved — the resume now runs {doc.page_count} pages.",
         }
     return await _ledger_response(
-        request, session, user_id=user_id, application=application, doc=doc, toast=toast
+        request,
+        session,
+        user_id=user_id,
+        application=application,
+        doc=doc,
+        toast=toast,
+        triggers={"resumePdfUpdated": True},
     )
 
 

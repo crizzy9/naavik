@@ -145,6 +145,30 @@
                   class="w-full rounded-md border border-slate-800 bg-white"
                   style="height: 760px"
                   data-testid="tailored-resume-embed"></iframe>
+          {# Debounced Typst recompile: each bullet toggle fires
+             `resumeSelectionChanged`; htmx resets the delay on every repeat
+             event, so a burst of toggles collapses into ONE compile. Lives
+             outside #apply-tailored-bullets so ledger swaps don't reset the
+             countdown mid-burst. No LLM call — selection-only recompile. #}
+          <div id="resume-recompile-listener"
+               hx-post="/_fragments/apply/resume-pdf/{{ application.id }}/recompile"
+               hx-trigger="resumeSelectionChanged from:body delay:600ms"
+               hx-swap="none"
+               hx-indicator="#resume-recompile-indicator"></div>
+          <div class="flex items-center gap-3 min-h-[1rem] -mt-1">
+            <span id="resume-recompile-indicator"
+                  class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-indigo-300"
+                  data-testid="resume-recompile-indicator">
+              <i data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin" stroke-width="1.5"></i>
+              Recompiling PDF…
+            </span>
+            <span id="resume-pdf-stale"
+                  class="hidden inline-flex items-center gap-1.5 text-xs text-amber-300"
+                  data-testid="resume-pdf-stale">
+              <i data-lucide="alert-triangle" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+              Preview is stale — the last recompile failed. Use Regen to rebuild.
+            </span>
+          </div>
           {% endif %}
           <details class="group" data-testid="tailored-ledger">
             <summary class="cursor-pointer text-xs text-slate-400 hover:text-slate-200 select-none">
