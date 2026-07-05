@@ -13,11 +13,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from llm import get_provider
-from llm.anthropic import AnthropicProvider, BatchRequest, BatchResponse
-from llm.base import LLMProviderError
+from llm.anthropic import AnthropicProvider, BatchRequest
 from llm.prompts.council_personas import PERSONAS, PROMPT_BUILDERS, CouncilVote
 from services import llm_tracker  # noqa: F401  (preserved for test monkeypatch path)
-from services._council_common import sync_fallback
+from services._council_common import run_persona_batch, sync_fallback
 from services.llm_tracker import _persist_usage as _persist_apiusage
 
 if TYPE_CHECKING:
@@ -115,57 +114,21 @@ async def vote_on_bullet_selection(
         for persona in PERSONAS
     ]
 
-    batch_used = False
-    responses: list[BatchResponse]
-    if isinstance(provider, AnthropicProvider):
-        try:
-            responses = await provider.batch(requests)
-            batch_used = True
-            # Anthropic batch API returns per-request usage; record one
-            # ApiUsage row per persona at half rate.
-            for resp in responses:
-                cost = (
-                    provider.estimate_cost(
-                        input_tokens=resp.input_tokens,
-                        output_tokens=resp.output_tokens,
-                    )
-                    * 0.5
-                )  # 50% batch discount
-                await _persist_apiusage(
-                    session,
-                    user_id=user_id,
-                    provider=provider,
-                    method="structured",
-                    prompt_name=f"council_{resp.custom_id}_batch",
-                    application_id=application_id,
-                    input_tokens=resp.input_tokens,
-                    output_tokens=resp.output_tokens,
-                    cost_usd=cost,
-                    latency_ms=0,
-                    succeeded=resp.succeeded,
-                    error_kind=None if resp.succeeded else "batch_request_failed",
-                )
-        except LLMProviderError as exc:
-            log.info("batch API unavailable, falling back to sync gather: %s", exc)
-            responses = await _sync_fallback(
-                session=session,
-                user_id=user_id,
-                application_id=application_id,
-                provider=provider,
-                requests=requests,
-                system=system,
-                cache_system=cache_system,
-            )
-    else:
-        responses = await _sync_fallback(
-            session=session,
-            user_id=user_id,
-            application_id=application_id,
-            provider=provider,
-            requests=requests,
-            system=system,
-            cache_system=cache_system,
-        )
+    # isinstance stays evaluated HERE (tests patch services.council.isinstance
+    # to force the branch); _persist_apiusage is passed by module-global so the
+    # services.council._persist_apiusage patch seam keeps intercepting.
+    responses, batch_used = await run_persona_batch(
+        session=session,
+        user_id=user_id,
+        application_id=application_id,
+        provider=provider,
+        requests=requests,
+        system=system,
+        cache_system=cache_system,
+        prompt_prefix="council",
+        use_batch=isinstance(provider, AnthropicProvider),
+        persist_usage=_persist_apiusage,
+    )
 
     persona_rankings: dict[str, list[int]] = {}
     for resp in responses:

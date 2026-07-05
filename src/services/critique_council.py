@@ -18,10 +18,9 @@ from difflib import SequenceMatcher
 from typing import TYPE_CHECKING
 
 from llm import get_provider
-from llm.anthropic import AnthropicProvider, BatchRequest, BatchResponse
-from llm.base import LLMProviderError
+from llm.anthropic import AnthropicProvider, BatchRequest
 from llm.prompts.critique_personas import PERSONAS, PROMPT_BUILDERS, CritiqueVote
-from services._council_common import sync_fallback as _sync_fallback
+from services._council_common import run_persona_batch
 from services.llm_tracker import _persist_usage as _persist_apiusage
 
 if TYPE_CHECKING:
@@ -145,55 +144,24 @@ async def critique_bundle(
         for persona in PERSONAS
     ]
 
-    batch_used = False
-    responses: list[BatchResponse]
-    if isinstance(provider, AnthropicProvider):
-        try:
-            responses = await provider.batch(requests)
-            batch_used = True
-            for resp in responses:
-                cost = (
-                    provider.estimate_cost(
-                        input_tokens=resp.input_tokens,
-                        output_tokens=resp.output_tokens,
-                    )
-                    * 0.5
-                )
-                await _persist_apiusage(
-                    session,
-                    user_id=user_id,
-                    provider=provider,
-                    method="structured",
-                    prompt_name=f"critique_{resp.custom_id}_batch",
-                    application_id=application_id,
-                    input_tokens=resp.input_tokens,
-                    output_tokens=resp.output_tokens,
-                    cost_usd=cost,
-                    latency_ms=0,
-                    succeeded=resp.succeeded,
-                    error_kind=None if resp.succeeded else "batch_request_failed",
-                )
-        except LLMProviderError as exc:
-            log.info("critique batch unavailable; falling back to sync: %s", exc)
-            responses = await _sync_fallback(
-                session=session,
-                user_id=user_id,
-                application_id=application_id,
-                provider=provider,
-                requests=requests,
-                system=system,
-                cache_system=cache_system,
-            )
-    else:
-        responses = await _sync_fallback(
-            session=session,
-            user_id=user_id,
-            application_id=application_id,
-            provider=provider,
-            requests=requests,
-            system=system,
-            cache_system=cache_system,
-        )
+    # isinstance stays evaluated HERE (tests patch
+    # services.critique_council.isinstance to force the branch);
+    # _persist_apiusage passes the module-global patch seam through.
+    # prompt_prefix="critique" is the plan 91 5.1 bug fix: sync-fallback
+    # rows were mislabelled council_* and fell out of the critique_usd
+    # cost-projection bucket.
+    responses, batch_used = await run_persona_batch(
+        session=session,
+        user_id=user_id,
+        application_id=application_id,
+        provider=provider,
+        requests=requests,
+        system=system,
+        cache_system=cache_system,
+        prompt_prefix="critique",
+        use_batch=isinstance(provider, AnthropicProvider),
+        persist_usage=_persist_apiusage,
+    )
 
     persona_votes: list[dict] = []
     for resp in responses:
