@@ -79,8 +79,6 @@ def downgrade() -> None:
     op.create_index("ix_job_found_at_desc", "job", ["found_at"])
 
     op.drop_index("ix_contact_user_email", table_name="contact")
-    op.drop_index(
-        "ix_profile_answer_source_screener_answer_id", table_name="profile_answer"
-    )
+    op.drop_index("ix_profile_answer_source_screener_answer_id", table_name="profile_answer")
     op.drop_index("ix_job_last_scrape_run_id", table_name="job")
     op.drop_index("ix_job_warm_intro_contact_id", table_name="job")

@@ -22,9 +22,7 @@ from tests._sqlite import strip_pg_checks
 
 pytestmark = pytest.mark.uses_sample_data_shims
 
-_PATH = (
-    Path(__file__).resolve().parent.parent / "migrations" / "versions" / "0038_index_hygiene.py"
-)
+_PATH = Path(__file__).resolve().parent.parent / "migrations" / "versions" / "0038_index_hygiene.py"
 
 
 def _load_migration():
@@ -82,9 +80,7 @@ def _pre_0038_tables(engine) -> None:
         conn.exec_driver_sql("CREATE INDEX ix_job_found_at_desc ON job (found_at)")
         conn.exec_driver_sql("CREATE INDEX ix_job_user_id ON job (user_id)")
         conn.exec_driver_sql("CREATE INDEX ix_contact_user_id ON contact (user_id)")
-        conn.exec_driver_sql(
-            "CREATE INDEX ix_profile_answer_user_id ON profile_answer (user_id)"
-        )
+        conn.exec_driver_sql("CREATE INDEX ix_profile_answer_user_id ON profile_answer (user_id)")
         conn.exec_driver_sql("DROP INDEX ix_job_warm_intro_contact_id")
         conn.exec_driver_sql("DROP INDEX ix_job_last_scrape_run_id")
         conn.exec_driver_sql("DROP INDEX ix_contact_user_email")

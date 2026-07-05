@@ -1,5 +1,5 @@
 ---
-Status: APPROVED (2026-07-04 — owner said "go for it", defaults accepted)
+Status: EXECUTED phases 0–8 (2026-07-05; see § Deviations from plan)
 Type: execution
 Authored: 2026-07-04
 Last updated: 2026-07-04
@@ -256,6 +256,66 @@ Gate; migration steps additionally get the chain-replay note (leave
   conftest shim dotted paths to the new homes (0.1 guard proves completeness).
 - Final full gate: ruff + format + pytest + Playwright + net-zero data + process
   shutdown.
+
+---
+
+## Deviations from plan (recorded 2026-07-05, phases 2–8 execution)
+
+- **2.2** `discover_ctx.up_next_dict` was listed CERTAIN-dead but has four
+  live call sites in `build_discover_ctx` — kept.
+- **4.1** `services/auth/users.py` added beyond the 4-file layout
+  (user lookups aren't tokens); `rate_limit.py` NOT folded into `throttle`
+  — it ships FastAPI deps, and folding it under `services/auth/` would
+  recreate the exact layering violation the step removes.
+- **4.2** `application_analytics` / `ats_postmortem` /
+  `profile_answer_service` / `generation_dispatch` NOT folded into
+  `services/applications/` — already coherent single-purpose modules;
+  folding adds facade churn without decomposition value.
+- **4.4** No `stages_free.py` stage-runner abstraction — the free stages
+  remain inline in `generate_bundle`. Extracting a probe-cap/run/append
+  runner is a rewrite, not a move, and Phase 4 commits were moves only.
+- **4.6** The single event→message model (killing the
+  `_embed_for_*`/`_telegram_text_for_*` dual encoding) is NOT done — same
+  rewrite-vs-move rationale; the dual renderers moved verbatim into
+  `notify/events.py`.
+- **4.x importer flip** — importers were NOT flipped to the new package
+  paths; everything still imports through the facades. The facades are
+  load-bearing: the ~60 conftest attribute shims and 100+
+  `patch("services.X.y")` targets point at them, and the split submodules
+  deliberately route internal cross-seam calls back through them (`svc()`
+  accessors) so test interception keeps working.
+- **5.2** The three-site scraper template method is NOT extracted —
+  lever/ashby are single-list-fetch scrapers with no shared detail loop;
+  rewriting working scraper internals for ~150 lines of savings wasn't
+  justified. The greenhouse `_skip_known` bug (re-fetching every detail
+  page) IS fixed with a regression test.
+- **5.3** `run_structured_llm` NOT introduced — the 16 `tracked_call`
+  boilerplate sites carry load-bearing `get_provider`/`llm_tracker` patch
+  seams; converting them breaks dozens of tests for zero behaviour gain.
+  The 10 dead bare prompt wrappers (tracker-bypass traps) were deleted
+  instead; `draft_email_response` stays (live caller, already tracked).
+- **5.6** The get_owned_* rollout to the remaining ~40 hand-rolled
+  ownership checks is deferred to the Q6 RAS→RPC follow-up plan — it
+  touches the same ~150 routes, and each conversion risks changing
+  status-code semantics that plan will re-audit anyway.
+- **7.3 / 7.4 (schema half)** deferred to the same follow-up data-model
+  plan as 7.5: closed-vocab CHECKs/enums and `String(N)` shrinks need a
+  per-column vocabulary/length audit against live data first — a blind
+  CHECK reintroduces the "invalid input value" crash class 1.5 fixed.
+  The 422-hardening half of 7.4 rides along. 7.1 (indexes) and 7.2
+  (Numeric money) shipped as 0038/0039.
+- **8 facade teardown** deferred — its precondition (importers flipped)
+  was deliberately not met, see the 4.x deviation. Teardown belongs with
+  the test-path re-plumbing in the follow-up plan. The Phase-8 FINAL GATE
+  itself ran: ruff + format clean, full suite 2847 passed / 15 skipped,
+  migrations 0038+0039 applied cleanly on the live dev Postgres, live
+  page sweep (13 routes, 200s; anon bullet-editor 307 / owner 200) +
+  Playwright screenshots green, net-zero data, all processes shut down.
+
+**Follow-up finding (pre-existing, out of scope):** the Overview page's SSE
+email-signal fragment throws `api.selectAndSwap is not a function` — the
+CDN-pinned `htmx.org@2.0.4/dist/ext/sse.js` is the htmx-1.x extension API.
+Predates plan 91 (no static/overview change in any plan-91 commit).
 
 ---
 

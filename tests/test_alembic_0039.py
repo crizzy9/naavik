@@ -19,9 +19,7 @@ from models import ApiUsage, GeneratedDocument
 
 pytestmark = pytest.mark.uses_sample_data_shims
 
-_PATH = (
-    Path(__file__).resolve().parent.parent / "migrations" / "versions" / "0039_money_numeric.py"
-)
+_PATH = Path(__file__).resolve().parent.parent / "migrations" / "versions" / "0039_money_numeric.py"
 
 
 def _load_migration():
