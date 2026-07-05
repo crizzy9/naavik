@@ -1364,6 +1364,7 @@ async def put_screener(
     payload: Annotated[dict[str, Any], Body()] = None,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     answer = (payload or {}).get("answer", "")
     owner_user_id = _user.id if _user is not None else None

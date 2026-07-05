@@ -66,6 +66,7 @@ async def post_email_thread_draft_reply(
     payload: Annotated[dict[str, Any] | None, Body()] = None,
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     t = await email_service.get_thread(session, thread_id)
     if t is None or t.user_id != _effective_user_id(user):

@@ -250,10 +250,13 @@ def test_fake_session_caller_unaffected_across_groups(client: TestClient):
     )
     assert r.status_code not in gate_codes, f"ui/discover gate misfired on fake-1: {r.status_code}"
 
-    # ui/routes/outreach — in-memory sample_data
+    # ui/routes/outreach — in-memory sample_data. post_contact now requires
+    # CSRF (plan 91 Phase 1.6); thread the pair so the fake-session gate (not
+    # CSRF) is what's under test.
     r = client.post(
         "/api/v1/contacts",
-        cookies={"naavik_session": "fake-1"},
+        cookies={"naavik_session": "fake-1", "naavik_csrf": csrf},
+        headers={"X-CSRF-Token": csrf},
         json={"name": "Test"},
     )
     assert r.status_code not in gate_codes, f"ui/outreach gate misfired on fake-1: {r.status_code}"
@@ -271,10 +274,13 @@ def test_fake_session_caller_unaffected_across_groups(client: TestClient):
         f"ui/settings test-connection should return 200/204/422; got {r.status_code}"
     )
 
-    # ui/routes/email — read sample_data thread, no DB write
+    # ui/routes/email — read sample_data thread, no DB write. draft-reply now
+    # requires CSRF (plan 91 Phase 1.6); thread the pair so the fake-session
+    # gate is what's under test.
     r = client.post(
         "/api/v1/email/threads/1/draft-reply",
-        cookies={"naavik_session": "fake-1"},
+        cookies={"naavik_session": "fake-1", "naavik_csrf": csrf},
+        headers={"X-CSRF-Token": csrf},
         json={"intent": "follow_up"},
     )
     assert r.status_code not in gate_codes, f"ui/email gate misfired on fake-1: {r.status_code}"

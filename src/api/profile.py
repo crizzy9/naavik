@@ -576,6 +576,7 @@ async def put_field(
     fail: Annotated[str | None, Query()] = None,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     """Per-field autosave. Returns the OOB autosave indicator partial."""
     if fail:
@@ -642,6 +643,7 @@ async def post_bullet(
     experience_id: Annotated[int, Form()] = 0,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     if not experience_id:
         raise HTTPException(status_code=422, detail="experience_id is required")
@@ -672,6 +674,7 @@ async def put_bullet(
     fail: Annotated[str | None, Query()] = None,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     if fail:
         raise HTTPException(status_code=422, detail="Couldn't save bullet")
@@ -716,6 +719,7 @@ async def delete_bullet(
     bullet_id: int,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     if not await profile_service.owns_bullet(
         session, bullet_id=bullet_id, user_id=_effective_user_id(_user)
@@ -821,6 +825,7 @@ async def post_bullets_reorder(
     payload: Annotated[dict[str, Any] | None, Body()] = None,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     payload = payload or {}
     bullet_ids = payload.get("bullet_ids") or []

@@ -172,6 +172,7 @@ async def post_llm_test(
     request: Request,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     """Try a tiny `provider.complete("ping")` and return ok/latency.
 

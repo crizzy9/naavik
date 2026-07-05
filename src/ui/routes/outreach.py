@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Res
 from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
 from api.deps import effective_user_id as _effective_user_id
 from api.deps import get_owned_contact
 from db.session import get_session
@@ -77,6 +78,7 @@ async def fragment_outreach_draft(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
     contact: Contact = Depends(get_owned_contact),
+    _csrf: None = Depends(require_csrf),
 ):
     """Return a freshly-drafted message card for a contact the caller owns."""
     user_id = _effective_user_id(user)
@@ -150,6 +152,7 @@ async def get_contacts(
 async def post_contact(
     payload: Annotated[dict[str, Any], Body()],
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     return {"ok": True, "id": 0, "payload": payload}
 
@@ -166,6 +169,7 @@ async def get_contact(contact: Contact = Depends(get_owned_contact)):
 async def put_contact(
     payload: Annotated[dict[str, Any], Body()],
     contact: Contact = Depends(get_owned_contact),
+    _csrf: None = Depends(require_csrf),
 ):
     return {"ok": True, "id": contact.id}
 
@@ -174,6 +178,7 @@ async def put_contact(
 async def delete_contact(
     contact: Contact = Depends(get_owned_contact),
     session: AsyncSession = Depends(get_session),
+    _csrf: None = Depends(require_csrf),
 ):
     # `get_owned_contact` and `get_session` share the same request-scoped
     # session (FastAPI dependency cache), so this mutates the fetched row.
@@ -187,6 +192,7 @@ async def delete_contact(
 async def post_contacts_find(
     payload: Annotated[dict[str, Any], Body()],
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     """Stub LinkedIn search — return 3 hardcoded fake contacts."""
     company = payload.get("company", "Unknown")
@@ -249,6 +255,7 @@ async def post_outreach_draft(
     payload: Annotated[dict[str, Any], Body()],
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = _effective_user_id(user)
     contact_id = int(payload.get("contact_id", 0))
@@ -287,6 +294,7 @@ async def post_outreach_send(
     payload: Annotated[dict[str, Any], Body()],
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     msg_id = int(payload.get("message_id", 0))
     # Ownership check before mutating (plan 91 Phase 1.3) — mark_sent flipped
@@ -305,5 +313,6 @@ async def post_outreach_send(
 async def post_outreach_skip(
     payload: Annotated[dict[str, Any], Body()],
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     return Response(status_code=204)

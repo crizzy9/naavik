@@ -36,7 +36,10 @@ def client_with_user():
         return user
 
     app.dependency_overrides[require_password_complete] = _override
-    yield TestClient(app, raise_server_exceptions=True), user
+    # Routes now require CSRF (plan 91 Phase 1.6); thread a matching double-submit pair.
+    _c = TestClient(app, raise_server_exceptions=True, headers={"X-CSRF-Token": "t"})
+    _c.cookies.set("naavik_csrf", "t")
+    yield _c, user
     app.dependency_overrides.pop(require_password_complete, None)
 
 

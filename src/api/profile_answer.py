@@ -15,6 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.auth import require_csrf
 from db.session import get_session
 from models import User
 from services import profile_answer_service
@@ -35,6 +36,7 @@ async def post_accept(
     profile_answer_id: int,
     session: AsyncSession = Depends(get_session),
     _user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = _effective_user_id(_user)
     ok = await profile_answer_service.record_acceptance(

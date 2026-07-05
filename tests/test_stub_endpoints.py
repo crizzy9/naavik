@@ -52,7 +52,9 @@ def client() -> TestClient:
     """
     from main import app
 
-    c = TestClient(app, raise_server_exceptions=True)
+    # Default X-CSRF-Token header so every request carries the double-submit
+    # pair (plan 91 Phase 1.6 widened require_csrf across the mutation surface).
+    c = TestClient(app, raise_server_exceptions=True, headers={"X-CSRF-Token": _CSRF_TOKEN})
     c.cookies.set("naavik_session", "fake-1")
     c.cookies.set("naavik_csrf", _CSRF_TOKEN)
     return c

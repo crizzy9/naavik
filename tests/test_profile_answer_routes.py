@@ -103,7 +103,7 @@ async def test_accept_route_404_when_missing(session_engine_factory):
     app.dependency_overrides[require_authed_session] = _stub_user
 
     try:
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-CSRF-Token": "t"}, cookies={"naavik_csrf": "t"})
         r = client.post("/api/v1/profile-answers/12345/accept")
         assert r.status_code == 404
     finally:
@@ -158,7 +158,7 @@ async def test_accept_route_happy_path(session_engine_factory):
     app.dependency_overrides[require_authed_session] = _stub_user
 
     try:
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-CSRF-Token": "t"}, cookies={"naavik_csrf": "t"})
         r = client.post(f"/api/v1/profile-answers/{target_id}/accept")
         assert r.status_code == 200, r.text
         body = r.json()
@@ -221,7 +221,7 @@ async def test_accept_route_idor_404(session_engine_factory):
     app.dependency_overrides[require_authed_session] = _stub_user_2
 
     try:
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-CSRF-Token": "t"}, cookies={"naavik_csrf": "t"})
         r = client.post(f"/api/v1/profile-answers/{target_id}/accept")
         assert r.status_code == 404
     finally:

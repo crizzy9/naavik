@@ -43,6 +43,7 @@ async def submit(
     application_id: int,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_password_complete),
+    _csrf: None = Depends(require_csrf),
 ):
     """DRAFT → APPLIED. Validates first; returns the row or 409 with the reason.
 
@@ -166,6 +167,7 @@ async def discard(
     application_id: int,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_password_complete),
+    _csrf: None = Depends(require_csrf),
 ):
     """DRAFT → CLOSED (withdrawn_by_me) + soft-delete.
 
@@ -192,6 +194,7 @@ async def put_status(
     payload: Annotated[dict[str, Any], Body()],
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_password_complete),
+    _csrf: None = Depends(require_csrf),
 ):
     """Manual status flip (e.g. APPLIED → RECRUITER_SCREEN).
 
@@ -242,6 +245,7 @@ async def move(
     payload: Annotated[dict[str, Any] | None, Body()] = None,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_password_complete),
+    _csrf: None = Depends(require_csrf),
 ):
     """Tracking-board column move (drag-drop status change).
 
