@@ -30,7 +30,7 @@ from services import email as email_sync
 from services.auth import require_authed_session
 from services.email import credentials as email_credentials
 from services.email import imap_host_guard
-from services.rate_limit import check_email_sync_now_rate_limit
+from services.utils.rate_limit import check_email_sync_now_rate_limit
 from ui.routes.profile import _effective_user_id
 
 log = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from services import geo
+from services.utils import geo
 
 pytestmark = pytest.mark.uses_sample_data_shims
 

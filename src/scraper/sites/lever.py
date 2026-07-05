@@ -32,7 +32,7 @@ from scraper.redaction import safe_exc, safe_url
 from scraper.sites._base_site import _BaseSiteScraper
 from scraper.types import RawJob, ScrapeQuery
 from scraper.url_guard import is_safe_destination
-from services.html_text import fragment_text
+from services.utils.html_text import fragment_text
 
 log = logging.getLogger(__name__)
 

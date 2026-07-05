@@ -104,7 +104,7 @@ async def get_city_suggestions(
     _user: User | None = Depends(require_authed_session),
 ):
     """City-autocomplete suggestion list for the job-search prefs editor."""
-    from services.geo import search_cities
+    from services.utils.geo import search_cities
 
     return templates.TemplateResponse(
         request,

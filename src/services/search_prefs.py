@@ -21,7 +21,7 @@ from llm.prompts.expand_titles import TitleExpansions, render_prompt
 from models import Experience, Profile, Settings
 from models.enums import JobSource
 from services import llm_tracker
-from services.geo import normalize_city
+from services.utils.geo import normalize_city
 
 log = logging.getLogger(__name__)
 

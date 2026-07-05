@@ -28,7 +28,7 @@ from models import ApplicationStatus, ClosedReason, Settings, User
 from services import applications as svc
 from services.auth import require_password_complete
 from services.generation import generate_bundle, regenerate_cover_letter
-from services.rate_limit import check_generate_bundle_rate_limit
+from services.utils.rate_limit import check_generate_bundle_rate_limit
 
 _REGENERATE_KIND_VALID = {"bundle", "cover_letter", "resume"}
 

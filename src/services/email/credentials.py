@@ -21,7 +21,7 @@ import logging
 from cryptography.fernet import Fernet, InvalidToken
 
 from models import EmailAccount
-from services._crypto import secret_key_fernet
+from services.utils.crypto import secret_key_fernet
 
 log = logging.getLogger(__name__)
 

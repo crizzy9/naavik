@@ -25,7 +25,7 @@ from services import (
     jobs as job_service,
 )
 from services.auth import require_authed_session
-from services.rate_limit import check_generate_bundle_rate_limit, check_rescore_rate_limit
+from services.utils.rate_limit import check_generate_bundle_rate_limit, check_rescore_rate_limit
 from ui import discover_ctx as dctx
 from ui import discover_review_ctx as drctx
 from ui.templates_setup import templates

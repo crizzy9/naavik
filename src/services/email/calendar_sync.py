@@ -33,7 +33,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import Application, ApplicationStatus, CalendarConnection, CalendarEvent, Job
 from scraper.url_guard import is_safe_destination
-from services._crypto import secret_key_fernet
+from services.utils.crypto import secret_key_fernet
 
 log = logging.getLogger(__name__)
 

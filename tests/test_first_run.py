@@ -15,7 +15,7 @@ pytestmark = pytest.mark.uses_sample_data_shims
 
 
 def test_first_run_state_is_first_run_when_empty():
-    from services.first_run import FirstRunState
+    from services.utils.first_run import FirstRunState
 
     state = FirstRunState(user_count=0)
     assert state.is_first_run is True
@@ -23,7 +23,7 @@ def test_first_run_state_is_first_run_when_empty():
 
 
 def test_first_run_state_not_first_run_when_users_exist():
-    from services.first_run import FirstRunState
+    from services.utils.first_run import FirstRunState
 
     state = FirstRunState(user_count=1)
     assert state.is_first_run is False
@@ -35,7 +35,7 @@ def test_first_run_state_not_first_run_when_users_exist():
 
 async def test_probe_user_count_zero_without_session():
     """`session=None` → user_count stays 0 (no DB to query)."""
-    from services.first_run import probe_first_run_state
+    from services.utils.first_run import probe_first_run_state
 
     state = await probe_first_run_state(session=None)
     assert state.user_count == 0

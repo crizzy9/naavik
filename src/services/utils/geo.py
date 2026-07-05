@@ -19,7 +19,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-_DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "us_cities.json"
+_DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "us_cities.json"
 
 _STATE_NAMES = {
     "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",

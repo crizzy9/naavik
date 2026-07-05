@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta  # noqa: E402
 import pytest  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 
-from services import rate_limit as rl  # noqa: E402
+from services.utils import rate_limit as rl  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

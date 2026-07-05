@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from models import User
 from services.auth import require_authed_session
-from services.geo import search_cities
+from services.utils.geo import search_cities
 
 router = APIRouter(prefix="/api/v1/geo")
 

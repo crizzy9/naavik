@@ -297,8 +297,8 @@ async def test_sync_now_rate_limited_1_per_min(client_with_user_42):
     """Second sync-now within a minute is 429 (plan 90 § H; architect MED)."""
     from models import EmailAccount
     from models.enums import EmailAccountProvider
-    from services import rate_limit
     from services.email import sync as email_sync
+    from services.utils import rate_limit
 
     client, _, maker = client_with_user_42
     rate_limit.reset_all()

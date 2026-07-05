@@ -57,7 +57,7 @@ def test_setup_help_links_to_runbook_section(client: TestClient):
 
 def test_setup_help_renders_fresh_install_card_when_no_users(client: TestClient, monkeypatch):
     """When no User row exists → signup-prompt info card."""
-    from services import first_run
+    from services.utils import first_run
 
     fake_state = first_run.FirstRunState(user_count=0)
 
@@ -75,7 +75,7 @@ def test_setup_help_renders_fresh_install_card_when_no_users(client: TestClient,
 
 def test_setup_help_renders_signed_in_card_when_users_present(client: TestClient, monkeypatch):
     """When a User row exists → 'sign in at /login' info card."""
-    from services import first_run
+    from services.utils import first_run
 
     fake_state = first_run.FirstRunState(user_count=1)
 

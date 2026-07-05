@@ -342,7 +342,7 @@ async def put_search_prefs(
         titles_changed = True
     elif action == "add_city":
         city = str(form.get("city") or "").strip()
-        from services.geo import normalize_city
+        from services.utils.geo import normalize_city
 
         normalized = normalize_city(city)
         if normalized and normalized not in (profile.target_cities or []):
