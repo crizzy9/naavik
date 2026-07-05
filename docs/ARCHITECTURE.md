@@ -94,7 +94,7 @@ Strict layering — each layer only depends on those below it.
 ### 3.4 `src/ui/` — HTMX views
 
 - `routes/`: page handlers + fragment handlers. Return `HTMLResponse` (Jinja-rendered) or partial HTML.
-- `templates/`: base layout + components/ (reusable partials) + pages/ (composed screens).
+- `templates/`: base layout + `components/` (reusable partials) + `pages/` (composed screens). Plan 93 grouped both by domain: `components/{common,shell,overview,profile,discover,jobs,tracking,outreach,settings}/` and `pages/{auth,overview,profile,discover,jobs,tracking,outreach,settings,dev}/` — `common/` holds design-system primitives (`_macros.html`, button, card, input, …), `shell/` the app chrome (sidebar, auth_shell); everything else lives with its page domain.
 - `static/`: htmx.min.js, lucide.min.js, base.js, styles.
 - **Components are NEVER duplicated.** If a screen needs a variant, extend the existing partial via macro args; don't fork.
 - Per-screen accessor pattern (plan 09 / refined plan 60): each page handler builds a context dict via a `discover_ctx()` / `tracking_ctx()` / `_build_profile_ctx()` helper. Post-plan-60 routes either read through the `services/*` layer (Postgres) or — for routes not yet migrated — fall through to fixture data in `src/db/sample_data.py`. The dual env-gated mode is gone; future plans incrementally rewire the remaining routes onto `services/*`.
@@ -106,18 +106,24 @@ the layout: domain packages whose `__init__.py` is the ONE public surface
 (conftest shims and `patch("services.<pkg>.X")` seams land there), plus
 single-purpose flat modules.
 
-**Domain packages** (plan 91 splits, plan 92 facade teardown + grouping):
-- `applications/` — DRAFT lifecycle, submission, status state-machine, queries, auto-apply queue, engagement, export. Import `from services import applications`.
-- `auth/` — bcrypt + JWT cookie + CSRF + login throttle + user lookups.
+**Domain packages** (plan 91 splits, plans 92–93 facade teardown + grouping):
+- `applications/` — DRAFT lifecycle, submission, status state-machine, queries, auto-apply queue, engagement, export, KPI analytics (`analytics.py`), ATS failure postmortems (`ats_postmortem.py`). Import `from services import applications`.
+- `auth/` — bcrypt + JWT cookie + CSRF + login throttle + user lookups (`users.py`, incl. the route-layer `get_user` read) + signing-key rotation (`jwt_rotation.py`) + account lifecycle (`account.py`).
 - `generation/` — resume/cover-letter/screener generation, bundle orchestrators (FREE + PREMIUM), cost cap, Typst compile seams, and the stage helpers (council, critique_council, detector_loop, tool_loop, voice_grounding, constitution, ai_tell_blocklist, burstiness_check, keyword_coverage, ethics_preflight, hiring_manager_extractor, ats_parser_ensemble/fidelity, generation_eval). Stage helpers are module-tier seams: `services.generation.<mod>.X`.
 - `email/` — IMAP sync, LLM classification, application inference, credentials, status mapping, ICS calendar sync, host guard. Thread API + sync seams on the package; the rest module-tier.
-- `jobs/` — job CRUD/queries + scrape-run bookkeeping (`service.py`), JD enrichment, raw-listing extraction, dedup. Callers alias `from services import jobs as job_service`.
+- `jobs/` — job CRUD/queries + scrape-run bookkeeping (`service.py`), JD enrichment, raw-listing extraction, dedup, the scraper-run orchestrator (`scraping.py`), and search preferences. Callers alias `from services import jobs as job_service`.
 - `notify/` — Discord/Telegram transports (`channels.py`) + event vocabulary and composite emitters (`events.py`).
+- `outreach/` — OutreachMessage lifecycle (`service.py`) + Contact read accessors (`contacts.py`). Conftest keeps both seam names via aliases of the package.
+- `settings/` — per-tab Settings CRUD (`service.py`), env-presence indicators (`env_secrets.py`), provider model catalogs (`llm_models.py`). Callers alias `from services import settings as settings_service` (never bare — `config.settings` owns that name).
+- `utils/` — domain-free helpers: `crypto` (SECRET_KEY Fernet), `geo`, `html_text`, `rate_limit` (in-memory limiter + FastAPI deps), `first_run`.
 - `profile/` — profile/experience/bullet/dossier CRUD (`service.py`), resume-text extraction, portfolio sync, stored application answers (`answers.py`). Callers alias `from services import profile as profile_service`.
 - `resolution/` — apply-site resolution pipeline (url_rules, board_probe, pipeline) + LinkedIn guest/auth tiers (`linkedin.py`).
-- `scorer/`, `ats/` — unchanged pre-existing packages (layered scoring; ATS submission adapters).
+- `scorer/` — layered scoring (visa/tag/semantic/LLM-judge orchestrator) + pgvector embeddings (`embeddings.py`) + score history rollups (`history.py`).
+- `ats/` — ATS submission adapters (unchanged).
 
-**Flat modules that stay** (single-purpose; moving buys nothing): `account_service`, `application_analytics`, `ats_postmortem`, `contact_tracker`, `embedding_service`, `env_secrets`, `first_run`, `generation_dispatch`, `geo`, `html_text`, `jwt_rotation_service`, `llm_models`, `llm_tracker`, `outreach_service`, `overview_service`, `rate_limit`, `scoring_history`, `scraper_service`, `search_prefs`, `settings_service`, `user_service`.
+- `generation/` also hosts the background dispatch registry (`dispatch.py` — `_tasks` + `enabled` singletons, the autouse test kill-switch).
+
+**Flat modules that stay** (deliberate, plan 93): `llm_tracker.py` — the cross-cutting cost seam every domain calls (CLAUDE.md convention path); `overview_service.py` — the Overview page read-model.
 
 `tests/test_no_retired_service_paths.py` fails on any reference to a retired pre-92 dotted path (e.g. `services.application_service`, `services.job_extractor`).
 

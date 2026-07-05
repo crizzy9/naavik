@@ -1,7 +1,7 @@
 # Plan 93 — services/ stray regroup + UI template layout + htmx ext pin
 
 - **Type:** execution
-- **Status:** DRAFT
+- **Status:** EXECUTED (2026-07-05)
 - **Predecessor:** `docs/plans/92-services-layout-finish.md` (EXECUTED). Plan 92 left 22
   flat modules in `services/` and did not touch `ui/templates/`, whose `components/`
   (125 files) and `pages/` (36 files) are flat sprawls. Owner feedback: still hard to
@@ -87,4 +87,23 @@ swap, net-zero data, stack teardown (leave :8000/:5432).
 
 ## Deviations from plan
 
-(recorded during execution)
+- **`user_service` had zero src consumers** — its `get_user` merged verbatim into
+  `auth/users.py` (re-exported on the auth package) rather than moving as a module;
+  the conftest shim + parity tests re-pointed to the package surface.
+- **Two more `_pkg()` accessors were required** (`settings/service.py` for the six
+  intra-module `get_or_create` calls; `outreach/service.py` for `mark_sent`'s
+  `get_message` read) — same interception rule as plan 92 B4.
+- **`__file__`-anchored path** — `utils/geo.py`'s `us_cities.json` lookup gained a
+  directory level (`parents[2]`); caught by its own tests.
+- **`tests/test_components.py::_CASES`** needed three passes (inline tuples,
+  multi-line tuples, then a block-scoped rewrite) — the list mixes formats; the final
+  rewrite maps every bare `X.html` inside the `_CASES` block.
+- **Path-built (unquoted) template references** in `test_components` (open/glob) and
+  `test_plan_86_batched_housekeeping` (`Path(...).read_text()`) were invisible to the
+  quoted-string sweep — fixed by hand; the components glob is now recursive so the
+  `dark:`-prefix lint keeps covering every file post-grouping.
+- **`test_no_cross_user_embedding_reads`** pins the embeddings file path — re-anchored
+  to `services/scorer/embeddings.py` (the lint stays meaningful).
+- **Shim-guard extension**: `test_shim_targets_exist.py`'s AST walk now also maps
+  `from services.<pkg> import <mod>` fixture imports, so module-tier shims
+  (`settings.llm_models`) stay guarded (74 targets, none dropped).

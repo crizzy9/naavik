@@ -72,10 +72,11 @@ src/
 ├── api/                 ← REST API routes (/api/v1/*)
 ├── ui/                  ← HTMX views (routes + Jinja2 templates + partials)
 ├── models/              ← SQLModel DB models + Pydantic schemas
-├── services/            ← Business logic — domain packages (plan 92): applications/,
-│                      auth/, email/, generation/, jobs/, notify/, profile/,
-│                      resolution/, scorer/, ats/ + single-purpose flat modules;
-│                      each package __init__ is its ONE public/patch surface
+├── services/            ← Business logic — domain packages (plans 92-93): applications/,
+│                      auth/, email/, generation/, jobs/, notify/, outreach/,
+│                      profile/, resolution/, scorer/, settings/, ats/, utils/;
+│                      each package __init__ is its ONE public/patch surface.
+│                      Only llm_tracker.py + overview_service.py stay flat
 ├── llm/                 ← LLM provider abstraction (anthropic, openai, ollama)
 ├── scraper/             ← Site-specific job scrapers (linkedin, greenhouse, ...)
 ├── typst/               ← Typst templates + compilation
@@ -96,7 +97,7 @@ src/
 
 - REST under `/api/v1/`; HTMX view routes under `/` return HTML fragments; fragment routes under `/_fragments/` and `/_modal/`
 - Fragment responses must match their `hx-target` granularity — never return page/panel markup into a smaller slot (`tests/test_fragment_full_page_guard.py` pins the class)
-- Reusable partials in `src/ui/templates/components/`, pages in `src/ui/templates/pages/`
+- Templates are domain-grouped (plan 93): partials in `src/ui/templates/components/{common,shell,<domain>}/`, screens in `src/ui/templates/pages/<domain>/` — design-system primitives go in `components/common/`, app chrome in `components/shell/`, everything else lives with its page domain
 - Tailwind + DaisyUI, dark mode primary, Lucide icons (stroke 1.5), Inter + JetBrains Mono
 - Every state-changing control gets loading + success/error feedback (hx-indicator + fragment/toast; `HX-Trigger: {"showToast": {...}}` is wired in `base.js`)
 - Alpine.js only if truly needed; no custom JS unless necessary
