@@ -18,12 +18,13 @@ from services import application_service
 
 def test_unmarked_test_does_not_get_application_service_shim():
     """Without the marker, `application_service.get_application` is the
-    real coroutine (defined in `src/services/application_service.py`),
-    not the conftest's `_get_application` closure that reads from
+    real coroutine (living under `src/services/` — since plan 91 4.2 the
+    implementation is `services/applications/queries.py` behind the
+    facade), not the conftest's `_get_application` closure that reads from
     `db.sample_data.APPLICATIONS`."""
     src_file = inspect.getsourcefile(application_service.get_application)
     assert src_file is not None
-    assert src_file.endswith("services/application_service.py"), (
+    assert "/src/services/" in src_file and "conftest" not in src_file, (
         f"expected real implementation; got {src_file} — the autouse "
         "shim has leaked into a non-marked test (plan 87 contract broken)"
     )
