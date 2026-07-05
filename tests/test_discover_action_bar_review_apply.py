@@ -1,33 +1,17 @@
-"""Discover action bar — Review & apply CTA wiring (plan 77 / 0.4.0.03).
+"""Discover action bar — Review & apply CTA wiring.
 
-Closes 0.3.3.08a deferred wiring follow-up from PR #170.
-
-Three things this file proves:
-  1. `discover_action_bar.html` Review & apply button points at
-     `/_fragments/apply/preview/by-job/<job_id>` with target `#apply-preview-slot`.
-  2. The new `by-job` route resolves/creates a DRAFT Application and renders
-     the same `apply_preview_card.html` partial the application-id route uses.
-  3. The Discover queue mount point (`#apply-preview-slot`) is present.
+Pins the SCREENS.md § 7 wiring: Review & apply opens the job's review
+workspace inline (`GET /_fragments/discover/expanded/<id>` into
+`#discover-main`). The plan-75/77 preview-card cluster it replaced was
+deleted in plan 91 (Q3); the negative assertions keep it from coming back.
 """
 
 from __future__ import annotations
 
-import os
-
 import pytest
-from fastapi.testclient import TestClient
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
 pytestmark = pytest.mark.uses_sample_data_shims
-
-os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
-
-
-@pytest.fixture(scope="module")
-def client() -> TestClient:
-    from main import app
-
-    return TestClient(app)
 
 
 @pytest.fixture(scope="module")
@@ -44,9 +28,6 @@ def env() -> Environment:
     return e
 
 
-# ── M1: action bar template wiring ───────────────────────────────────
-
-
 def test_action_bar_review_apply_opens_job_workspace_inline(env: Environment):
     """P3 — Review & apply opens THAT job's review workspace directly:
     `GET /_fragments/discover/expanded/<id>` swapped into `#discover-main`
@@ -58,67 +39,3 @@ def test_action_bar_review_apply_opens_job_workspace_inline(env: Environment):
     # Old preview-card wiring is gone.
     assert "/_fragments/apply/preview/by-job/" not in html
     assert "#apply-preview-slot" not in html
-
-
-def test_discover_queue_mount_point_present(env: Environment):
-    """The Discover queue partial renders `#apply-preview-slot` for swap target.
-
-    Uses the same `_JOB` shape `tests/test_components.py` parametrizes over —
-    enough keys to satisfy `swipe_card.html` + the score circle macro.
-    """
-    job = {
-        "id": 42,
-        "company": "Stripe",
-        "company_initial": "S",
-        "company_color": "bg-purple-600",
-        "gradient_from": "from-indigo-600",
-        "gradient_to": "to-purple-600",
-        "role": "Senior ML Engineer",
-        "team": "Atlas",
-        "score": 86,
-        "location": "San Francisco",
-        "salary_range": "$240-290k",
-        "work_mode": "Hybrid",
-        "team_size": "team of 12",
-        "visa_friendly": True,
-        "posted_relative": "2h ago",
-        "jd_bullets": ["5+ years"],
-        "warm_intro_label": None,
-        "tags": ["ai-ml"],
-        "match_breakdown": {"ai-ml": 0.95},
-        "match_overall": 0.86,
-    }
-    html = env.get_template("pages/_discover_queue.html").render(
-        current_card=job,
-        up_next=[],
-        stuck_drafts=[],
-        auto_apply_drafts=[],
-        saved_count=0,
-        filters_active=0,
-    )
-    assert 'id="apply-preview-slot"' in html, html
-
-
-# ── M1: by-job route end-to-end ──────────────────────────────────────
-
-
-def test_apply_preview_by_job_returns_preview_card_for_known_job(client: TestClient):
-    """GET `/_fragments/apply/preview/by-job/{job_id}` renders the preview card."""
-    # Job 101 is the seeded Stripe headline (UNSWIPED) per sample_data.JOBS.
-    r = client.get(
-        "/_fragments/apply/preview/by-job/101",
-        cookies={"naavik_session": "fake-1"},
-    )
-    assert r.status_code == 200, f"got {r.status_code}: {r.text[:400]}"
-    assert "Generate tailored bundle?" in r.text
-    assert "Confirm submit" in r.text
-    assert "Cancel" in r.text
-
-
-def test_apply_preview_by_job_404_for_missing_job(client: TestClient):
-    """Unknown job_id → 404 via the standard `_job_or_404` guard."""
-    r = client.get(
-        "/_fragments/apply/preview/by-job/999999",
-        cookies={"naavik_session": "fake-1"},
-    )
-    assert r.status_code == 404

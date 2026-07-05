@@ -16,8 +16,6 @@
       {% with job_id=current_card.id %}
         {% include "components/discover_action_bar.html" %}
       {% endwith %}
-      {# Plan 77 · 0.4.0.03 — mount point for apply_preview_card swap. #}
-      <div id="apply-preview-slot" class="w-full"></div>
     {% else %}
       {% if filters_active and filters_active > 0 %}
         {# Plan 36 § G — "filter-with-zero-results empty-state" branch. #}
