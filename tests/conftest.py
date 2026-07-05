@@ -121,7 +121,9 @@ def _restore_sample_data(request):
         "BULLETS",
         "CONTACTS",
     )
-    snapshots = {name: [row.model_copy(deep=True) for row in getattr(sd, name)] for name in _MUTABLE}
+    snapshots = {
+        name: [row.model_copy(deep=True) for row in getattr(sd, name)] for name in _MUTABLE
+    }
     yield
     for name, snapshot in snapshots.items():
         collection = getattr(sd, name)
@@ -206,6 +208,25 @@ def _patch_services_to_sample_data(request, monkeypatch):
     async def _get_experience(_session, experience_id):
         return next((e for e in sd.EXPERIENCES if e.id == experience_id), None)
 
+    _real_owns_bullet = profile_service.owns_bullet
+
+    async def _owns_bullet(_session, *, bullet_id, user_id):
+        # Route tests inject a `_NoopSession` — resolve ownership via the sd
+        # bullet → experience → profile chain. Files that carry the shim marker
+        # but seed their OWN sqlite and call owns_bullet directly (e.g.
+        # test_hardening_pass) pass a real AsyncSession whose bullet ids collide
+        # with sd's, so those must hit the real query. (plan 91 Phase 1.2 wired
+        # owns_bullet into the bullet-fragment deps.)
+        if not isinstance(_session, _NoopSession):
+            return await _real_owns_bullet(_session, bullet_id=bullet_id, user_id=user_id)
+        bullet = next((b for b in sd.BULLETS if b.id == bullet_id), None)
+        if bullet is None:
+            return False
+        experience = next((e for e in sd.EXPERIENCES if e.id == bullet.experience_id), None)
+        if experience is None:
+            return False
+        return experience.profile_id == sd.PROFILE.id and sd.PROFILE.user_id == user_id
+
     async def _list_skills(_session, _user_id):
         return sorted(sd.SKILLS, key=lambda s: s.order_index)
 
@@ -232,6 +253,7 @@ def _patch_services_to_sample_data(request, monkeypatch):
     monkeypatch.setattr(profile_service, "list_experiences", _list_experiences)
     monkeypatch.setattr(profile_service, "get_bullets_for_experience", _get_bullets_for_experience)
     monkeypatch.setattr(profile_service, "get_bullet", _get_bullet)
+    monkeypatch.setattr(profile_service, "owns_bullet", _owns_bullet)
     monkeypatch.setattr(profile_service, "get_experience", _get_experience)
     monkeypatch.setattr(profile_service, "list_skills", _list_skills)
     monkeypatch.setattr(profile_service, "list_educations", _list_educations)
@@ -829,6 +851,7 @@ def client():
     """Plain `TestClient` — no auth cookies. Use for unauthenticated-path
     assertions or seed cookies yourself."""
     from fastapi.testclient import TestClient
+
     from main import app
 
     return TestClient(app, raise_server_exceptions=True)
@@ -839,6 +862,7 @@ def authed_client(auth_cookies):
     """`TestClient` pre-seeded with the debug fake-session + CSRF cookies — the
     dominant pattern across the suite."""
     from fastapi.testclient import TestClient
+
     from main import app
 
     test_client = TestClient(app, raise_server_exceptions=True)

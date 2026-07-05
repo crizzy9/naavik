@@ -14,8 +14,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.deps import get_owned_bullet
 from db.session import get_session
-from models import User
+from models import Bullet, User
 from services import profile_service
 from services.auth import require_authed_session
 from ui import profile_ctx as pctx
@@ -148,12 +149,11 @@ async def confirm_modal(
 )
 async def bullet_editor_modal(
     request: Request,
-    bullet_id: int,
     session: AsyncSession = Depends(get_session),
+    bullet: Bullet = Depends(get_owned_bullet),
 ):
-    bullet = await profile_service.get_bullet(session, bullet_id)
-    if bullet is None:
-        raise HTTPException(status_code=404, detail="Bullet not found")
+    # Auth + ownership via the dependency (plan 91 Phase 1.2): this route had
+    # no auth dep and filtered only by id, leaking any user's bullet text.
     exp = await profile_service.get_experience(session, bullet.experience_id)
     role_label = f"{exp.company} · {exp.title}" if exp else "Bullet"
     return templates.TemplateResponse(
@@ -173,12 +173,9 @@ async def bullet_editor_modal(
 )
 async def profile_bullet_row(
     request: Request,
-    bullet_id: int,
-    session: AsyncSession = Depends(get_session),
+    bullet: Bullet = Depends(get_owned_bullet),
 ):
-    bullet = await profile_service.get_bullet(session, bullet_id)
-    if bullet is None:
-        raise HTTPException(status_code=404, detail="Bullet not found")
+    # Auth + ownership via the dependency (plan 91 Phase 1.2).
     return templates.TemplateResponse(
         request,
         "components/bullet_edit_row.html",

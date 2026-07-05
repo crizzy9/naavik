@@ -9,19 +9,17 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Res
 from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from api.deps import effective_user_id as _effective_user_id
+from api.deps import get_owned_contact
 from db.session import get_session
-from models import User
+from models import Contact, User
 from models.enums import OutreachIntent, OutreachStatus
-from services import contact_tracker, outreach_service
+from services import application_service, contact_tracker, outreach_service
 from services.auth import require_authed_session
 from ui import outreach_ctx as octx
 from ui.templates_setup import templates
 
 router = APIRouter()
-
-
-def _effective_user_id(user: User | None) -> int:
-    return user.id if user is not None else 1
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -75,23 +73,25 @@ async def fragment_app_detail(
 )
 async def fragment_outreach_draft(
     request: Request,
-    contact_id: int,
     application_id: Annotated[int | None, Query()] = None,
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
+    contact: Contact = Depends(get_owned_contact),
 ):
-    """Return a freshly-drafted message card for a contact."""
-    contact = await contact_tracker.get_contact(session, contact_id)
-    if contact is None:
-        raise HTTPException(status_code=404, detail="Contact not found")
+    """Return a freshly-drafted message card for a contact the caller owns."""
+    user_id = _effective_user_id(user)
+    if application_id is not None:
+        app_row = await application_service.get_application(session, application_id)
+        if app_row is None or app_row.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Application not found")
     body = (
         f"Hey {contact.name.split()[0]} — quick follow-up on the conversation. "
         "Happy to share an updated CV if helpful."
     )
     msg = await outreach_service.create_message(
         session,
-        user_id=_effective_user_id(user),
-        contact_id=contact_id,
+        user_id=user_id,
+        contact_id=contact.id,
         application_id=application_id,
         intent=OutreachIntent.FOLLOW_UP,
         body=body,
@@ -135,6 +135,11 @@ async def get_contacts(
             session, user_id=user_id, company=company
         )
     elif app_id:
+        # Ownership-scope by the application (plan 91 Phase 1.3) — the join-only
+        # accessor previously returned contacts linked to any user's app.
+        app_row = await application_service.get_application(session, app_id)
+        if app_row is None or app_row.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Application not found")
         items = await contact_tracker.list_contacts_for_application(session, app_id)
     else:
         items = await contact_tracker.list_contacts(session, user_id)
@@ -150,40 +155,30 @@ async def post_contact(
 
 
 @router.get("/api/v1/contacts/{contact_id}", name="contacts_get")
-async def get_contact(
-    contact_id: int,
-    session: AsyncSession = Depends(get_session),
-):
-    c = await contact_tracker.get_contact(session, contact_id)
-    if c is None:
-        raise HTTPException(status_code=404, detail="Contact not found")
-    return c.model_dump(mode="json")
+async def get_contact(contact: Contact = Depends(get_owned_contact)):
+    # Auth + ownership enforced by the dependency (plan 91 Phase 1.2): the
+    # route previously had no auth dep at all and filtered only by id, leaking
+    # any user's contact PII.
+    return contact.model_dump(mode="json")
 
 
 @router.put("/api/v1/contacts/{contact_id}", name="contacts_put")
 async def put_contact(
-    contact_id: int,
     payload: Annotated[dict[str, Any], Body()],
-    session: AsyncSession = Depends(get_session),
-    _user: User | None = Depends(require_authed_session),
+    contact: Contact = Depends(get_owned_contact),
 ):
-    c = await contact_tracker.get_contact(session, contact_id)
-    if c is None:
-        raise HTTPException(status_code=404, detail="Contact not found")
-    return {"ok": True, "id": contact_id}
+    return {"ok": True, "id": contact.id}
 
 
 @router.delete("/api/v1/contacts/{contact_id}", name="contacts_delete")
 async def delete_contact(
-    contact_id: int,
+    contact: Contact = Depends(get_owned_contact),
     session: AsyncSession = Depends(get_session),
-    _user: User | None = Depends(require_authed_session),
 ):
-    c = await contact_tracker.get_contact(session, contact_id)
-    if c is None:
-        raise HTTPException(status_code=404, detail="Contact not found")
-    c.deleted_at = datetime.now(UTC)
-    session.add(c)
+    # `get_owned_contact` and `get_session` share the same request-scoped
+    # session (FastAPI dependency cache), so this mutates the fetched row.
+    contact.deleted_at = datetime.now(UTC)
+    session.add(contact)
     await session.commit()
     return Response(status_code=204)
 
@@ -231,12 +226,21 @@ async def get_outreach_messages(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
+    user_id = _effective_user_id(user)
     if app_id:
+        # Ownership-scope by the referenced app/contact (plan 91 Phase 1.3) —
+        # the by-id accessors previously returned any user's messages.
+        app_row = await application_service.get_application(session, app_id)
+        if app_row is None or app_row.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Application not found")
         msgs = await outreach_service.list_messages_for_application(session, app_id)
     elif contact_id:
+        contact = await contact_tracker.get_contact(session, contact_id)
+        if contact is None or contact.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Contact not found")
         msgs = await outreach_service.list_messages_for_contact(session, contact_id)
     else:
-        msgs = await outreach_service.list_all_messages(session, _effective_user_id(user))
+        msgs = await outreach_service.list_all_messages(session, user_id)
     return [m.model_dump(mode="json") for m in msgs]
 
 
@@ -246,6 +250,7 @@ async def post_outreach_draft(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
+    user_id = _effective_user_id(user)
     contact_id = int(payload.get("contact_id", 0))
     app_id = payload.get("app_id")
     intent_str = payload.get("intent", "follow_up")
@@ -254,15 +259,19 @@ async def post_outreach_draft(
     except ValueError:
         raise HTTPException(status_code=422, detail=f"Unknown intent {intent_str!r}") from None
     contact = await contact_tracker.get_contact(session, contact_id)
-    if contact is None:
+    if contact is None or contact.user_id != user_id:
         raise HTTPException(status_code=404, detail="Contact not found")
+    if app_id is not None:
+        app_row = await application_service.get_application(session, int(app_id))
+        if app_row is None or app_row.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Application not found")
     body = (
         f"Hey {contact.name.split()[0]} — quick check-in. Let me know if there's "
         "anything I can do to help move things along."
     )
     msg = await outreach_service.create_message(
         session,
-        user_id=_effective_user_id(user),
+        user_id=user_id,
         contact_id=contact_id,
         application_id=app_id,
         intent=intent,
@@ -277,9 +286,14 @@ async def post_outreach_draft(
 async def post_outreach_send(
     payload: Annotated[dict[str, Any], Body()],
     session: AsyncSession = Depends(get_session),
-    _user: User | None = Depends(require_authed_session),
+    user: User | None = Depends(require_authed_session),
 ):
     msg_id = int(payload.get("message_id", 0))
+    # Ownership check before mutating (plan 91 Phase 1.3) — mark_sent flipped
+    # any user's DRAFT→SENT by id.
+    existing = await outreach_service.get_message(session, msg_id)
+    if existing is None or existing.user_id != _effective_user_id(user):
+        raise HTTPException(status_code=404, detail="Message not found")
     msg = await outreach_service.mark_sent(session, msg_id)
     if msg is None:
         raise HTTPException(status_code=404, detail="Message not found")
