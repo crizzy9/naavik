@@ -346,11 +346,11 @@ async def test_generate_resume_cost_cap_short_circuits(session):
     with (
         patch("services.document_generator.get_provider", return_value=provider),
         patch("services.document_generator.typst_compile", new=_fake_typst([1])),
+        pytest.raises(dg.CostCapExceededError),
     ):
-        with pytest.raises(dg.CostCapExceededError):
-            await dg.generate_resume(
-                session, app, settings=_settings(daily_llm_cost_cap_usd=0.5), job=job
-            )
+        await dg.generate_resume(
+            session, app, settings=_settings(daily_llm_cost_cap_usd=0.5), job=job
+        )
     assert provider.calls == []
     assert app.docs_state == DocsState.NONE  # never flipped to GENERATING
 

@@ -124,21 +124,21 @@ async def _raw_insert(session, obj) -> int:
 
 
 async def _seed_job(session, **overrides) -> Job:
-    base = dict(
-        user_id=1,
-        source=JobSource.MANUAL,
-        external_id=f"x-{overrides.get('company', 'acme')}",
-        board=ApplicationBoard.GREENHOUSE,
-        url="https://example.com/job",
-        url_type="direct",
-        company="Acme",
-        role="Software Engineer",
-        description="d",
-        score=0.9,
-        found_at=_NOW,
-        created_at=_NOW,
-        updated_at=_NOW,
-    )
+    base = {
+        "user_id": 1,
+        "source": JobSource.MANUAL,
+        "external_id": f"x-{overrides.get('company', 'acme')}",
+        "board": ApplicationBoard.GREENHOUSE,
+        "url": "https://example.com/job",
+        "url_type": "direct",
+        "company": "Acme",
+        "role": "Software Engineer",
+        "description": "d",
+        "score": 0.9,
+        "found_at": _NOW,
+        "created_at": _NOW,
+        "updated_at": _NOW,
+    }
     base.update(overrides)
     job_id = await _raw_insert(session, Job(**base))
     return (await session.exec(select(Job).where(Job.id == job_id))).one()
@@ -167,16 +167,16 @@ async def _seed_profile(session, **overrides) -> int:
 
 
 def _make_app(**overrides) -> Application:
-    base = dict(
-        user_id=1,
-        company="Acme",
-        role="Software Engineer",
-        status=ApplicationStatus.DRAFT,
-        docs_state=DocsState.NONE,
-        board=ApplicationBoard.GREENHOUSE,
-        created_at=_NOW,
-        updated_at=_NOW,
-    )
+    base = {
+        "user_id": 1,
+        "company": "Acme",
+        "role": "Software Engineer",
+        "status": ApplicationStatus.DRAFT,
+        "docs_state": DocsState.NONE,
+        "board": ApplicationBoard.GREENHOUSE,
+        "created_at": _NOW,
+        "updated_at": _NOW,
+    }
     base.update(overrides)
     # ck_application_applied_at_required: non-DRAFT rows must carry applied_at.
     if base["status"] != ApplicationStatus.DRAFT and "applied_at" not in overrides:
