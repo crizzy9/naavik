@@ -36,11 +36,11 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import EmailAccount, EmailAccountStatus, EmailMessage, EmailThread
-from services import email_credentials
-from services.imap_host_guard import (
+from services.email import credentials as email_credentials
+from services.email.imap_host_guard import (
     SAFE_ERROR_MESSAGE as _ERR_HOST,
 )
-from services.imap_host_guard import (
+from services.email.imap_host_guard import (
     ImapHostNotAllowed,
     ensure_imap_host_allowed,
 )

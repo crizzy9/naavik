@@ -8,7 +8,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import Application
 from models.enums import AppEventKind, ApplicationStatus, RecruiterState, ReferralState
-from services import applications, contact_tracker, email_service
+from services import applications, contact_tracker
+from services import email as email_service
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",
@@ -131,7 +132,7 @@ async def build_tracking_ctx(
     show_closed: bool = False,
     show_drafts: bool = False,
 ) -> dict[str, object]:
-    from services import email_application_inference as inference
+    from services.email import inference
 
     visible_apps = await applications.list_visible_in_tracking(session, user_id)
     # Item 5 — unconfirmed inferred applications stay off the board; they
@@ -175,7 +176,7 @@ async def build_tracking_ctx(
     # Item 11 — honest calendar state from the real CalendarConnection row;
     # the Connect button used to point at the fake OAuth stub (which
     # round-tripped back showing "not connected" forever).
-    from services import calendar_sync
+    from services.email import calendar_sync
 
     calendar_connection = await calendar_sync.get_connection(session, user_id)
     upcoming = (
@@ -419,7 +420,7 @@ async def build_application_detail_ctx(
                 )
 
     # Item 11 — calendar events fuzzy-matched to this application.
-    from services import calendar_sync
+    from services.email import calendar_sync
 
     calendar_events = [
         {

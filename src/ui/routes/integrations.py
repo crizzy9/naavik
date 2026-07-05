@@ -31,7 +31,7 @@ async def get_integrations_email(
     _user: User | None = Depends(require_authed_session),
 ):
     """The Integrations page — inbox (IMAP) + calendar (secret ICS URL)."""
-    from services import calendar_sync
+    from services.email import calendar_sync
 
     user_id = _effective_user_id(_user)
     accounts = (

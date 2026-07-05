@@ -164,7 +164,7 @@ def _patch_services_to_sample_data(request, monkeypatch):
     from services import (
         applications,
         contact_tracker,
-        email_service,
+        email,
         job_service,
         llm_tracker,
         outreach_service,
@@ -696,12 +696,10 @@ def _patch_services_to_sample_data(request, monkeypatch):
             reverse=True,
         )[:limit]
 
-    monkeypatch.setattr(email_service, "list_threads", _list_threads)
-    monkeypatch.setattr(email_service, "get_thread", _get_thread)
-    monkeypatch.setattr(
-        email_service, "list_threads_for_application", _list_threads_for_application
-    )
-    monkeypatch.setattr(email_service, "recent_signals", _recent_signals)
+    monkeypatch.setattr(email, "list_threads", _list_threads)
+    monkeypatch.setattr(email, "get_thread", _get_thread)
+    monkeypatch.setattr(email, "list_threads_for_application", _list_threads_for_application)
+    monkeypatch.setattr(email, "recent_signals", _recent_signals)
 
     # ── overview_service ────────────────────────────────────────────────
     async def _compute_kpis(_session, user_id, *, window_days=90):

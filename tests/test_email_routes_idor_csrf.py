@@ -27,7 +27,7 @@ def _patch_imap_host_guard_dns(monkeypatch):
     IP literals resolve to themselves."""
     import ipaddress
 
-    from services import imap_host_guard
+    from services.email import imap_host_guard
 
     def _fake_resolve(host: str) -> tuple[str, ...]:
         if host == "imap.example.com":
@@ -185,7 +185,7 @@ async def test_post_imap_persists_user_id_from_auth(client_with_user_42):
     async def _spy_test_conn(*, host, port, username, password, client_factory=None):
         return True, None
 
-    with patch("services.email_sync.test_imap_connection", new=_spy_test_conn):
+    with patch("services.email.test_imap_connection", new=_spy_test_conn):
         r = client.post(
             "/api/v1/integrations/email/imap",
             data={
@@ -216,7 +216,7 @@ async def test_post_imap_rejects_without_csrf_when_active(
     async def _spy_test_conn(*, host, port, username, password, client_factory=None):
         return True, None
 
-    with patch("services.email_sync.test_imap_connection", new=_spy_test_conn):
+    with patch("services.email.test_imap_connection", new=_spy_test_conn):
         r = client.post(
             "/api/v1/integrations/email/imap",
             data={
@@ -257,7 +257,7 @@ async def test_delete_account_idor_404_on_cross_user(client_with_user_42):
 async def test_connect_blocks_internal_host_sanitized(client_with_user_42, monkeypatch):
     """Connect to an internal target is rejected 400 with a canonical message —
     no raw exception, no resolved-IP leak (PR #214 hacker H1)."""
-    from services import imap_host_guard
+    from services.email import imap_host_guard
 
     monkeypatch.setattr(imap_host_guard, "_resolve_host", lambda host: ("169.254.169.254",))
 
@@ -297,7 +297,8 @@ async def test_sync_now_rate_limited_1_per_min(client_with_user_42):
     """Second sync-now within a minute is 429 (plan 90 § H; architect MED)."""
     from models import EmailAccount
     from models.enums import EmailAccountProvider
-    from services import email_sync, rate_limit
+    from services import rate_limit
+    from services.email import sync as email_sync
 
     client, _, maker = client_with_user_42
     rate_limit.reset_all()
@@ -319,7 +320,7 @@ async def test_sync_now_rate_limited_1_per_min(client_with_user_42):
     async def _spy_sync(session, account, *, client_factory=None):
         return email_sync.SyncResult(account_id=account.id or 0)
 
-    with patch("services.email_sync.sync_account", new=_spy_sync):
+    with patch("services.email.sync_account", new=_spy_sync):
         r1 = client.post("/api/v1/integrations/email/501/sync-now")
         r2 = client.post("/api/v1/integrations/email/501/sync-now")
 
@@ -381,7 +382,7 @@ async def test_connect_imap_htmx_failure_returns_visible_fragment(client_with_us
     async def _fail_conn(*, host, port, username, password, client_factory=None):
         return False, "login rejected by server"
 
-    with patch("services.email_sync.test_imap_connection", new=_fail_conn):
+    with patch("services.email.test_imap_connection", new=_fail_conn):
         r = client.post(
             "/api/v1/integrations/email/imap",
             data={

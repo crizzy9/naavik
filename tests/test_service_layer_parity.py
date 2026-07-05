@@ -77,12 +77,12 @@ from models.enums import (  # noqa: E402
 from services import applications as application_service  # noqa: E402
 from services import (  # noqa: E402
     contact_tracker,
-    email_service,
     outreach_service,
     overview_service,
     profile_service,
     user_service,
 )
+from services import email as email_service  # noqa: E402
 
 # Profile/Bullet/Skill carry Postgres CHECK constraints using `char_length`
 # which sqlite cannot evaluate. We patch them out for the in-memory engine

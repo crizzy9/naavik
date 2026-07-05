@@ -33,8 +33,9 @@ from models import (
     UnclassifiedReason,
 )
 from models.enums import EmailClassification
-from services import email_status_mapper, llm_tracker, notify
-from services.email_sync import _MAX_SENDER_EMAIL_LEN, _MAX_SUBJECT_LEN
+from services import llm_tracker, notify
+from services.email import status_mapper as email_status_mapper
+from services.email.sync import _MAX_SENDER_EMAIL_LEN, _MAX_SUBJECT_LEN
 
 log = logging.getLogger(__name__)
 

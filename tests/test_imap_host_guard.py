@@ -14,8 +14,8 @@ import pytest
 
 os.environ.setdefault("NAAVIK_DEBUG", "1")
 
-from services import imap_host_guard  # noqa: E402
-from services.imap_host_guard import (  # noqa: E402
+from services.email import imap_host_guard  # noqa: E402
+from services.email.imap_host_guard import (  # noqa: E402
     ImapHostNotAllowed,
     check_imap_host,
     ensure_imap_host_allowed,

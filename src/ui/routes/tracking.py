@@ -561,7 +561,7 @@ async def post_inferred_confirm(
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    from services import email_application_inference as inference
+    from services.email import inference
 
     ok = await inference.confirm(
         session, user_id=_effective_user_id(user), application_id=application_id
@@ -586,7 +586,7 @@ async def post_inferred_dismiss(
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    from services import email_application_inference as inference
+    from services.email import inference
 
     ok = await inference.dismiss(
         session, user_id=_effective_user_id(user), application_id=application_id

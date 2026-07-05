@@ -16,7 +16,8 @@ from api.auth import require_csrf
 from db.session import get_session
 from models import User
 from models.enums import EmailClassification
-from services import applications, email_service
+from services import applications
+from services import email as email_service
 from services.auth import require_authed_session
 
 router = APIRouter()

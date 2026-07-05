@@ -22,8 +22,8 @@ os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 sqlite3.register_adapter(list, json.dumps)
 sqlite3.register_adapter(dict, json.dumps)
 
-from services import email_application_inference as inference  # noqa: E402
-from services.email_application_inference import detect_receipt  # noqa: E402
+from services.email import inference  # noqa: E402
+from services.email.inference import detect_receipt  # noqa: E402
 
 
 @compiles(JSONB, "sqlite")

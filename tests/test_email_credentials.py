@@ -33,7 +33,7 @@ def _account(password_column: str = ""):
 
 
 def test_store_and_load_round_trip():
-    from services import email_credentials
+    from services.email import credentials as email_credentials
 
     account = _account()
     email_credentials.store_imap_password(account, "p@ssw0rd-2026")
@@ -43,7 +43,7 @@ def test_store_and_load_round_trip():
 def test_ciphertext_at_rest():
     """The value persisted in the column is ciphertext — not the plaintext, and
     does not contain it (DB dump / pg_dump does not leak the password verbatim)."""
-    from services import email_credentials
+    from services.email import credentials as email_credentials
 
     secret = "p@ssw0rd-2026"
     account = _account()
@@ -60,7 +60,7 @@ def test_wrong_secret_key_fails_closed(monkeypatch):
     """A token encrypted under one SECRET_KEY must NOT decrypt under another.
     load_imap_password returns None (fail-closed), never garbage-as-password."""
     from config import settings as app_settings
-    from services import email_credentials
+    from services.email import credentials as email_credentials
 
     account = _account()
     email_credentials.store_imap_password(account, "p@ssw0rd-2026")
@@ -72,7 +72,7 @@ def test_wrong_secret_key_fails_closed(monkeypatch):
 def test_load_empty_column_returns_none():
     """A never-stored credential (empty column) fails closed rather than feeding
     an empty string to the IMAP client."""
-    from services import email_credentials
+    from services.email import credentials as email_credentials
 
     assert email_credentials.load_imap_password(_account(password_column="")) is None
 
@@ -80,7 +80,7 @@ def test_load_empty_column_returns_none():
 def test_plaintext_column_value_does_not_decrypt():
     """A raw plaintext value in the column (not a Fernet token) fails closed —
     load never returns the ciphertext/plaintext column as the password."""
-    from services import email_credentials
+    from services.email import credentials as email_credentials
 
     account = _account(password_column="not-a-fernet-token")
     assert email_credentials.load_imap_password(account) is None

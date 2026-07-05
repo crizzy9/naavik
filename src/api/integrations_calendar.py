@@ -20,8 +20,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from api.auth import require_csrf
 from db.session import get_session
 from models import CalendarConnection, User
-from services import calendar_sync
 from services.auth import require_authed_session
+from services.email import calendar_sync
 
 log = logging.getLogger(__name__)
 

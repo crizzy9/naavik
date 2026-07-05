@@ -341,7 +341,7 @@ async def sync_emails() -> None:
     Fan-out per `EmailAccount`. Best-effort — per-account failures bump
     `connection_failure_count` + flip status; no exception propagates.
     """
-    from services.email_sync import sync_all_accounts
+    from services.email import sync_all_accounts
 
     async with async_session() as session:
         result = await sync_all_accounts(session)
@@ -361,8 +361,8 @@ async def classify_emails() -> None:
     Picks unclassified EmailMessage rows. Graceful no-LLM degrade marks rows
     `unclassified_reason=NO_PROVIDER_CONFIGURED` so they retry post-LLM-config.
     """
-    from services.email_application_inference import infer_unprocessed
-    from services.email_classifier import classify_unprocessed
+    from services.email.classifier import classify_unprocessed
+    from services.email.inference import infer_unprocessed
 
     async with async_session() as session:
         n = await classify_unprocessed(session, limit=200)
@@ -383,7 +383,7 @@ async def sync_calendars() -> None:
     from sqlmodel import select as _select
 
     from models import CalendarConnection
-    from services import calendar_sync
+    from services.email import calendar_sync
 
     async with async_session() as session:
         connections = (

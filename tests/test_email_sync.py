@@ -62,7 +62,7 @@ def _patch_imap_host_guard_dns(monkeypatch):
     exercises the guard without live network."""
     import ipaddress
 
-    from services import imap_host_guard
+    from services.email import imap_host_guard
 
     def _fake_resolve(host: str) -> tuple[str, ...]:
         if host == "imap.example.com":
@@ -152,7 +152,8 @@ class _FailingFakeIMAP(_FakeIMAP):
 async def test_sync_account_persists_messages(session):
     from models import EmailAccount, EmailMessage, User
     from models.enums import EmailAccountProvider, EmailAccountStatus
-    from services import email_credentials, email_sync
+    from services.email import credentials as email_credentials
+    from services.email import sync as email_sync
 
     user = User(email="owner@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -197,7 +198,8 @@ async def test_sync_account_persists_messages(session):
 async def test_sync_account_auth_failure_flips_status(session):
     from models import EmailAccount, User
     from models.enums import EmailAccountProvider, EmailAccountStatus
-    from services import email_credentials, email_sync
+    from services.email import credentials as email_credentials
+    from services.email import sync as email_sync
 
     user = User(email="bad@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -234,7 +236,8 @@ async def test_sync_account_dedup_on_repeat(session):
     `uq_email_message_external` constraint."""
     from models import EmailAccount, EmailMessage, User
     from models.enums import EmailAccountProvider
-    from services import email_credentials, email_sync
+    from services.email import credentials as email_credentials
+    from services.email import sync as email_sync
 
     user = User(email="dedup@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -285,7 +288,8 @@ async def test_sync_account_caps_untrusted_fields(session):
     """subject capped to 200, sender_email to 254 at persist (PR #214 M1/L3)."""
     from models import EmailAccount, EmailMessage, User
     from models.enums import EmailAccountProvider
-    from services import email_credentials, email_sync
+    from services.email import credentials as email_credentials
+    from services.email import sync as email_sync
 
     user = User(email="cap@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -332,7 +336,9 @@ async def test_sync_account_blocks_internal_host(session, monkeypatch):
     the persisted error is canonical (no raw exception / IP leak)."""
     from models import EmailAccount, EmailMessage, User
     from models.enums import EmailAccountProvider, EmailAccountStatus
-    from services import email_credentials, email_sync, imap_host_guard
+    from services.email import credentials as email_credentials
+    from services.email import imap_host_guard
+    from services.email import sync as email_sync
 
     # Rebind the test host to an internal IP (DNS-rebind simulation).
     monkeypatch.setattr(imap_host_guard, "_resolve_host", lambda host: ("169.254.169.254",))

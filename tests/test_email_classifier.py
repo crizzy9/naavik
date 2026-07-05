@@ -116,7 +116,7 @@ async def _seed_message(session, *, user_id: int, app_id: int | None = None):
 async def test_classifier_no_settings_marks_no_provider(session, monkeypatch):
     """No Settings row → no LLM provider → graceful degrade."""
     from models import UnclassifiedReason, User
-    from services import email_classifier
+    from services.email import classifier as email_classifier
 
     user = User(email="noprov@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -142,7 +142,7 @@ async def test_classifier_auth_required_marks_no_provider(session, monkeypatch):
 
     from llm import LLMProviderError
     from models import UnclassifiedReason, User
-    from services import email_classifier
+    from services.email import classifier as email_classifier
 
     user = User(email="auth@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -178,7 +178,7 @@ async def test_classifier_happy_path(session, monkeypatch):
     from llm.prompts.classify_email import EmailClassificationResult
     from models import User
     from models.enums import EmailClassification
-    from services import email_classifier
+    from services.email import classifier as email_classifier
 
     user = User(email="happy@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -221,7 +221,7 @@ async def test_classifier_caps_subject_and_sender_in_prompt(session, monkeypatch
 
     from llm.prompts.classify_email import EmailClassificationResult
     from models import User
-    from services import email_classifier
+    from services.email import classifier as email_classifier
 
     user = User(email="cap2@example.com", password_hash="x", is_active=True)
     session.add(user)
@@ -266,7 +266,7 @@ async def test_classifier_llm_failure_marks_llm_failed(session, monkeypatch):
 
     from llm import LLMProviderError
     from models import UnclassifiedReason, User
-    from services import email_classifier
+    from services.email import classifier as email_classifier
 
     user = User(email="fail@example.com", password_hash="x", is_active=True)
     session.add(user)

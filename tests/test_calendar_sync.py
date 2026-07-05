@@ -18,7 +18,7 @@ from sqlalchemy.ext.compiler import compiles
 os.environ.setdefault("NAAVIK_DEBUG", "1")
 os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 
-from services import calendar_sync  # noqa: E402
+from services.email import calendar_sync  # noqa: E402
 
 
 @compiles(JSONB, "sqlite")
@@ -208,8 +208,8 @@ async def test_connect_fetches_before_saving_and_syncs(client_42):
         return SAMPLE_ICS
 
     with (
-        patch("services.calendar_sync.fetch_ics", new=_fake_fetch),
-        patch("services.calendar_sync.validate_ics_url", return_value=(True, None)),
+        patch("services.email.calendar_sync.fetch_ics", new=_fake_fetch),
+        patch("services.email.calendar_sync.validate_ics_url", return_value=(True, None)),
     ):
         r = client.post(
             "/api/v1/integrations/calendar",
