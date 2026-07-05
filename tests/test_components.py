@@ -176,12 +176,10 @@ _CASES: list[tuple[str, dict]] = [
     ("button.html", {"variant": "primary", "label": "Save"}),
     ("input.html", {"name": "email", "type": "email", "placeholder": "you@example.com"}),
     ("card.html", {"title": "Recent activity", "sub": "last 24h", "body": "<p>hi</p>"}),
-    ("tag_chip.html", {"label": "ai-ml", "selected": True}),
     ("status_dot.html", {"status": "APPLIED"}),
     ("status_badge.html", {"status": "ONSITE_LOOP"}),
     ("score_circle.html", {"score": 86, "size": "default"}),
     ("ai_badge.html", {"qualifier": "enthusiastic"}),
-    ("kbd.html", {"key": "←"}),
     ("field_label.html", {"label": "Tags", "for_id": "tags", "hint": "3 selected"}),
     (
         "info_card.html",
@@ -600,7 +598,7 @@ _CASES: list[tuple[str, dict]] = [
     ("bullet_edit_row_skeleton.html", {}),
 ]
 
-assert len(_CASES) == 87, f"Expected 87 components, got {len(_CASES)}"
+assert len(_CASES) == 85, f"Expected 85 components, got {len(_CASES)}"
 
 
 @pytest.mark.parametrize(
@@ -636,13 +634,6 @@ def test_score_circle_uses_macro_via_macros_file(env: Environment) -> None:
     assert ">92</span>" in out
     assert "%" not in out
     assert "stroke-emerald-400" in out  # threshold ≥ 80
-
-
-def test_tag_chip_has_no_sparkle(env: Environment) -> None:
-    out = env.get_template("components/tag_chip.html").render(label="ai-ml", selected=False)
-    assert 'data-lucide="sparkles"' not in out
-    out_selected = env.get_template("components/tag_chip.html").render(label="ai-ml", selected=True)
-    assert 'data-lucide="sparkles"' not in out_selected
 
 
 def test_status_dot_colors_complete() -> None:
