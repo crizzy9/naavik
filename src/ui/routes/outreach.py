@@ -7,6 +7,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
@@ -248,24 +249,37 @@ async def get_outreach_messages(
     return [m.model_dump(mode="json") for m in msgs]
 
 
+class OutreachDraftBody(BaseModel):
+    """Typed body (plan 94 slice B / plan 91 § 7.4) — non-numeric ids are a
+    422 at the edge instead of a ValueError 500 from `int(payload[...])`.
+    Defaults preserve the old `.get(..., 0)` → 404-lookup-miss behaviour."""
+
+    contact_id: int = 0
+    app_id: int | None = None
+    intent: str = "follow_up"
+
+
+class OutreachSendBody(BaseModel):
+    message_id: int = 0
+
+
 @router.post("/api/v1/outreach/draft", name="outreach_draft_post")
 async def post_outreach_draft(
-    payload: Annotated[dict[str, Any], Body()],
+    payload: OutreachDraftBody,
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
     user_id = _effective_user_id(user)
-    contact_id = int(payload.get("contact_id", 0))
-    app_id = payload.get("app_id")
-    intent_str = payload.get("intent", "follow_up")
+    contact_id = payload.contact_id
+    app_id = payload.app_id
     try:
-        intent = OutreachIntent(intent_str)
+        intent = OutreachIntent(payload.intent)
     except ValueError:
-        raise HTTPException(status_code=422, detail=f"Unknown intent {intent_str!r}") from None
+        raise HTTPException(status_code=422, detail=f"Unknown intent {payload.intent!r}") from None
     contact = await owned_contact_or_404(session, contact_id, user_id)
     if app_id is not None:
-        await owned_application_or_404(session, int(app_id), user_id, allow_deleted=True)
+        await owned_application_or_404(session, app_id, user_id, allow_deleted=True)
     body = (
         f"Hey {contact.name.split()[0]} — quick check-in. Let me know if there's "
         "anything I can do to help move things along."
@@ -285,12 +299,12 @@ async def post_outreach_draft(
 
 @router.post("/api/v1/outreach/send", name="outreach_send")
 async def post_outreach_send(
-    payload: Annotated[dict[str, Any], Body()],
+    payload: OutreachSendBody,
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    msg_id = int(payload.get("message_id", 0))
+    msg_id = payload.message_id
     # Ownership check before mutating (plan 91 Phase 1.3) — mark_sent flipped
     # any user's DRAFT→SENT by id.
     await owned_message_or_404(session, msg_id, _effective_user_id(user))

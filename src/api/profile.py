@@ -188,6 +188,21 @@ async def _apply_entity_edit(
 # ── Bulk PUT (Save changes) ─────────────────────────────────────────────
 
 
+_EMAIL_MAX_LEN = 320  # Profile.email VARCHAR(320) — oversize would 500 in asyncpg
+
+
+def _profile_edge_error(name: str, value: str) -> str | None:
+    """Edge validation for bulk/single Profile field writes (plan 94 slice B /
+    plan 91 § 7.4). Returns an error message, or None when the value is fine.
+    Empty string means "clear the field" and is always legal."""
+    if name == "email" and value:
+        if len(value) > _EMAIL_MAX_LEN:
+            return f"email exceeds {_EMAIL_MAX_LEN} characters"
+        if "@" not in value:
+            return "email must contain '@'"
+    return None
+
+
 @router.put("/api/v1/profile", name="api_profile_put_bulk")
 async def put_profile_bulk(
     request: Request,
@@ -234,6 +249,10 @@ async def put_profile_bulk(
             eeo_payload[name] = value if value != "" else None
             continue
         if name in profile_service.ALLOWED_PROFILE_FIELDS:
+            edge_err = _profile_edge_error(name, value)
+            if edge_err:
+                failed.append((name, edge_err))
+                continue
             try:
                 await profile_service.update_field(
                     session,
@@ -593,6 +612,9 @@ async def put_field(
     # Read raw form value — accept any string; service-layer coerces.
     form = await request.form()
     raw_value = form.get("value")
+    edge_err = _profile_edge_error(field, raw_value if isinstance(raw_value, str) else "")
+    if edge_err:
+        raise HTTPException(status_code=422, detail=edge_err)
 
     try:
         await profile_service.update_field(
