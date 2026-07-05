@@ -55,7 +55,10 @@
      UMD global shape matches. `lucide.createIcons()` runs from base.js. #}
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='/static/lucide.min.js';document.head.appendChild(s);"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-  <script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/sse.js"></script>
+  <!-- htmx-2 SSE extension — htmx.org@2.0.4/dist/ext/sse.js ships the htmx-1.x
+       extension API (api.selectAndSwap) and throws on every SSE swap (plan 91
+       follow-up finding; fixed alongside plan 92). -->
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.4/dist/sse.js"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/response-targets.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="/static/keys.js"></script>
