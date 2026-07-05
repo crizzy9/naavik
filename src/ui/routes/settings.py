@@ -977,28 +977,10 @@ async def get_llm_usage(
     }
 
 
-@router.put("/api/v1/settings/auto-apply", name="settings_auto_apply_put")
-async def put_auto_apply(
-    request: Request,
-    _user: User | None = Depends(require_authed_session),
-):
-    return {"ok": True}
-
-
-@router.put("/api/v1/settings/sources", name="settings_sources_put")
-async def put_sources(
-    request: Request,
-    _user: User | None = Depends(require_authed_session),
-):
-    return {"ok": True}
-
-
-@router.put("/api/v1/settings/notifications", name="settings_notifications_put")
-async def put_notifications(
-    request: Request,
-    _user: User | None = Depends(require_authed_session),
-):
-    return {"ok": True}
+# The PUT /api/v1/settings/{auto-apply,sources,notifications,account} handlers
+# that used to live here were `{"ok": true}` stubs, dead by registration order:
+# api/settings.py registers first in main.py and owns those paths. Removed in
+# plan 91 (2.5) so a future router reorder can't silently resurrect them.
 
 
 @router.post("/api/v1/settings/notifications/test", name="settings_notifications_test")
@@ -1041,27 +1023,6 @@ async def post_notifications_test(
     )
 
 
-@router.get("/api/v1/settings/deployment", name="settings_deployment_get")
-async def get_deployment(
-    session: AsyncSession = Depends(get_session),
-    user: User | None = Depends(require_authed_session),
-):
-    settings = await settings_service.get_or_create(session, user_id=_effective_user_id(user))
-    scheduler_running = False
-    try:
-        from scheduler import is_running as _sched_running
-
-        scheduler_running = bool(_sched_running())
-    except Exception:  # noqa: BLE001
-        scheduler_running = False
-    return {
-        "mode": settings.deployment_mode.value,
-        "version": _app_version(),
-        "scheduler_status": "running" if scheduler_running else "stopped",
-        "data_dir": app_settings.data_dir,
-    }
-
-
 # The fake in-app "Restart" endpoint (returned 202 without restarting) and the
 # fabricated log-stream SSE endpoint were removed in the hardening pass. Process
 # lifecycle is owned by the supervisor (Docker / systemd); logs are read there.
@@ -1076,14 +1037,6 @@ async def get_account(
     if p is None:
         raise HTTPException(status_code=404, detail="Profile not found")
     return {"full_name": p.full_name, "email": p.email}
-
-
-@router.put("/api/v1/settings/account", name="settings_account_put")
-async def put_account(
-    request: Request,
-    _user: User | None = Depends(require_authed_session),
-):
-    return {"ok": True}
 
 
 @router.put("/api/v1/settings/account/password", name="settings_account_password")

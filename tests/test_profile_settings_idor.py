@@ -129,12 +129,9 @@ def test_put_profile_field_threads_authed_user_id(client_with_user_42):
     assert captured == [42]
 
 
-# ── PUT /api/v1/profile/application-questions ────────────────────────────
-# NOTE: This route's IDOR was fixed defensively, but the route itself is
-# currently shadowed by `put_field`'s `{field}` parameterized route which
-# is registered earlier in profile.py and matches first. The bulk PUT
-# above exercises the same `update_application_questions` service call,
-# so the IDOR fix is already covered.
+# NOTE: the shadowed PUT /api/v1/profile/application-questions route was
+# removed in plan 91 (2.6). The bulk PUT above exercises the same
+# `update_application_questions` service call, so its IDOR fix stays covered.
 
 
 # ── PUT /api/v1/settings/llm ─────────────────────────────────────────────

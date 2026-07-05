@@ -612,25 +612,11 @@ async def put_field(
     )
 
 
-@router.put("/api/v1/profile/application-questions", name="api_profile_put_application_questions")
-async def put_application_questions(
-    request: Request,
-    payload: Annotated[dict[str, Any] | None, Body()] = None,
-    session: AsyncSession = Depends(get_session),
-    _user: User | None = Depends(require_authed_session),
-):
-    payload = payload or {}
-    try:
-        await profile_service.update_application_questions(
-            session,
-            user_id=_effective_user_id(_user),
-            payload=payload,
-        )
-        await session.commit()
-    except LookupError as exc:
-        await session.rollback()
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"ok": True}
+# NOTE: a PUT /api/v1/profile/application-questions route used to live here,
+# but the `{field}` catch-all above is registered first and matches the path,
+# so it was unreachable (plan 91 2.6). EEO-bag updates flow through the bulk
+# PUT /api/v1/profile, which calls the same
+# `profile_service.update_application_questions`.
 
 
 # ── Bullets ─────────────────────────────────────────────────────────────
