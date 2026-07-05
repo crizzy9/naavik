@@ -256,7 +256,7 @@ async def process_auto_apply_queue(
         if application.docs_state == DocsState.GENERATING:
             continue
         if application.docs_state in {DocsState.NONE, DocsState.STALE, DocsState.FAILED}:
-            from services.bundle_generator import generate_bundle
+            from services.generation import generate_bundle
 
             try:
                 bundle = await generate_bundle(session, application, settings=s, job=job)

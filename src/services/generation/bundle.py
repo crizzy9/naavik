@@ -1,10 +1,11 @@
 """Bundle orchestration — BundleResult + the FREE composite + cover-letter regen.
 
-Split out of services/bundle_generator.py in plan 91 Phase 4.4;
-behaviour unchanged. `dg` binds the services.document_generator facade,
-so `patch("services.bundle_generator.dg.X")` (which mutates that shared
-module object) keeps intercepting; the premium pipeline calls the free
-composite through the bundle facade for the same reason.
+Split out of the former services/bundle_generator.py in plan 91 Phase 4.4;
+behaviour unchanged. `dg` binds the
+services.document_generator module, so `patch("services.document_generator.X")`
+(which mutates that shared module object) keeps intercepting; the premium
+pipeline calls the free composite through the `services.generation` package
+surface for the same reason.
 """
 
 import logging
@@ -43,13 +44,13 @@ log = logging.getLogger(__name__)
 
 
 def _bg():
-    """The `services.bundle_generator` facade, resolved at call time —
-    keeps patch("services.bundle_generator.{assemble_corpus,
+    """The `services.generation` package surface, resolved at call time —
+    keeps patch("services.generation.{assemble_corpus,
     extract_hiring_manager,_load_profile_experiences,generate_bundle}")
     intercepting internal calls."""
-    from services import bundle_generator
+    from services import generation
 
-    return bundle_generator
+    return generation
 
 
 @dataclass(slots=True)

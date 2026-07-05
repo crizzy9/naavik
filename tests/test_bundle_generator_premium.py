@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.bundle_generator import (
+from services.generation import (
     BundleResult,
     generate_bundle,
 )
@@ -74,7 +74,7 @@ async def test_free_tier_default_routes_to_free_path():
     app = _application()
 
     with patch(
-        "services.bundle_generator.dg.is_cost_capped",
+        "services.document_generator.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await generate_bundle(session, app, settings=settings)
@@ -94,7 +94,7 @@ async def test_premium_tier_explicit_kwarg_overrides_settings():
     app = _application()
 
     with patch(
-        "services.bundle_generator._generate_bundle_premium",
+        "services.generation._generate_bundle_premium",
         AsyncMock(
             return_value=BundleResult(
                 degraded=False,
@@ -119,7 +119,7 @@ async def test_settings_generation_tier_premium_dispatches():
     app = _application()
 
     with patch(
-        "services.bundle_generator._generate_bundle_premium",
+        "services.generation._generate_bundle_premium",
         AsyncMock(return_value=BundleResult(generation_trace={"tier": "premium"})),
     ) as mock_premium:
         result = await generate_bundle(session, app, settings=settings)
@@ -132,7 +132,7 @@ async def test_settings_generation_tier_premium_dispatches():
 async def test_premium_cost_cap_pre_flight_falls_back_to_free_skipped():
     """When cost cap fires before any stage, the PREMIUM dispatcher
     inherits the FREE skipped_reason without exploding."""
-    from services.bundle_generator import _generate_bundle_premium
+    from services.generation import _generate_bundle_premium
 
     settings = _settings(generation_tier="premium", daily_llm_cost_cap_usd=0.01)
     session = AsyncMock()
@@ -141,7 +141,7 @@ async def test_premium_cost_cap_pre_flight_falls_back_to_free_skipped():
     app = _application()
 
     with patch(
-        "services.bundle_generator.dg.is_cost_capped",
+        "services.document_generator.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await _generate_bundle_premium(session, app, settings=settings)
@@ -156,10 +156,10 @@ async def test_premium_cost_cap_pre_flight_falls_back_to_free_skipped():
 @pytest.mark.asyncio
 async def test_premium_happy_path_calls_all_4_stages():
     """End-to-end PREMIUM call wires council + detector + critique + tool_loop."""
-    from services.bundle_generator import _generate_bundle_premium
     from services.council import SelectedBullets
     from services.critique_council import CritiqueReport
     from services.detector_loop import DetectorReport
+    from services.generation import _generate_bundle_premium
     from services.tool_loop import IterationRecord, ToolLoopReport
 
     settings = _settings(generation_tier="premium")
@@ -209,19 +209,19 @@ async def test_premium_happy_path_calls_all_4_stages():
 
     with (
         patch(
-            "services.bundle_generator.generate_bundle",
+            "services.generation.generate_bundle",
             AsyncMock(return_value=free_result),
         ),
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(None, [])),
         ),
         patch(
@@ -278,8 +278,8 @@ async def test_premium_happy_path_calls_all_4_stages():
 @pytest.mark.asyncio
 async def test_premium_cost_cap_mid_flight_skips_remaining_stages():
     """Cost cap firing between PREMIUM stages skips downstream + flags degraded."""
-    from services.bundle_generator import _generate_bundle_premium
     from services.council import SelectedBullets
+    from services.generation import _generate_bundle_premium
 
     settings = _settings(generation_tier="premium")
     session = AsyncMock()
@@ -313,19 +313,19 @@ async def test_premium_cost_cap_mid_flight_skips_remaining_stages():
 
     with (
         patch(
-            "services.bundle_generator.generate_bundle",
+            "services.generation.generate_bundle",
             AsyncMock(return_value=free_result),
         ),
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             new=AsyncMock(side_effect=_cap),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(None, [])),
         ),
         patch(
@@ -363,7 +363,7 @@ async def test_premium_cost_cap_mid_flight_skips_remaining_stages():
 @pytest.mark.asyncio
 async def test_premium_inherits_free_trace_fields():
     """PREMIUM merges all FREE trace keys + adds PREMIUM keys without dropping."""
-    from services.bundle_generator import _generate_bundle_premium
+    from services.generation import _generate_bundle_premium
 
     settings = _settings(generation_tier="premium", daily_llm_cost_cap_usd=0.01)
     session = AsyncMock()
@@ -373,7 +373,7 @@ async def test_premium_inherits_free_trace_fields():
 
     # FREE skipped due to cap; we just verify the trace structure inheritance.
     with patch(
-        "services.bundle_generator.dg.is_cost_capped",
+        "services.document_generator.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await _generate_bundle_premium(session, app, settings=settings)
@@ -396,10 +396,10 @@ async def test_premium_invokes_ensemble_score_and_records_trace_keys(tmp_path):
     `_generate_bundle_premium` when the rendered PDF exists. The audit trail
     MUST carry `ensemble_parse_score` + `ensemble_parsers_used` keys."""
     from services.ats_parser_ensemble import EnsembleReport
-    from services.bundle_generator import _generate_bundle_premium
     from services.council import SelectedBullets
     from services.critique_council import CritiqueReport
     from services.detector_loop import DetectorReport
+    from services.generation import _generate_bundle_premium
     from services.tool_loop import IterationRecord, ToolLoopReport
 
     # Real on-disk PDF stub so Path.exists() returns True
@@ -464,19 +464,19 @@ async def test_premium_invokes_ensemble_score_and_records_trace_keys(tmp_path):
 
     with (
         patch(
-            "services.bundle_generator.generate_bundle",
+            "services.generation.generate_bundle",
             AsyncMock(return_value=free_result),
         ),
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(None, [])),
         ),
         patch(
@@ -535,7 +535,7 @@ async def test_premium_ensemble_below_threshold_records_warning_flag():
     import tempfile
 
     from services.ats_parser_ensemble import EnsembleReport
-    from services.bundle_generator import _generate_bundle_premium
+    from services.generation import _generate_bundle_premium
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(b"%PDF-1.4 fake")
@@ -570,19 +570,19 @@ async def test_premium_ensemble_below_threshold_records_warning_flag():
 
         with (
             patch(
-                "services.bundle_generator.generate_bundle",
+                "services.generation.generate_bundle",
                 AsyncMock(return_value=free_result),
             ),
             patch(
-                "services.bundle_generator.dg.is_cost_capped",
+                "services.document_generator.is_cost_capped",
                 AsyncMock(return_value=False),
             ),
             patch(
-                "services.bundle_generator.assemble_corpus",
+                "services.generation.assemble_corpus",
                 AsyncMock(return_value=None),
             ),
             patch(
-                "services.bundle_generator._load_profile_experiences",
+                "services.generation._load_profile_experiences",
                 AsyncMock(return_value=(None, [])),
             ),
             patch(
@@ -617,7 +617,7 @@ async def test_premium_ensemble_below_threshold_records_warning_flag():
 @pytest.mark.asyncio
 async def test_premium_ensemble_skipped_when_pdf_missing():
     """No PDF on disk (FREE pipeline didn't render) -> ensemble in skipped."""
-    from services.bundle_generator import _generate_bundle_premium
+    from services.generation import _generate_bundle_premium
 
     settings = _settings(generation_tier="premium")
     session = AsyncMock()
@@ -637,19 +637,19 @@ async def test_premium_ensemble_skipped_when_pdf_missing():
 
     with (
         patch(
-            "services.bundle_generator.generate_bundle",
+            "services.generation.generate_bundle",
             AsyncMock(return_value=free_result),
         ),
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(None, [])),
         ),
         patch(

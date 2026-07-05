@@ -374,7 +374,7 @@ async def test_queue_generates_docs_then_submits(session):
         return SimpleNamespace(skipped_reason=None, degraded=False)
 
     with (
-        patch("services.bundle_generator.generate_bundle", new=fake_generate),
+        patch("services.generation.generate_bundle", new=fake_generate),
         patch("services.application_service.submit_draft", new=_submit_ok()),
     ):
         result = await process_auto_apply_queue(session)
@@ -398,7 +398,7 @@ async def test_queue_cost_capped_generation_counts_skip(session):
     async def capped(sess, application, *, settings, job=None):
         return SimpleNamespace(skipped_reason="cost_cap_reached", degraded=False)
 
-    with patch("services.bundle_generator.generate_bundle", new=capped):
+    with patch("services.generation.generate_bundle", new=capped):
         result = await process_auto_apply_queue(session)
 
     assert result.skipped_by_cap == 1
@@ -557,6 +557,6 @@ async def test_queue_ignores_other_users_when_scoped(session):
 # Sanity: the module-under-test import seam used by the queue patches above.
 def test_patch_seams_exist():
     assert hasattr(application_service, "submit_draft")
-    import services.bundle_generator as bg
+    import services.generation as bg
 
     assert hasattr(bg, "generate_bundle")

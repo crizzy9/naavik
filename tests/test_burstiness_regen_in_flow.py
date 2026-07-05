@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.bundle_generator import generate_bundle
+from services.generation import generate_bundle
 from services.voice_grounding import VoiceCorpus
 
 pytestmark = pytest.mark.uses_sample_data_shims
@@ -127,39 +127,39 @@ async def _run_bundle(session, application, settings, job, fake_resume, *, regen
 
     with (
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=fake_corpus),
         ),
         patch(
-            "services.bundle_generator.extract_hiring_manager",
+            "services.generation.extract_hiring_manager",
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.bundle_generator.dg.generate_resume",
+            "services.document_generator.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.bundle_generator.dg.generate_cover_letter",
+            "services.document_generator.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.bundle_generator.dg.answer_screeners",
+            "services.document_generator.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
-            "services.bundle_generator.dg.regen_bullet_for_variance",
+            "services.document_generator.regen_bullet_for_variance",
             regen_mock,
         ),
         patch(
-            "services.bundle_generator.validate_parse_fidelity",
+            "services.generation.validate_parse_fidelity",
             return_value=None,
         ),
     ):
@@ -380,39 +380,39 @@ async def test_burstiness_regen_skipped_on_cost_cap():
 
     with (
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(side_effect=_capped_at_burstiness),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=fake_corpus),
         ),
         patch(
-            "services.bundle_generator.extract_hiring_manager",
+            "services.generation.extract_hiring_manager",
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.bundle_generator.dg.generate_resume",
+            "services.document_generator.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.bundle_generator.dg.generate_cover_letter",
+            "services.document_generator.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.bundle_generator.dg.answer_screeners",
+            "services.document_generator.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
-            "services.bundle_generator.dg.regen_bullet_for_variance",
+            "services.document_generator.regen_bullet_for_variance",
             regen_mock,
         ),
         patch(
-            "services.bundle_generator.validate_parse_fidelity",
+            "services.generation.validate_parse_fidelity",
             return_value=None,
         ),
     ):

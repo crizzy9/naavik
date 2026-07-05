@@ -81,7 +81,7 @@ async def test_queue_generates_docs_when_missing():
         return_value=_make_app(status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
     )
     with (
-        patch("services.bundle_generator.generate_bundle", new=fake_generate),
+        patch("services.generation.generate_bundle", new=fake_generate),
         patch("services.application_service.submit_draft", new=fake_submit),
     ):
         result = await process_auto_apply_queue(session)

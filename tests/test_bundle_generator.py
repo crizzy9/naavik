@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from services.ats_parser_fidelity import ParseScoreReport
-from services.bundle_generator import (
+from services.generation import (
     GENERATION_TRACE_SCHEMA_VERSION,
     BundleResult,
     generate_bundle,
@@ -107,7 +107,7 @@ async def test_bundle_pre_flight_cost_cap_skips_all_stages():
     session.add = lambda x: None
 
     with patch(
-        "services.bundle_generator.dg.is_cost_capped",
+        "services.document_generator.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await generate_bundle(session, application, settings=settings)
@@ -137,7 +137,7 @@ async def test_bundle_no_job_raises():
 
     with (
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         pytest.raises(ValueError, match="has no job context"),
@@ -176,35 +176,35 @@ async def test_bundle_full_happy_path():
 
     with (
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=fake_corpus),
         ),
         patch(
-            "services.bundle_generator.extract_hiring_manager",
+            "services.generation.extract_hiring_manager",
             AsyncMock(return_value=fake_hm),
         ),
         patch(
-            "services.bundle_generator.dg.generate_resume",
+            "services.document_generator.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(None, [])),  # skip headline (no profile)
         ),
         patch(
-            "services.bundle_generator.dg.generate_cover_letter",
+            "services.document_generator.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.bundle_generator.dg.answer_screeners",
+            "services.document_generator.answer_screeners",
             AsyncMock(return_value=fake_screeners),
         ),
         patch(
-            "services.bundle_generator.validate_parse_fidelity",
+            "services.generation.validate_parse_fidelity",
             return_value=ParseScoreReport(
                 score=0.92,
                 tier="silent",
@@ -263,9 +263,9 @@ async def test_bundle_cost_cap_mid_flight_after_corpus():
         return call_count["n"] >= 2
 
     with (
-        patch("services.bundle_generator.dg.is_cost_capped", _capped),
+        patch("services.document_generator.is_cost_capped", _capped),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=_make_corpus()),
         ),
     ):
@@ -288,7 +288,7 @@ async def test_bundle_audit_trail_carries_voice_fingerprint():
     settings = _make_settings(daily_llm_cost_cap_usd=0.01)
 
     with patch(
-        "services.bundle_generator.dg.is_cost_capped",
+        "services.document_generator.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await generate_bundle(session, application, settings=settings)

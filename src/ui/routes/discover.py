@@ -1309,7 +1309,7 @@ async def post_cover_generate(
     422 when no LLM provider is configured.
     """
     from llm.base import LLMProviderError
-    from services.bundle_generator import regenerate_cover_letter
+    from services.generation import regenerate_cover_letter
 
     user_id = _effective_user_id(user)
     application = await application_service.get_application(session, application_id)

@@ -57,7 +57,7 @@ from models.enums import (
     ScreenerQuestionType,
     VisaSponsorship,
 )
-from services import bundle_generator
+from services import generation as bundle_generator
 from services.document_generator import question_fingerprint
 from tests._sqlite import sqlite_session, strip_pg_checks
 from typst.compiler import CompileResult, TypstError

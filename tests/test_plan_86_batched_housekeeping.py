@@ -681,7 +681,7 @@ async def test_generate_bundle_regenerate_kind_cover_letter_skips_resume(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`regenerate_kind=cover_letter` dispatches to `regenerate_cover_letter`, NOT `generate_bundle`."""
-    from services import bundle_generator
+    from services import generation as bundle_generator
 
     full_called = False
     cover_only_called = False

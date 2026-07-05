@@ -84,7 +84,7 @@ def spawn_generation(application_id: int) -> bool:
 async def _run_generation(application_id: int) -> None:
     """Own-session bundle generation; never raises."""
     from db.session import async_session
-    from services.bundle_generator import generate_bundle
+    from services.generation import generate_bundle
 
     try:
         async with async_session() as session:

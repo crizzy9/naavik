@@ -27,7 +27,7 @@ from db.session import get_session
 from models import ApplicationStatus, ClosedReason, Settings, User
 from services import application_service as svc
 from services.auth import require_password_complete
-from services.bundle_generator import generate_bundle, regenerate_cover_letter
+from services.generation import generate_bundle, regenerate_cover_letter
 from services.rate_limit import check_generate_bundle_rate_limit
 
 _REGENERATE_KIND_VALID = {"bundle", "cover_letter", "resume"}

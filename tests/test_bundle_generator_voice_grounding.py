@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.bundle_generator import generate_bundle
+from services.generation import generate_bundle
 from services.hiring_manager_extractor import HiringManagerHit
 from services.voice_grounding import VoiceCorpus
 
@@ -146,35 +146,35 @@ async def test_bundle_constitution_threaded_to_resume_call():
 
     with (
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=fake_corpus),
         ),
         patch(
-            "services.bundle_generator.extract_hiring_manager",
+            "services.generation.extract_hiring_manager",
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.bundle_generator.dg.generate_resume",
+            "services.document_generator.generate_resume",
             _capture_resume,
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.bundle_generator.dg.generate_cover_letter",
+            "services.document_generator.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.bundle_generator.dg.answer_screeners",
+            "services.document_generator.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
-            "services.bundle_generator.validate_parse_fidelity",
+            "services.generation.validate_parse_fidelity",
             return_value=None,
         ),
     ):
@@ -222,35 +222,35 @@ async def test_bundle_constitution_threaded_to_cover_letter_call():
 
     with (
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=fake_corpus),
         ),
         patch(
-            "services.bundle_generator.extract_hiring_manager",
+            "services.generation.extract_hiring_manager",
             AsyncMock(return_value=fake_hm),
         ),
         patch(
-            "services.bundle_generator.dg.generate_resume",
+            "services.document_generator.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.bundle_generator.dg.generate_cover_letter",
+            "services.document_generator.generate_cover_letter",
             _capture_cover,
         ),
         patch(
-            "services.bundle_generator.dg.answer_screeners",
+            "services.document_generator.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
-            "services.bundle_generator.validate_parse_fidelity",
+            "services.generation.validate_parse_fidelity",
             return_value=None,
         ),
     ):
@@ -290,35 +290,35 @@ async def test_bundle_headline_stage_retired():
 
     with (
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=fake_corpus),
         ),
         patch(
-            "services.bundle_generator.extract_hiring_manager",
+            "services.generation.extract_hiring_manager",
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.bundle_generator.dg.generate_resume",
+            "services.document_generator.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.bundle_generator.dg.generate_cover_letter",
+            "services.document_generator.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.bundle_generator.dg.answer_screeners",
+            "services.document_generator.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
-            "services.bundle_generator.validate_parse_fidelity",
+            "services.generation.validate_parse_fidelity",
             return_value=None,
         ),
     ):
@@ -367,35 +367,35 @@ async def test_bundle_no_constitution_when_no_corpus():
 
     with (
         patch(
-            "services.bundle_generator.dg.is_cost_capped",
+            "services.document_generator.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
-            "services.bundle_generator.assemble_corpus",
+            "services.generation.assemble_corpus",
             AsyncMock(return_value=empty_corpus),
         ),
         patch(
-            "services.bundle_generator.extract_hiring_manager",
+            "services.generation.extract_hiring_manager",
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.bundle_generator.dg.generate_resume",
+            "services.document_generator.generate_resume",
             _capture_resume,
         ),
         patch(
-            "services.bundle_generator._load_profile_experiences",
+            "services.generation._load_profile_experiences",
             AsyncMock(return_value=(None, [])),  # cold-start: no Profile
         ),
         patch(
-            "services.bundle_generator.dg.generate_cover_letter",
+            "services.document_generator.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.bundle_generator.dg.answer_screeners",
+            "services.document_generator.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
-            "services.bundle_generator.validate_parse_fidelity",
+            "services.generation.validate_parse_fidelity",
             return_value=None,
         ),
     ):
