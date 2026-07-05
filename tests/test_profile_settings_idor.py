@@ -83,7 +83,7 @@ def test_put_profile_bulk_threads_authed_user_id(client_with_user_42):
     async def _spy(session, *, user_id, field, value):
         captured.append(user_id)
 
-    with patch("services.profile_service.update_field", new=_spy):
+    with patch("services.profile.update_field", new=_spy):
         r = client.put("/api/v1/profile", data={"full_name": "Cross User Rename"})
 
     assert r.status_code == 200, r.text[:300]
@@ -101,7 +101,7 @@ def test_put_profile_bulk_eeo_threads_authed_user_id(client_with_user_42):
     async def _spy_aq(session, *, user_id, payload):
         captured.append(user_id)
 
-    with patch("services.profile_service.update_application_questions", new=_spy_aq):
+    with patch("services.profile.update_application_questions", new=_spy_aq):
         r = client.put("/api/v1/profile", data={"notice_period_days": "21"})
 
     assert r.status_code == 200, r.text[:300]
@@ -119,7 +119,7 @@ def test_put_profile_field_threads_authed_user_id(client_with_user_42):
     async def _spy(session, *, user_id, field, value):
         captured.append(user_id)
 
-    with patch("services.profile_service.update_field", new=_spy):
+    with patch("services.profile.update_field", new=_spy):
         r = client.put(
             "/api/v1/profile/full_name",
             data={"value": "Cross User"},
@@ -280,7 +280,7 @@ def test_fake_session_resolves_to_user_id_one():
     app.dependency_overrides[require_csrf] = _csrf_pass
     try:
         client = TestClient(app, raise_server_exceptions=True)
-        with patch("services.profile_service.update_field", new=_spy):
+        with patch("services.profile.update_field", new=_spy):
             r = client.put(
                 "/api/v1/profile",
                 data={"full_name": "Fake Session Save"},

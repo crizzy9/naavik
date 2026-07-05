@@ -18,8 +18,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from api.auth import require_csrf
 from db.session import get_session
 from models import User
-from services import profile_answer_service
 from services.auth import require_authed_session
+from services.profile import answers as profile_answer_service
 
 router = APIRouter()
 

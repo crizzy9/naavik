@@ -41,7 +41,7 @@ from models import (  # noqa: E402
     User,
 )
 from models.enums import ApplicationStatus, ScreenerAnswerSource, ScreenerQuestionType  # noqa: E402
-from services import profile_answer_service  # noqa: E402
+from services.profile import answers as profile_answer_service  # noqa: E402
 
 pytestmark = pytest.mark.uses_sample_data_shims
 

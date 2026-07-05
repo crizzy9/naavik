@@ -19,8 +19,8 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from services import portfolio_sync as ps
-from services.portfolio_sync import (
+from services.profile import portfolio_sync as ps
+from services.profile.portfolio_sync import (
     assert_no_pii,
     cors_allowed_origins,
     is_cors_allowed,
@@ -183,7 +183,7 @@ async def test_regenerate_generic_resume_calls_generator(tmp_path):
         output_path.write_bytes(b"%PDF-fake")
         return SimpleNamespace(byte_size=8, page_count=1)
 
-    with patch("services.portfolio_sync.portfolio_resume_path", return_value=out):
+    with patch("services.profile.portfolio_sync.portfolio_resume_path", return_value=out):
         result = await regenerate_generic_resume(settings=settings, generate_fn=fake_gen)
     assert result == out
     assert out.exists()
@@ -197,7 +197,7 @@ async def test_regenerate_generic_resume_handles_failure(tmp_path):
     async def failing_gen(*a, **kw):
         raise RuntimeError("compile bombed")
 
-    with patch("services.portfolio_sync.portfolio_resume_path", return_value=out):
+    with patch("services.profile.portfolio_sync.portfolio_resume_path", return_value=out):
         result = await regenerate_generic_resume(settings=settings, generate_fn=failing_gen)
     assert result is None
 
@@ -273,8 +273,8 @@ async def test_schedule_debounced_regen_coalesces_rapid_calls():
         ps._debounce_handle = None
 
     with (
-        patch("services.portfolio_sync.regenerate_generic_resume", new=fake_regen),
-        patch("services.portfolio_sync.trigger_netlify_rebuild", new=fake_netlify),
+        patch("services.profile.portfolio_sync.regenerate_generic_resume", new=fake_regen),
+        patch("services.profile.portfolio_sync.trigger_netlify_rebuild", new=fake_netlify),
     ):
         # 3 rapid calls; each resets the timer to 0.05s out.
         for _ in range(3):

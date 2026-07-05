@@ -57,7 +57,7 @@ from models import (  # noqa: E402
     Skill,
     User,
 )
-from services.extraction import _parse_date, _persist_profile  # noqa: E402
+from services.profile.extraction import _parse_date, _persist_profile  # noqa: E402
 
 _TABLES = [
     User.__table__,

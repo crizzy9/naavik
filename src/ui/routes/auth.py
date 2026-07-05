@@ -27,7 +27,8 @@ from api.auth import require_csrf
 from config import settings as app_settings
 from db.session import get_session
 from models import User
-from services import env_secrets, profile_service
+from services import env_secrets
+from services import profile as profile_service
 from services.auth import get_current_user, require_password_complete
 from ui.templates_setup import templates
 
@@ -211,7 +212,8 @@ async def post_extraction_upload(
     parsed_summary: dict | None = None
     parse_error: str | None = None
     try:
-        from services import extraction, settings_service
+        from services import settings_service
+        from services.profile import extraction
 
         user_settings = await settings_service.get_or_create(session, user_id=user_id)
         if env_secrets.resolve_active_llm_provider() is not None:

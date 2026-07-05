@@ -25,11 +25,13 @@ from services import (
     applications,
     env_secrets,
     llm_tracker,
-    profile_service,
     settings_service,
 )
 from services import (
     jobs as job_service,
+)
+from services import (
+    profile as profile_service,
 )
 from services.auth import (
     SESSION_COOKIE,

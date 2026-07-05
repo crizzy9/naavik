@@ -629,7 +629,7 @@ async def post_job_by_url(
 
     # Score immediately so the card lands with a real score, not a blank.
     score_note = "unscored — no profile yet"
-    from services import profile_service
+    from services import profile as profile_service
     from services.scorer import score_job_layered
 
     profile = await profile_service.get_profile(session, user_id)
@@ -959,7 +959,7 @@ async def fragment_resume_bullet_toggle(
     """
     from models.enums import BulletSelectionOverride
     from services import generation as dg
-    from services import profile_service
+    from services import profile as profile_service
 
     user_id = _effective_user_id(user)
     application = await _application_owned_or_404(session, application_id, user_id)
@@ -1093,7 +1093,8 @@ async def fragment_resume_bullet_save(
     profile's master bullet is untouched.
     """
     from services import generation as dg
-    from services import profile_service, settings_service
+    from services import profile as profile_service
+    from services import settings_service
 
     user_id = _effective_user_id(user)
     application = await _application_owned_or_404(session, application_id, user_id)

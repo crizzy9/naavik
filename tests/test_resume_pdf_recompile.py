@@ -94,7 +94,7 @@ def _toggle(client, application, *, doc=_doc(), recompile_mock=None):
             "services.applications.get_application",
             new=AsyncMock(return_value=application),
         ),
-        patch("services.profile_service.owns_bullet", new=AsyncMock(return_value=True)),
+        patch("services.profile.owns_bullet", new=AsyncMock(return_value=True)),
         patch(
             "services.generation._latest_error_free_doc",
             new=AsyncMock(return_value=doc),

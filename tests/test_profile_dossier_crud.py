@@ -57,7 +57,7 @@ from models import (  # noqa: E402
     Skill,
     User,
 )
-from services import profile_service  # noqa: E402
+from services import profile as profile_service  # noqa: E402
 
 
 def _strip_pg_checks() -> list:

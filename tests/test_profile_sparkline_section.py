@@ -74,7 +74,7 @@ def test_profile_renders_empty_sparkline_state_when_families_empty(
     monkeypatch, client: TestClient, auth_cookies: dict[str, str]
 ) -> None:
     """If the user has no scored jobs yet, render the empty-state hint."""
-    from services import profile_service
+    from services import profile as profile_service
 
     async def _empty_history(_session, _user_id):
         return {"last_aggregated_at": "2026-05-21T00:00:00+00:00", "families": []}

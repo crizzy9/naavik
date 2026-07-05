@@ -30,6 +30,21 @@ from models import (
 # for nullable fields like Bullet.selection_override).
 _UNSET: Any = object()
 
+
+def _pkg():
+    """The `services.profile` package surface, resolved at call time.
+
+    Intra-module calls to shimmed/patched seams (`get_profile`,
+    `get_bullet`, `get_bullets_for_experience`, `get_experience`,
+    `parse_resume_heuristics`) route through the package `__init__` so
+    conftest shims and `patch("services.profile.X")` keep intercepting
+    them — pre-split they read this module's own globals, which WAS the
+    patch surface (plan 92 B4)."""
+    from services import profile
+
+    return profile
+
+
 # Whitelist of profile fields that the per-field PUT endpoint may touch.
 # (Same set as the route handler's `_ALLOWED_FIELDS`; service-side gate is
 # the source of truth.)
@@ -78,7 +93,7 @@ async def get_score_history(session: AsyncSession, user_id: int) -> dict:
     Empty dict when no Profile row OR the column is still default. Cron
     `score.aggregate_daily` keeps this fresh; ctx-builder consumes it.
     """
-    profile = await get_profile(session, user_id)
+    profile = await _pkg().get_profile(session, user_id)
     if profile is None:
         return {}
     return dict(profile.score_history or {})
@@ -250,7 +265,7 @@ async def update_field(
     """Per-field PUT for the autosave indicator."""
     if field not in ALLOWED_PROFILE_FIELDS:
         raise ValueError(f"field {field!r} not allowed via per-field PUT")
-    profile = await get_profile(session, user_id)
+    profile = await _pkg().get_profile(session, user_id)
     if profile is None:
         raise LookupError(f"no profile for user_id={user_id}")
     setattr(profile, field, value)
@@ -326,11 +341,11 @@ async def set_raw_resume_text(
     currently falsy. Returns the updated Profile, or None when the user has
     no Profile row yet (best-effort; caller can ignore).
     """
-    profile = await get_profile(session, user_id)
+    profile = await _pkg().get_profile(session, user_id)
     if profile is None:
         return None
     profile.raw_resume_text = text
-    parsed = parse_resume_heuristics(text)
+    parsed = _pkg().parse_resume_heuristics(text)
     for field in ("full_name", "email", "phone"):
         if parsed.get(field) and not getattr(profile, field, None):
             setattr(profile, field, parsed[field])
@@ -346,7 +361,7 @@ async def update_application_questions(
     payload: dict[str, Any],
 ) -> Profile:
     """Bulk update for the 10 EEO/visa fields per DATA_MODEL.md § A note."""
-    profile = await get_profile(session, user_id)
+    profile = await _pkg().get_profile(session, user_id)
     if profile is None:
         raise LookupError(f"no profile for user_id={user_id}")
 
@@ -412,7 +427,7 @@ async def update_bullet(
     tags: list[str] | None = None,
     selection_override: Any = _UNSET,
 ) -> Bullet:
-    b = await get_bullet(session, bullet_id)
+    b = await _pkg().get_bullet(session, bullet_id)
     if b is None:
         raise LookupError(f"bullet {bullet_id} not found")
     if text is not None:
@@ -445,7 +460,7 @@ async def update_bullet(
 
 
 async def delete_bullet(session: AsyncSession, bullet_id: int) -> bool:
-    b = await get_bullet(session, bullet_id)
+    b = await _pkg().get_bullet(session, bullet_id)
     if b is None:
         return False
     now = datetime.now(UTC)
@@ -463,7 +478,7 @@ async def reorder_bullets(
     bullet_ids: list[int],
 ) -> list[Bullet]:
     """Apply order_index from the provided list."""
-    bullets = await get_bullets_for_experience(session, experience_id)
+    bullets = await _pkg().get_bullets_for_experience(session, experience_id)
     by_id = {b.id: b for b in bullets}
     now = datetime.now(UTC)
     for idx, bid in enumerate(bullet_ids):
@@ -474,7 +489,7 @@ async def reorder_bullets(
         b.updated_at = now
         session.add(b)
     await session.flush()
-    return await get_bullets_for_experience(session, experience_id)
+    return await _pkg().get_bullets_for_experience(session, experience_id)
 
 
 # ── Dossier child-entity CRUD (item 1, 2026-07) ─────────────────────────
@@ -486,7 +501,7 @@ async def reorder_bullets(
 
 
 async def _profile_or_raise(session: AsyncSession, user_id: int) -> Profile:
-    profile = await get_profile(session, user_id)
+    profile = await _pkg().get_profile(session, user_id)
     if profile is None:
         raise LookupError(f"no profile for user_id={user_id}")
     return profile
@@ -567,7 +582,7 @@ async def update_experience(
     start_date: datetime | None = None,
     end_date: datetime | None | object = "__unset__",
 ) -> Experience:
-    exp = await get_experience(session, experience_id)
+    exp = await _pkg().get_experience(session, experience_id)
     if exp is None:
         raise LookupError(f"experience {experience_id} not found")
     if company is not None and company.strip():
@@ -591,7 +606,7 @@ async def update_experience(
 
 
 async def delete_experience(session: AsyncSession, experience_id: int) -> bool:
-    exp = await get_experience(session, experience_id)
+    exp = await _pkg().get_experience(session, experience_id)
     if exp is None:
         return False
     now = datetime.now(UTC)

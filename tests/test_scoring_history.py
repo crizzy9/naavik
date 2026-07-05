@@ -331,7 +331,7 @@ async def test_update_profile_score_history_missing_profile() -> None:
 
 @pytest.mark.asyncio
 async def test_get_score_history_returns_empty_when_profile_missing() -> None:
-    from services.profile_service import get_score_history
+    from services.profile import get_score_history
 
     session = _FakeSession()
     assert await get_score_history(session, 99) == {}
@@ -339,7 +339,7 @@ async def test_get_score_history_returns_empty_when_profile_missing() -> None:
 
 @pytest.mark.asyncio
 async def test_get_score_history_returns_blob_when_present() -> None:
-    from services.profile_service import get_score_history
+    from services.profile import get_score_history
 
     blob = {"last_aggregated_at": "2026-05-21T00:00:00+00:00", "families": []}
     profile = _StubProfile(user_id=1, score_history=blob)

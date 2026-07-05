@@ -842,7 +842,7 @@ async def put_account(
     routes whitelisted fields through `profile_service.update_field`, and
     returns a `#settings-save-result` fragment when form-shaped.
     """
-    from services import profile_service
+    from services import profile as profile_service
     from ui.routes.settings import _effective_user_id
 
     is_form = _is_form_request(request)

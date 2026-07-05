@@ -91,7 +91,7 @@ def client_with_user(tmp_path: Path, monkeypatch):
     from api.auth import require_csrf
     from config import settings as app_settings
     from main import app
-    from services import profile_service
+    from services import profile as profile_service
     from services.auth import require_password_complete
 
     user = SimpleNamespace(

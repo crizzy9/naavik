@@ -147,7 +147,7 @@ async def _build_bundle(session: AsyncSession, application: Application) -> Appl
             )
         )
     ).all()
-    from services import profile_service
+    from services import profile as profile_service
 
     return ApplicationBundle(
         application=application,
@@ -432,7 +432,7 @@ async def _persist_reusable_screener_answers(
     answers are already personal; AUTO-filled rows are profile-field reuse
     and don't need a separate cache.
     """
-    from services import profile_answer_service
+    from services.profile import answers as profile_answer_service
 
     stmt = select(ApplicationScreenerAnswer).where(
         ApplicationScreenerAnswer.application_id == application.id,

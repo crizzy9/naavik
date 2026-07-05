@@ -317,7 +317,7 @@ def test_bulk_put_skill_items_chips_reach_service(client: TestClient, auth_cooki
     `update_skill` as ONE accumulated list, sentinel filtered out."""
     from unittest.mock import AsyncMock
 
-    from services import profile_service
+    from services import profile as profile_service
 
     update = AsyncMock()
     monkeypatch.setattr(profile_service, "owns_skill", AsyncMock(return_value=True))
@@ -336,7 +336,7 @@ def test_bulk_put_project_tag_chips_enforce_vocab(client: TestClient, auth_cooki
     to the 9-tag vocabulary before reaching `update_project`."""
     from unittest.mock import AsyncMock
 
-    from services import profile_service
+    from services import profile as profile_service
 
     update = AsyncMock()
     monkeypatch.setattr(profile_service, "owns_project", AsyncMock(return_value=True))

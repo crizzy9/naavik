@@ -5,7 +5,8 @@ from __future__ import annotations
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import Application, Job
-from services import applications, contact_tracker, profile_service
+from services import applications, contact_tracker
+from services import profile as profile_service
 from ui.discover_ctx import _initial_color, _salary_range
 from ui.jobs_ctx import apply_kind_label
 

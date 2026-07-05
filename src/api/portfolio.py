@@ -27,7 +27,7 @@ from models import (
     Settings,
     Skill,
 )
-from services import portfolio_sync
+from services.profile import portfolio_sync
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/portfolio")

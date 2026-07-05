@@ -296,7 +296,7 @@ def test_jobs_by_url_real_pipeline(client, monkeypatch):
     from llm.base import LLMProviderError
     from scraper.crawl4ai_client import Crawl4AIClient
     from services import jobs as job_service
-    from services import profile_service
+    from services import profile as profile_service
 
     async def _fake_fetch(self, url):
         return "<html><title>Staff Engineer - Acme</title><body>JD text</body></html>"

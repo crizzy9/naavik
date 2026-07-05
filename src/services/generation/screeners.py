@@ -174,7 +174,7 @@ async def answer_screeners(
             # spending LLM tokens. A hit prefills the suggestion but never
             # auto-submits (decision D7); the row's `drafted_by_model` carries
             # a `reuse:<id>` marker so the UI swaps in the diff component.
-            from services import profile_answer_service as _pas
+            from services.profile import answers as _pas
 
             reuse_hit = None
             try:

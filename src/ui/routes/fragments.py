@@ -17,7 +17,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from api.deps import get_owned_bullet
 from db.session import get_session
 from models import Bullet, User
-from services import profile_service
+from services import profile as profile_service
 from services.auth import require_authed_session
 from ui import profile_ctx as pctx
 from ui.templates_setup import templates

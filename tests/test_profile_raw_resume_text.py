@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-from services import profile_service
-from services.profile_service import parse_resume_heuristics
+from services import profile as profile_service
+from services.profile import parse_resume_heuristics
 
 
 def test_parse_extracts_email_phone_name():

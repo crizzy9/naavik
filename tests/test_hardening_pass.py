@@ -160,7 +160,7 @@ async def _seed_user_with_bullet(s: AsyncSession, user_id: int) -> int:
 
 @pytest.mark.asyncio
 async def test_owns_bullet_true_for_owner_false_for_other(factory):
-    from services import profile_service
+    from services import profile as profile_service
 
     async with factory() as s:
         bullet_id = await _seed_user_with_bullet(s, user_id=1)
@@ -194,7 +194,7 @@ async def test_delete_user_account_removes_owned_rows(factory):
         assert (await s.exec(select(func.count(User.id)).where(User.id == 1))).one() == 0
         assert (await s.exec(select(func.count(Profile.id)).where(Profile.user_id == 1))).one() == 0
         assert (await s.exec(select(func.count(User.id)).where(User.id == 2))).one() == 1
-        from services import profile_service
+        from services import profile as profile_service
 
         assert await profile_service.owns_bullet(s, bullet_id=keep_bullet, user_id=2) is True
 

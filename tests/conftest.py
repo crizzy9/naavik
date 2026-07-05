@@ -168,12 +168,14 @@ def _patch_services_to_sample_data(request, monkeypatch):
         llm_tracker,
         outreach_service,
         overview_service,
-        profile_service,
         settings_service,
         user_service,
     )
     from services import (
         jobs as job_service,
+    )
+    from services import (
+        profile as profile_service,
     )
 
     async def _fake_get_session():

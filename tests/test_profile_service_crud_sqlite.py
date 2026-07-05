@@ -33,7 +33,7 @@ from models import (
     User,
 )
 from models.enums import BulletSelectionOverride
-from services import profile_service
+from services import profile as profile_service
 from tests._sqlite import sqlite_session, strip_pg_checks
 
 _NOW = datetime(2026, 7, 4, 12, 0, tzinfo=UTC)

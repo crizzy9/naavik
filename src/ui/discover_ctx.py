@@ -279,7 +279,7 @@ async def build_discover_ctx(
     # Post-fetch title relevance (docs/design/JOB_SEARCH_PREFERENCES.md § E):
     # jobs whose title matches a targeted-title variant surface first;
     # non-matching jobs stay in the queue (never drop data), just later.
-    from services import profile_service
+    from services import profile as profile_service
     from services.search_prefs import title_matches
 
     profile = await profile_service.get_profile(session, user_id)

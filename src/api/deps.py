@@ -245,7 +245,7 @@ async def get_owned_bullet(
 ) -> Bullet:
     """Fetch a bullet the caller owns (bullet → experience → profile → user),
     else 404."""
-    from services import profile_service
+    from services import profile as profile_service
 
     uid = effective_user_id(user)
     if not await profile_service.owns_bullet(session, bullet_id=bullet_id, user_id=uid):
