@@ -21,7 +21,7 @@ from sqlalchemy.ext.compiler import compiles  # noqa: E402
 
 from llm.base import EmbeddingResult  # noqa: E402
 from models import EMBEDDING_DIM  # noqa: E402
-from services import embedding_service  # noqa: E402
+from services.scorer import embeddings as embedding_service  # noqa: E402
 
 pytestmark = pytest.mark.uses_sample_data_shims
 
@@ -91,7 +91,7 @@ def test_content_hash_stable_for_same_input():
 @pytest.mark.asyncio
 async def test_embed_job_skip_when_no_provider(monkeypatch):
     """Provider resolves None → no LLM call, returns None."""
-    monkeypatch.setattr("services.embedding_service.get_embedding_provider", lambda s: None)
+    monkeypatch.setattr("services.scorer.embeddings.get_embedding_provider", lambda s: None)
     session = AsyncMock()
     job = _job_stub()
     settings = _settings_stub(enabled=False)

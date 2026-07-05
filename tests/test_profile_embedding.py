@@ -19,7 +19,7 @@ import pytest  # noqa: E402
 
 from llm.base import EmbeddingResult  # noqa: E402
 from models import EMBEDDING_DIM  # noqa: E402
-from services import embedding_service  # noqa: E402
+from services.scorer import embeddings as embedding_service  # noqa: E402
 
 pytestmark = pytest.mark.uses_sample_data_shims
 
@@ -111,7 +111,7 @@ def test_profile_embed_text_includes_bullets():
 
 @pytest.mark.asyncio
 async def test_embed_profile_skip_when_no_provider(monkeypatch):
-    monkeypatch.setattr("services.embedding_service.get_embedding_provider", lambda s: None)
+    monkeypatch.setattr("services.scorer.embeddings.get_embedding_provider", lambda s: None)
     session = AsyncMock()
     out = await embedding_service.embed_profile(
         session, profile=_profile_stub(), settings=_settings_stub(enabled=False)
@@ -337,7 +337,7 @@ async def test_embed_profile_swallows_provider_error():
 
 @pytest.mark.asyncio
 async def test_needs_profile_embedding_no_provider(monkeypatch):
-    monkeypatch.setattr("services.embedding_service.get_embedding_provider", lambda s: None)
+    monkeypatch.setattr("services.scorer.embeddings.get_embedding_provider", lambda s: None)
     session = AsyncMock()
     assert not await embedding_service.needs_profile_embedding(
         session, profile=_profile_stub(), settings=_settings_stub(enabled=False)

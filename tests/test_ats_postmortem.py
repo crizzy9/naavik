@@ -28,7 +28,7 @@ from fastapi.testclient import TestClient
 
 from llm.base import LLMProviderError, StructuredResult
 from llm.prompts.ats_postmortem import PostmortemAnalysis
-from services import ats_postmortem
+from services.applications import ats_postmortem
 
 # ── Fixtures ────────────────────────────────────────────────────────────
 

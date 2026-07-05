@@ -30,6 +30,13 @@ async def get_user_by_id(session: AsyncSession, user_id: int) -> User | None:
     return result.one_or_none()
 
 
+async def get_user(session: AsyncSession, user_id: int) -> User | None:
+    """Soft-delete-aware single-user fetch (absorbed from the former
+    services/user_service.py in plan 93 — the route-layer read accessor)."""
+    stmt = select(User).where(User.id == user_id, User.deleted_at.is_(None))
+    return (await session.exec(stmt)).one_or_none()
+
+
 async def authenticate(
     session: AsyncSession,
     email: str,

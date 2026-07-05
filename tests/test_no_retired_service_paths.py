@@ -66,6 +66,27 @@ RETIRED: dict[str, str] = {
     "extraction": "services.profile.extraction",
     "portfolio_sync": "services.profile.portfolio_sync",
     "profile_answer_service": "services.profile.answers",
+    # Plan 93 Part 1 — stray regroup
+    "_crypto": "services.utils.crypto",
+    "geo": "services.utils.geo",
+    "html_text": "services.utils.html_text",
+    "rate_limit": "services.utils.rate_limit",
+    "first_run": "services.utils.first_run",
+    "settings_service": "services.settings (package surface)",
+    "env_secrets": "services.settings.env_secrets",
+    "llm_models": "services.settings.llm_models",
+    "outreach_service": "services.outreach (package surface)",
+    "contact_tracker": "services.outreach (package surface, contacts.py)",
+    "jwt_rotation_service": "services.auth.jwt_rotation",
+    "account_service": "services.auth.account",
+    "user_service": "services.auth (get_user on the package)",
+    "application_analytics": "services.applications.analytics",
+    "ats_postmortem": "services.applications.ats_postmortem",
+    "generation_dispatch": "services.generation.dispatch",
+    "embedding_service": "services.scorer.embeddings",
+    "scoring_history": "services.scorer.history",
+    "scraper_service": "services.jobs.scraping",
+    "search_prefs": "services.jobs.search_prefs",
 }
 
 _SELF = Path(__file__).resolve()

@@ -290,10 +290,10 @@ async def kpis_by_role_family(
     """Role-family breakdown (plan 86 / 0.4.5.06).
 
     Buckets each in-window Application by the role-family classifier from
-    `services.scoring_history.classify_role_family`. Empty families dropped
+    `services.scorer.history.classify_role_family`. Empty families dropped
     (same convention as `aggregate_score_history`).
     """
-    from services.scoring_history import classify_role_family
+    from services.scorer.history import classify_role_family
 
     apps = await _load_apps_with_roles(session, user_id=user_id, window_days=window_days)
     if not apps:

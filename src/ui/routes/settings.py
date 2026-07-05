@@ -21,7 +21,6 @@ from config import settings as app_settings
 from db.session import get_session
 from models import JobScrapeRunRead, JobSource, User
 from services import (
-    account_service,
     applications,
     llm_tracker,
 )
@@ -41,6 +40,7 @@ from services.auth import (
     verify_jwt_async,
     verify_password,
 )
+from services.auth import account as account_service
 from services.settings import env_secrets
 from ui.templates_setup import templates
 
@@ -543,7 +543,7 @@ async def _build_sources_view(session: AsyncSession | None, *, user_id: int) -> 
             )
             # docs/design/JOB_SEARCH_PREFERENCES.md § D — profile prefs are
             # the primary input; Settings fields survive as overrides.
-            from services.search_prefs import derive_source_inputs
+            from services.jobs.search_prefs import derive_source_inputs
 
             derived_kw, derived_loc, is_override = derive_source_inputs(
                 profile_obj, settings_obj, source

@@ -33,7 +33,7 @@ _CSRF_TOKEN = "csrf-cookie-token-plan-81-postmortem-aaaaaaaa"
 def client_with_user(tmp_path, monkeypatch) -> tuple[TestClient, SimpleNamespace]:
     """Bring up TestClient + override require_authed_session to a known user."""
     from config import settings as app_settings
-    from services import ats_postmortem as svc_pm
+    from services.applications import ats_postmortem as svc_pm
 
     monkeypatch.setattr(app_settings, "data_dir", str(tmp_path))
     monkeypatch.setattr(svc_pm.app_settings, "data_dir", str(tmp_path))

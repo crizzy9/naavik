@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from models import Application, DocsState
-from services import generation_dispatch
+from services.generation import dispatch as generation_dispatch
 
 
 def _app(docs_state: DocsState, *, updated_ago: timedelta | None = None) -> Application:

@@ -24,7 +24,7 @@ from scraper.base import ScraperBase
 from scraper.crawl4ai_client import Crawl4AIClient
 from scraper.sites.sample import SampleScraper
 from scraper.types import RawJob, ScrapeQuery
-from services import scraper_service
+from services.jobs import scraping as scraper_service
 
 pytestmark = pytest.mark.uses_sample_data_shims
 
@@ -377,7 +377,7 @@ async def test_run_scraper_dispatches_notify_on_success_with_new_jobs():
     )
 
     notify_mock = AsyncMock()
-    with patch("services.scraper_service.notify_scrape_run_summary", new=notify_mock):
+    with patch("services.jobs.scraping.notify_scrape_run_summary", new=notify_mock):
         run = await scraper_service.run_scraper(
             session,  # type: ignore[arg-type]
             scraper=scraper,
@@ -415,7 +415,7 @@ async def test_run_scraper_skips_notify_when_no_new_jobs():
         session.exec_queue.append(_exec_one(existing))
 
     notify_mock = AsyncMock()
-    with patch("services.scraper_service.notify_scrape_run_summary", new=notify_mock):
+    with patch("services.jobs.scraping.notify_scrape_run_summary", new=notify_mock):
         run = await scraper_service.run_scraper(
             session,  # type: ignore[arg-type]
             scraper=scraper,
@@ -434,7 +434,7 @@ async def test_run_scraper_skips_notify_on_failed_status():
     session = _FakeSession()
 
     notify_mock = AsyncMock()
-    with patch("services.scraper_service.notify_scrape_run_summary", new=notify_mock):
+    with patch("services.jobs.scraping.notify_scrape_run_summary", new=notify_mock):
         run = await scraper_service.run_scraper(
             session,  # type: ignore[arg-type]
             scraper=scraper,
@@ -452,7 +452,7 @@ async def test_run_scraper_notify_false_skips_dispatch():
     session = _setup_session_for_sample(scraper, all_new=True)
 
     notify_mock = AsyncMock()
-    with patch("services.scraper_service.notify_scrape_run_summary", new=notify_mock):
+    with patch("services.jobs.scraping.notify_scrape_run_summary", new=notify_mock):
         run = await scraper_service.run_scraper(
             session,  # type: ignore[arg-type]
             scraper=scraper,
@@ -477,7 +477,7 @@ async def test_run_scraper_notify_failure_does_not_block_lifecycle():
     async def _boom(**_kw):
         raise RuntimeError("notify died")
 
-    with patch("services.scraper_service.notify_scrape_run_summary", new=_boom):
+    with patch("services.jobs.scraping.notify_scrape_run_summary", new=_boom):
         run = await scraper_service.run_scraper(
             session,  # type: ignore[arg-type]
             scraper=scraper,

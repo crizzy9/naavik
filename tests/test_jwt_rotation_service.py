@@ -24,7 +24,7 @@ from models import (
     TenantSigningKey,
     TenantSigningKeyStatus,
 )
-from services.jwt_rotation_service import (
+from services.auth.jwt_rotation import (
     _generate_keypair,
     ensure_active_key,
     expire_retiring_keys,

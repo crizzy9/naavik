@@ -5860,7 +5860,7 @@ APP_EVENTS.extend(
 #   CLOSED apps            → terminal STATUS_CHANGE to CLOSED
 #
 # Funnel rollups derived from the highest STATUS_CHANGE.payload.to value
-# reached per application (see services.application_analytics._max_reached_by_app).
+# reached per application (see services.applications.analytics._max_reached_by_app).
 # ─────────────────────────────────────────────────────────────────────────
 
 

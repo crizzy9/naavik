@@ -82,7 +82,7 @@ def _disable_background_generation():
     which test fixtures don't override — a spawned task would write to (or
     hang on) the operator's real DB. Off for every test; generation_dispatch
     unit tests exercise `_run_generation` directly."""
-    from services import generation_dispatch
+    from services.generation import dispatch as generation_dispatch
 
     generation_dispatch.enabled = False
     yield
@@ -166,7 +166,9 @@ def _patch_services_to_sample_data(request, monkeypatch):
         email,
         llm_tracker,
         overview_service,
-        user_service,
+    )
+    from services import (
+        auth as user_service,
     )
     from services import (
         jobs as job_service,

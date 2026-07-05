@@ -146,7 +146,7 @@ async def _emit_status_change(
 @pytest.mark.asyncio
 async def test_compute_kpis_empty_history(session: AsyncSession) -> None:
     """No applications → 0/0 → 0.0 rates, no div-by-zero."""
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     kpis = await svc.compute_kpis(session, user_id=1)
     assert kpis.applied_in_window == 0
@@ -160,7 +160,7 @@ async def test_compute_kpis_empty_history(session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_compute_kpis_basic_funnel(session: AsyncSession) -> None:
     """Known: 4 applied; 2 reach recruiter; 1 onsite; 1 offer."""
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     a1 = await _make_app(session, aid=1, company="A")
     a2 = await _make_app(session, aid=2, company="B")
@@ -188,7 +188,7 @@ async def test_compute_kpis_basic_funnel(session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_compute_kpis_window_excludes_old_applications(session: AsyncSession) -> None:
     """Application applied 100 days ago is excluded from a 90-day window."""
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     await _make_app(session, aid=1, applied_days_ago=100)  # outside 90d
     await _make_app(session, aid=2, applied_days_ago=10)  # inside 90d
@@ -201,7 +201,7 @@ async def test_compute_kpis_window_excludes_old_applications(session: AsyncSessi
 @pytest.mark.asyncio
 async def test_compute_kpis_cross_user_safety(session: AsyncSession) -> None:
     """Querying user_id=42 must NOT aggregate user_id=1's applications."""
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     a1 = await _make_app(session, aid=1, user_id=1)
     await _emit_status_change(session, aid=a1, to="OFFER")  # user 1 got an offer
@@ -228,7 +228,7 @@ async def test_compute_kpis_excludes_draft(session: AsyncSession) -> None:
         RecruiterState,
         ReferralState,
     )
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     now = datetime.now(UTC)
     a_draft = Application(
@@ -258,7 +258,7 @@ async def test_compute_kpis_excludes_draft(session: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_kpis_by_company_returns_sorted(session: AsyncSession) -> None:
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     # Acme · 3 applications · 1 offer
     a1 = await _make_app(session, aid=1, company="Acme")

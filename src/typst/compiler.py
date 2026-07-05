@@ -85,7 +85,7 @@ async def compile(  # noqa: A001 — `compile` is the natural verb
     CONCURRENCY (plan 91 6.7): callers pass FIXED output paths
     (`<app_id>/resume.pdf`); two concurrent generations for the SAME
     application race on the file and the loser's PDF wins the disk. The
-    per-app in-flight registry in `services.generation_dispatch` is the
+    per-app in-flight registry in `services.generation.dispatch` is the
     current guard — do not add a second unguarded call site for the same
     application id.
     """

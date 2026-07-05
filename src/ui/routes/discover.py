@@ -101,7 +101,7 @@ async def _ensure_draft_and_dispatch(
     Returns `(application, eager)`.
     """
     from models.enums import DocsState
-    from services import generation_dispatch
+    from services.generation import dispatch as generation_dispatch
 
     settings = await settings_service.get_or_create(session, user_id=user_id)
     eager = settings.eager_review_generation
@@ -216,8 +216,8 @@ async def post_auto_submit(
     background so the queue visibly moves.
     """
     from models.enums import DocsState
-    from services import generation_dispatch
     from services.ats import board_supports_auto_submit
+    from services.generation import dispatch as generation_dispatch
 
     user_id = _effective_user_id(user)
     job = await _job_or_404(session, job_id, user_id)
@@ -416,7 +416,7 @@ async def fragment_workspace(
     settings = await settings_service.get_or_create(session, user_id=user_id)
     app = await applications.get_application_for_job(session, user_id=user_id, job_id=job_id)
 
-    from services import generation_dispatch
+    from services.generation import dispatch as generation_dispatch
 
     if app is not None and generation_dispatch.is_generation_stale(app):
         from models.enums import DocsState
@@ -451,7 +451,7 @@ async def fragment_tailor(
     """'Tailor for this job' CTA on the lazy workspace — create the DRAFT,
     dispatch background generation, and return the workspace in GENERATING
     state (the root then polls until docs settle)."""
-    from services import generation_dispatch
+    from services.generation import dispatch as generation_dispatch
 
     user_id = _effective_user_id(user)
     job = await _job_or_404(session, job_id, user_id)
@@ -1191,13 +1191,13 @@ async def fragment_generate_bundle(
     """Kick off bundle generation and re-render the workspace in GENERATING state.
 
     Backs the 'Generate tailored documents' / 'Regen' buttons. Generation runs
-    in a background task (`services.generation_dispatch`) — the response
+    in a background task (`services.generation.dispatch`) — the response
     returns immediately with `docs_state=GENERATING` and the workspace polls
     `/_fragments/discover/workspace/{job_id}` until docs settle to READY/FAILED.
     """
     import json as _json
 
-    from services import generation_dispatch
+    from services.generation import dispatch as generation_dispatch
 
     user_id = _effective_user_id(user)
     application = await applications.get_application(session, application_id)

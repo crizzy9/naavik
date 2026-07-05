@@ -85,7 +85,7 @@ def test_search_similar_carries_user_id_predicate():
     must keep `WHERE user_id = :uid` in the SQL string.
     """
     src = Path(__file__).resolve().parent.parent / "src"
-    body = (src / "services" / "embedding_service.py").read_text(encoding="utf-8")
+    body = (src / "services" / "scorer" / "embeddings.py").read_text(encoding="utf-8")
     assert "WHERE user_id = :uid" in body, (
         "embedding_service.search_similar lost its `WHERE user_id = :uid` "
         "predicate. Plan 61 decision D8 / multi-tenant boundary. Restore it."

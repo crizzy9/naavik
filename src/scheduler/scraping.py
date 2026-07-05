@@ -40,8 +40,8 @@ from scraper.rate_limit import resolve_rate_limit
 from scraper.redaction import safe_exc
 from scraper.sites import scrapers as scraper_registry
 from scraper.types import ScrapeQuery
+from services.jobs.scraping import run_scraper
 from services.notify import notify_admin_error
-from services.scraper_service import run_scraper
 from services.settings import env_secrets
 
 log = logging.getLogger(__name__)
@@ -115,7 +115,7 @@ def _compose_queries(
     Company-list sources are unchanged.
     """
     from config import settings as app_settings
-    from services.search_prefs import derive_source_inputs
+    from services.jobs.search_prefs import derive_source_inputs
 
     if source is JobSource.WORKDAY:
         return [ScrapeQuery(company_filter=list(settings.workday_companies or []))]

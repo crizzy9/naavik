@@ -179,7 +179,7 @@ async def test_owns_bullet_true_for_owner_false_for_other(factory):
 async def test_delete_user_account_removes_owned_rows(factory):
     from sqlmodel import func, select
 
-    from services import account_service
+    from services.auth import account as account_service
 
     async with factory() as s:
         await _seed_user_with_bullet(s, user_id=1)

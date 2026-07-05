@@ -40,7 +40,7 @@ from services.auth import (
     verify_jwt,
     verify_jwt_async,
 )
-from services.jwt_rotation_service import rotate_tenant_key
+from services.auth.jwt_rotation import rotate_tenant_key
 
 pytestmark = pytest.mark.uses_sample_data_shims
 

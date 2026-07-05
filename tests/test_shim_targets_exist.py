@@ -48,13 +48,21 @@ def _shim_targets() -> list[tuple[str, str]]:
     assert fixture is not None, f"{_FIXTURE_NAME} not found in {_CONFTEST}"
 
     # Local name → dotted module path, for every `from services import ...`
-    # inside the fixture body (both the big tuple import and `llm_models`).
+    # AND (post plan 93) `from services.<pkg> import <mod>` inside the fixture
+    # body. Only names that then appear as a `monkeypatch.setattr` first arg
+    # are used, so function imports never produce bogus module paths.
     service_mods: dict[str, str] = {}
     for node in ast.walk(fixture):
         if isinstance(node, ast.ImportFrom) and node.module == "services":
             for alias in node.names:
                 local = alias.asname or alias.name
                 service_mods[local] = f"services.{alias.name}"
+        elif (
+            isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("services.")
+        ):
+            for alias in node.names:
+                local = alias.asname or alias.name
+                service_mods[local] = f"{node.module}.{alias.name}"
 
     targets: list[tuple[str, str]] = []
     for node in ast.walk(fixture):

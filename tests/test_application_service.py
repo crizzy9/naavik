@@ -193,7 +193,7 @@ def test_forward_transition_rules():
 async def test_get_or_create_draft_never_generates_inline():
     """A GET must never block on LLM + Typst — get_or_create_draft only
     creates the row; generation is dispatched async by the route
-    (services.generation_dispatch). Eager mode included."""
+    (services.generation.dispatch). Eager mode included."""
     settings = _make_settings(eager_review_generation=True)
     job = _make_job()
     session = _FakeSession()

@@ -14,7 +14,7 @@ import pytest
 
 from llm.base import LLMProviderError
 from models.enums import JobSource
-from services import search_prefs
+from services.jobs import search_prefs
 
 pytestmark = pytest.mark.uses_sample_data_shims
 

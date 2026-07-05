@@ -20,7 +20,7 @@ import pytest
 
 from llm.base import StructuredResult
 from llm.prompts.ats_postmortem import PostmortemAnalysis
-from services import ats_postmortem
+from services.applications import ats_postmortem
 
 pytestmark = pytest.mark.uses_sample_data_shims
 

@@ -50,7 +50,7 @@ async def get_or_create_draft(
 
     Never generates documents inline — a GET must not block on LLM + Typst
     (~13s on the dev box). Callers that want eager generation dispatch it
-    asynchronously via `services.generation_dispatch` after committing.
+    asynchronously via `services.generation.dispatch` after committing.
     """
     del settings  # signature kept uniform; generation moved out of this path
     existing = await svc().get_application_for_job(session, user_id=user_id, job_id=job_id)

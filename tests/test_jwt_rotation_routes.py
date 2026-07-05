@@ -152,7 +152,7 @@ async def test_rotate_jwt_key_authed_succeeds_and_persists(_session) -> None:
     client = TestClient(app)
 
     # Seed an initial ACTIVE key via direct insert (simulates post-migration state).
-    from services.jwt_rotation_service import rotate_tenant_key
+    from services.auth.jwt_rotation import rotate_tenant_key
 
     await rotate_tenant_key(_session, tenant_id=1)
     await _session.commit()
@@ -208,7 +208,7 @@ async def test_rotate_jwt_key_returns_409_on_integrity_error(_session, monkeypat
     token = await issue_jwt_async(_session, user_id=1, tenant_id=1)
     csrf = issue_csrf_token()
 
-    import services.jwt_rotation_service as svc
+    import services.auth.jwt_rotation as svc
 
     async def _boom(*_args, **_kwargs):
         raise IntegrityError("conflict", params=None, orig=Exception("uq violation"))
@@ -247,7 +247,7 @@ async def test_expire_retiring_cron_body_smokes(_session) -> None:
     from contextlib import asynccontextmanager
 
     from scheduler import jobs as jobs_mod
-    from services.jwt_rotation_service import rotate_tenant_key
+    from services.auth.jwt_rotation import rotate_tenant_key
 
     await rotate_tenant_key(_session, tenant_id=1)
     await rotate_tenant_key(_session, tenant_id=1)

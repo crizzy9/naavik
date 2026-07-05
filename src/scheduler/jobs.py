@@ -136,7 +136,7 @@ async def expire_retiring_signing_keys() -> None:
     defaults to 7 days when no per-tenant override exists.
     """
     from models import Settings as SettingsRow
-    from services.jwt_rotation_service import expire_retiring_keys
+    from services.auth.jwt_rotation import expire_retiring_keys
 
     async with async_session() as session:
         # Scalar select to avoid hydrating JSONB columns the cron doesn't need.
@@ -190,7 +190,7 @@ async def embed_pending_jobs() -> None:
     via `llm_tracker.tracked_call` (which logs ApiUsage rows the cap reads).
     """
     from models import Job, Settings
-    from services import embedding_service
+    from services.scorer import embeddings as embedding_service
 
     async with async_session() as session:
         users_stmt = select(Settings).where(Settings.semantic_match_enabled.is_(True))
@@ -227,7 +227,7 @@ async def embed_orphan_sweep() -> None:
 
     DELETE JobEmbedding rows whose Job is gone or soft-deleted. Idempotent.
     """
-    from services import embedding_service
+    from services.scorer import embeddings as embedding_service
 
     async with async_session() as session:
         deleted = await embedding_service.delete_orphan_embeddings(session)
@@ -276,7 +276,7 @@ async def score_aggregate_daily() -> None:
     trend blob from `Job.match_breakdown.scored_at` and write it to
     `Profile.score_history`. Pure DB aggregation — no LLM calls.
     """
-    from services import scoring_history
+    from services.scorer import history as scoring_history
 
     async with async_session() as session:
         # Pull every live profile; score-history is per-user.
@@ -302,7 +302,7 @@ async def embed_pending_profiles() -> None:
     no-op when text + model match. Best-effort: errors are logged + moved on.
     """
     from models import Profile, Settings
-    from services import embedding_service
+    from services.scorer import embeddings as embedding_service
 
     async with async_session() as session:
         users_stmt = select(Settings).where(Settings.semantic_match_enabled.is_(True))

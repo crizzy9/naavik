@@ -62,6 +62,7 @@ from .tokens import _signing_material as _signing_material
 from .tokens import _verification_material as _verification_material
 from .users import (
     authenticate,
+    get_user,
     get_user_by_email,
     get_user_by_id,
 )
@@ -93,6 +94,7 @@ __all__ = [
     "cleanup_expired_revoked_jwts",
     "get_client_ip",
     "get_current_user",
+    "get_user",
     "get_user_by_email",
     "get_user_by_id",
     "hash_password",

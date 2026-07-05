@@ -22,7 +22,7 @@ from typing import Any  # noqa: E402
 
 import pytest  # noqa: E402
 
-from services.scoring_history import (  # noqa: E402
+from services.scorer.history import (  # noqa: E402
     aggregate_score_history,
     classify_role_family,
 )
@@ -302,7 +302,7 @@ class _StubProfile:
 
 @pytest.mark.asyncio
 async def test_update_profile_score_history_round_trip() -> None:
-    from services import scoring_history
+    from services.scorer import history as scoring_history
 
     now = datetime(2026, 5, 21, 12, 0, tzinfo=UTC)
     profile = _StubProfile(user_id=1)
@@ -319,7 +319,7 @@ async def test_update_profile_score_history_round_trip() -> None:
 @pytest.mark.asyncio
 async def test_update_profile_score_history_missing_profile() -> None:
     """Helper returns None when the user has no Profile."""
-    from services import scoring_history
+    from services.scorer import history as scoring_history
 
     session = _FakeSession(jobs=[], profiles={})
     result = await scoring_history.update_profile_score_history(session, 99)
@@ -352,14 +352,14 @@ async def test_get_score_history_returns_blob_when_present() -> None:
 
 def test_parse_scored_at_rejects_epoch_int_string() -> None:
     """Epoch ints look numeric but aren't ISO 8601 — return None."""
-    from services.scoring_history import _parse_scored_at
+    from services.scorer.history import _parse_scored_at
 
     assert _parse_scored_at("1716285600") is None
 
 
 def test_parse_scored_at_rejects_natural_language() -> None:
     """Non-digit start fails the early rejection check."""
-    from services.scoring_history import _parse_scored_at
+    from services.scorer.history import _parse_scored_at
 
     assert _parse_scored_at("yesterday") is None
     assert _parse_scored_at("today") is None
@@ -368,7 +368,7 @@ def test_parse_scored_at_rejects_natural_language() -> None:
 
 def test_parse_scored_at_accepts_naive_iso() -> None:
     """Naive ISO timestamps get UTC attached (preserves existing tolerance)."""
-    from services.scoring_history import _parse_scored_at
+    from services.scorer.history import _parse_scored_at
 
     out = _parse_scored_at("2026-05-21T10:00:00")
     assert out is not None
@@ -379,7 +379,7 @@ def test_parse_scored_at_accepts_naive_iso() -> None:
 
 def test_parse_scored_at_accepts_zulu_suffix() -> None:
     """Zulu (`Z`) suffix is converted to `+00:00`."""
-    from services.scoring_history import _parse_scored_at
+    from services.scorer.history import _parse_scored_at
 
     out = _parse_scored_at("2026-05-21T10:00:00Z")
     assert out is not None
@@ -388,7 +388,7 @@ def test_parse_scored_at_accepts_zulu_suffix() -> None:
 
 def test_parse_scored_at_accepts_bare_date() -> None:
     """Bare YYYY-MM-DD is valid ISO 8601 — accept it."""
-    from services.scoring_history import _parse_scored_at
+    from services.scorer.history import _parse_scored_at
 
     out = _parse_scored_at("2026-05-21")
     assert out is not None
@@ -396,7 +396,7 @@ def test_parse_scored_at_accepts_bare_date() -> None:
 
 
 def test_parse_scored_at_empty_string_returns_none() -> None:
-    from services.scoring_history import _parse_scored_at
+    from services.scorer.history import _parse_scored_at
 
     assert _parse_scored_at("") is None
     assert _parse_scored_at("   ") is None

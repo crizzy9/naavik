@@ -270,7 +270,7 @@ async def _emit_status(session: AsyncSession, *, aid: int, to: str, user_id: int
 @pytest.mark.asyncio
 async def test_kpis_by_role_family_buckets_by_classifier(session: AsyncSession) -> None:
     """Apps cluster into the expected role-family buckets via classify_role_family."""
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     await _seed_app(session, aid=1, role="Senior Backend Engineer")
     await _seed_app(session, aid=2, role="Senior Backend Engineer")
@@ -292,7 +292,7 @@ async def test_kpis_by_role_family_buckets_by_classifier(session: AsyncSession) 
 @pytest.mark.asyncio
 async def test_kpis_by_role_family_drops_empty_families(session: AsyncSession) -> None:
     """Families with zero in-window apps are absent from the output dict."""
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     await _seed_app(session, aid=1, role="Backend Engineer")
     out = await svc.kpis_by_role_family(session, user_id=1)
@@ -313,7 +313,7 @@ async def test_kpis_by_tag_intersects_bullet_and_job_tags(
     seed an APPLIED Application via the schema (no list cols) and
     monkeypatch the bullet/job-tags reads in the service.
     """
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     await _seed_app(session, aid=10, role="Engineer", job_id=1)
 
@@ -361,7 +361,7 @@ async def test_kpis_by_tag_skips_apps_without_bullet_provenance(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Apps with no GeneratedDocument.bullet_selection are skipped (no 'other' bucket)."""
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     await _seed_app(session, aid=20, role="Engineer", job_id=2)
 
@@ -620,7 +620,7 @@ def test_sample_data_30plus_applications_with_status_chains() -> None:
     from collections import Counter
 
     from db import sample_data as sd
-    from services.scoring_history import classify_role_family
+    from services.scorer.history import classify_role_family
 
     assert len(sd.APPLICATIONS) >= 30
 
@@ -824,7 +824,7 @@ async def test_tracking_analytics_renders_role_family_section(
 
     class _FakeAnalytics:
         async def compute_kpis(self, _s, *, user_id, window_days):
-            from services.application_analytics import ApplicationKpis, FunnelCounts
+            from services.applications.analytics import ApplicationKpis, FunnelCounts
 
             return ApplicationKpis(
                 window_days=window_days,

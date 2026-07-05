@@ -19,7 +19,8 @@ from config import settings as app_settings
 from db.session import get_session
 from models import User
 from models.enums import AppEventKind, ApplicationStatus, ClosedReason, JobQueueState
-from services import application_analytics, applications
+from services import applications
+from services.applications import analytics as application_analytics
 from services.auth import require_authed_session
 from ui import tracking_ctx as tctx
 from ui.templates_setup import templates
@@ -183,8 +184,8 @@ async def library_row_action(
 
     if action == "queue":
         from models.enums import DocsState
-        from services import generation_dispatch
         from services import settings as settings_service
+        from services.generation import dispatch as generation_dispatch
 
         settings = await settings_service.get_or_create(session, user_id=user_id)
         draft = await applications.queue_auto_apply(

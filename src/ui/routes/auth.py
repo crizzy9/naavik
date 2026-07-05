@@ -241,7 +241,7 @@ async def post_extraction_upload(
     # Settings, then expand titles (degrades to raw titles with no LLM).
     # Best-effort: never fail the upload on preference seeding.
     try:
-        from services import search_prefs
+        from services.jobs import search_prefs
 
         profile_row = await profile_service.get_profile(session, user_id)
         if profile_row is not None:

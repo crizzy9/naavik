@@ -276,7 +276,7 @@ async def update_field(
     # Plan 65 § D.3 (OQ-6): best-effort on-edit profile embedding refresh.
     # Gated by Settings.semantic_match_enabled inside the helper; errors
     # swallowed (nightly cron is the safety net).
-    from services.embedding_service import maybe_refresh_profile_embedding
+    from services.scorer.embeddings import maybe_refresh_profile_embedding
 
     await maybe_refresh_profile_embedding(session, user_id=user_id)
     return profile
@@ -388,7 +388,7 @@ async def update_application_questions(
         await _emit_profile_updated(session, user_id, touched)
         await session.flush()
         # Plan 65 § D.3 (OQ-6): best-effort on-edit profile embedding.
-        from services.embedding_service import maybe_refresh_profile_embedding
+        from services.scorer.embeddings import maybe_refresh_profile_embedding
 
         await maybe_refresh_profile_embedding(session, user_id=user_id)
     return profile
@@ -453,7 +453,7 @@ async def update_bullet(
             await session.exec(select(Profile).where(Profile.id == exp.profile_id))
         ).one_or_none()
         if prof is not None:
-            from services.embedding_service import maybe_refresh_profile_embedding
+            from services.scorer.embeddings import maybe_refresh_profile_embedding
 
             await maybe_refresh_profile_embedding(session, user_id=prof.user_id)
     return b

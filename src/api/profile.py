@@ -319,8 +319,8 @@ async def put_search_prefs(
     The response is the SAME `_search_prefs_editor.html` fragment the
     controls target — granularity matched to `closest [data-search-prefs]`.
     """
-    from services import search_prefs
     from services import settings as settings_service
+    from services.jobs import search_prefs
 
     form = await request.form()
     action = str(form.get("action") or "")

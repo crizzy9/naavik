@@ -25,7 +25,7 @@ _CSRF_TOKEN = "csrf-cookie-token-plan-81-anpage-eeeeeeee"
 @pytest.fixture
 def patched_client(monkeypatch) -> TestClient:
     """Patch the analytics service to return a deterministic KPI digest."""
-    from services import application_analytics as svc
+    from services.applications import analytics as svc
 
     async def _fake_kpis(_session, *, user_id, window_days=90):
         return svc.ApplicationKpis(

@@ -29,7 +29,7 @@ from models import (
     Settings,
     StatusChangeTrigger,
 )
-from services import ats_postmortem
+from services.applications import ats_postmortem
 from services.applications.auto_apply import _stamp_auto_apply_artifacts
 from services.applications.common import (
     ApplicationServiceError,
