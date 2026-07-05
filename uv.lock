@@ -1862,7 +1862,6 @@ dev = [
 ]
 premium-parsers = [
     { name = "pyresparser" },
-    { name = "pyresume" },
 ]
 
 [package.metadata]
@@ -1887,7 +1886,6 @@ requires-dist = [
     { name = "pyjwt", specifier = ">=2.10.0" },
     { name = "pypdf", specifier = ">=5.1.0" },
     { name = "pyresparser", marker = "extra == 'premium-parsers'", specifier = ">=1.0.6" },
-    { name = "pyresume", marker = "extra == 'premium-parsers'", specifier = ">=0.1.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.25.0" },
     { name = "python-multipart", specifier = ">=0.0.20" },
@@ -2731,18 +2729,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f4/d8/c39fca14e264224786146820ee455a5aead9acd9ab34d9b1a8bc25cea878/pyresparser-1.0.6.tar.gz", hash = "sha256:3d69861705504e1b04f3360de660681952c78e94e109da47c1efda238b212cb1", size = 4218568, upload-time = "2019-12-15T03:25:57.804Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/be/1c/0b84af1e9b9f5236c9a7f3e7bd306a4cb5c71eef15cc27ed343a3ceb5996/pyresparser-1.0.6-py3-none-any.whl", hash = "sha256:c5060e31fa8986c741f4b341583e94138c0c392b8c16452e41fc7b830ef80228", size = 4247060, upload-time = "2019-12-15T03:25:52.709Z" },
-]
-
-[[package]]
-name = "pyresume"
-version = "0.1.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/91/94/73171f34506a8b161c9dfd0070b77c7ea36b605c3f368ebe76f15894d6e7/pyresume-0.1.1.tar.gz", hash = "sha256:7a2e19c5c276020722742e5730ec5cd6f349b5af4525f9cf929bd9c576b5c813", size = 24305, upload-time = "2018-06-10T05:18:26.32Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/5f/91ea801fdd38fa336b460159c92969e59b80782c8c0587f2b6f35dfb30ea/pyresume-0.1.1-py2.py3-none-any.whl", hash = "sha256:901d3034056f075187654a66e43de10100a1779ac36964f4ad221e81110916d3", size = 20745, upload-time = "2018-06-10T05:18:27.625Z" },
 ]
 
 [[package]]

@@ -78,7 +78,6 @@ dev = [
 # these aren't installed. Install via `uv sync --extra premium-parsers`.
 premium-parsers = [
     "pyresparser>=1.0.6",
-    "pyresume>=0.1.0",
 ]
 
 [project.scripts]
