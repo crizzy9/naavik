@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch  # noqa: E402
 import pytest  # noqa: E402
 
 from models import ApplicationBoard, JobSource  # noqa: E402
-from services import apply_site_resolver as resolver  # noqa: E402
+from services import resolution as resolver  # noqa: E402
 
 # ── classify_apply_url ────────────────────────────────────────────────
 

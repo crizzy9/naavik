@@ -16,7 +16,7 @@ from types import SimpleNamespace  # noqa: E402
 
 import pytest  # noqa: E402
 
-from services import apply_site_resolver as asr  # noqa: E402
+from services import resolution as asr  # noqa: E402
 from services import resolution as lr  # noqa: E402
 
 # ── fixtures ─────────────────────────────────────────────────────────────

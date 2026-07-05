@@ -1,6 +1,6 @@
 """Authoritative LinkedIn apply-target resolution — two tiers, one seam.
 
-Both tiers feed the same `ResolvedApply` that `apply_site_resolver` already
+Both tiers feed the same `ResolvedApply` that the resolution pipeline already
 stamps onto `Job`, so this is a resolver STAGE, not a rewrite. `source` stays
 `LINKEDIN`; `board` / `apply_kind` / `apply_url` become the real apply site.
 

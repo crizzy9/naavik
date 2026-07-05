@@ -91,7 +91,7 @@ async def submit(
                 "button to open the posting and apply directly."
             )
         else:
-            from services.apply_site_resolver import APPLY_KIND_LABELS
+            from services.resolution import APPLY_KIND_LABELS
 
             site = APPLY_KIND_LABELS.get(apply_kind or "", "") or "the company site"
             text = (

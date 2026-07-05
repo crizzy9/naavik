@@ -1,8 +1,8 @@
 """URL classification, tracking-unwrap, slug + title-match heuristics.
 
-Split out of services/apply_site_resolver.py in plan 91 Phase 4.5;
+Split out of the former services/apply_site_resolver.py in plan 91 Phase 4.5;
 behaviour unchanged. Internal calls to patched seams route through `svc()`
-(the services.apply_site_resolver facade) so test interception keeps
+(the services.resolution package surface) so test interception keeps
 working; LinkedIn-auth calls stay lazy through the linkedin_resolver
 facade for the same reason.
 """

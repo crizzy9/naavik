@@ -218,19 +218,16 @@ async def post_job_resolve_apply(
     Returns the refreshed card fragment.
     """
     job = await _job_or_404(session, job_id, _effective_user_id(user))
-    from services import application_service, apply_site_resolver, jd_enrichment
-    from services import resolution as linkedin_resolver
+    from services import application_service, jd_enrichment, resolution
 
-    auth = (
-        linkedin_resolver.AuthContext(remaining=1) if linkedin_resolver.auth_available() else None
-    )
+    auth = resolution.AuthContext(remaining=1) if resolution.auth_available() else None
     try:
-        resolved = await apply_site_resolver.resolve_job(job, auth=auth)
+        resolved = await resolution.resolve_job(job, auth=auth)
     except Exception as exc:  # noqa: BLE001 — surface as a counted failed attempt
         log.warning("inline apply-site resolution failed for job %s: %s", job.id, exc)
-        apply_site_resolver.note_failed_attempt(job)
+        resolution.note_failed_attempt(job)
     else:
-        apply_site_resolver.apply_resolution(job, resolved)
+        resolution.apply_resolution(job, resolved)
         if resolved.description_html or resolved.description_text:
             jd_enrichment.maybe_apply_discovered_description(job, resolved)
         await application_service.resync_draft_apply_target(session, job)
@@ -265,17 +262,17 @@ async def post_job_apply_url(
     if not cleaned.lower().startswith(("http://", "https://")):
         raise HTTPException(status_code=422, detail="Enter a full http(s) URL")
 
-    from services import application_service, apply_site_resolver
+    from services import application_service, resolution
 
-    final, kind = await apply_site_resolver.normalize_apply_url(cleaned)
-    resolved = apply_site_resolver.ResolvedApply(
+    final, kind = await resolution.normalize_apply_url(cleaned)
+    resolved = resolution.ResolvedApply(
         kind=kind or "company_site",
         apply_url=final,
-        ats_org=apply_site_resolver.ats_org_from_url(final, kind),
+        ats_org=resolution.ats_org_from_url(final, kind),
         via="manual",
         original_apply_url=cleaned if final != cleaned else None,
     )
-    apply_site_resolver.apply_resolution(job, resolved, count_attempt=False)
+    resolution.apply_resolution(job, resolved, count_attempt=False)
     await application_service.resync_draft_apply_target(session, job)
     session.add(job)
     await session.commit()

@@ -20,7 +20,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import Job, JobSource
-from services import apply_site_resolver
+from services import resolution as apply_site_resolver
 from services.html_text import html_to_text
 
 log = logging.getLogger(__name__)

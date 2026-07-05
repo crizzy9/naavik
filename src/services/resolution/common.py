@@ -1,8 +1,8 @@
 """Shared constants + the facade accessor for the resolution package.
 
-Plan 91 Phase 4.5. `svc()` resolves the `services.apply_site_resolver`
-facade at call time so `patch.object(resolver, "X")` seams keep
-intercepting internal calls.
+Plan 91 Phase 4.5 / plan 92 teardown. `svc()` resolves the
+`services.resolution` package surface at call time so
+`patch.object(resolver, "X")` seams keep intercepting internal calls.
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from models import ApplicationBoard
 
 
 def svc():
-    """The `services.apply_site_resolver` facade, resolved at call time."""
-    from services import apply_site_resolver
+    """The `services.resolution` package surface, resolved at call time."""
+    from services import resolution
 
-    return apply_site_resolver
+    return resolution
 
 
 _FETCH_TIMEOUT = 12.0

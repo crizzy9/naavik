@@ -417,7 +417,8 @@ async def resolve_apply_sites() -> None:
     swaps thin Indeed/email descriptions for the canonical ATS posting so
     `score_pending` re-scores against the real JD.
     """
-    from services import apply_site_resolver, jd_enrichment
+    from services import jd_enrichment
+    from services import resolution as apply_site_resolver
 
     async with async_session() as session:
         n = await apply_site_resolver.resolve_pending(session)

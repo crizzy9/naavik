@@ -64,7 +64,7 @@ def _human_until(when: datetime | None) -> str | None:
 
 def apply_kind_label(kind: str | None) -> str | None:
     """Human chip text for Job.apply_kind; None = render no chip."""
-    from services.apply_site_resolver import APPLY_KIND_LABELS
+    from services.resolution import APPLY_KIND_LABELS
 
     if not kind:
         return None

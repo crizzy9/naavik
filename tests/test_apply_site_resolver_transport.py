@@ -15,7 +15,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from services import apply_site_resolver as resolver
+from services import resolution as resolver
 
 _PUBLIC_IP = "93.184.216.34"
 

@@ -13,7 +13,7 @@ import pytest  # noqa: E402
 
 from models import ApplicationBoard, JobSource  # noqa: E402
 from services import jd_enrichment  # noqa: E402
-from services.apply_site_resolver import ResolvedApply, _BoardPosting  # noqa: E402
+from services.resolution import ResolvedApply, _BoardPosting  # noqa: E402
 
 
 def _job(
@@ -106,7 +106,7 @@ async def test_fetch_posting_description_matches_url():
         ),
     ]
     with patch(
-        "services.apply_site_resolver._greenhouse_postings",
+        "services.resolution._greenhouse_postings",
         new=AsyncMock(return_value=postings),
     ):
         out = await jd_enrichment._fetch_posting_description(job)

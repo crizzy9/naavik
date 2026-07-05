@@ -340,7 +340,8 @@ async def _create_job_from_receipt(
     # full JD instead of a one-sentence stub. Best-effort; the row above is
     # already a valid fallback.
     try:
-        from services import apply_site_resolver, jd_enrichment
+        from services import jd_enrichment
+        from services import resolution as apply_site_resolver
 
         resolved = await apply_site_resolver.resolve_job(job)
         apply_site_resolver.apply_resolution(job, resolved)
