@@ -34,6 +34,16 @@ log = logging.getLogger(__name__)
 VALID_GENERATION_TIERS: frozenset[str] = frozenset({"free", "premium"})
 
 
+def _pkg():
+    """The `services.settings` package surface, resolved at call time —
+    intra-module calls to the shimmed `get_or_create` route through it so
+    conftest shims / `patch("services.settings.get_or_create")` keep
+    intercepting (plan 93; same pattern as services/profile plan 92 B4)."""
+    from services import settings
+
+    return settings
+
+
 async def get_or_create(session: AsyncSession, user_id: int) -> Settings:
     stmt = select(Settings).where(Settings.user_id == user_id)
     row = (await session.exec(stmt)).one_or_none()
@@ -60,7 +70,7 @@ async def update_llm(
     semantic_match_threshold: float | None = None,
     semantic_match_sync_on_upsert: bool | None = None,
 ) -> Settings:
-    s = await get_or_create(session, user_id)
+    s = await _pkg().get_or_create(session, user_id)
     if provider is not None:
         s.llm_provider = provider
     if model is not None:
@@ -100,7 +110,7 @@ async def update_auto_apply(
     auto_apply_per_board_daily_caps: dict[str, int] | None = None,
     auto_apply_dry_run: bool | None = None,
 ) -> Settings:
-    s = await get_or_create(session, user_id)
+    s = await _pkg().get_or_create(session, user_id)
     if auto_apply_enabled is not None:
         s.auto_apply_enabled = auto_apply_enabled
     if auto_apply_score_threshold is not None:
@@ -152,7 +162,7 @@ async def update_sources(
     indeed_location: str | None = None,
     scraper_rate_limits: dict[str, dict] | None = None,
 ) -> Settings:
-    s = await get_or_create(session, user_id)
+    s = await _pkg().get_or_create(session, user_id)
     if sources_enabled is not None:
         s.sources_enabled = sources_enabled
     if source_schedules is not None:
@@ -189,7 +199,7 @@ async def update_notifications(
     notify_on_errors: bool | None = None,
     notifications_enabled: dict[str, bool] | None = None,
 ) -> Settings:
-    s = await get_or_create(session, user_id)
+    s = await _pkg().get_or_create(session, user_id)
     if notify_threshold is not None:
         s.notify_threshold = float(notify_threshold)
     if notify_on_errors is not None:
@@ -288,7 +298,7 @@ async def update_generation(
     `originality_api_key_clear=True` — prevents accidental wipe when the
     Generation form re-submits without re-entering the password input.
     """
-    s = await get_or_create(session, user_id)
+    s = await _pkg().get_or_create(session, user_id)
     if generation_tier is not None:
         if generation_tier not in VALID_GENERATION_TIERS:
             raise ValueError(f"generation_tier must be one of {sorted(VALID_GENERATION_TIERS)}")
@@ -476,7 +486,7 @@ async def get_deployment_info(session: AsyncSession, user_id: int) -> dict[str, 
     along with the vault. Self-hosters set secrets via `.env`; filesystem
     permissions are the operative defense.
     """
-    s = await get_or_create(session, user_id)
+    s = await _pkg().get_or_create(session, user_id)
     return {
         "deployment_mode": s.deployment_mode.value,
         "debug": s.debug,

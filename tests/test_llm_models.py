@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from services import llm_models
+from services.settings import llm_models
 
 
 @pytest.fixture(autouse=True)

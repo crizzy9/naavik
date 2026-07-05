@@ -183,7 +183,8 @@ async def library_row_action(
 
     if action == "queue":
         from models.enums import DocsState
-        from services import generation_dispatch, settings_service
+        from services import generation_dispatch
+        from services import settings as settings_service
 
         settings = await settings_service.get_or_create(session, user_id=user_id)
         draft = await applications.queue_auto_apply(

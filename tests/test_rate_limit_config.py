@@ -178,7 +178,7 @@ def test_resolver_handles_non_dict_scraper_rate_limits(hostile):
 @pytest.mark.asyncio
 async def test_update_sources_validates_and_persists_rate_limits():
     """`update_sources(scraper_rate_limits=...)` validates each entry."""
-    from services import settings_service
+    from services import settings as settings_service
 
     class _FakeSession:
         def __init__(self):
@@ -220,7 +220,7 @@ async def test_update_sources_validates_and_persists_rate_limits():
 @pytest.mark.asyncio
 async def test_update_sources_rejects_invalid_rate_limits():
     """Validation surfaces as `ValidationError`; nothing gets persisted."""
-    from services import settings_service
+    from services import settings as settings_service
 
     class _FakeSession:
         def add(self, obj):

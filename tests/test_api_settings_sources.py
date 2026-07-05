@@ -72,7 +72,7 @@ def test_put_sources_rejects_invalid_scraper_rate_limits_with_422(
     """`update_sources` raising `ValidationError` → 422 at the route boundary."""
     from db.session import get_session
     from main import app
-    from services import settings_service
+    from services import settings as settings_service
 
     async def _raise_validation_error(*args, **kwargs):
         # Surface the same ValidationError the service raises on a bad
@@ -119,7 +119,7 @@ def test_put_sources_passes_all_kwargs_to_service(
     """All 8 kwargs (incl. scraper_rate_limits + keyword/location pairs) reach the service."""
     from db.session import get_session
     from main import app
-    from services import settings_service
+    from services import settings as settings_service
 
     captured: dict = {}
 

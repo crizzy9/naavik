@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.settings_service import (
+from services.settings import (
     _PREMIUM_PROJECTION_FALLBACK,
     CostProjection,
     compute_premium_cost_projection,
@@ -101,7 +101,7 @@ async def test_update_generation_persists_tier_toggle():
     session.add = lambda r: None
 
     with patch(
-        "services.settings_service.get_or_create",
+        "services.settings.get_or_create",
         AsyncMock(return_value=fake_settings),
     ):
         s = await update_generation(
@@ -131,7 +131,7 @@ async def test_update_generation_rejects_invalid_tier():
     )
     with (
         patch(
-            "services.settings_service.get_or_create",
+            "services.settings.get_or_create",
             AsyncMock(return_value=fake),
         ),
         pytest.raises(ValueError, match="generation_tier"),
@@ -162,7 +162,7 @@ async def test_update_generation_persists_originality_key():
 
     # New non-empty value: set
     with patch(
-        "services.settings_service.get_or_create",
+        "services.settings.get_or_create",
         AsyncMock(return_value=fake),
     ):
         s = await update_generation(session, user_id=1, originality_api_key="sk-new")
@@ -171,7 +171,7 @@ async def test_update_generation_persists_originality_key():
     # Empty string + no clear sentinel: PRESERVE existing (regression guard)
     fake.originality_api_key = "sk-new"
     with patch(
-        "services.settings_service.get_or_create",
+        "services.settings.get_or_create",
         AsyncMock(return_value=fake),
     ):
         s = await update_generation(session, user_id=1, originality_api_key="")
@@ -179,7 +179,7 @@ async def test_update_generation_persists_originality_key():
 
     # Explicit clear sentinel: drop to None
     with patch(
-        "services.settings_service.get_or_create",
+        "services.settings.get_or_create",
         AsyncMock(return_value=fake),
     ):
         s = await update_generation(
@@ -213,7 +213,7 @@ async def test_update_generation_preserves_originality_when_field_absent():
 
     # Caller toggles tier_2_evasion only; originality_api_key not in payload
     with patch(
-        "services.settings_service.get_or_create",
+        "services.settings.get_or_create",
         AsyncMock(return_value=fake),
     ):
         s = await update_generation(
@@ -226,7 +226,7 @@ async def test_update_generation_preserves_originality_when_field_absent():
 
     # Caller submits empty originality_api_key (form auto-blank) — preserves
     with patch(
-        "services.settings_service.get_or_create",
+        "services.settings.get_or_create",
         AsyncMock(return_value=fake),
     ):
         s = await update_generation(
@@ -258,7 +258,7 @@ async def test_update_generation_tier_2_evasion_partial_skip():
     )
 
     with patch(
-        "services.settings_service.get_or_create",
+        "services.settings.get_or_create",
         AsyncMock(return_value=fake),
     ):
         s = await update_generation(session, user_id=1)  # no kwargs

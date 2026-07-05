@@ -53,7 +53,7 @@ async def submit(
     """
     import json as _json
 
-    from services import settings_service
+    from services import settings as settings_service
 
     application = await svc.get_application(session, application_id)
     if application is None or application.user_id != current_user.id:

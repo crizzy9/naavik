@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.session import get_session
-from services.settings_service import get_or_create
+from services.settings import get_or_create
 from ui.templates_setup import templates
 
 router = APIRouter()

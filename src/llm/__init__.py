@@ -122,7 +122,7 @@ def get_provider(
     # env-configured. Avoids the silent "auth_required" path operators hit
     # when `OPENAI_API_KEY` is set but `Settings.llm_provider` defaulted to
     # ANTHROPIC.
-    from services.env_secrets import resolve_active_llm_provider
+    from services.settings.env_secrets import resolve_active_llm_provider
 
     active_id = resolve_active_llm_provider()
     if active_id is None:

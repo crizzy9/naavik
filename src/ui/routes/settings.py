@@ -23,16 +23,13 @@ from models import JobScrapeRunRead, JobSource, User
 from services import (
     account_service,
     applications,
-    env_secrets,
     llm_tracker,
-    settings_service,
 )
-from services import (
-    jobs as job_service,
-)
+from services import jobs as job_service
 from services import (
     profile as profile_service,
 )
+from services import settings as settings_service
 from services.auth import (
     SESSION_COOKIE,
     hash_password_with_complexity_check,
@@ -44,6 +41,7 @@ from services.auth import (
     verify_jwt_async,
     verify_password,
 )
+from services.settings import env_secrets
 from ui.templates_setup import templates
 
 router = APIRouter()
@@ -115,7 +113,7 @@ _PROVIDERS_DISPLAY = [
 
 
 async def _llm_model_options_for(provider_id: str) -> list[str]:
-    from services import llm_models
+    from services.settings import llm_models
 
     return await llm_models.list_models(provider_id)
 
@@ -332,7 +330,7 @@ async def _build_generation_cost_projection(session: AsyncSession | None, *, use
     """Return CostProjection for the Generation tab. Falls back to ROADMAP
     estimates when session-less or query fails."""
     if session is None:
-        from services.settings_service import _PREMIUM_PROJECTION_FALLBACK
+        from services.settings import _PREMIUM_PROJECTION_FALLBACK
 
         return _PREMIUM_PROJECTION_FALLBACK
     return await settings_service.compute_premium_cost_projection(session, user_id=user_id)

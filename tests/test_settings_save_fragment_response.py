@@ -64,7 +64,7 @@ def _patch_services(monkeypatch):
     from db.session import get_session
     from main import app
     from services import profile as profile_service
-    from services import settings_service
+    from services import settings as settings_service
 
     async def _stub_update_llm(session, **kwargs):
         return sd.SETTINGS

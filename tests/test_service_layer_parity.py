@@ -75,13 +75,13 @@ from models.enums import (  # noqa: E402
     WorkAuthorization,
 )
 from services import applications as application_service  # noqa: E402
+from services import email as email_service  # noqa: E402
+from services import outreach as contact_tracker  # noqa: E402
+from services import outreach as outreach_service  # noqa: E402
 from services import (  # noqa: E402
-    contact_tracker,
-    outreach_service,
     overview_service,
     user_service,
 )
-from services import email as email_service  # noqa: E402
 from services import profile as profile_service  # noqa: E402
 
 # Profile/Bullet/Skill carry Postgres CHECK constraints using `char_length`

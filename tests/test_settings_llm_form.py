@@ -305,7 +305,7 @@ def test_put_llm_form_no_live_db_does_not_500(client: TestClient, auth_cookies, 
     NAAVIK_LIVE_DB. Exercises the same code path the live-DB
     round-trip test does, minus the persistence assertion.
     """
-    from services import settings_service
+    from services import settings as settings_service
 
     async def _stub_update_llm(session, **kwargs):
         from db import sample_data as sd

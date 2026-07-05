@@ -17,6 +17,15 @@ from models import OutreachMessage
 from models.enums import OutreachIntent, OutreachStatus
 
 
+def _pkg():
+    """The `services.outreach` package surface, resolved at call time —
+    `mark_sent`'s internal `get_message` read routes through it so the
+    conftest shim keeps intercepting (plan 93)."""
+    from services import outreach
+
+    return outreach
+
+
 async def list_messages_for_contact(
     session: AsyncSession, contact_id: int
 ) -> list[OutreachMessage]:
@@ -106,7 +115,7 @@ async def create_message(
 
 async def mark_sent(session: AsyncSession, message_id: int) -> OutreachMessage | None:
     """Transition DRAFT → SENT + stamp sent_at."""
-    msg = await get_message(session, message_id)
+    msg = await _pkg().get_message(session, message_id)
     if msg is None:
         return None
     now = datetime.now(UTC)

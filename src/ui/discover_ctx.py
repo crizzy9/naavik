@@ -15,8 +15,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from models import Job as SQLJob
 from models import JobFilter, JobQueueState
 from models.enums import VisaRestriction
-from services import applications, contact_tracker
+from services import applications
 from services import jobs as job_service
+from services import outreach as contact_tracker
 from ui.jobs_ctx import apply_kind_label
 
 _COMPANY_COLORS = {
@@ -271,7 +272,7 @@ async def build_discover_ctx(
     filters: JobFilter | None = None,
 ) -> dict[str, object]:
     """Build the Discover context dict against live DB."""
-    from services import settings_service
+    from services import settings as settings_service
 
     effective_filters = filters or JobFilter()
     queue = await _live_unswiped(session, user_id=user_id, filters=effective_filters)

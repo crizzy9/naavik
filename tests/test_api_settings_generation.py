@@ -64,7 +64,7 @@ def test_put_generation_preserves_api_key_on_empty_form_submit(
     calling `update_generation`, so the service never sees `originality_api_key`."""
     from db.session import get_session
     from main import app
-    from services import settings_service
+    from services import settings as settings_service
 
     captured: dict = {}
 
@@ -107,7 +107,7 @@ def test_put_generation_sets_api_key_when_non_empty(
     """A non-empty `originality_api_key` payload reaches the service unchanged."""
     from db.session import get_session
     from main import app
-    from services import settings_service
+    from services import settings as settings_service
 
     captured: dict = {}
 
@@ -141,7 +141,7 @@ def test_put_generation_explicit_clear_sentinel_passes_through(
     """JSON callers that need to clear pass `originality_api_key_clear=true`."""
     from db.session import get_session
     from main import app
-    from services import settings_service
+    from services import settings as settings_service
 
     captured: dict = {}
 

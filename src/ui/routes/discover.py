@@ -18,12 +18,10 @@ from models.enums import (
 )
 from services import (
     applications,
-    contact_tracker,
-    settings_service,
 )
-from services import (
-    jobs as job_service,
-)
+from services import jobs as job_service
+from services import outreach as contact_tracker
+from services import settings as settings_service
 from services.auth import require_authed_session
 from services.utils.rate_limit import check_generate_bundle_rate_limit, check_rescore_rate_limit
 from ui import discover_ctx as dctx
@@ -837,7 +835,7 @@ async def fragment_cover_section_save(
     import json as _json
 
     from services import generation as dg
-    from services import settings_service
+    from services import settings as settings_service
 
     user_id = _effective_user_id(user)
     ok = await applications.update_cover_section(
@@ -1024,7 +1022,7 @@ async def fragment_resume_pdf_recompile(
     import json as _json
 
     from services import generation as dg
-    from services import settings_service
+    from services import settings as settings_service
     from typst.compiler import TypstError
 
     user_id = _effective_user_id(user)
@@ -1094,7 +1092,7 @@ async def fragment_resume_bullet_save(
     """
     from services import generation as dg
     from services import profile as profile_service
-    from services import settings_service
+    from services import settings as settings_service
 
     user_id = _effective_user_id(user)
     application = await _application_owned_or_404(session, application_id, user_id)

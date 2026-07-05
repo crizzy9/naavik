@@ -160,7 +160,8 @@ def test_settings_all_seven_tabs(client: TestClient, auth_cookies, monkeypatch):
     from main import app
     from services import applications as application_service
     from services import jobs as job_service
-    from services import llm_tracker, settings_service
+    from services import llm_tracker
+    from services import settings as settings_service
 
     class _NoopSession:
         async def commit(self):

@@ -64,7 +64,7 @@ def _stub_db(monkeypatch):
 
 def _capture_service_calls(monkeypatch) -> dict:
     """Stub the three settings_service update fns; capture their kwargs."""
-    from services import settings_service
+    from services import settings as settings_service
 
     calls: dict[str, dict] = {}
 

@@ -15,7 +15,9 @@ from api.deps import get_owned_contact
 from db.session import get_session
 from models import Contact, User
 from models.enums import OutreachIntent, OutreachStatus
-from services import applications, contact_tracker, outreach_service
+from services import applications
+from services import outreach as contact_tracker
+from services import outreach as outreach_service
 from services.auth import require_authed_session
 from ui import outreach_ctx as octx
 from ui.templates_setup import templates

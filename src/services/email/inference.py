@@ -365,7 +365,7 @@ async def _scrape_posting_url(session: AsyncSession, *, user_id: int, url: str) 
     from scraper.types import RawJob
     from scraper.url_guard import is_safe_destination
     from services import jobs as job_service
-    from services import settings_service
+    from services import settings as settings_service
     from services.jobs.extractor import enrich_raw_job
 
     safe, reason = is_safe_destination(url)

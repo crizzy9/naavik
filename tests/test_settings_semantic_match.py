@@ -14,7 +14,7 @@ os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 
 import pytest  # noqa: E402
 
-from services import settings_service  # noqa: E402
+from services import settings as settings_service  # noqa: E402
 
 pytestmark = pytest.mark.uses_sample_data_shims
 

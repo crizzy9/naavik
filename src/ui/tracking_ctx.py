@@ -8,8 +8,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import Application
 from models.enums import AppEventKind, ApplicationStatus, RecruiterState, ReferralState
-from services import applications, contact_tracker
+from services import applications
 from services import email as email_service
+from services import outreach as contact_tracker
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",

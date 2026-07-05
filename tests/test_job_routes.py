@@ -216,8 +216,8 @@ async def test_build_discover_ctx_empty_live_returns_empty_queue(monkeypatch):
     no longer exists.
     """
     from services import applications as application_service
-    from services import contact_tracker
     from services import jobs as job_service
+    from services import outreach as contact_tracker
 
     async def _empty_list_jobs(*a, **kw):
         return []

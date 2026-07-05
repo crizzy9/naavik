@@ -183,7 +183,7 @@ def _build_client(
     # Patch the lazily-imported names inside _maybe_dispatch_auto_apply_now.
     # The function imports `settings_service.get_or_create` + `get_scheduler`
     # at call time, so patching the parent modules is sufficient.
-    from services import settings_service
+    from services import settings as settings_service
 
     monkeypatch.setattr(settings_service, "get_or_create", _fake_get_or_create)
     monkeypatch.setattr("scheduler.get_scheduler", lambda: fake_scheduler)

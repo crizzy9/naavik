@@ -27,9 +27,9 @@ from api.auth import require_csrf
 from config import settings as app_settings
 from db.session import get_session
 from models import User
-from services import env_secrets
 from services import profile as profile_service
 from services.auth import get_current_user, require_password_complete
+from services.settings import env_secrets
 from ui.templates_setup import templates
 
 log = logging.getLogger(__name__)
@@ -212,7 +212,7 @@ async def post_extraction_upload(
     parsed_summary: dict | None = None
     parse_error: str | None = None
     try:
-        from services import settings_service
+        from services import settings as settings_service
         from services.profile import extraction
 
         user_settings = await settings_service.get_or_create(session, user_id=user_id)
@@ -247,7 +247,7 @@ async def post_extraction_upload(
         if profile_row is not None:
             seeded = await search_prefs.prefill_search_prefs(session, profile=profile_row)
             if seeded:
-                from services import settings_service as _settings_service
+                from services import settings as _settings_service
 
                 user_settings = await _settings_service.get_or_create(session, user_id=user_id)
                 await search_prefs.refresh_title_expansions(

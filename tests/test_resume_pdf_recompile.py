@@ -150,7 +150,7 @@ def _recompile(client, *, result=None, side_effect=None):
             new=AsyncMock(return_value=_application()),
         ),
         patch(
-            "services.settings_service.get_or_create",
+            "services.settings.get_or_create",
             new=AsyncMock(return_value=SimpleNamespace()),
         ),
         patch("services.generation.recompile_resume_from_selection", new=mock),

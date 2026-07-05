@@ -230,7 +230,7 @@ async def get_owned_contact(
 ) -> Contact:
     """Fetch a contact the caller owns, else 404 (same shape as a missing row —
     no cross-user existence oracle)."""
-    from services import contact_tracker
+    from services import outreach as contact_tracker
 
     contact = await contact_tracker.get_contact(session, contact_id)
     if contact is None or contact.user_id != effective_user_id(user):

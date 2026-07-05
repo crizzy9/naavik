@@ -76,10 +76,8 @@ def _patch_route_helpers(monkeypatch):
     from services import (
         jobs as job_service,
     )
-    from services import (
-        llm_tracker,
-        settings_service,
-    )
+    from services import llm_tracker
+    from services import settings as settings_service
 
     state: dict = {
         "failures": [],

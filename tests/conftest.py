@@ -163,19 +163,25 @@ def _patch_services_to_sample_data(request, monkeypatch):
     from models.enums import ApplicationStatus, EmailClassification, JobQueueState
     from services import (
         applications,
-        contact_tracker,
         email,
         llm_tracker,
-        outreach_service,
         overview_service,
-        settings_service,
         user_service,
     )
     from services import (
         jobs as job_service,
     )
     from services import (
+        outreach as contact_tracker,
+    )
+    from services import (
+        outreach as outreach_service,
+    )
+    from services import (
         profile as profile_service,
+    )
+    from services import (
+        settings as settings_service,
     )
 
     async def _fake_get_session():
@@ -186,7 +192,7 @@ def _patch_services_to_sample_data(request, monkeypatch):
     # P6.4 — the model dropdown now asks provider list-models APIs at
     # request time; tests must never hit the network. Pin to the static
     # fallback catalog.
-    from services import llm_models
+    from services.settings import llm_models
 
     async def _static_models(provider_id: str) -> list[str]:
         return list(llm_models.FALLBACK_MODELS.get(provider_id, []))
@@ -747,7 +753,7 @@ def _patch_services_to_sample_data(request, monkeypatch):
         return _SettingsRow.model_validate(sd.SETTINGS.model_dump())
 
     async def _compute_premium_cost_projection(_session, *, user_id):
-        from services.settings_service import _PREMIUM_PROJECTION_FALLBACK
+        from services.settings import _PREMIUM_PROJECTION_FALLBACK
 
         return _PREMIUM_PROJECTION_FALLBACK
 

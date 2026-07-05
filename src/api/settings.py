@@ -28,8 +28,9 @@ from api.auth import require_csrf
 from db.session import get_session
 from models import JobSource, User
 from models import LLMProvider as LLMProviderEnum
-from services import env_secrets, settings_service
+from services import settings as settings_service
 from services.auth import require_authed_session
+from services.settings import env_secrets
 
 router = APIRouter()
 

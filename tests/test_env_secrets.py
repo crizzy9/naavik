@@ -30,14 +30,14 @@ def env_settings(monkeypatch):
 
 def test_llm_provider_configured_anthropic_absent(env_settings):
     from models import LLMProvider
-    from services import env_secrets
+    from services.settings import env_secrets
 
     assert env_secrets.llm_provider_configured(LLMProvider.ANTHROPIC) is False
 
 
 def test_llm_provider_configured_anthropic_present(env_settings, monkeypatch):
     from models import LLMProvider
-    from services import env_secrets
+    from services.settings import env_secrets
 
     monkeypatch.setattr(env_settings, "anthropic_api_key", "sk-ant-test-redacted")
     assert env_secrets.llm_provider_configured(LLMProvider.ANTHROPIC) is True
@@ -45,7 +45,7 @@ def test_llm_provider_configured_anthropic_present(env_settings, monkeypatch):
 
 def test_llm_provider_configured_openai_present(env_settings, monkeypatch):
     from models import LLMProvider
-    from services import env_secrets
+    from services.settings import env_secrets
 
     monkeypatch.setattr(env_settings, "openai_api_key", "sk-openai-test-redacted")
     assert env_secrets.llm_provider_configured(LLMProvider.OPENAI) is True
@@ -53,7 +53,7 @@ def test_llm_provider_configured_openai_present(env_settings, monkeypatch):
 
 def test_llm_provider_configured_ollama_always_true_when_base_url_set(env_settings):
     from models import LLMProvider
-    from services import env_secrets
+    from services.settings import env_secrets
 
     # Default `http://localhost:11434` set in the fixture; Ollama always
     # has a base URL, so the indicator is always True.
@@ -61,7 +61,7 @@ def test_llm_provider_configured_ollama_always_true_when_base_url_set(env_settin
 
 
 def test_discord_webhook_configured_toggles_with_env(env_settings, monkeypatch):
-    from services import env_secrets
+    from services.settings import env_secrets
 
     assert env_secrets.discord_webhook_configured() is False
     monkeypatch.setattr(env_settings, "discord_webhook_url", "https://discord/x")
@@ -69,7 +69,7 @@ def test_discord_webhook_configured_toggles_with_env(env_settings, monkeypatch):
 
 
 def test_telegram_bot_configured_requires_both_token_and_chat_id(env_settings, monkeypatch):
-    from services import env_secrets
+    from services.settings import env_secrets
 
     assert env_secrets.telegram_bot_configured() is False
     monkeypatch.setattr(env_settings, "telegram_bot_token", "123:ABC")
@@ -79,7 +79,7 @@ def test_telegram_bot_configured_requires_both_token_and_chat_id(env_settings, m
 
 
 def test_portfolio_webhook_configured(env_settings, monkeypatch):
-    from services import env_secrets
+    from services.settings import env_secrets
 
     assert env_secrets.portfolio_webhook_configured() is False
     monkeypatch.setattr(env_settings, "portfolio_webhook_url", "https://api.netlify.com/build/x")
@@ -87,7 +87,7 @@ def test_portfolio_webhook_configured(env_settings, monkeypatch):
 
 
 def test_env_indicators_for_llm_tab_returns_three_keys(env_settings):
-    from services import env_secrets
+    from services.settings import env_secrets
 
     bundle = env_secrets.env_indicators_for_llm_tab()
     assert set(bundle.keys()) == {"anthropic", "openai", "ollama"}
@@ -97,7 +97,7 @@ def test_env_indicators_for_llm_tab_returns_three_keys(env_settings):
 
 
 def test_env_indicators_for_notifications_tab_returns_three_keys(env_settings):
-    from services import env_secrets
+    from services.settings import env_secrets
 
     bundle = env_secrets.env_indicators_for_notifications_tab()
     assert set(bundle.keys()) == {"discord", "telegram", "portfolio"}
@@ -107,7 +107,7 @@ def test_env_indicators_for_notifications_tab_returns_three_keys(env_settings):
 
 
 def test_is_configured_dispatches_by_scope(env_settings, monkeypatch):
-    from services import env_secrets
+    from services.settings import env_secrets
 
     monkeypatch.setattr(env_settings, "anthropic_api_key", "sk-x")
     monkeypatch.setattr(env_settings, "discord_webhook_url", "https://discord/x")
@@ -121,7 +121,7 @@ def test_is_configured_dispatches_by_scope(env_settings, monkeypatch):
 
 
 def test_is_configured_unknown_scope_returns_false(env_settings):
-    from services import env_secrets
+    from services.settings import env_secrets
 
     assert env_secrets.is_configured("nonsense") is False
     assert env_secrets.is_configured("") is False
@@ -132,7 +132,7 @@ def test_scraper_source_configured_workday_reads_settings(env_settings):
     from types import SimpleNamespace
 
     from models import JobSource
-    from services import env_secrets
+    from services.settings import env_secrets
 
     empty = SimpleNamespace(workday_companies=[], linkedin_keywords=None, indeed_keywords=None)
     assert env_secrets.scraper_source_configured(JobSource.WORKDAY, empty) is False
@@ -150,7 +150,7 @@ def test_scraper_source_configured_greenhouse_lever_ashby_read_env(env_settings,
     from types import SimpleNamespace
 
     from models import JobSource
-    from services import env_secrets
+    from services.settings import env_secrets
 
     settings = SimpleNamespace(workday_companies=[], linkedin_keywords=None, indeed_keywords=None)
 
@@ -174,7 +174,7 @@ def test_scraper_source_configured_linkedin_indeed_read_keywords(env_settings):
     from types import SimpleNamespace
 
     from models import JobSource
-    from services import env_secrets
+    from services.settings import env_secrets
 
     empty = SimpleNamespace(workday_companies=[], linkedin_keywords=None, indeed_keywords=None)
     assert env_secrets.scraper_source_configured(JobSource.LINKEDIN, empty) is False
@@ -194,7 +194,7 @@ def test_scraper_source_configured_unsupported_sources_return_false(env_settings
     from types import SimpleNamespace
 
     from models import JobSource
-    from services import env_secrets
+    from services.settings import env_secrets
 
     settings = SimpleNamespace(
         workday_companies=["x"], linkedin_keywords=["x"], indeed_keywords=["x"]
@@ -210,7 +210,7 @@ def test_scraper_source_configured_unsupported_sources_return_false(env_settings
 
 def test_resolve_active_llm_provider_anthropic_first(env_settings, monkeypatch):
     """Anthropic key set → returns 'anthropic' regardless of others."""
-    from services import env_secrets
+    from services.settings import env_secrets
 
     monkeypatch.setattr(env_settings, "anthropic_api_key", "sk-ant-x")
     monkeypatch.setattr(env_settings, "openai_api_key", "sk-openai-x")
@@ -220,7 +220,7 @@ def test_resolve_active_llm_provider_anthropic_first(env_settings, monkeypatch):
 
 def test_resolve_active_llm_provider_openai_when_anthropic_absent(env_settings, monkeypatch):
     """No Anthropic key but OpenAI set → returns 'openai'."""
-    from services import env_secrets
+    from services.settings import env_secrets
 
     monkeypatch.setattr(env_settings, "anthropic_api_key", None)
     monkeypatch.setattr(env_settings, "openai_api_key", "sk-openai-x")
@@ -230,7 +230,7 @@ def test_resolve_active_llm_provider_openai_when_anthropic_absent(env_settings, 
 
 def test_resolve_active_llm_provider_ollama_when_cloud_absent(env_settings, monkeypatch):
     """No cloud keys but Ollama base URL → returns 'ollama'."""
-    from services import env_secrets
+    from services.settings import env_secrets
 
     monkeypatch.setattr(env_settings, "anthropic_api_key", None)
     monkeypatch.setattr(env_settings, "openai_api_key", None)
@@ -240,7 +240,7 @@ def test_resolve_active_llm_provider_ollama_when_cloud_absent(env_settings, monk
 
 def test_resolve_active_llm_provider_none_when_unconfigured(env_settings, monkeypatch):
     """No provider configured (incl. Ollama URL unset) → returns None."""
-    from services import env_secrets
+    from services.settings import env_secrets
 
     monkeypatch.setattr(env_settings, "anthropic_api_key", None)
     monkeypatch.setattr(env_settings, "openai_api_key", None)
@@ -250,7 +250,7 @@ def test_resolve_active_llm_provider_none_when_unconfigured(env_settings, monkey
 
 def test_helpers_never_return_secret_values(env_settings, monkeypatch):
     """Defensive: every indicator helper returns bool, never the actual value."""
-    from services import env_secrets
+    from services.settings import env_secrets
 
     monkeypatch.setattr(env_settings, "anthropic_api_key", "sk-ant-DO-NOT-LEAK")
     monkeypatch.setattr(env_settings, "discord_webhook_url", "https://discord/SECRET")

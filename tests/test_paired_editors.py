@@ -89,7 +89,7 @@ def _patch_route(monkeypatch):
     from db.session import get_session
     from main import app
     from services import jobs as job_service
-    from services import settings_service
+    from services import settings as settings_service
 
     state: dict = {
         "settings": _make_settings(),
@@ -172,7 +172,7 @@ def test_put_rate_limit_rejects_rpm_below_floor(
 ):
     """rpm < 0.1 (the RateLimitConfig floor) → 422 from real service path."""
     # Use the real service so RateLimitConfig actually validates.
-    from services import settings_service as svc
+    from services import settings as svc
 
     monkeypatch.undo()  # drop the autouse fake for THIS test
 
@@ -210,7 +210,7 @@ def test_put_rate_limit_rejects_delay_lo_gt_hi(
     client: TestClient, auth_cookies, csrf_headers, monkeypatch
 ):
     """delay_lo > delay_hi → 422 via cross-field validator."""
-    from services import settings_service as svc
+    from services import settings as svc
 
     monkeypatch.undo()
 
@@ -246,7 +246,7 @@ def test_put_rate_limit_rejects_rpm_above_ceiling(
     client: TestClient, auth_cookies, csrf_headers, monkeypatch
 ):
     """rpm > 600 (the upper bound) → 422."""
-    from services import settings_service as svc
+    from services import settings as svc
 
     monkeypatch.undo()
 
@@ -303,7 +303,7 @@ def test_put_keywords_form_encoded_comma_split(
     client: TestClient, auth_cookies, csrf_headers, monkeypatch
 ):
     """Form-encoded `linkedin_keywords=a, b, c` → list[str] via server-side split."""
-    from services import settings_service as svc
+    from services import settings as svc
 
     captured: dict = {}
 
@@ -327,7 +327,7 @@ def test_put_form_encoded_rate_limit_flat_field_unpack(
     client: TestClient, auth_cookies, csrf_headers, monkeypatch
 ):
     """Flat HTMX form fields `<source>_rpm` / `_lo` / `_hi` collapse into nested dict."""
-    from services import settings_service as svc
+    from services import settings as svc
 
     captured: dict = {}
 
@@ -392,7 +392,7 @@ def test_put_sources_threads_effective_user_id(
     `user_id=1` literal the pre-fix path used). Mirrors plan 56 / 0.2.7.02
     IDOR fix on the GET path.
     """
-    from services import settings_service as svc
+    from services import settings as svc
 
     captured: dict = {}
 

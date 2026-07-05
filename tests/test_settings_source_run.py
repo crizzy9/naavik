@@ -44,7 +44,7 @@ def csrf_headers() -> dict[str, str]:
 @pytest.fixture
 def _settings_stub(monkeypatch):
     """Route reads Settings via settings_service.get_or_create."""
-    from services import settings_service
+    from services import settings as settings_service
 
     holder = SimpleNamespace(
         linkedin_keywords=[],

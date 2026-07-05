@@ -80,7 +80,7 @@ def _rewrite(client, data=None, *, llm_value=None, provider_fails=False, tracked
         patch("services.profile.owns_bullet", new=AsyncMock(return_value=True)),
         patch("services.profile.get_bullet", new=AsyncMock(return_value=_BULLET)),
         patch(
-            "services.settings_service.get_or_create",
+            "services.settings.get_or_create",
             new=AsyncMock(return_value=SimpleNamespace()),
         ),
         get_provider,

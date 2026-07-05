@@ -14,7 +14,9 @@ from models.enums import (
     RecruiterState,
     ReferralState,
 )
-from services import applications, contact_tracker, outreach_service
+from services import applications
+from services import outreach as contact_tracker
+from services import outreach as outreach_service
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",

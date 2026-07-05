@@ -319,7 +319,8 @@ async def put_search_prefs(
     The response is the SAME `_search_prefs_editor.html` fragment the
     controls target — granularity matched to `closest [data-search-prefs]`.
     """
-    from services import search_prefs, settings_service
+    from services import search_prefs
+    from services import settings as settings_service
 
     form = await request.form()
     action = str(form.get("action") or "")
@@ -744,7 +745,8 @@ async def post_bullet_rewrite(
     from llm import get_provider
     from llm.base import LLMProviderError
     from llm.prompts.rewrite_bullet import DEFAULT_STYLE, PROMPT, STYLES, BulletRewrite
-    from services import llm_tracker, settings_service
+    from services import llm_tracker
+    from services import settings as settings_service
 
     user_id = _effective_user_id(_user)
     if not await profile_service.owns_bullet(session, bullet_id=bullet_id, user_id=user_id):

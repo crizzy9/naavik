@@ -50,7 +50,7 @@ def test_put_auto_apply_form_persists_per_board_caps(client, monkeypatch):
 
         return _S()
 
-    from services import settings_service
+    from services import settings as settings_service
 
     monkeypatch.setattr(settings_service, "update_auto_apply", fake_update)
 
@@ -83,7 +83,7 @@ def test_put_auto_apply_form_dry_run_toggle(client, monkeypatch):
 
         return _S()
 
-    from services import settings_service
+    from services import settings as settings_service
 
     monkeypatch.setattr(settings_service, "update_auto_apply", fake_update)
     r = client.put(
@@ -114,7 +114,7 @@ def test_put_auto_apply_json_path_unchanged_for_existing_callers(client, monkeyp
 
         return _S()
 
-    from services import settings_service
+    from services import settings as settings_service
 
     monkeypatch.setattr(settings_service, "update_auto_apply", fake_update)
     r = client.put(
@@ -227,7 +227,7 @@ def test_put_auto_apply_form_empty_numeric_fields_do_not_500(client, monkeypatch
 
         return _S()
 
-    from services import settings_service
+    from services import settings as settings_service
 
     monkeypatch.setattr(settings_service, "update_auto_apply", fake_update)
 
@@ -250,7 +250,7 @@ def test_put_auto_apply_form_non_numeric_field_422(client, monkeypatch):
     async def fake_update(session, user_id, **kwargs):  # pragma: no cover
         raise AssertionError("service must not be reached on bad input")
 
-    from services import settings_service
+    from services import settings as settings_service
 
     monkeypatch.setattr(settings_service, "update_auto_apply", fake_update)
 

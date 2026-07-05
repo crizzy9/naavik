@@ -148,7 +148,7 @@ def test_put_settings_llm_threads_authed_user_id(client_with_user_42):
 
         return sd.SETTINGS
 
-    with patch("services.settings_service.update_llm", new=_spy):
+    with patch("services.settings.update_llm", new=_spy):
         r = client.put(
             "/api/v1/settings/llm",
             data={"llm_provider": "anthropic", "llm_model": "claude-sonnet-4-6"},
@@ -173,7 +173,7 @@ def test_put_settings_auto_apply_threads_authed_user_id(client_with_user_42):
 
         return sd.SETTINGS
 
-    with patch("services.settings_service.update_auto_apply", new=_spy):
+    with patch("services.settings.update_auto_apply", new=_spy):
         r = client.put(
             "/api/v1/settings/auto-apply",
             data={"auto_apply_score_threshold": "0.85"},
@@ -198,7 +198,7 @@ def test_put_settings_notifications_threads_authed_user_id(client_with_user_42):
 
         return sd.SETTINGS
 
-    with patch("services.settings_service.update_notifications", new=_spy):
+    with patch("services.settings.update_notifications", new=_spy):
         r = client.put(
             "/api/v1/settings/notifications",
             data={"notify_threshold": "0.75"},
@@ -223,7 +223,7 @@ def test_get_settings_llm_threads_authed_user_id(client_with_user_42):
 
         return sd.SETTINGS
 
-    with patch("services.settings_service.get_or_create", new=_spy):
+    with patch("services.settings.get_or_create", new=_spy):
         r = client.get("/api/v1/settings/llm")
 
     assert r.status_code == 200, r.text[:300]
@@ -248,7 +248,7 @@ def test_get_settings_deployment_threads_authed_user_id(client_with_user_42):
             "data_dir": "~/.naavik/data",
         }
 
-    with patch("services.settings_service.get_deployment_info", new=_spy):
+    with patch("services.settings.get_deployment_info", new=_spy):
         r = client.get("/api/v1/settings/deployment")
 
     assert r.status_code == 200, r.text[:300]
