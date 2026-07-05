@@ -301,7 +301,7 @@ async def _create_job_from_receipt(
     """Library Job for a receipt that matched nothing. Posting URL → the
     real add-by-URL pipeline (guard → fetch → LLM extract → upsert);
     metadata-only receipts land as `source=email` rows."""
-    from services import job_service
+    from services import jobs as job_service
 
     if hit.posting_url:
         try:
@@ -340,8 +340,8 @@ async def _create_job_from_receipt(
     # full JD instead of a one-sentence stub. Best-effort; the row above is
     # already a valid fallback.
     try:
-        from services import jd_enrichment
         from services import resolution as apply_site_resolver
+        from services.jobs import jd_enrichment
 
         resolved = await apply_site_resolver.resolve_job(job)
         apply_site_resolver.apply_resolution(job, resolved)
@@ -364,8 +364,9 @@ async def _scrape_posting_url(session: AsyncSession, *, user_id: int, url: str) 
     from scraper.crawl4ai_client import Crawl4AIClient
     from scraper.types import RawJob
     from scraper.url_guard import is_safe_destination
-    from services import job_service, settings_service
-    from services.job_extractor import enrich_raw_job
+    from services import jobs as job_service
+    from services import settings_service
+    from services.jobs.extractor import enrich_raw_job
 
     safe, reason = is_safe_destination(url)
     if not safe:

@@ -385,7 +385,7 @@ async def build_application_detail_ctx(
     job_url: str | None = None
     if application.job_id is not None:
         try:
-            from services import job_service
+            from services import jobs as job_service
 
             job = await job_service.get_job(session, application.job_id)
             if job is not None and getattr(job, "score", None) is not None:
@@ -519,7 +519,7 @@ async def build_library_ctx(
     attached per row."""
     from models import JobFilter
     from models.enums import JobQueueState
-    from services import job_service
+    from services import jobs as job_service
 
     facet_counts: dict[str, int] = {}
     total = 0

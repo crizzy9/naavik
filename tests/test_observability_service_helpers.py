@@ -198,7 +198,7 @@ def pytest_approx(value, tol: float = 1e-9):
 
 def test_list_recent_scrape_runs_orders_desc_limits_arg():
     """ORDER BY started_at DESC + LIMIT honored from kwarg."""
-    from services.job_service import list_recent_scrape_runs
+    from services.jobs.service import list_recent_scrape_runs
 
     captured: list = []
 
@@ -219,7 +219,7 @@ def test_list_recent_scrape_runs_orders_desc_limits_arg():
 
 def test_list_recent_scrape_runs_defaults_to_50():
     """Default `limit=50` lands in compiled SQL when caller omits the kwarg."""
-    from services.job_service import list_recent_scrape_runs
+    from services.jobs.service import list_recent_scrape_runs
 
     captured: list = []
 
@@ -235,7 +235,7 @@ def test_list_recent_scrape_runs_defaults_to_50():
 
 def test_list_recent_scrape_runs_returns_list_type():
     """Returns `list[...]`, not a SQLAlchemy result proxy."""
-    from services.job_service import list_recent_scrape_runs
+    from services.jobs.service import list_recent_scrape_runs
 
     class _EmptySession:
         async def exec(self, stmt):

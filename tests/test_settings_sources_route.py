@@ -141,7 +141,8 @@ def _patch_route_helpers(monkeypatch):
     """
     from db.session import get_session
     from main import app
-    from services import job_service, settings_service
+    from services import jobs as job_service
+    from services import settings_service
 
     state: dict = {
         "settings": _make_settings(),
@@ -341,7 +342,8 @@ def test_build_sources_view_threads_user_id(monkeypatch):
     """
     import asyncio
 
-    from services import job_service, settings_service
+    from services import jobs as job_service
+    from services import settings_service
     from ui.routes import settings as settings_routes
 
     captured: dict[str, int] = {}

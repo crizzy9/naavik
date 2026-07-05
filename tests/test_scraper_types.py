@@ -20,7 +20,7 @@ from models import (
     VisaRestriction,
 )
 from scraper.types import RawJob, ScrapeQuery
-from services.job_service import _JOB_CREATE_FIELDS, _create_payload
+from services.jobs.service import _JOB_CREATE_FIELDS, _create_payload
 
 pytestmark = pytest.mark.uses_sample_data_shims
 

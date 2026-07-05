@@ -32,7 +32,7 @@ from models import JobScrapeRun, JobScrapeStatus, Settings
 from scraper.base import ScraperBase
 from scraper.redaction import safe_exc, safe_url
 from scraper.types import ScrapeQuery
-from services import job_service
+from services import jobs as job_service
 from services.notify import notify_scrape_run_summary
 
 log = logging.getLogger(__name__)

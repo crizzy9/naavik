@@ -171,7 +171,7 @@ async def reextract_signals(session: AsyncSession, *, batch_size: int = 15) -> i
     from llm import LLMProviderError, get_provider
     from models import Settings
     from scraper.types import RawJob
-    from services.job_extractor import enrich_raw_job
+    from services.jobs.extractor import enrich_raw_job
 
     stmt = (
         select(Job)

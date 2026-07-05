@@ -50,7 +50,7 @@ async def get_scrape_status(
     """
     from datetime import UTC, datetime, timedelta
 
-    from services import job_service
+    from services import jobs as job_service
     from ui.routes.profile import _effective_user_id
     from ui.routes.settings import _format_started_at
 

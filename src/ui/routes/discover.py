@@ -19,8 +19,10 @@ from models.enums import (
 from services import (
     applications,
     contact_tracker,
-    job_service,
     settings_service,
+)
+from services import (
+    jobs as job_service,
 )
 from services.auth import require_authed_session
 from services.rate_limit import check_generate_bundle_rate_limit, check_rescore_rate_limit
@@ -558,7 +560,7 @@ async def post_job_by_url(
     from scraper.crawl4ai_client import Crawl4AIClient
     from scraper.types import RawJob
     from scraper.url_guard import is_safe_destination
-    from services.job_extractor import enrich_raw_job
+    from services.jobs.extractor import enrich_raw_job
 
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:

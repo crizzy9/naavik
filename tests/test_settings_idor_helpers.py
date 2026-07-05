@@ -57,7 +57,7 @@ class _NoopSession:
 
 def test_recent_scrape_runs_view_threads_user_id(monkeypatch):
     """`_recent_scrape_runs_view(session, user_id=N)` passes N to job_service."""
-    from services import job_service
+    from services import jobs as job_service
     from ui.routes import settings as settings_routes
 
     captured: dict[str, int] = {}
@@ -75,7 +75,7 @@ def test_recent_scrape_runs_view_threads_user_id(monkeypatch):
 
 def test_recent_scrape_runs_view_distinct_users_get_distinct_calls(monkeypatch):
     """Cross-user: user-1 + user-42 each thread their own id through."""
-    from services import job_service
+    from services import jobs as job_service
     from ui.routes import settings as settings_routes
 
     seen: list[int] = []

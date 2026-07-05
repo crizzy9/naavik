@@ -70,7 +70,7 @@ async def submit(
 
     # board=None falls through to submit_draft's explicit `no_board` error.
     if application.board is not None and not board_supports_auto_submit(application.board):
-        from services import job_service
+        from services import jobs as job_service
 
         job = (
             await job_service.get_job(session, application.job_id)

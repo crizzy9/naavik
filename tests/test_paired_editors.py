@@ -88,7 +88,8 @@ def _patch_route(monkeypatch):
     """Replace DB-touching service calls + override `get_session`."""
     from db.session import get_session
     from main import app
-    from services import job_service, settings_service
+    from services import jobs as job_service
+    from services import settings_service
 
     state: dict = {
         "settings": _make_settings(),

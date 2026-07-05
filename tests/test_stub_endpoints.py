@@ -232,7 +232,7 @@ def test_jobs_get_by_id(client, monkeypatch):
         SeniorityLevel,
         VisaRestriction,
     )
-    from services import job_service
+    from services import jobs as job_service
 
     now = datetime.now(UTC)
 
@@ -295,7 +295,8 @@ def test_jobs_by_url_real_pipeline(client, monkeypatch):
 
     from llm.base import LLMProviderError
     from scraper.crawl4ai_client import Crawl4AIClient
-    from services import job_service, profile_service
+    from services import jobs as job_service
+    from services import profile_service
 
     async def _fake_fetch(self, url):
         return "<html><title>Staff Engineer - Acme</title><body>JD text</body></html>"

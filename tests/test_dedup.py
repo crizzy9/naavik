@@ -34,7 +34,8 @@ from models import (
     SeniorityLevel,
     VisaRestriction,
 )
-from services import dedup, job_service
+from services import jobs as job_service
+from services.jobs import dedup
 
 
 class _FakeSession:

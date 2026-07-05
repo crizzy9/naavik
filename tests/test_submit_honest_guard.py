@@ -74,7 +74,7 @@ def _submit(client, *, board, apply_kind, apply_url=None):
             new=AsyncMock(return_value=_app_stub(board)),
         ),
         patch(
-            "services.job_service.get_job",
+            "services.jobs.get_job",
             new=AsyncMock(return_value=_job_stub(apply_kind, apply_url)),
         ),
         patch("api.applications.svc.submit_draft", new=submit_mock),

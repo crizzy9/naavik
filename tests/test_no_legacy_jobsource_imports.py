@@ -54,7 +54,7 @@ def test_discover_ctx_wires_job_service_list_jobs():
         "sample_data shim, update this lint + document the regression in the "
         "plan's ## Deviations section."
     )
-    # Accept either a dedicated `from services import job_service` line, the
+    # Accept either a dedicated `from services import jobs as job_service` line, the
     # combined `from services import …, job_service, …` form (used after the
     # plan-69 service-layer expansion), or the long-form `from services.job_service`
     # alias. The lint exists to catch a regression to `sd.discover_queue()`, not

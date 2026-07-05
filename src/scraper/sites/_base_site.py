@@ -62,7 +62,7 @@ class _BaseSiteScraper(ScraperBase):
         if self._provider is None or self._session is None or self._user_id is None:
             return raw_job
         try:
-            from services.job_extractor import enrich_raw_job  # lazy: 0.2.0.08
+            from services.jobs.extractor import enrich_raw_job  # lazy: 0.2.0.08
         except ImportError:
             log.debug(
                 "services.job_extractor unavailable (0.2.0.08 not yet shipped); "

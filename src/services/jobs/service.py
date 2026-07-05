@@ -32,7 +32,7 @@ from models import (
     RemotePolicy,
     VisaRestriction,
 )
-from services import dedup
+from services.jobs import dedup
 
 # ── Single-job CRUD ──────────────────────────────────────────────────────
 

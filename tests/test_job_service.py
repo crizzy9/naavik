@@ -33,7 +33,7 @@ from models import (
     SeniorityLevel,
     VisaRestriction,
 )
-from services import job_service
+from services import jobs as job_service
 
 # ── In-memory fakes ──────────────────────────────────────────────────────
 

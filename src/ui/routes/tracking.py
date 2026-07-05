@@ -196,7 +196,7 @@ async def library_row_action(
         if docs_missing:
             generation_dispatch.spawn_generation(draft.id)
     else:
-        from services import job_service
+        from services import jobs as job_service
 
         job = await job_service.set_queue_state(
             session, job_id, user_id=user_id, state=target_state

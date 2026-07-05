@@ -92,7 +92,7 @@ def _fake_job(*, jid=601, user_id=1, **overrides):
 
 
 def _install_job(monkeypatch, job):
-    from services import job_service
+    from services import jobs as job_service
 
     async def _get(session, job_id):
         return job if job_id == job.id else None

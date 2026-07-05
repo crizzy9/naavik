@@ -24,10 +24,12 @@ from services import (
     account_service,
     applications,
     env_secrets,
-    job_service,
     llm_tracker,
     profile_service,
     settings_service,
+)
+from services import (
+    jobs as job_service,
 )
 from services.auth import (
     SESSION_COOKIE,

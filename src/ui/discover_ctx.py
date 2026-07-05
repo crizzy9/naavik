@@ -15,7 +15,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from models import Job as SQLJob
 from models import JobFilter, JobQueueState
 from models.enums import VisaRestriction
-from services import applications, contact_tracker, job_service
+from services import applications, contact_tracker
+from services import jobs as job_service
 from ui.jobs_ctx import apply_kind_label
 
 _COMPANY_COLORS = {

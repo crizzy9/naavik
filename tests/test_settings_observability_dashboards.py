@@ -74,7 +74,9 @@ def _patch_route_helpers(monkeypatch):
     from main import app
     from services import applications as application_service
     from services import (
-        job_service,
+        jobs as job_service,
+    )
+    from services import (
         llm_tracker,
         settings_service,
     )
@@ -466,7 +468,7 @@ def test_sources_tab_caps_recent_runs_at_50_via_service_signature(
     client: TestClient, auth_cookies, monkeypatch
 ):
     """Plan 54 invariant: helper accepts `limit=50`. Service must enforce."""
-    from services import job_service
+    from services import jobs as job_service
 
     captured = {"limit": None}
 

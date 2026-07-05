@@ -52,7 +52,7 @@ def test_post_manual_job_happy_path(client: TestClient, monkeypatch) -> None:
 
         return SimpleNamespace(id=999)
 
-    from services import job_service
+    from services import jobs as job_service
 
     monkeypatch.setattr(job_service, "create_manual_job", _fake_create)
 
@@ -90,7 +90,7 @@ def test_post_manual_job_synthesizes_url_when_omitted(client: TestClient, monkey
 
         return SimpleNamespace(id=1000)
 
-    from services import job_service
+    from services import jobs as job_service
 
     monkeypatch.setattr(job_service, "create_manual_job", _fake_create)
 
@@ -288,7 +288,7 @@ def test_post_manual_job_accepts_manual_synthetic_url(client: TestClient, monkey
 
         return SimpleNamespace(id=1001)
 
-    from services import job_service
+    from services import jobs as job_service
 
     monkeypatch.setattr(job_service, "create_manual_job", _fake_create)
 

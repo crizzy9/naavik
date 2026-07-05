@@ -306,7 +306,7 @@ async def resolve_pending(
         # Discovery already carried the canonical JD — enrich for free while
         # we hold it (thin Indeed/email descriptions get the real posting).
         if resolved.description_html or resolved.description_text:
-            from services import jd_enrichment
+            from services.jobs import jd_enrichment
 
             jd_enrichment.maybe_apply_discovered_description(job, resolved)
         # A DRAFT created before resolution snapshotted the aggregator board —

@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch  # noqa: E402
 import pytest  # noqa: E402
 
 from models import ApplicationBoard, JobSource  # noqa: E402
-from services import jd_enrichment  # noqa: E402
+from services.jobs import jd_enrichment  # noqa: E402
 from services.resolution import ResolvedApply, _BoardPosting  # noqa: E402
 
 
@@ -194,7 +194,7 @@ async def test_reextract_signals_populates_tags_and_clears_flag():
     with (
         patch("llm.get_provider", return_value=SimpleNamespace(provider_id="openai")),
         patch(
-            "services.job_extractor.enrich_raw_job",
+            "services.jobs.extractor.enrich_raw_job",
             new=AsyncMock(return_value=enriched_raw),
         ),
     ):

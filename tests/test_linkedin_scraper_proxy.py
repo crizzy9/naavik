@@ -230,7 +230,8 @@ async def test_scraper_service_writes_proxy_sub_key_when_proxy_active(monkeypatc
     from scraper.crawl4ai_client import Crawl4AIClient
     from scraper.proxy import ProxyURLConfig
     from scraper.sites.sample import SampleScraper
-    from services import job_service, scraper_service
+    from services import jobs as job_service
+    from services import scraper_service
 
     proxy_cfg = ProxyURLConfig(
         url="http://leaku:leakp@gate.example.com:7000",
@@ -312,7 +313,8 @@ async def test_scraper_service_writes_proxy_used_false_when_no_proxy(monkeypatch
     """No proxy → raw_meta.proxy.used is False + host is None."""
     from scraper.crawl4ai_client import Crawl4AIClient
     from scraper.sites.sample import SampleScraper
-    from services import job_service, scraper_service
+    from services import jobs as job_service
+    from services import scraper_service
 
     class _SampleSession:
         def __init__(self):

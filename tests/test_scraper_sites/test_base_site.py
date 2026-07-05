@@ -3,7 +3,7 @@
 Exercises the `_maybe_enrich` decision tree:
 
 - Provider/session/user_id missing → identity pass-through.
-- `services.job_extractor` not importable → identity pass-through w/ debug log.
+- `services.jobs.extractor` not importable → identity pass-through w/ debug log.
 - `enrich_raw_job` raises → tier-1 error logged, identity pass-through.
 - All wired + service returns enriched RawJob → enriched RawJob returned.
 """
@@ -51,22 +51,22 @@ def _make_seed() -> RawJob:
 
 @pytest.fixture
 def _wipe_job_extractor():
-    """Make sure `services.job_extractor` is NOT cached in sys.modules."""
-    sys.modules.pop("services.job_extractor", None)
+    """Make sure `services.jobs.extractor` is NOT cached in sys.modules."""
+    sys.modules.pop("services.jobs.extractor", None)
     yield
-    sys.modules.pop("services.job_extractor", None)
+    sys.modules.pop("services.jobs.extractor", None)
 
 
 @pytest.mark.asyncio
 async def test_maybe_enrich_passthrough_when_provider_missing(_wipe_job_extractor):
-    """No provider → identity. `services.job_extractor` is NOT imported."""
+    """No provider → identity. `services.jobs.extractor` is NOT imported."""
     scraper = _StubSiteScraper(client=object())  # type: ignore[arg-type]
     seed = _make_seed()
 
     result = await scraper._maybe_enrich(seed)
 
     assert result is seed
-    assert "services.job_extractor" not in sys.modules
+    assert "services.jobs.extractor" not in sys.modules
 
 
 @pytest.mark.asyncio
@@ -82,15 +82,15 @@ async def test_maybe_enrich_passthrough_when_session_missing(_wipe_job_extractor
     result = await scraper._maybe_enrich(seed)
 
     assert result is seed
-    assert "services.job_extractor" not in sys.modules
+    assert "services.jobs.extractor" not in sys.modules
 
 
 @pytest.mark.asyncio
 async def test_maybe_enrich_handles_missing_service_module(_wipe_job_extractor, monkeypatch):
-    """If `services.job_extractor` isn't installed (pre-0.2.0.08), return identity."""
+    """If `services.jobs.extractor` isn't installed (pre-0.2.0.08), return identity."""
     # Force the lazy import to fail. Two-step: ensure no real module is
     # cached, then make the import raise.
-    monkeypatch.setitem(sys.modules, "services.job_extractor", None)
+    monkeypatch.setitem(sys.modules, "services.jobs.extractor", None)
 
     scraper = _StubSiteScraper(
         client=object(),  # type: ignore[arg-type]
@@ -109,7 +109,7 @@ async def test_maybe_enrich_handles_missing_service_module(_wipe_job_extractor, 
 @pytest.mark.asyncio
 async def test_maybe_enrich_calls_service_when_wired(_wipe_job_extractor, monkeypatch):
     """When `enrich_raw_job` exists, the shim awaits it and returns the result."""
-    fake_module = types.ModuleType("services.job_extractor")
+    fake_module = types.ModuleType("services.jobs.extractor")
     calls: list[dict] = []
 
     async def _fake_enrich(*, session, user_id, provider, raw_job):
@@ -118,7 +118,7 @@ async def test_maybe_enrich_calls_service_when_wired(_wipe_job_extractor, monkey
         return raw_job.model_copy(update={"company_name": "Acme (enriched)"})
 
     fake_module.enrich_raw_job = _fake_enrich
-    monkeypatch.setitem(sys.modules, "services.job_extractor", fake_module)
+    monkeypatch.setitem(sys.modules, "services.jobs.extractor", fake_module)
 
     session = _FakeSession()
     provider = _FakeProvider()
@@ -141,13 +141,13 @@ async def test_maybe_enrich_calls_service_when_wired(_wipe_job_extractor, monkey
 @pytest.mark.asyncio
 async def test_maybe_enrich_catches_service_exception(_wipe_job_extractor, monkeypatch):
     """A raised enrichment becomes a tier-1 error and we return the seed unchanged."""
-    fake_module = types.ModuleType("services.job_extractor")
+    fake_module = types.ModuleType("services.jobs.extractor")
 
     async def _broken_enrich(*, session, user_id, provider, raw_job):
         raise RuntimeError("LLM unavailable")
 
     fake_module.enrich_raw_job = _broken_enrich
-    monkeypatch.setitem(sys.modules, "services.job_extractor", fake_module)
+    monkeypatch.setitem(sys.modules, "services.jobs.extractor", fake_module)
 
     scraper = _StubSiteScraper(
         client=object(),  # type: ignore[arg-type]

@@ -174,7 +174,7 @@ def test_parse_filters_include_duplicates_toggle():
 @pytest.mark.asyncio
 async def test_build_discover_ctx_uses_job_service_when_session_present(monkeypatch):
     """Plan 36 § A · D.5 — live-DB path calls job_service.list_jobs."""
-    from services import job_service
+    from services import jobs as job_service
 
     captured: dict[str, Any] = {}
 
@@ -216,7 +216,8 @@ async def test_build_discover_ctx_empty_live_returns_empty_queue(monkeypatch):
     no longer exists.
     """
     from services import applications as application_service
-    from services import contact_tracker, job_service
+    from services import contact_tracker
+    from services import jobs as job_service
 
     async def _empty_list_jobs(*a, **kw):
         return []
@@ -297,7 +298,7 @@ def test_discover_queue_fragment_filter_with_zero_results(client, auth_cookies):
 @pytest.mark.asyncio
 async def test_include_duplicates_filter_threads_into_job_service(monkeypatch):
     """`?include_duplicates=1` must reach JobFilter so the filter actually applies."""
-    from services import job_service
+    from services import jobs as job_service
 
     captured: dict[str, Any] = {}
 
@@ -324,7 +325,7 @@ async def test_include_duplicates_filter_threads_into_job_service(monkeypatch):
 async def test_job_detail_renders_200_for_owner(monkeypatch):
     """`/jobs/{id}` returns 200 + renders the topbar + body sections."""
     from main import app
-    from services import job_service
+    from services import jobs as job_service
 
     target = _fake_job(jid=501, user_id=1, company="Hugging Face", score=0.0)
 
@@ -347,7 +348,7 @@ async def test_job_detail_renders_200_for_owner(monkeypatch):
 async def test_job_detail_404_when_job_missing(monkeypatch):
     """Unknown job id → 404."""
     from main import app
-    from services import job_service
+    from services import jobs as job_service
 
     async def _none(session, job_id):
         return None
@@ -363,7 +364,7 @@ async def test_job_detail_404_when_job_missing(monkeypatch):
 async def test_job_detail_404_for_non_owner(monkeypatch):
     """IDOR mitigation: user A sees user B's job as 404 (not 403)."""
     from main import app
-    from services import job_service
+    from services import jobs as job_service
 
     other = _fake_job(jid=502, user_id=999, company="Crossover Corp")
 
@@ -383,7 +384,7 @@ async def test_job_detail_404_for_non_owner(monkeypatch):
 async def test_job_detail_404_when_archived(monkeypatch):
     """Soft-deleted Job (`deleted_at` set) is invisible to /jobs/{id}."""
     from main import app
-    from services import job_service
+    from services import jobs as job_service
 
     archived = _fake_job(jid=503, deleted_at=datetime.now(UTC))
 
@@ -401,7 +402,7 @@ async def test_job_detail_404_when_archived(monkeypatch):
 async def test_job_detail_renders_duplicate_banner(monkeypatch):
     """When `duplicate_of_id` is set, the amber duplicate banner renders."""
     from main import app
-    from services import job_service
+    from services import jobs as job_service
 
     dup = _fake_job(jid=504, duplicate_of_id=501)
 
@@ -421,7 +422,7 @@ async def test_job_detail_renders_duplicate_banner(monkeypatch):
 async def test_job_detail_renders_scrape_run_metadata(monkeypatch):
     """When the Job has a last_scrape_run_id, the scrape-run block renders."""
     from main import app
-    from services import job_service
+    from services import jobs as job_service
 
     target = _fake_job(jid=505, last_scrape_run_id=77)
     fake_run = SimpleNamespace(
@@ -461,7 +462,7 @@ async def test_job_detail_renders_scrape_run_metadata(monkeypatch):
 async def test_api_v1_jobs_get_json_404_for_non_owner(monkeypatch):
     """`GET /api/v1/jobs/{id}` (moved to jobs.py) enforces same IDOR boundary."""
     from main import app
-    from services import job_service
+    from services import jobs as job_service
 
     other = _fake_job(jid=506, user_id=999)
 
@@ -483,7 +484,7 @@ async def test_api_v1_jobs_get_json_uses_jobread_projection(monkeypatch):
     gate already restricts cross-user reads.
     """
     from main import app
-    from services import job_service
+    from services import jobs as job_service
 
     own = _fake_job(
         jid=507,

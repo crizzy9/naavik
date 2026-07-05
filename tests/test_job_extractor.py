@@ -24,8 +24,8 @@ from models.enums import (
     VisaRestriction,
 )
 from scraper.types import RawJob
-from services import job_extractor
-from services.job_extractor import (
+from services.jobs import extractor as job_extractor
+from services.jobs.extractor import (
     ExtractionSkipped,
     _parse_posted_at,
     _strip_boilerplate,
@@ -453,7 +453,7 @@ async def test_enrich_raw_job_integration_with_upsert_payload() -> None:
         assert promoted not in payload["raw_meta"]
 
     # And _create_payload keeps them (end of the transport chain → Job(...)).
-    from services.job_service import _create_payload
+    from services.jobs.service import _create_payload
 
     create_kwargs = _create_payload(payload)
     assert create_kwargs["tags"] == ["backend", "platform", "genai"]

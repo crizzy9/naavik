@@ -31,7 +31,7 @@ from models import (
     RemotePolicy,
     User,
 )
-from services import job_service
+from services import jobs as job_service
 from services.auth import require_authed_session
 from ui import jobs_ctx
 from ui.templates_setup import templates
@@ -218,7 +218,8 @@ async def post_job_resolve_apply(
     Returns the refreshed card fragment.
     """
     job = await _job_or_404(session, job_id, _effective_user_id(user))
-    from services import applications, jd_enrichment, resolution
+    from services import applications, resolution
+    from services.jobs import jd_enrichment
 
     auth = resolution.AuthContext(remaining=1) if resolution.auth_available() else None
     try:
