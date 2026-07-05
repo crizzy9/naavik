@@ -836,7 +836,7 @@ async def fragment_cover_section_save(
     """
     import json as _json
 
-    from services import document_generator as dg
+    from services import generation as dg
     from services import settings_service
 
     user_id = _effective_user_id(user)
@@ -958,7 +958,7 @@ async def fragment_resume_bullet_toggle(
     toast only fires when the PDF really updated.
     """
     from models.enums import BulletSelectionOverride
-    from services import document_generator as dg
+    from services import generation as dg
     from services import profile_service
 
     user_id = _effective_user_id(user)
@@ -1023,7 +1023,7 @@ async def fragment_resume_pdf_recompile(
     """
     import json as _json
 
-    from services import document_generator as dg
+    from services import generation as dg
     from services import settings_service
     from typst.compiler import TypstError
 
@@ -1092,7 +1092,7 @@ async def fragment_resume_bullet_save(
     The edit lives in `submission_artifacts.bullet_text_overrides` — the
     profile's master bullet is untouched.
     """
-    from services import document_generator as dg
+    from services import generation as dg
     from services import profile_service, settings_service
 
     user_id = _effective_user_id(user)

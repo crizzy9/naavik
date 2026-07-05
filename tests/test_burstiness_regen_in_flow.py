@@ -127,7 +127,7 @@ async def _run_bundle(session, application, settings, job, fake_resume, *, regen
 
     with (
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
@@ -139,7 +139,7 @@ async def _run_bundle(session, application, settings, job, fake_resume, *, regen
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.document_generator.generate_resume",
+            "services.generation.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
@@ -147,15 +147,15 @@ async def _run_bundle(session, application, settings, job, fake_resume, *, regen
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.document_generator.generate_cover_letter",
+            "services.generation.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.document_generator.answer_screeners",
+            "services.generation.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
-            "services.document_generator.regen_bullet_for_variance",
+            "services.generation.regen_bullet_for_variance",
             regen_mock,
         ),
         patch(
@@ -380,7 +380,7 @@ async def test_burstiness_regen_skipped_on_cost_cap():
 
     with (
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(side_effect=_capped_at_burstiness),
         ),
         patch(
@@ -392,7 +392,7 @@ async def test_burstiness_regen_skipped_on_cost_cap():
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.document_generator.generate_resume",
+            "services.generation.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
@@ -400,15 +400,15 @@ async def test_burstiness_regen_skipped_on_cost_cap():
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.document_generator.generate_cover_letter",
+            "services.generation.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.document_generator.answer_screeners",
+            "services.generation.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
-            "services.document_generator.regen_bullet_for_variance",
+            "services.generation.regen_bullet_for_variance",
             regen_mock,
         ),
         patch(

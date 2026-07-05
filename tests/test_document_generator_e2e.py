@@ -1,7 +1,7 @@
 """Plan 91 Phase 3.2 — document_generator end-to-end characterization.
 
 The existing `test_document_generator.py` suite pins the module's PRIVATE
-call graph (21 `patch("services.document_generator._x")` targets) — it would
+call graph (21 `patch("services.generation._x")` targets) — it would
 break on the Phase-4 split without proving behaviour preservation. This file
 is the test that survives the split: it fakes ONLY the process boundaries
 (`get_provider` → a scripted provider, `typst_compile` → a scripted
@@ -261,14 +261,14 @@ async def test_generate_resume_end_to_end(session):
     """Happy path: rank → refine every bullet → tailor summary → compile →
     GeneratedDocument row with the full selection blob; every LLM call lands
     an ApiUsage row through the real tracker."""
-    from services import document_generator as dg
+    from services import generation as dg
 
     app, job, bullet_ids = await _seed_world(session)
     provider = FakeProvider(selected_ids=list(reversed(bullet_ids)))
 
     with (
-        patch("services.document_generator.get_provider", return_value=provider),
-        patch("services.document_generator.typst_compile", new=_fake_typst([1])),
+        patch("services.generation.get_provider", return_value=provider),
+        patch("services.generation.typst_compile", new=_fake_typst([1])),
     ):
         doc = await dg.generate_resume(session, app, settings=_settings(), job=job)
 
@@ -299,14 +299,14 @@ async def test_generate_resume_end_to_end(session):
 async def test_generate_resume_page_fit_drops_lowest_priority(session):
     """First compile overflows → the fit loop drops the lowest-ranked bullet
     and converges to one page; the drop is recorded in the selection blob."""
-    from services import document_generator as dg
+    from services import generation as dg
 
     app, job, bullet_ids = await _seed_world(session)
     provider = FakeProvider(selected_ids=bullet_ids)
 
     with (
-        patch("services.document_generator.get_provider", return_value=provider),
-        patch("services.document_generator.typst_compile", new=_fake_typst([2, 1])),
+        patch("services.generation.get_provider", return_value=provider),
+        patch("services.generation.typst_compile", new=_fake_typst([2, 1])),
     ):
         doc = await dg.generate_resume(session, app, settings=_settings(), job=job)
 
@@ -322,7 +322,7 @@ async def test_generate_resume_page_fit_drops_lowest_priority(session):
 async def test_generate_resume_cost_cap_short_circuits(session):
     """Today's real ApiUsage spend ≥ cap → CostCapExceededError before any
     provider call (exercises the real spend query)."""
-    from services import document_generator as dg
+    from services import generation as dg
 
     app, job, _ = await _seed_world(session)
     session.add(
@@ -344,8 +344,8 @@ async def test_generate_resume_cost_cap_short_circuits(session):
 
     provider = FakeProvider()
     with (
-        patch("services.document_generator.get_provider", return_value=provider),
-        patch("services.document_generator.typst_compile", new=_fake_typst([1])),
+        patch("services.generation.get_provider", return_value=provider),
+        patch("services.generation.typst_compile", new=_fake_typst([1])),
         pytest.raises(dg.CostCapExceededError),
     ):
         await dg.generate_resume(
@@ -360,14 +360,14 @@ async def test_generate_resume_degrades_without_provider(session):
     """Provider hard-fails every call → rank falls back to profile order,
     refine falls back to the original text, summary falls back to the profile
     summary — the document still ships."""
-    from services import document_generator as dg
+    from services import generation as dg
 
     app, job, bullet_ids = await _seed_world(session)
     provider = FakeProvider(fail=True)
 
     with (
-        patch("services.document_generator.get_provider", return_value=provider),
-        patch("services.document_generator.typst_compile", new=_fake_typst([1])),
+        patch("services.generation.get_provider", return_value=provider),
+        patch("services.generation.typst_compile", new=_fake_typst([1])),
     ):
         doc = await dg.generate_resume(session, app, settings=_settings(), job=job)
 
@@ -391,7 +391,7 @@ async def test_generate_resume_degrades_without_provider(session):
 @pytest.mark.asyncio
 async def test_generate_resume_typst_error_marks_failed(session):
     """TypstError → docs_state FAILED + an error-carrying GeneratedDocument."""
-    from services import document_generator as dg
+    from services import generation as dg
 
     app, job, _ = await _seed_world(session)
     provider = FakeProvider()
@@ -400,8 +400,8 @@ async def test_generate_resume_typst_error_marks_failed(session):
         raise TypstError("missing font")
 
     with (
-        patch("services.document_generator.get_provider", return_value=provider),
-        patch("services.document_generator.typst_compile", new=broken_compile),
+        patch("services.generation.get_provider", return_value=provider),
+        patch("services.generation.typst_compile", new=broken_compile),
     ):
         doc = await dg.generate_resume(session, app, settings=_settings(), job=job)
 

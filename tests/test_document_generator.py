@@ -21,8 +21,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services import document_generator as dg
-from services.document_generator import (
+from services import generation as dg
+from services.generation import (
     CostCapExceededError,
     PreGenerateResult,
     answer_screeners,
@@ -194,7 +194,7 @@ async def test_cost_cap_short_circuits_before_llm_calls():
 
     fake_session = AsyncMock()
     with (
-        patch("services.document_generator._today_spend", new=AsyncMock(return_value=0.05)),
+        patch("services.generation._today_spend", new=AsyncMock(return_value=0.05)),
         pytest.raises(CostCapExceededError),
     ):
         await generate_resume(fake_session, application, settings=settings, job=_make_job())
@@ -207,12 +207,12 @@ async def test_cost_cap_pre_generate_returns_skipped_reason():
     fake_session = AsyncMock()
     with (
         patch(
-            "services.document_generator._today_spend",
+            "services.generation._today_spend",
             new=AsyncMock(return_value=0.05),
         ),
         # Job lookup not needed — cost_cap fires before reuse check.
         patch(
-            "services.document_generator.can_reuse_existing_resume",
+            "services.generation.can_reuse_existing_resume",
             new=AsyncMock(return_value=False),
         ),
         patch.object(fake_session, "exec", new=AsyncMock()) as exec_mock,
@@ -404,13 +404,13 @@ async def test_answer_screeners_drafts_custom_question_via_llm():
     questions = [{"question_text": "Why Stripe?", "question_type": "textarea"}]
 
     with (
-        patch("services.document_generator.get_provider", return_value=fake_provider),
+        patch("services.generation.get_provider", return_value=fake_provider),
         patch(
-            "services.document_generator.llm_tracker.tracked_call",
+            "services.generation.llm_tracker.tracked_call",
             new=fake_tracked_call,
         ),
         patch(
-            "services.document_generator._today_spend",
+            "services.generation._today_spend",
             new=AsyncMock(return_value=0.0),
         ),
     ):
@@ -532,18 +532,18 @@ async def test_generate_resume_honors_always_include(tmp_path):
         return SimpleNamespace(value={"selected_ids": [3]})
 
     with (
-        patch("services.document_generator._today_spend", new=AsyncMock(return_value=0.0)),
+        patch("services.generation._today_spend", new=AsyncMock(return_value=0.0)),
         patch(
-            "services.document_generator.load_profile_snapshot",
+            "services.generation.load_profile_snapshot",
             new=AsyncMock(return_value=snap),
         ),
         patch(
-            "services.document_generator._app_documents_dir",
+            "services.generation._app_documents_dir",
             return_value=out_dir,
         ),
-        patch("services.document_generator.get_provider"),
+        patch("services.generation.get_provider"),
         patch(
-            "services.document_generator.llm_tracker.tracked_call",
+            "services.generation.llm_tracker.tracked_call",
             new=fake_select_bullets,
         ),
     ):
@@ -655,13 +655,11 @@ async def test_generate_resume_fit_loop_converges_to_one_page(tmp_path):
         return SimpleNamespace(value={})
 
     with (
-        patch("services.document_generator._today_spend", new=AsyncMock(return_value=0.0)),
-        patch(
-            "services.document_generator.load_profile_snapshot", new=AsyncMock(return_value=snap)
-        ),
-        patch("services.document_generator._app_documents_dir", return_value=out_dir),
-        patch("services.document_generator.get_provider"),
-        patch("services.document_generator.llm_tracker.tracked_call", new=fake_llm),
+        patch("services.generation._today_spend", new=AsyncMock(return_value=0.0)),
+        patch("services.generation.load_profile_snapshot", new=AsyncMock(return_value=snap)),
+        patch("services.generation._app_documents_dir", return_value=out_dir),
+        patch("services.generation.get_provider"),
+        patch("services.generation.llm_tracker.tracked_call", new=fake_llm),
     ):
         doc = await generate_resume(fake_session, application, settings=settings, job=job)
 
@@ -683,9 +681,7 @@ async def test_generate_generic_resume_fits_one_page(tmp_path):
     fake_session = AsyncMock()
 
     out_pdf = tmp_path / "portfolio" / "resume.pdf"
-    with patch(
-        "services.document_generator.load_profile_snapshot", new=AsyncMock(return_value=snap)
-    ):
+    with patch("services.generation.load_profile_snapshot", new=AsyncMock(return_value=snap)):
         doc = await dg.generate_generic_resume(
             fake_session, user_id=1, settings=settings, output_path=out_pdf
         )
@@ -705,11 +701,11 @@ async def test_pre_generate_no_op_when_reuse_heuristic_holds():
     fake_session = AsyncMock()
     with (
         patch(
-            "services.document_generator._today_spend",
+            "services.generation._today_spend",
             new=AsyncMock(return_value=0.0),
         ),
         patch(
-            "services.document_generator.can_reuse_existing_resume",
+            "services.generation.can_reuse_existing_resume",
             new=AsyncMock(return_value=True),
         ),
     ):
@@ -732,23 +728,23 @@ async def test_pre_generate_force_bypasses_reuse_and_cost_cap():
     fake_session = AsyncMock()
     with (
         patch(
-            "services.document_generator._today_spend",
+            "services.generation._today_spend",
             new=AsyncMock(return_value=999.0),
         ),
         patch(
-            "services.document_generator.can_reuse_existing_resume",
+            "services.generation.can_reuse_existing_resume",
             new=AsyncMock(return_value=True),
         ),
         patch(
-            "services.document_generator.generate_resume",
+            "services.generation.generate_resume",
             new=AsyncMock(return_value=SimpleNamespace(kind="resume")),
         ),
         patch(
-            "services.document_generator.generate_cover_letter",
+            "services.generation.generate_cover_letter",
             new=AsyncMock(return_value=SimpleNamespace(kind="cover_letter")),
         ),
         patch(
-            "services.document_generator.answer_screeners",
+            "services.generation.answer_screeners",
             new=AsyncMock(return_value=[]),
         ),
     ):

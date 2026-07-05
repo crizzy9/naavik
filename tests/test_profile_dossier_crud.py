@@ -254,7 +254,7 @@ async def test_project_kind_split(session: AsyncSession):
 
 @pytest.mark.anyio
 async def test_snapshot_includes_certifications_and_open_source(session: AsyncSession):
-    from services import document_generator as dg
+    from services import generation as dg
 
     await _seed(session)
     await profile_service.add_certification(session, 1)
@@ -277,7 +277,7 @@ async def test_snapshot_includes_certifications_and_open_source(session: AsyncSe
 async def test_resume_summary_falls_back_to_summary_full(session: AsyncSession):
     """`summary_full` is the user-editable master; without a tailored summary
     or `summary_short` it must still reach the resume payload."""
-    from services import document_generator as dg
+    from services import generation as dg
 
     profile = await _seed(session)
     profile.summary_full = "Full editable summary."

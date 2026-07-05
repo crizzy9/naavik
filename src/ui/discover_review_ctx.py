@@ -80,7 +80,7 @@ async def _latest_resume_blob(
     """`bullet_selection` blob of the newest error-free RESUME document."""
     if application is None or application.id is None:
         return None
-    from services import document_generator as dg
+    from services import generation as dg
 
     doc = await dg._latest_error_free_doc(session, application.id, dg.GeneratedDocumentKind.RESUME)
     if doc is None or not doc.bullet_selection:

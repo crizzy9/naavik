@@ -41,7 +41,7 @@ from llm.prompts.orchestrate_refinement import (
     TOOL_DEFINITIONS,
     build_orchestrator_prompt,
 )
-from services import document_generator as dg
+from services import generation as dg
 from services import llm_tracker
 from services.ats_parser_fidelity import validate_parse_fidelity
 from services.detector_loop import run_detector_loop

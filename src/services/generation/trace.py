@@ -1,10 +1,9 @@
 """Generation-trace scaffolding (schema version, initial shape, persistence).
 
 Split out of the former services/bundle_generator.py in plan 91 Phase 4.4;
-behaviour unchanged. `dg` binds the services.document_generator facade,
-so `patch("services.document_generator.X")` (which mutates that shared
-module object) keeps intercepting; the premium pipeline calls the free
-composite through the bundle facade for the same reason.
+behaviour unchanged. Cross-seam calls route through the
+`services.generation` package surface at call time so
+`patch("services.generation.X")` keeps intercepting.
 """
 
 import logging

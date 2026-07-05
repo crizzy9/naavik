@@ -457,7 +457,7 @@ class PlaywrightFormFiller(ATSAdapter):
         return None
 
     async def _screenshot(self, page, application: Application, tag: str) -> str:
-        from services.document_generator import _app_documents_dir
+        from services.generation import _app_documents_dir
 
         out_dir = _app_documents_dir(application.id) / "auto_apply"
         out_dir.mkdir(parents=True, exist_ok=True)

@@ -74,7 +74,7 @@ async def test_free_tier_default_routes_to_free_path():
     app = _application()
 
     with patch(
-        "services.document_generator.is_cost_capped",
+        "services.generation.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await generate_bundle(session, app, settings=settings)
@@ -141,7 +141,7 @@ async def test_premium_cost_cap_pre_flight_falls_back_to_free_skipped():
     app = _application()
 
     with patch(
-        "services.document_generator.is_cost_capped",
+        "services.generation.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await _generate_bundle_premium(session, app, settings=settings)
@@ -213,7 +213,7 @@ async def test_premium_happy_path_calls_all_4_stages():
             AsyncMock(return_value=free_result),
         ),
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
@@ -317,7 +317,7 @@ async def test_premium_cost_cap_mid_flight_skips_remaining_stages():
             AsyncMock(return_value=free_result),
         ),
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             new=AsyncMock(side_effect=_cap),
         ),
         patch(
@@ -373,7 +373,7 @@ async def test_premium_inherits_free_trace_fields():
 
     # FREE skipped due to cap; we just verify the trace structure inheritance.
     with patch(
-        "services.document_generator.is_cost_capped",
+        "services.generation.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await _generate_bundle_premium(session, app, settings=settings)
@@ -468,7 +468,7 @@ async def test_premium_invokes_ensemble_score_and_records_trace_keys(tmp_path):
             AsyncMock(return_value=free_result),
         ),
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
@@ -574,7 +574,7 @@ async def test_premium_ensemble_below_threshold_records_warning_flag():
                 AsyncMock(return_value=free_result),
             ),
             patch(
-                "services.document_generator.is_cost_capped",
+                "services.generation.is_cost_capped",
                 AsyncMock(return_value=False),
             ),
             patch(
@@ -641,7 +641,7 @@ async def test_premium_ensemble_skipped_when_pdf_missing():
             AsyncMock(return_value=free_result),
         ),
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(

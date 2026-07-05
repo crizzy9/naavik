@@ -96,11 +96,11 @@ def _toggle(client, application, *, doc=_doc(), recompile_mock=None):
         ),
         patch("services.profile_service.owns_bullet", new=AsyncMock(return_value=True)),
         patch(
-            "services.document_generator._latest_error_free_doc",
+            "services.generation._latest_error_free_doc",
             new=AsyncMock(return_value=doc),
         ),
         patch(
-            "services.document_generator.recompile_resume_from_selection",
+            "services.generation.recompile_resume_from_selection",
             new=recompile_mock,
         ),
         patch(
@@ -153,7 +153,7 @@ def _recompile(client, *, result=None, side_effect=None):
             "services.settings_service.get_or_create",
             new=AsyncMock(return_value=SimpleNamespace()),
         ),
-        patch("services.document_generator.recompile_resume_from_selection", new=mock),
+        patch("services.generation.recompile_resume_from_selection", new=mock),
     ):
         r = client.post("/_fragments/apply/resume-pdf/11/recompile")
     return r, mock

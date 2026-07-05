@@ -102,7 +102,7 @@ async def test_bullet_selection_log_initialized_in_initial_trace() -> None:
     settings = _make_settings(daily_llm_cost_cap_usd=0.01)
 
     with patch(
-        "services.document_generator.is_cost_capped",
+        "services.generation.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await generate_bundle(session, application, settings=settings)
@@ -148,7 +148,7 @@ async def test_bullet_selection_log_populated_for_selected_bullets() -> None:
 
     with (
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
@@ -160,7 +160,7 @@ async def test_bullet_selection_log_populated_for_selected_bullets() -> None:
             AsyncMock(return_value=fake_hm),
         ),
         patch(
-            "services.document_generator.generate_resume",
+            "services.generation.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
@@ -171,11 +171,11 @@ async def test_bullet_selection_log_populated_for_selected_bullets() -> None:
             AsyncMock(return_value=(None, [])),
         ),
         patch(
-            "services.document_generator.generate_cover_letter",
+            "services.generation.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.document_generator.answer_screeners",
+            "services.generation.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
@@ -243,7 +243,7 @@ async def test_bullet_selection_log_dedupes_duplicate_ids() -> None:
 
     with (
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
@@ -255,7 +255,7 @@ async def test_bullet_selection_log_dedupes_duplicate_ids() -> None:
             AsyncMock(return_value=fake_hm),
         ),
         patch(
-            "services.document_generator.generate_resume",
+            "services.generation.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
@@ -263,11 +263,11 @@ async def test_bullet_selection_log_dedupes_duplicate_ids() -> None:
             AsyncMock(return_value=(None, [])),
         ),
         patch(
-            "services.document_generator.generate_cover_letter",
+            "services.generation.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.document_generator.answer_screeners",
+            "services.generation.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(

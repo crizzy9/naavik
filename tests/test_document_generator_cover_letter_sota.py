@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.document_generator import generate_cover_letter
+from services.generation import generate_cover_letter
 
 pytestmark = pytest.mark.uses_sample_data_shims
 
@@ -105,16 +105,16 @@ async def test_generate_cover_letter_uses_sota_prompt_name():
     )
 
     with (
-        patch("services.document_generator.is_cost_capped", AsyncMock(return_value=False)),
+        patch("services.generation.is_cost_capped", AsyncMock(return_value=False)),
         patch(
-            "services.document_generator.load_profile_snapshot",
+            "services.generation.load_profile_snapshot",
             AsyncMock(return_value=_make_snap()),
         ),
-        patch("services.document_generator.get_provider"),
-        patch("services.document_generator.llm_tracker.tracked_call", _capture_tracked),
-        patch("services.document_generator.typst_compile", AsyncMock(return_value=fake_compile)),
+        patch("services.generation.get_provider"),
+        patch("services.generation.llm_tracker.tracked_call", _capture_tracked),
+        patch("services.generation.typst_compile", AsyncMock(return_value=fake_compile)),
         patch(
-            "services.document_generator._app_documents_dir",
+            "services.generation._app_documents_dir",
             return_value=Path("/tmp/app42"),
         ),
     ):
@@ -166,16 +166,16 @@ async def test_generate_cover_letter_pain_letter_dispatch():
     fake_compile = SimpleNamespace(byte_size=1, page_count=1, compiled_at=datetime.now(UTC))
 
     with (
-        patch("services.document_generator.is_cost_capped", AsyncMock(return_value=False)),
+        patch("services.generation.is_cost_capped", AsyncMock(return_value=False)),
         patch(
-            "services.document_generator.load_profile_snapshot",
+            "services.generation.load_profile_snapshot",
             AsyncMock(return_value=_make_snap()),
         ),
-        patch("services.document_generator.get_provider"),
-        patch("services.document_generator.llm_tracker.tracked_call", _capture_tracked),
-        patch("services.document_generator.typst_compile", AsyncMock(return_value=fake_compile)),
+        patch("services.generation.get_provider"),
+        patch("services.generation.llm_tracker.tracked_call", _capture_tracked),
+        patch("services.generation.typst_compile", AsyncMock(return_value=fake_compile)),
         patch(
-            "services.document_generator._app_documents_dir",
+            "services.generation._app_documents_dir",
             return_value=Path("/tmp/app42"),
         ),
     ):
@@ -217,16 +217,16 @@ async def test_generate_cover_letter_settings_override_pins_format():
     fake_compile = SimpleNamespace(byte_size=1, page_count=1, compiled_at=datetime.now(UTC))
 
     with (
-        patch("services.document_generator.is_cost_capped", AsyncMock(return_value=False)),
+        patch("services.generation.is_cost_capped", AsyncMock(return_value=False)),
         patch(
-            "services.document_generator.load_profile_snapshot",
+            "services.generation.load_profile_snapshot",
             AsyncMock(return_value=_make_snap()),
         ),
-        patch("services.document_generator.get_provider"),
-        patch("services.document_generator.llm_tracker.tracked_call", _capture_tracked),
-        patch("services.document_generator.typst_compile", AsyncMock(return_value=fake_compile)),
+        patch("services.generation.get_provider"),
+        patch("services.generation.llm_tracker.tracked_call", _capture_tracked),
+        patch("services.generation.typst_compile", AsyncMock(return_value=fake_compile)),
         patch(
-            "services.document_generator._app_documents_dir",
+            "services.generation._app_documents_dir",
             return_value=Path("/tmp/app42"),
         ),
     ):

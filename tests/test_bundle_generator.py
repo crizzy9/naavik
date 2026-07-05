@@ -107,7 +107,7 @@ async def test_bundle_pre_flight_cost_cap_skips_all_stages():
     session.add = lambda x: None
 
     with patch(
-        "services.document_generator.is_cost_capped",
+        "services.generation.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await generate_bundle(session, application, settings=settings)
@@ -137,7 +137,7 @@ async def test_bundle_no_job_raises():
 
     with (
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         pytest.raises(ValueError, match="has no job context"),
@@ -176,7 +176,7 @@ async def test_bundle_full_happy_path():
 
     with (
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
@@ -188,7 +188,7 @@ async def test_bundle_full_happy_path():
             AsyncMock(return_value=fake_hm),
         ),
         patch(
-            "services.document_generator.generate_resume",
+            "services.generation.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
@@ -196,11 +196,11 @@ async def test_bundle_full_happy_path():
             AsyncMock(return_value=(None, [])),  # skip headline (no profile)
         ),
         patch(
-            "services.document_generator.generate_cover_letter",
+            "services.generation.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.document_generator.answer_screeners",
+            "services.generation.answer_screeners",
             AsyncMock(return_value=fake_screeners),
         ),
         patch(
@@ -263,7 +263,7 @@ async def test_bundle_cost_cap_mid_flight_after_corpus():
         return call_count["n"] >= 2
 
     with (
-        patch("services.document_generator.is_cost_capped", _capped),
+        patch("services.generation.is_cost_capped", _capped),
         patch(
             "services.generation.assemble_corpus",
             AsyncMock(return_value=_make_corpus()),
@@ -288,7 +288,7 @@ async def test_bundle_audit_trail_carries_voice_fingerprint():
     settings = _make_settings(daily_llm_cost_cap_usd=0.01)
 
     with patch(
-        "services.document_generator.is_cost_capped",
+        "services.generation.is_cost_capped",
         AsyncMock(return_value=True),
     ):
         result = await generate_bundle(session, application, settings=settings)

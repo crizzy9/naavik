@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from services import document_generator as dg
+from services import generation as dg
 
 
 def _bullet(bid: int, exp_id: int, text: str = "Did a thing with numbers 42%"):

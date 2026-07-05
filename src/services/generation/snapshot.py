@@ -1,6 +1,6 @@
 """Profile snapshot loader + resume-reuse heuristics.
 
-Split out of services/document_generator.py in plan 91 Phase 4.3;
+Split out of the former services/document_generator.py in plan 91 Phase 4.3;
 behaviour unchanged. Internal calls to patched seams go through `svc()`
 (the facade) so test interception keeps working.
 """

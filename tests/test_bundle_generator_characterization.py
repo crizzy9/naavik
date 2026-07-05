@@ -58,7 +58,7 @@ from models.enums import (
     VisaSponsorship,
 )
 from services import generation as bundle_generator
-from services.document_generator import question_fingerprint
+from services.generation import question_fingerprint
 from tests._sqlite import sqlite_session, strip_pg_checks
 from typst.compiler import CompileResult, TypstError
 
@@ -291,8 +291,8 @@ async def test_bundle_survives_typst_failure_with_partial_output(session):
     provider = FakeProvider()
 
     with (
-        patch("services.document_generator.get_provider", return_value=provider),
-        patch("services.document_generator.typst_compile", new=_typst_broken()),
+        patch("services.generation.get_provider", return_value=provider),
+        patch("services.generation.typst_compile", new=_typst_broken()),
     ):
         result = await bundle_generator.generate_bundle(session, app, settings=_settings(), job=job)
 
@@ -346,8 +346,8 @@ async def test_bundle_answer_screener_legs(session):
     provider = FakeProvider()
 
     with (
-        patch("services.document_generator.get_provider", return_value=provider),
-        patch("services.document_generator.typst_compile", new=_typst_ok()),
+        patch("services.generation.get_provider", return_value=provider),
+        patch("services.generation.typst_compile", new=_typst_ok()),
     ):
         result = await bundle_generator.generate_bundle(session, app, settings=_settings(), job=job)
 
@@ -395,8 +395,8 @@ async def test_bundle_cost_cap_preflight_skips_all_stages(session):
     provider = FakeProvider()
 
     with (
-        patch("services.document_generator.get_provider", return_value=provider),
-        patch("services.document_generator.typst_compile", new=_typst_ok()),
+        patch("services.generation.get_provider", return_value=provider),
+        patch("services.generation.typst_compile", new=_typst_ok()),
     ):
         result = await bundle_generator.generate_bundle(
             session, app, settings=_settings(daily_llm_cost_cap_usd=0.5), job=job

@@ -166,11 +166,11 @@ async def regenerate_generic_resume(
 ) -> Path | None:
     """Compile the generic resume PDF + cache at the canonical path.
 
-    `generate_fn` defaults to `document_generator.generate_generic_resume`;
+    `generate_fn` defaults to `generation.generate_generic_resume`;
     tests inject a stub. Returns the compiled path on success, None on failure.
     """
     if generate_fn is None:
-        from services.document_generator import (
+        from services.generation import (
             generate_generic_resume as generate_fn,  # type: ignore[no-redef]
         )
     out_path = portfolio_resume_path()

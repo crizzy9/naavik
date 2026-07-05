@@ -94,7 +94,7 @@ async def aggregate_costs() -> None:
 
 async def cleanup_stale_docs() -> None:
     """`admin.cleanup_stale_docs` — weekly Sun 03:00."""
-    from services.document_generator import cleanup_stale
+    from services.generation import cleanup_stale
 
     async with async_session() as session:
         n = await cleanup_stale(session)

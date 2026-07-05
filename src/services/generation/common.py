@@ -1,9 +1,9 @@
 """Shared foundations for the generation package (plan 91 Phase 4.3).
 
-`svc()` resolves the `services.document_generator` facade at call time so
+`svc()` resolves the `services.generation` package surface at call time so
 internal calls to patched seams (get_provider, typst_compile, llm_tracker,
 is_cost_capped, _today_spend, _app_documents_dir, load_profile_snapshot,
-_latest_error_free_doc) keep honoring `patch("services.document_generator.X")`
+_latest_error_free_doc) keep honoring `patch("services.generation.X")`
 and `monkeypatch.setattr(dg, ...)` exactly as they did pre-split.
 """
 
@@ -16,10 +16,12 @@ from config import settings as app_settings
 
 
 def svc():
-    """The `services.document_generator` facade, resolved at call time."""
-    from services import document_generator
+    """The `services.generation` package surface, resolved at call time —
+    keeps `patch("services.generation.X")` seams intercepting internal
+    calls (plan 91 Phase 4.3 / plan 92 teardown)."""
+    from services import generation
 
-    return document_generator
+    return generation
 
 
 # Documents directory — relative to DATA_DIR; per-app subdir.

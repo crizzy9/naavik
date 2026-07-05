@@ -5,7 +5,7 @@ drops below a target threshold OR a hard iteration cap is reached. At
 convergence (or final iter) optionally consults Originality.ai for a
 real-detector spot-check (hybrid per locked OQ-4).
 
-Budget-aware: probes `document_generator.is_cost_capped` between iterations
+Budget-aware: probes `generation.is_cost_capped` between iterations
 and exits early when today's spend approaches the daily cap. Honors locked
 OQ-3 (max_iters cap N=3 with budget-aware early exit).
 
@@ -26,7 +26,7 @@ from llm.prompts.detect_ai_likelihood import build_prompt as build_detect_prompt
 from llm.prompts.refine_to_human import RefinedText
 from llm.prompts.refine_to_human import build_prompt as build_refine_prompt
 from llm.providers.originality import score_text as originality_score_text
-from services import document_generator as dg
+from services import generation as dg
 from services import llm_tracker
 
 if TYPE_CHECKING:

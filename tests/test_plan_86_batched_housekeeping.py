@@ -721,7 +721,7 @@ def test_regenerate_button_template_uses_cover_letter_kind() -> None:
 def test_bullet_overrides_per_app_wins_over_model_field() -> None:
     """`_resolve_override` returns the per-app override when present."""
     from models.enums import BulletSelectionOverride
-    from services.document_generator import _resolve_override
+    from services.generation import _resolve_override
 
     bullet = SimpleNamespace(
         id=42,
@@ -734,7 +734,7 @@ def test_bullet_overrides_per_app_wins_over_model_field() -> None:
 def test_bullet_overrides_falls_back_to_model_field_when_unset() -> None:
     """`_resolve_override` reads model field when per-app dict has no entry."""
     from models.enums import BulletSelectionOverride
-    from services.document_generator import _resolve_override
+    from services.generation import _resolve_override
 
     bullet = SimpleNamespace(
         id=99,
@@ -751,7 +751,7 @@ def test_bullet_overrides_falls_back_to_model_field_when_unset() -> None:
 def test_bullet_overrides_empty_dict_uses_model_defaults() -> None:
     """Empty per-app dict is equivalent to no override; model column wins."""
     from models.enums import BulletSelectionOverride
-    from services.document_generator import _resolve_override
+    from services.generation import _resolve_override
 
     b_always = SimpleNamespace(id=1, selection_override=BulletSelectionOverride.ALWAYS_INCLUDE)
     b_never = SimpleNamespace(id=2, selection_override=BulletSelectionOverride.NEVER_INCLUDE)
@@ -764,7 +764,7 @@ def test_bullet_overrides_empty_dict_uses_model_defaults() -> None:
 
 def test_application_bullet_overrides_extracts_from_submission_artifacts() -> None:
     """`_application_bullet_overrides` reads `submission_artifacts['bullet_overrides']`."""
-    from services.document_generator import _application_bullet_overrides
+    from services.generation import _application_bullet_overrides
 
     app = SimpleNamespace(
         submission_artifacts={
@@ -787,7 +787,7 @@ def test_application_bullet_overrides_extracts_from_submission_artifacts() -> No
 def test_split_bullets_by_override_threads_application_overrides() -> None:
     """`_split_bullets_by_override` accepts + honors `application_overrides`."""
     from models.enums import BulletSelectionOverride
-    from services.document_generator import _split_bullets_by_override
+    from services.generation import _split_bullets_by_override
 
     b1 = SimpleNamespace(id=1, selection_override=None)
     b2 = SimpleNamespace(id=2, selection_override=BulletSelectionOverride.NEVER_INCLUDE)

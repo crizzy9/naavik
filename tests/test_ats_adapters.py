@@ -265,7 +265,7 @@ def test_identity_from_bundle_builds_urls():
 
 
 async def test_dry_run_fills_and_screenshots_without_submitting(tmp_path, monkeypatch):
-    from services import document_generator as dg
+    from services import generation as dg
 
     monkeypatch.setattr(dg, "_app_documents_dir", lambda app_id: tmp_path)
     adapter = GreenhouseAdapter()
@@ -284,7 +284,7 @@ async def test_dry_run_fills_and_screenshots_without_submitting(tmp_path, monkey
 
 
 async def test_real_submit_requires_confirmation_text(tmp_path, monkeypatch):
-    from services import document_generator as dg
+    from services import generation as dg
 
     monkeypatch.setattr(dg, "_app_documents_dir", lambda app_id: tmp_path)
     adapter = GreenhouseAdapter()
@@ -314,7 +314,7 @@ async def test_real_submit_requires_confirmation_text(tmp_path, monkeypatch):
 
 
 async def test_captcha_blocks_real_submit_but_not_dry_run(tmp_path, monkeypatch):
-    from services import document_generator as dg
+    from services import generation as dg
 
     monkeypatch.setattr(dg, "_app_documents_dir", lambda app_id: tmp_path)
     adapter = GreenhouseAdapter()
@@ -343,7 +343,7 @@ async def test_captcha_blocks_real_submit_but_not_dry_run(tmp_path, monkeypatch)
 
 
 async def test_login_wall_fails_honestly(tmp_path, monkeypatch):
-    from services import document_generator as dg
+    from services import generation as dg
 
     monkeypatch.setattr(dg, "_app_documents_dir", lambda app_id: tmp_path)
     adapter = AshbyAdapter()

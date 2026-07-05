@@ -1,11 +1,11 @@
 """Bundle orchestration — BundleResult + the FREE composite + cover-letter regen.
 
 Split out of the former services/bundle_generator.py in plan 91 Phase 4.4;
-behaviour unchanged. `dg` binds the
-services.document_generator module, so `patch("services.document_generator.X")`
-(which mutates that shared module object) keeps intercepting; the premium
-pipeline calls the free composite through the `services.generation` package
-surface for the same reason.
+behaviour unchanged. Cross-seam calls
+(`is_cost_capped`, `generate_resume`, `generate_cover_letter`,
+`answer_screeners`, `regen_bullet_for_variance`, and the bundle composites)
+route through the `services.generation` package surface at call time
+(`svc()` / `_bg()`) so `patch("services.generation.X")` keeps intercepting.
 """
 
 import logging
@@ -25,7 +25,6 @@ from models import (
     Profile,
     Settings,
 )
-from services import document_generator as dg
 from services.ai_tell_blocklist import effective_blocklist, strip_violations
 from services.ats_parser_fidelity import (
     ParseScoreReport,
@@ -33,6 +32,8 @@ from services.ats_parser_fidelity import (
 from services.burstiness_check import check_and_score
 from services.constitution import render_preamble
 from services.ethics_preflight import EthicsReport, preflight_check
+from services.generation.common import svc
+from services.generation.cost_cap import CostCapExceededError
 from services.generation.trace import (
     _initial_trace,
     _persist_trace,
@@ -140,7 +141,7 @@ async def regenerate_cover_letter(
     Short-circuits the full bundle pipeline: no resume regen, no bullet
     selection re-run, no screener answers. Re-runs corpus assembly +
     hiring manager extraction (cheap, needed for cover-letter inputs)
-    then `dg.generate_cover_letter`.
+    then `generate_cover_letter`.
 
     Returns a `BundleResult` carrying only the new cover letter; resume +
     screeners are left as None (caller handles via response shape — the
@@ -150,7 +151,7 @@ async def regenerate_cover_letter(
     result = BundleResult()
     user_id = application.user_id
 
-    if await dg.is_cost_capped(session, user_id, settings):
+    if await svc().is_cost_capped(session, user_id, settings):
         result.skipped_reason = "cost_cap_reached"
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
@@ -200,7 +201,7 @@ async def regenerate_cover_letter(
     matched_tags = list(breakdown.get("matched_tags") or [])
 
     try:
-        cover = await dg.generate_cover_letter(
+        cover = await svc().generate_cover_letter(
             session,
             application,
             settings=settings,
@@ -211,7 +212,7 @@ async def regenerate_cover_letter(
             matched_tags=matched_tags,
         )
         result.cover_letter = cover
-    except dg.CostCapExceededError:
+    except CostCapExceededError:
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
     return result
@@ -269,7 +270,7 @@ async def generate_bundle(
     user_id = application.user_id
 
     # Pre-flight cost-cap probe — if exhausted, bail without any LLM spend.
-    if await dg.is_cost_capped(session, user_id, settings):
+    if await svc().is_cost_capped(session, user_id, settings):
         result.skipped_reason = "cost_cap_reached"
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
@@ -328,7 +329,7 @@ async def generate_bundle(
         trace["constitution_present"] = cache_preamble
 
     # Stage 2 — hiring manager (regex first; LLM fallback only when JD ≥200)
-    if await dg.is_cost_capped(session, user_id, settings):
+    if await svc().is_cost_capped(session, user_id, settings):
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
         trace["degraded_mode"] = True
@@ -371,7 +372,7 @@ async def generate_bundle(
     matched_tags = list(breakdown.get("matched_tags") or [])
 
     # Stage 4 — resume (delegates to existing pipeline)
-    if await dg.is_cost_capped(session, user_id, settings):
+    if await svc().is_cost_capped(session, user_id, settings):
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
         trace["degraded_mode"] = True
@@ -381,7 +382,7 @@ async def generate_bundle(
         return result
 
     try:
-        resume = await dg.generate_resume(
+        resume = await svc().generate_resume(
             session,
             application,
             settings=settings,
@@ -420,7 +421,7 @@ async def generate_bundle(
                     }
                 )
             trace["bullet_selection_log"] = log_entries
-    except dg.CostCapExceededError:
+    except CostCapExceededError:
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
         trace["degraded_mode"] = True
@@ -430,7 +431,7 @@ async def generate_bundle(
         return result
 
     # Stage 5 — cover letter (delegates to existing pipeline; T15 keeps old path)
-    if await dg.is_cost_capped(session, user_id, settings):
+    if await svc().is_cost_capped(session, user_id, settings):
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
         trace["degraded_mode"] = True
@@ -448,7 +449,7 @@ async def generate_bundle(
                 "source": hiring_manager.source,
                 "confidence": hiring_manager.confidence,
             }
-        cover = await dg.generate_cover_letter(
+        cover = await svc().generate_cover_letter(
             session,
             application,
             settings=settings,
@@ -460,7 +461,7 @@ async def generate_bundle(
         )
         result.cover_letter = cover
         trace["stages_run"].append("cover_letter")
-    except dg.CostCapExceededError:
+    except CostCapExceededError:
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
         trace["degraded_mode"] = True
@@ -470,7 +471,7 @@ async def generate_bundle(
         return result
 
     # Stage 6 — screeners
-    if await dg.is_cost_capped(session, user_id, settings):
+    if await svc().is_cost_capped(session, user_id, settings):
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
         trace["degraded_mode"] = True
@@ -480,7 +481,7 @@ async def generate_bundle(
         return result
 
     try:
-        screeners = await dg.answer_screeners(
+        screeners = await svc().answer_screeners(
             session,
             application,
             settings=settings,
@@ -490,7 +491,7 @@ async def generate_bundle(
         )
         result.screeners = list(screeners)
         trace["stages_run"].append("screeners")
-    except dg.CostCapExceededError:
+    except CostCapExceededError:
         result.degraded = True
         result.degraded_reason = "cost_cap_reached"
         trace["degraded_mode"] = True
@@ -541,11 +542,11 @@ async def generate_bundle(
             if not report.passed and report.worst_offender_idx is not None:
                 trace["burstiness_std_pre_regen"] = report.std_dev
                 worst_idx = report.worst_offender_idx
-                if await dg.is_cost_capped(session, user_id, settings):
+                if await svc().is_cost_capped(session, user_id, settings):
                     trace["burstiness_regen_skipped_cost_cap"] = True
                 else:
                     worst_key = keys[worst_idx]
-                    regen_text = await dg.regen_bullet_for_variance(
+                    regen_text = await svc().regen_bullet_for_variance(
                         session=session,
                         settings=settings,
                         user_id=user_id,
@@ -656,7 +657,7 @@ async def generate_bundle(
         from services import generation_eval
 
         try:
-            run_judge = not await dg.is_cost_capped(session, user_id, settings)
+            run_judge = not await svc().is_cost_capped(session, user_id, settings)
             scorecard = await generation_eval.evaluate_bundle(
                 session, application, settings=settings, run_judge=run_judge
             )

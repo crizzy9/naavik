@@ -135,7 +135,7 @@ async def test_bundle_records_em_dash_violations_from_resume_bullets():
 
     with (
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
@@ -147,7 +147,7 @@ async def test_bundle_records_em_dash_violations_from_resume_bullets():
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.document_generator.generate_resume",
+            "services.generation.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
@@ -155,11 +155,11 @@ async def test_bundle_records_em_dash_violations_from_resume_bullets():
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.document_generator.generate_cover_letter",
+            "services.generation.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.document_generator.answer_screeners",
+            "services.generation.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
@@ -212,7 +212,7 @@ async def test_bundle_records_blocklist_violations_from_cover_letter_sections():
 
     with (
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
@@ -224,7 +224,7 @@ async def test_bundle_records_blocklist_violations_from_cover_letter_sections():
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.document_generator.generate_resume",
+            "services.generation.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
@@ -232,11 +232,11 @@ async def test_bundle_records_blocklist_violations_from_cover_letter_sections():
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.document_generator.generate_cover_letter",
+            "services.generation.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.document_generator.answer_screeners",
+            "services.generation.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(
@@ -286,7 +286,7 @@ async def test_bundle_no_violations_when_text_clean():
 
     with (
         patch(
-            "services.document_generator.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
         patch(
@@ -298,7 +298,7 @@ async def test_bundle_no_violations_when_text_clean():
             AsyncMock(return_value=None),
         ),
         patch(
-            "services.document_generator.generate_resume",
+            "services.generation.generate_resume",
             AsyncMock(return_value=fake_resume),
         ),
         patch(
@@ -306,11 +306,11 @@ async def test_bundle_no_violations_when_text_clean():
             AsyncMock(return_value=(fake_profile, [])),
         ),
         patch(
-            "services.document_generator.generate_cover_letter",
+            "services.generation.generate_cover_letter",
             AsyncMock(return_value=fake_cover),
         ),
         patch(
-            "services.document_generator.answer_screeners",
+            "services.generation.answer_screeners",
             AsyncMock(return_value=[]),
         ),
         patch(

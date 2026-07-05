@@ -159,7 +159,7 @@ def _usage_row(*, cost: float, at: datetime, succeeded: bool = True) -> ApiUsage
 async def test_today_spend_uses_utc_midnight_boundary(session):
     """Yesterday's spend (UTC) is excluded; today's counts — including
     failed-call rows, matching the canonical tracker accounting."""
-    from services import document_generator as dg
+    from services import generation as dg
 
     now = datetime.now(UTC)
     utc_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -182,7 +182,7 @@ async def test_today_spend_uses_utc_midnight_boundary(session):
 @pytest.mark.asyncio
 async def test_today_spend_delegates_to_canonical_tracker(session):
     """One accounting implementation: _today_spend == today_cost_usd."""
-    from services import document_generator as dg
+    from services import generation as dg
 
     now = datetime.now(UTC)
     session.add(_usage_row(cost=2.25, at=now))

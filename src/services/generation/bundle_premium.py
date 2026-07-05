@@ -1,11 +1,11 @@
 """PREMIUM-tier bundle pipeline (council/detector/critique/tool-loop stack).
 
 Split out of the former services/bundle_generator.py in plan 91 Phase 4.4;
-behaviour unchanged. `dg` binds the
-services.document_generator module, so `patch("services.document_generator.X")`
-(which mutates that shared module object) keeps intercepting; the premium
-pipeline calls the free composite through the `services.generation` package
-surface for the same reason.
+behaviour unchanged. Cross-seam calls
+(`is_cost_capped`, `generate_resume`, `generate_cover_letter`,
+`answer_screeners`, `regen_bullet_for_variance`, and the bundle composites)
+route through the `services.generation` package surface at call time
+(`svc()` / `_bg()`) so `patch("services.generation.X")` keeps intercepting.
 """
 
 import logging
@@ -22,7 +22,6 @@ from models import (
     Profile,
     Settings,
 )
-from services import document_generator as dg
 from services.ai_tell_blocklist import effective_blocklist
 from services.constitution import render_preamble
 from services.generation.bundle import (
@@ -30,6 +29,7 @@ from services.generation.bundle import (
     _extract_must_haves,
     _resume_text_for_coverage,
 )
+from services.generation.common import svc
 from services.generation.trace import _persist_trace
 
 log = logging.getLogger(__name__)
@@ -144,7 +144,7 @@ async def _generate_bundle_premium(
         log.debug("PREMIUM preamble rebuild failed (non-fatal): %s", exc)
 
     # PREMIUM stage 1 — bullet-selection council
-    if await dg.is_cost_capped(session, user_id, settings):
+    if await svc().is_cost_capped(session, user_id, settings):
         trace["premium_stages_skipped"].extend(["council", "detector", "critique", "tool_loop"])
         trace["degraded_mode"] = True
         trace["degraded_reason"] = "cost_cap_reached_premium"
@@ -197,7 +197,7 @@ async def _generate_bundle_premium(
         trace["premium_stages_skipped"].append("council")
 
     # PREMIUM stage 2 — detector loop on resume bullets + cover letter
-    if await dg.is_cost_capped(session, user_id, settings):
+    if await svc().is_cost_capped(session, user_id, settings):
         trace["premium_stages_skipped"].extend(["detector", "critique", "tool_loop"])
         trace["degraded_mode"] = True
         trace["degraded_reason"] = "cost_cap_reached_premium"
@@ -274,7 +274,7 @@ async def _generate_bundle_premium(
         trace["premium_stages_skipped"].append("ensemble")
 
     # PREMIUM stage 3 — critique council
-    if await dg.is_cost_capped(session, user_id, settings):
+    if await svc().is_cost_capped(session, user_id, settings):
         trace["premium_stages_skipped"].extend(["critique", "tool_loop"])
         trace["degraded_mode"] = True
         trace["degraded_reason"] = "cost_cap_reached_premium"
@@ -311,7 +311,7 @@ async def _generate_bundle_premium(
         trace["premium_stages_skipped"].append("critique")
 
     # PREMIUM stage 4 — tool-loop orchestrator
-    if await dg.is_cost_capped(session, user_id, settings):
+    if await svc().is_cost_capped(session, user_id, settings):
         trace["premium_stages_skipped"].append("tool_loop")
         trace["degraded_mode"] = True
         trace["degraded_reason"] = "cost_cap_reached_premium"

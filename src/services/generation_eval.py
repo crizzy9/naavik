@@ -229,7 +229,7 @@ async def evaluate_bundle(
     """Score the application's latest generated bundle. Returns the
     scorecard dict (also written into `generation_trace["eval_scorecard"]`
     by the caller), or None when nothing has been generated."""
-    from services import document_generator as dg
+    from services import generation as dg
 
     resume_doc = await dg._latest_error_free_doc(
         session, application.id, GeneratedDocumentKind.RESUME
