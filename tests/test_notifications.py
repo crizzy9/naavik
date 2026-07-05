@@ -4,7 +4,6 @@ Per plan 10 § E. Coverage:
 - Discord embed shape per event
 - Telegram outbound shape per event
 - Per-event toggle from Settings.notifications_enabled
-- Toast queue is push/consume-safe
 - High-score gate respects Settings.notify_threshold
 """
 
@@ -17,7 +16,6 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from services import notifications
 from services.notifications import (
     EVENT_APPLICATION_SENT,
     EVENT_AUTO_APPLY_FAILED,
@@ -32,7 +30,6 @@ from services.notifications import (
     notify_application_submitted,
     notify_new_high_score,
     notify_scrape_run_summary,
-    push_toast,
     send_discord,
     send_telegram,
 )
@@ -302,39 +299,18 @@ async def test_notify_new_high_score_dispatches_when_above_threshold():
     tg.assert_awaited()
 
 
-# ── Toast queue ────────────────────────────────────────────────────
-
-
 @pytest.mark.asyncio
-async def test_push_toast_enqueues_in_order():
-    # Drain the queue first.
-    while not notifications._TOAST_QUEUE.empty():
-        notifications._TOAST_QUEUE.get_nowait()
-
-    await push_toast("info", "first", "body1")
-    await push_toast("warning", "second", "body2")
-    assert notifications._TOAST_QUEUE.qsize() == 2
-    a = notifications._TOAST_QUEUE.get_nowait()
-    b = notifications._TOAST_QUEUE.get_nowait()
-    assert a.title == "first"
-    assert b.title == "second"
-    assert a.kind == "info"
-    assert b.kind == "warning"
-
-
-@pytest.mark.asyncio
-async def test_notify_application_submitted_pushes_toast():
+async def test_notify_application_submitted_fans_out_to_both_channels():
     s = _settings()
-    while not notifications._TOAST_QUEUE.empty():
-        notifications._TOAST_QUEUE.get_nowait()
+    discord = AsyncMock(return_value=True)
+    tg = AsyncMock(return_value=True)
     with (
-        patch("services.notifications.send_discord", new=AsyncMock(return_value=True)),
-        patch("services.notifications.send_telegram", new=AsyncMock(return_value=True)),
+        patch("services.notifications.send_discord", new=discord),
+        patch("services.notifications.send_telegram", new=tg),
     ):
         await notify_application_submitted(settings=s, application=_application())
-    toast = notifications._TOAST_QUEUE.get_nowait()
-    assert toast.kind == "success"
-    assert "Stripe" in toast.body
+    discord.assert_awaited_once()
+    tg.assert_awaited_once()
 
 
 # ── Per-scrape-run summary (plan 37 / 0.2.0.12) ─────────────────────────
@@ -436,13 +412,11 @@ def test_telegram_text_for_scrape_run_under_4096_bytes():
 
 @pytest.mark.asyncio
 async def test_notify_scrape_run_summary_no_op_when_no_new_jobs():
-    """run.new_jobs == 0 → no Discord, no Telegram, no toast."""
+    """run.new_jobs == 0 → no Discord, no Telegram."""
     s = _settings()
     run = _scrape_run(new_jobs=0)
     discord = AsyncMock(return_value=False)
     tg = AsyncMock(return_value=False)
-    while not notifications._TOAST_QUEUE.empty():
-        notifications._TOAST_QUEUE.get_nowait()
     with (
         patch("services.notifications._send_discord_scrape_run", new=discord),
         patch("services.notifications._send_telegram_scrape_run", new=tg),
@@ -450,16 +424,13 @@ async def test_notify_scrape_run_summary_no_op_when_no_new_jobs():
         await notify_scrape_run_summary(settings=s, run=run, top_jobs=[])
     discord.assert_not_awaited()
     tg.assert_not_awaited()
-    assert notifications._TOAST_QUEUE.empty()
 
 
 @pytest.mark.asyncio
-async def test_notify_scrape_run_summary_fans_out_to_all_three_channels():
-    """new_jobs > 0 → Discord + Telegram + toast all fire."""
+async def test_notify_scrape_run_summary_fans_out_to_both_channels():
+    """new_jobs > 0 → Discord + Telegram both fire."""
     s = _settings()
     run = _scrape_run(new_jobs=5)
-    while not notifications._TOAST_QUEUE.empty():
-        notifications._TOAST_QUEUE.get_nowait()
     discord = AsyncMock(return_value=True)
     tg = AsyncMock(return_value=True)
     with (
@@ -469,18 +440,13 @@ async def test_notify_scrape_run_summary_fans_out_to_all_three_channels():
         await notify_scrape_run_summary(settings=s, run=run, top_jobs=_top_jobs(3))
     discord.assert_awaited_once()
     tg.assert_awaited_once()
-    toast = notifications._TOAST_QUEUE.get_nowait()
-    assert toast.kind == "info"
-    assert "linkedin" in toast.title
 
 
 @pytest.mark.asyncio
 async def test_notify_scrape_run_summary_survives_one_channel_failure():
-    """return_exceptions=True → a Discord raise doesn't cancel Telegram + toast."""
+    """return_exceptions=True → a Discord raise doesn't cancel Telegram."""
     s = _settings()
     run = _scrape_run(new_jobs=5)
-    while not notifications._TOAST_QUEUE.empty():
-        notifications._TOAST_QUEUE.get_nowait()
 
     async def _boom(**_kw):
         raise RuntimeError("discord exploded")
@@ -493,9 +459,6 @@ async def test_notify_scrape_run_summary_survives_one_channel_failure():
         # The whole gather must not raise.
         await notify_scrape_run_summary(settings=s, run=run, top_jobs=_top_jobs(3))
     tg.assert_awaited_once()
-    # Toast still fires regardless.
-    toast = notifications._TOAST_QUEUE.get_nowait()
-    assert toast.kind == "info"
 
 
 @pytest.mark.asyncio

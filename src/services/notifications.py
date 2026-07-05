@@ -1,4 +1,4 @@
-"""Notifications — Discord webhook + Telegram outbound + in-app toast.
+"""Notifications — Discord webhook + Telegram outbound.
 
 Per BACKEND.md § L.3, § L.4, § H.1 + plan 10 § C.5.
 
@@ -7,16 +7,17 @@ Plan 26 (0.2.0.01): credentials moved from the encrypted vault to env vars
 (`DISCORD_WEBHOOK_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) consumed
 by pydantic-settings in `src/config.py`. Per-event toggles still live in
 `Settings.notifications_enabled` (JSON dict).
+
+In-app toasts are NOT this module's job: live toasts ride the
+`HX-Trigger: {"showToast": ...}` response header (wired in `base.js`), which
+only exists on request/response cycles — these emitters run in background
+jobs with no response to attach to.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -38,44 +39,6 @@ EVENT_SCRAPE_RUN_NEW_JOBS = "scrape_run_new_jobs"
 
 # Plan 37 / 0.2.0.12: max top-jobs links inlined into the summary embed/text.
 _SCRAPE_RUN_TOP_N = 5
-
-
-# ── Toast / SSE in-app routing ─────────────────────────────────────────
-
-
-@dataclass(slots=True)
-class Toast:
-    kind: str  # info / success / warning / error
-    title: str
-    body: str | None = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
-
-
-# Process-wide queue. SSE handler at /_fragments/toast subscribes.
-_TOAST_QUEUE: asyncio.Queue[Toast] = asyncio.Queue(maxsize=128)
-
-
-async def push_toast(kind: str, title: str, body: str | None = None) -> None:
-    try:
-        _TOAST_QUEUE.put_nowait(Toast(kind=kind, title=title, body=body))
-    except asyncio.QueueFull:
-        log.warning("toast queue full; dropping notification %r", title)
-
-
-async def stream_toasts() -> AsyncIterator[str]:
-    """SSE generator — yields a chunk per toast.
-
-    Caller wires this to /_fragments/toast (consumed by #toast-region OOB swap).
-    """
-    while True:
-        toast = await _TOAST_QUEUE.get()
-        payload = {
-            "kind": toast.kind,
-            "title": toast.title,
-            "body": toast.body or "",
-            "ts": toast.timestamp.isoformat(),
-        }
-        yield f"event: toast\ndata: {json.dumps(payload)}\n\n"
 
 
 # ── Test message (Settings · Notifications "Test" button) ───────────────
@@ -347,7 +310,6 @@ async def notify_new_high_score(
         send_telegram(
             settings=settings, event=EVENT_NEW_HIGH_SCORE, job=job, http_client=http_client
         ),
-        push_toast("info", "New match", f"{job.role} @ {job.company} (score {job.score:.2f})"),
         return_exceptions=True,
     )
 
@@ -371,11 +333,6 @@ async def notify_application_submitted(
             application=application,
             http_client=http_client,
         ),
-        push_toast(
-            "success",
-            "Application submitted",
-            f"{application.role} @ {application.company}",
-        ),
         return_exceptions=True,
     )
 
@@ -387,7 +344,7 @@ async def notify_priority_email(
     classification: str,
     http_client: httpx.AsyncClient | None = None,
 ) -> None:
-    """Fan a classified email out to Discord + Telegram + in-app toast.
+    """Fan a classified email out to Discord + Telegram.
 
     Plan 90 / 0.5.0.04. Dispatches by classification onto the existing
     `EVENT_INTERVIEW_SCHEDULED` / `EVENT_OFFER_RECEIVED` / `EVENT_REJECTION`
@@ -407,23 +364,12 @@ async def notify_priority_email(
 
     if cls in (EmailClassification.INTERVIEW_REQUEST, EmailClassification.ASSESSMENT):
         event = EVENT_INTERVIEW_SCHEDULED
-        toast_kind = "info"
-        toast_title = "Interview request"
     elif cls == EmailClassification.OFFER:
         event = EVENT_OFFER_RECEIVED
-        toast_kind = "success"
-        toast_title = "Offer received"
     elif cls == EmailClassification.REJECTION:
         event = EVENT_REJECTION
-        toast_kind = "warning"
-        toast_title = "Rejection received"
     else:
-        # FOLLOW_UP / OTHER — informational toast only.
-        await push_toast(
-            "info",
-            "Email classified",
-            f"{cls.value} · {application.company}",
-        )
+        # FOLLOW_UP / OTHER — not worth an outbound ping.
         return
 
     await asyncio.gather(
@@ -438,11 +384,6 @@ async def notify_priority_email(
             event=event,
             application=application,
             http_client=http_client,
-        ),
-        push_toast(
-            toast_kind,
-            toast_title,
-            f"{application.role} @ {application.company}",
         ),
         return_exceptions=True,
     )
@@ -637,7 +578,7 @@ async def notify_scrape_run_summary(
     top_jobs: list[Job],
     http_client: httpx.AsyncClient | None = None,
 ) -> None:
-    """Fan-out one JobScrapeRun summary to Discord + Telegram + in-app toast.
+    """Fan-out one JobScrapeRun summary to Discord + Telegram.
 
     No-ops when `run.new_jobs <= 0` so the caller can invoke unconditionally
     after lifecycle finalize. Per-channel mutes + missing-env cases handled
@@ -652,11 +593,6 @@ async def notify_scrape_run_summary(
         ),
         _send_telegram_scrape_run(
             settings=settings, run=run, top_jobs=top_jobs, http_client=http_client
-        ),
-        push_toast(
-            "info",
-            f"{run.new_jobs} new jobs from {run.source.value}",
-            f"{run.listings_returned} listings · {run.updated_jobs} updated",
         ),
         return_exceptions=True,
     )
