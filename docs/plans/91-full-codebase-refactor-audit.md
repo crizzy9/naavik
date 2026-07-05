@@ -1,5 +1,5 @@
 ---
-Status: AWAITING REVIEW
+Status: APPROVED (2026-07-04 — owner said "go for it", defaults accepted)
 Type: execution
 Authored: 2026-07-04
 Last updated: 2026-07-04
@@ -311,15 +311,15 @@ Gate; migration steps additionally get the chain-replay note (leave
 
 ## Approval checklist (tick to approve; plan-acceptance gate, not implementation tracking)
 
-- [ ] Phase sequence and safety-net-first ordering approved.
-- [ ] Q1 tenancy model decided (single-tenant vs multi-user).
-- [ ] Q2 data-model appetite decided (defer 7.5 vs do now).
-- [ ] Q3 scaffolding-module dispositions confirmed.
-- [ ] Q4 toast SSE disposition confirmed.
-- [ ] Q5 fallback-provider disposition confirmed.
-- [ ] Q6 RAS→RPC scope (in/out) confirmed.
-- [ ] Green-gate definition (ruff via nix + pytest + Playwright + net-zero data + process shutdown) accepted.
-- [ ] OK to begin Phase 0 (tests-only, zero `src/` behaviour change) on approval.
+- [x] Phase sequence and safety-net-first ordering approved.
+- [x] Q1 tenancy model → **single-tenant explicit** (recommended default accepted).
+- [x] Q2 data-model appetite → **defer 7.5** to a follow-up plan (7.1–7.4 this round).
+- [x] Q3 scaffolding → delete `recruiter_optimization`+`tailor_headline`; keep `ats_generic_form_fill`, `app_event_payloads`, `sample.py`; sweep+delete confirmed-dead apply-preview cluster.
+- [x] Q4 toast SSE → **delete** the unrouted queue path (live toasts via `HX-Trigger`).
+- [x] Q5 fallback-provider → **wire** it through `tracked_call`.
+- [x] Q6 RAS→RPC convergence → **out of scope** (follow-up plan).
+- [x] Green-gate definition (ruff via nix + pytest + Playwright + net-zero data + process shutdown) accepted.
+- [x] Phase 0 (tests-only, zero `src/` behaviour change) authorized and in progress.
 
 ---
 
