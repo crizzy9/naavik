@@ -147,9 +147,11 @@ async def test_fetch_propagates_transport_errors_to_caller(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectTimeout("slow upstream")
 
-    with patch("httpx.AsyncClient", new=_mock_client_factory(handler)):
-        with pytest.raises(httpx.ConnectTimeout):
-            await resolver._fetch("https://api.lever.co/x")
+    with (
+        patch("httpx.AsyncClient", new=_mock_client_factory(handler)),
+        pytest.raises(httpx.ConnectTimeout),
+    ):
+        await resolver._fetch("https://api.lever.co/x")
 
 
 # ── _redirect_probe ─────────────────────────────────────────────────────
