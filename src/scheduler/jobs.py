@@ -440,7 +440,7 @@ async def _maybe_alert_linkedin_session() -> None:
     next "ok" recording, re-arming the alert for the next expiry.
     """
     from models import Settings
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
     from services.notify import notify_admin_error
 
     health = linkedin_resolver.read_session_health()

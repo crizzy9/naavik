@@ -51,12 +51,12 @@ log = logging.getLogger(__name__)
 
 
 def _li():
-    """The `services.linkedin_resolver` facade, resolved at call time —
-    keeps `patch.object(linkedin_resolver, "read_session_health")` seams
-    intercepting internal calls (plan 91 Phase 4.5)."""
-    from services import linkedin_resolver
+    """The `services.resolution` package surface, resolved at call time —
+    keeps `patch.object(resolution, "read_session_health")` seams
+    intercepting internal calls (plan 91 Phase 4.5 / plan 92 teardown)."""
+    from services import resolution
 
-    return linkedin_resolver
+    return resolution
 
 
 # ── Tier A: guest-HTML parsing (pure) ────────────────────────────────────

@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     # (LinkedIn / Indeed / Generic); these slots are reserved + read at
     # adapter-instantiation time (NOT once at startup).
     workday_login_token: str | None = None
-    # Also the bootstrap `li_at` for `services/linkedin_resolver.py` — it seeds
+    # Also the bootstrap `li_at` for `services/resolution/linkedin.py` — it seeds
     # the persistent Chromium profile under DATA_DIR/linkedin/profile so the
     # authenticated apply-target resolver (Tier B) can read the real offsite
     # URL. Refresh via `scripts/linkedin_login.py`.

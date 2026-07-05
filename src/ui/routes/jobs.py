@@ -218,7 +218,8 @@ async def post_job_resolve_apply(
     Returns the refreshed card fragment.
     """
     job = await _job_or_404(session, job_id, _effective_user_id(user))
-    from services import application_service, apply_site_resolver, jd_enrichment, linkedin_resolver
+    from services import application_service, apply_site_resolver, jd_enrichment
+    from services import resolution as linkedin_resolver
 
     auth = (
         linkedin_resolver.AuthContext(remaining=1) if linkedin_resolver.auth_available() else None

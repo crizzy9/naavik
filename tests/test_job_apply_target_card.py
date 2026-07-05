@@ -157,7 +157,8 @@ def test_card_renders_exhausted_state_with_paste_form(client, monkeypatch):
 
 
 def test_re_resolve_stamps_and_returns_fragment(client, monkeypatch):
-    from services import application_service, apply_site_resolver, linkedin_resolver
+    from services import application_service, apply_site_resolver
+    from services import resolution as linkedin_resolver
 
     job = _fake_job(apply_kind="external", apply_resolved_via="unresolved")
     _install_job(monkeypatch, job)
@@ -184,7 +185,8 @@ def test_re_resolve_stamps_and_returns_fragment(client, monkeypatch):
 
 
 def test_re_resolve_failure_counts_attempt(client, monkeypatch):
-    from services import apply_site_resolver, linkedin_resolver
+    from services import apply_site_resolver
+    from services import resolution as linkedin_resolver
 
     job = _fake_job(apply_kind="external", apply_resolved_via="unresolved")
     _install_job(monkeypatch, job)

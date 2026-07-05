@@ -21,7 +21,7 @@ import pytest  # noqa: E402
 
 def _wire(monkeypatch, *, health, settings_row=...):
     from scheduler import jobs as sj
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     monkeypatch.setattr(linkedin_resolver, "read_session_health", lambda: health)
     latched: list[str] = []

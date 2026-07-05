@@ -285,7 +285,8 @@ async def _ctx_for_tab(
         ctx["ats_credential_indicators"] = env_secrets.ats_credential_indicators()
         ctx["cost_projection"] = await _build_generation_cost_projection(session, user_id=user_id)
         # Apply-target resolution ops — Tier-B session health + pipeline counts.
-        from services import apply_site_resolver, linkedin_resolver
+        from services import apply_site_resolver
+        from services import resolution as linkedin_resolver
 
         # hasattr guard: legacy test fixtures inject minimal session fakes
         # without `.exec`; the card renders health-only when stats are absent.

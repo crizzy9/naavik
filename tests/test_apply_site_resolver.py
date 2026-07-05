@@ -133,7 +133,7 @@ async def test_resolve_direct_ats_url_short_circuits():
 
 
 def _guest(*, is_offsite, company_slug=None, description_text=None, posting_title=None):
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     return linkedin_resolver.GuestDetail(
         is_offsite=is_offsite,
@@ -254,7 +254,7 @@ async def test_resolve_linkedin_offsite_unresolved_is_external():
 @pytest.mark.asyncio
 async def test_resolve_linkedin_ambiguous_discovery_prefers_auth():
     """Two near-identical postings tie → defer to the authoritative auth path."""
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     job = _job(company="Catapult")
     auth = linkedin_resolver.AuthContext(remaining=1)
@@ -312,7 +312,7 @@ async def test_resolve_linkedin_ambiguous_discovery_best_effort_without_auth():
 @pytest.mark.asyncio
 async def test_resolve_linkedin_auth_fallback_when_discovery_misses():
     """Discovery misses → the authenticated resolver supplies the offsite URL."""
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     job = _job(company="Weirdco")
     auth = linkedin_resolver.AuthContext(remaining=1)
@@ -830,7 +830,7 @@ async def test_normalize_apply_url_ssrf_blocked_hop_stops():
 @pytest.mark.asyncio
 async def test_resolve_linkedin_auth_company_site_normalizes_to_ats():
     """A Tier-B careers-page URL that redirects onto Workday upgrades the kind."""
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     job = _job()
     guest = linkedin_resolver.GuestDetail(

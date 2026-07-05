@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 
 async def _fetch_guest_detail(job: Job):
     """Fetch + parse the LinkedIn guest job-detail page (offsite marker + slug + JD)."""
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     detail_url = (job.raw_meta or {}).get("detail_endpoint") or (
         f"{_LINKEDIN_DETAIL_BASE}{job.external_id}"
@@ -63,7 +63,7 @@ async def _resolve_linkedin(
     auth,
 ) -> ResolvedApply:
     """Two-tier LinkedIn resolution: guest-slug discovery, then authenticated."""
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     guest = await svc()._fetch_guest_detail(job)
     if guest.is_offsite is False:
@@ -281,7 +281,7 @@ async def resolve_pending(
 
     # Authenticated LinkedIn fallback — only when a session is configured, and
     # budgeted so one sweep never opens a long train of authenticated tabs.
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     auth = (
         linkedin_resolver.AuthContext(remaining=3, jitter=jitter)

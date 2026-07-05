@@ -28,7 +28,7 @@ def client() -> TestClient:
 
 
 def test_card_renders_not_logged_in_with_instructions(client, monkeypatch):
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     monkeypatch.setattr(
         linkedin_resolver,
@@ -45,7 +45,7 @@ def test_card_renders_not_logged_in_with_instructions(client, monkeypatch):
 
 
 def test_card_renders_ok_without_instructions(client, monkeypatch):
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     monkeypatch.setattr(
         linkedin_resolver,
@@ -61,7 +61,7 @@ def test_card_renders_ok_without_instructions(client, monkeypatch):
 
 
 def test_card_renders_not_configured_state(client, monkeypatch):
-    from services import linkedin_resolver
+    from services import resolution as linkedin_resolver
 
     monkeypatch.setattr(linkedin_resolver, "read_session_health", lambda: None)
     monkeypatch.setattr(linkedin_resolver, "auth_available", lambda: False)
