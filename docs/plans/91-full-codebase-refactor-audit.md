@@ -298,12 +298,20 @@ Gate; migration steps additionally get the chain-replay note (leave
   ownership checks is deferred to the Q6 RAS→RPC follow-up plan — it
   touches the same ~150 routes, and each conversion risks changing
   status-code semantics that plan will re-audit anyway.
+  **[RESOLVED 2026-07-05 by plan 94 slice A]** — shared `owned_*_or_404`
+  helpers in `api/deps.py`; per-site semantics preserved exactly (incl. the
+  soft-delete-gate inconsistency, recorded as a Q6 finding).
 - **7.3 / 7.4 (schema half)** deferred to the same follow-up data-model
   plan as 7.5: closed-vocab CHECKs/enums and `String(N)` shrinks need a
   per-column vocabulary/length audit against live data first — a blind
   CHECK reintroduces the "invalid input value" crash class 1.5 fixed.
   The 422-hardening half of 7.4 rides along. 7.1 (indexes) and 7.2
   (Numeric money) shipped as 0038/0039.
+  **[RESOLVED 2026-07-05 by plan 94 slices B+C]** — 7.4 edge validation
+  (typed outreach bodies + profile email guard) and 7.3 closed-vocab CHECKs
+  (migration 0040, eight columns, live-data audited). 7.5 remains deferred
+  per Open Q2; `docs/plans/94-plan91-deferred-followups.md` re-records the
+  4.4/4.6/5.3 skips with post-teardown rationale.
 - **8 facade teardown** deferred — its precondition (importers flipped)
   was deliberately not met, see the 4.x deviation. Teardown belongs with
   the test-path re-plumbing in the follow-up plan.

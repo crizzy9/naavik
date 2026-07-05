@@ -1,7 +1,7 @@
 # Plan 94 — plan-91 deferred follow-ups: ownership rollout + data-model hardening
 
 - **Type:** execution
-- **Status:** DRAFT
+- **Status:** EXECUTED (2026-07-05)
 - **Predecessor:** `docs/plans/91-full-codebase-refactor-audit.md` (its § Deviations
   deferred 5.6, 7.3, 7.4-schema-half; Open Q2 locked "defer 7.5, do 7.1–7.4 this
   round" — 7.1/7.2 shipped as 0038/0039). Plans 92–93 finished the layout, so the
@@ -81,4 +81,23 @@ Postgres. Final: live Playwright owner pass, net-zero data, teardown (leave
 
 ## Deviations from plan
 
-(recorded during execution)
+- **Slice A:** `test_score_rescore_route` fed the route's raw `select(Job)` via a
+  fake session; the route now reads through `services.jobs.get_job` (the raw
+  route-level select also violated the no-raw-SQL-in-routes convention), so the
+  test stubs that seam instead. Everything else was drop-in.
+- **Slice B narrowed to the real crash sites:** the Settings PUTs were already
+  hardened by 0.7.0.48; the contacts POST/PUT bodies are non-persisting stubs
+  (bounding their echo changes a pinned stub response for zero integrity gain);
+  `Project.kind` was already service-validated. What shipped: typed outreach
+  draft/send bodies (bare `int()` 500s → 422) + the profile email edge guard
+  (VARCHAR(320) overflow / missing `@` → 422 fragment).
+- **Slice C:** the model-level CHECKs immediately flushed six drifted test
+  fixtures (`url_type` values `"direct"`, `"job"`, `"canonical"` that no writer
+  produces) — exactly the drift class the constraints exist to catch. The
+  sqlite negative test needed the suite's `@compiles(ARRAY/JSONB, "sqlite")`
+  shim pattern. `OutreachMessage.channel` vocab includes both `linkedin_dm`
+  (writer default) and `linkedin`/`email` (fixture/seed values) — the
+  vocabulary is closed but not yet canonicalized; flagged for whichever plan
+  next touches outreach.
+- **Settings.* CHECKs skipped** as planned (single-row-per-user config table,
+  service-layer validation).
