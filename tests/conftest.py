@@ -90,6 +90,46 @@ def _disable_background_generation():
 
 
 @pytest.fixture(autouse=True)
+def _restore_sample_data(request):
+    """Snapshot/restore the mutable `sample_data` collections around each
+    shim-tier test (plan 91 Phase 0.4).
+
+    The fake service helpers (`sd._append_manual_application`, `_create_draft`,
+    `_apply_status_override`, `_record_screener_answer`, queue-state flips, …)
+    mutate module-level lists **in place**, so without a restore the pass/fail
+    of one test can depend on rows another test left behind. A handful of files
+    hand-rolled this (`test_stub_endpoints.py`, `test_draft_lifecycle.py`);
+    this generalizes it to every shim-tier test.
+
+    Deep-copies capture in-place row-field edits (status/queue_state/answer),
+    not just list membership. Gated on the marker — the sqlite/live tiers use
+    real sessions and never touch `sample_data` mutably, so they skip the cost.
+    A file's own restore fixture nests harmlessly inside this one.
+    """
+    if not list(request.node.iter_markers("uses_sample_data_shims")):
+        yield
+        return
+    from db import sample_data as sd
+
+    _MUTABLE = (
+        "APPLICATIONS",
+        "JOBS",
+        "OUTREACH_MESSAGES",
+        "APP_EVENTS",
+        "GENERATED_DOCUMENTS",
+        "SCREENER_ANSWERS",
+        "BULLETS",
+        "CONTACTS",
+    )
+    snapshots = {name: [row.model_copy(deep=True) for row in getattr(sd, name)] for name in _MUTABLE}
+    yield
+    for name, snapshot in snapshots.items():
+        collection = getattr(sd, name)
+        collection.clear()
+        collection.extend(snapshot)
+
+
+@pytest.fixture(autouse=True)
 def _patch_services_to_sample_data(request, monkeypatch):
     """Make route → service-layer reads transparent to the legacy fixtures.
 
@@ -754,3 +794,53 @@ def _patch_services_to_sample_data(request, monkeypatch):
     yield
 
     app.dependency_overrides.pop(get_session, None)
+
+
+# ── Shared client / auth / CSRF fixtures (plan 91 Phase 0.3) ──────────────
+# 79 test files self-roll `TestClient` + fake-session + CSRF boilerplate. These
+# provide one shared trio so route restructuring is a single edit. A module
+# that defines its own same-name fixture (e.g. `client`) overrides these — the
+# existing self-rolled fixtures keep winning locally, so nothing breaks.
+
+_SHARED_CSRF_TOKEN = "csrf-shared-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+
+@pytest.fixture
+def csrf_token() -> str:
+    return _SHARED_CSRF_TOKEN
+
+
+@pytest.fixture
+def csrf_headers() -> dict[str, str]:
+    """`X-CSRF-Token` header matching `auth_cookies` for double-submit POSTs.
+    HTMX injects this globally in prod (`base.html`); tests thread it."""
+    return {"X-CSRF-Token": _SHARED_CSRF_TOKEN}
+
+
+@pytest.fixture
+def auth_cookies() -> dict[str, str]:
+    """Debug fake-session cookie + matching CSRF cookie. `require_authed_session`
+    accepts `fake-1` only under `NAAVIK_DEBUG=1` (set in this conftest)."""
+    return {"naavik_session": "fake-1", "naavik_csrf": _SHARED_CSRF_TOKEN}
+
+
+@pytest.fixture
+def client():
+    """Plain `TestClient` — no auth cookies. Use for unauthenticated-path
+    assertions or seed cookies yourself."""
+    from fastapi.testclient import TestClient
+    from main import app
+
+    return TestClient(app, raise_server_exceptions=True)
+
+
+@pytest.fixture
+def authed_client(auth_cookies):
+    """`TestClient` pre-seeded with the debug fake-session + CSRF cookies — the
+    dominant pattern across the suite."""
+    from fastapi.testclient import TestClient
+    from main import app
+
+    test_client = TestClient(app, raise_server_exceptions=True)
+    test_client.cookies.update(auth_cookies)
+    return test_client
