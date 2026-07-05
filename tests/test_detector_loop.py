@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.detector_loop import (
+from services.generation.detector_loop import (
     DEFAULT_TARGET_CONFIDENCE,
     DetectorReport,
     run_detector_loop,
@@ -50,7 +50,7 @@ def _refined(rewritten: str, changes: list[str] | None = None):
 async def test_empty_input_short_circuits():
     """Empty text returns immediately; no LLM call fires."""
     settings = _settings()
-    with patch("services.detector_loop.get_provider"):
+    with patch("services.generation.detector_loop.get_provider"):
         report = await run_detector_loop(
             "",
             session=None,
@@ -76,17 +76,17 @@ async def test_iter_0_convergence_no_refine():
     originality_call = AsyncMock(return_value=0.05)
 
     with (
-        patch("services.detector_loop.get_provider", return_value=fake_provider),
+        patch("services.generation.detector_loop.get_provider", return_value=fake_provider),
         patch(
-            "services.detector_loop.llm_tracker.tracked_call",
+            "services.generation.detector_loop.llm_tracker.tracked_call",
             detect_call,
         ),
         patch(
-            "services.detector_loop.originality_score_text",
+            "services.generation.detector_loop.originality_score_text",
             originality_call,
         ),
         patch(
-            "services.detector_loop.dg.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
     ):
@@ -130,14 +130,14 @@ async def test_refine_then_converge_calls_originality():
         raise AssertionError(f"unexpected prompt: {prompt_name}")
 
     with (
-        patch("services.detector_loop.get_provider", return_value=fake_provider),
-        patch("services.detector_loop.llm_tracker.tracked_call", new=tracked),
+        patch("services.generation.detector_loop.get_provider", return_value=fake_provider),
+        patch("services.generation.detector_loop.llm_tracker.tracked_call", new=tracked),
         patch(
-            "services.detector_loop.originality_score_text",
+            "services.generation.detector_loop.originality_score_text",
             AsyncMock(return_value=0.12),
         ),
         patch(
-            "services.detector_loop.dg.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
     ):
@@ -174,12 +174,12 @@ async def test_max_iters_cap_exits_with_last_attempt():
 
     with (
         patch(
-            "services.detector_loop.get_provider",
+            "services.generation.detector_loop.get_provider",
             return_value=SimpleNamespace(provider_id="anthropic"),
         ),
-        patch("services.detector_loop.llm_tracker.tracked_call", new=tracked),
+        patch("services.generation.detector_loop.llm_tracker.tracked_call", new=tracked),
         patch(
-            "services.detector_loop.dg.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
     ):
@@ -205,10 +205,10 @@ async def test_budget_early_exit_no_llm_call():
     detect_call = AsyncMock()
 
     with (
-        patch("services.detector_loop.get_provider", return_value=SimpleNamespace()),
-        patch("services.detector_loop.llm_tracker.tracked_call", detect_call),
+        patch("services.generation.detector_loop.get_provider", return_value=SimpleNamespace()),
+        patch("services.generation.detector_loop.llm_tracker.tracked_call", detect_call),
         patch(
-            "services.detector_loop.dg.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=True),
         ),
     ):
@@ -245,14 +245,14 @@ async def test_no_api_key_skips_originality():
     originality_call = AsyncMock(return_value=0.5)
 
     with (
-        patch("services.detector_loop.get_provider", return_value=SimpleNamespace()),
-        patch("services.detector_loop.llm_tracker.tracked_call", new=tracked),
+        patch("services.generation.detector_loop.get_provider", return_value=SimpleNamespace()),
+        patch("services.generation.detector_loop.llm_tracker.tracked_call", new=tracked),
         patch(
-            "services.detector_loop.originality_score_text",
+            "services.generation.detector_loop.originality_score_text",
             originality_call,
         ),
         patch(
-            "services.detector_loop.dg.is_cost_capped",
+            "services.generation.is_cost_capped",
             AsyncMock(return_value=False),
         ),
     ):

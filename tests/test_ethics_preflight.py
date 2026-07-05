@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.ethics_preflight import EthicsReport, preflight_check
+from services.generation.ethics_preflight import EthicsReport, preflight_check
 
 pytestmark = pytest.mark.uses_sample_data_shims
 

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from llm import get_provider
 from llm.anthropic import AnthropicProvider, BatchRequest
 from llm.prompts.critique_personas import PERSONAS, PROMPT_BUILDERS, CritiqueVote
-from services._council_common import run_persona_batch
+from services.generation._council_common import run_persona_batch
 from services.llm_tracker import _persist_usage as _persist_apiusage
 
 if TYPE_CHECKING:

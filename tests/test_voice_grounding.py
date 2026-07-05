@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from services.voice_grounding import (
+from services.generation.voice_grounding import (
     VoiceCorpus,
     assemble_corpus,
     compute_sentence_stats,
@@ -80,7 +80,7 @@ async def test_assemble_corpus_aggregates_all_five_sources(monkeypatch):
     """When all 5 sources have content, the corpus contains all of them."""
     # Mock the per-source loaders directly — keeps the test independent of
     # SQLModel pagination + JOIN syntax.
-    from services import voice_grounding as vg
+    from services.generation import voice_grounding as vg
 
     async def _bullets(*args, **kwargs):
         return ["shipped the auth service", "drove latency from 80ms to 12ms"]
@@ -121,7 +121,7 @@ async def test_assemble_corpus_aggregates_all_five_sources(monkeypatch):
 @pytest.mark.asyncio
 async def test_assemble_corpus_handles_missing_sources(monkeypatch):
     """No profile / no bullets returns empty-but-valid corpus."""
-    from services import voice_grounding as vg
+    from services.generation import voice_grounding as vg
 
     async def _empty(*args, **kwargs):
         return []

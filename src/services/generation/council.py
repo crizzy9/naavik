@@ -16,7 +16,7 @@ from llm import get_provider
 from llm.anthropic import AnthropicProvider, BatchRequest
 from llm.prompts.council_personas import PERSONAS, PROMPT_BUILDERS, CouncilVote
 from services import llm_tracker  # noqa: F401  (preserved for test monkeypatch path)
-from services._council_common import run_persona_batch, sync_fallback
+from services.generation._council_common import run_persona_batch, sync_fallback
 from services.llm_tracker import _persist_usage as _persist_apiusage
 
 if TYPE_CHECKING:

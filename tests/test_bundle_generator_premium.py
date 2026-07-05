@@ -156,11 +156,11 @@ async def test_premium_cost_cap_pre_flight_falls_back_to_free_skipped():
 @pytest.mark.asyncio
 async def test_premium_happy_path_calls_all_4_stages():
     """End-to-end PREMIUM call wires council + detector + critique + tool_loop."""
-    from services.council import SelectedBullets
-    from services.critique_council import CritiqueReport
-    from services.detector_loop import DetectorReport
     from services.generation import _generate_bundle_premium
-    from services.tool_loop import IterationRecord, ToolLoopReport
+    from services.generation.council import SelectedBullets
+    from services.generation.critique_council import CritiqueReport
+    from services.generation.detector_loop import DetectorReport
+    from services.generation.tool_loop import IterationRecord, ToolLoopReport
 
     settings = _settings(generation_tier="premium")
     session = AsyncMock()
@@ -225,19 +225,19 @@ async def test_premium_happy_path_calls_all_4_stages():
             AsyncMock(return_value=(None, [])),
         ),
         patch(
-            "services.council.vote_on_bullet_selection",
+            "services.generation.council.vote_on_bullet_selection",
             AsyncMock(return_value=council_report),
         ),
         patch(
-            "services.detector_loop.run_detector_loop",
+            "services.generation.detector_loop.run_detector_loop",
             AsyncMock(return_value=detector_report),
         ),
         patch(
-            "services.critique_council.critique_bundle",
+            "services.generation.critique_council.critique_bundle",
             AsyncMock(return_value=critique_report),
         ),
         patch(
-            "services.tool_loop.orchestrate_refinement",
+            "services.generation.tool_loop.orchestrate_refinement",
             AsyncMock(return_value=tool_report),
         ),
     ):
@@ -278,8 +278,8 @@ async def test_premium_happy_path_calls_all_4_stages():
 @pytest.mark.asyncio
 async def test_premium_cost_cap_mid_flight_skips_remaining_stages():
     """Cost cap firing between PREMIUM stages skips downstream + flags degraded."""
-    from services.council import SelectedBullets
     from services.generation import _generate_bundle_premium
+    from services.generation.council import SelectedBullets
 
     settings = _settings(generation_tier="premium")
     session = AsyncMock()
@@ -329,7 +329,7 @@ async def test_premium_cost_cap_mid_flight_skips_remaining_stages():
             AsyncMock(return_value=(None, [])),
         ),
         patch(
-            "services.council.vote_on_bullet_selection",
+            "services.generation.council.vote_on_bullet_selection",
             AsyncMock(return_value=council_report),
         ),
     ):
@@ -395,12 +395,12 @@ async def test_premium_invokes_ensemble_score_and_records_trace_keys(tmp_path):
     """Architect HIGH-1 regression: `ensemble_score` MUST be called from
     `_generate_bundle_premium` when the rendered PDF exists. The audit trail
     MUST carry `ensemble_parse_score` + `ensemble_parsers_used` keys."""
-    from services.ats_parser_ensemble import EnsembleReport
-    from services.council import SelectedBullets
-    from services.critique_council import CritiqueReport
-    from services.detector_loop import DetectorReport
     from services.generation import _generate_bundle_premium
-    from services.tool_loop import IterationRecord, ToolLoopReport
+    from services.generation.ats_parser_ensemble import EnsembleReport
+    from services.generation.council import SelectedBullets
+    from services.generation.critique_council import CritiqueReport
+    from services.generation.detector_loop import DetectorReport
+    from services.generation.tool_loop import IterationRecord, ToolLoopReport
 
     # Real on-disk PDF stub so Path.exists() returns True
     pdf_path = tmp_path / "resume.pdf"
@@ -480,23 +480,23 @@ async def test_premium_invokes_ensemble_score_and_records_trace_keys(tmp_path):
             AsyncMock(return_value=(None, [])),
         ),
         patch(
-            "services.council.vote_on_bullet_selection",
+            "services.generation.council.vote_on_bullet_selection",
             AsyncMock(return_value=council_report),
         ),
         patch(
-            "services.detector_loop.run_detector_loop",
+            "services.generation.detector_loop.run_detector_loop",
             AsyncMock(return_value=detector_report),
         ),
         patch(
-            "services.ats_parser_ensemble.ensemble_score",
+            "services.generation.ats_parser_ensemble.ensemble_score",
             AsyncMock(return_value=ensemble_report),
         ) as mock_ensemble,
         patch(
-            "services.critique_council.critique_bundle",
+            "services.generation.critique_council.critique_bundle",
             AsyncMock(return_value=critique_report),
         ),
         patch(
-            "services.tool_loop.orchestrate_refinement",
+            "services.generation.tool_loop.orchestrate_refinement",
             AsyncMock(return_value=tool_report),
         ),
     ):
@@ -534,8 +534,8 @@ async def test_premium_ensemble_below_threshold_records_warning_flag():
     import os
     import tempfile
 
-    from services.ats_parser_ensemble import EnsembleReport
     from services.generation import _generate_bundle_premium
+    from services.generation.ats_parser_ensemble import EnsembleReport
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(b"%PDF-1.4 fake")
@@ -586,7 +586,7 @@ async def test_premium_ensemble_below_threshold_records_warning_flag():
                 AsyncMock(return_value=(None, [])),
             ),
             patch(
-                "services.ats_parser_ensemble.ensemble_score",
+                "services.generation.ats_parser_ensemble.ensemble_score",
                 AsyncMock(return_value=below_threshold),
             ) as mock_ensemble,
         ):
@@ -653,7 +653,7 @@ async def test_premium_ensemble_skipped_when_pdf_missing():
             AsyncMock(return_value=(None, [])),
         ),
         patch(
-            "services.ats_parser_ensemble.ensemble_score",
+            "services.generation.ats_parser_ensemble.ensemble_score",
             AsyncMock(),
         ) as mock_ensemble,
     ):

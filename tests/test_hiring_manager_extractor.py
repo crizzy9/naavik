@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.hiring_manager_extractor import (
+from services.generation.hiring_manager_extractor import (
     HiringManagerHit,
     _try_regex,
     extract_hiring_manager,
@@ -100,7 +100,7 @@ async def test_blank_manual_override_falls_through():
 async def test_regex_hit_skips_llm_fallback():
     session = AsyncMock()
     settings = SimpleNamespace()
-    with patch("services.hiring_manager_extractor.get_provider") as mock_provider:
+    with patch("services.generation.hiring_manager_extractor.get_provider") as mock_provider:
         hit = await extract_hiring_manager(
             session=session,
             user_id=1,
@@ -116,7 +116,7 @@ async def test_regex_hit_skips_llm_fallback():
 async def test_short_jd_skips_llm_fallback():
     session = AsyncMock()
     settings = SimpleNamespace()
-    with patch("services.hiring_manager_extractor.get_provider") as mock_provider:
+    with patch("services.generation.hiring_manager_extractor.get_provider") as mock_provider:
         hit = await extract_hiring_manager(
             session=session,
             user_id=1,

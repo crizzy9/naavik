@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.critique_council import (
+from services.generation.critique_council import (
     CONSENSUS_SIMILARITY_THRESHOLD,
     CritiqueReport,
     _cluster_concerns,
@@ -183,9 +183,9 @@ async def test_critique_bundle_majority_revise_triggers_regen():
     )
 
     with (
-        patch("services.critique_council.get_provider", return_value=fake_provider),
-        patch("services.critique_council.isinstance", return_value=True),
-        patch("services.critique_council._persist_apiusage", AsyncMock()),
+        patch("services.generation.critique_council.get_provider", return_value=fake_provider),
+        patch("services.generation.critique_council.isinstance", return_value=True),
+        patch("services.generation.critique_council._persist_apiusage", AsyncMock()),
     ):
         report = await critique_bundle(
             resume_text="resume text here",
@@ -239,9 +239,9 @@ async def test_critique_bundle_unanimous_ship_no_regen():
     )
 
     with (
-        patch("services.critique_council.get_provider", return_value=fake_provider),
-        patch("services.critique_council.isinstance", return_value=True),
-        patch("services.critique_council._persist_apiusage", AsyncMock()),
+        patch("services.generation.critique_council.get_provider", return_value=fake_provider),
+        patch("services.generation.critique_council.isinstance", return_value=True),
+        patch("services.generation.critique_council._persist_apiusage", AsyncMock()),
     ):
         report = await critique_bundle(
             resume_text="r",
@@ -280,9 +280,9 @@ async def test_critique_all_personas_fail_returns_degraded():
     )
 
     with (
-        patch("services.critique_council.get_provider", return_value=fake_provider),
-        patch("services.critique_council.isinstance", return_value=True),
-        patch("services.critique_council._persist_apiusage", AsyncMock()),
+        patch("services.generation.critique_council.get_provider", return_value=fake_provider),
+        patch("services.generation.critique_council.isinstance", return_value=True),
+        patch("services.generation.critique_council._persist_apiusage", AsyncMock()),
     ):
         report = await critique_bundle(
             resume_text="r",

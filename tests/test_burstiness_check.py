@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.burstiness_check import (
+from services.generation.burstiness_check import (
     BURSTINESS_THRESHOLD,
     BurstinessReport,
     check_and_score,

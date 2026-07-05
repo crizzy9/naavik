@@ -17,7 +17,7 @@ from __future__ import annotations
 from llm import get_provider
 from models import GeneratedDocumentKind  # callers reach it as generation.GeneratedDocumentKind
 from services import llm_tracker
-from services.ats_parser_fidelity import validate_parse_fidelity
+from services.generation.ats_parser_fidelity import validate_parse_fidelity
 from services.generation.bullet_selection import (
     _REFINE_JD_CHARS as _REFINE_JD_CHARS,
 )
@@ -90,6 +90,7 @@ from services.generation.cover_letter import (
 from services.generation.cover_letter import (
     generate_cover_letter,
 )
+from services.generation.hiring_manager_extractor import extract_hiring_manager
 from services.generation.maintenance import (
     PreGenerateResult,
     cleanup_stale,
@@ -181,8 +182,7 @@ from services.generation.trace import (
 from services.generation.trace import (
     _persist_trace as _persist_trace,
 )
-from services.hiring_manager_extractor import extract_hiring_manager
-from services.voice_grounding import VoiceCorpus, assemble_corpus
+from services.generation.voice_grounding import VoiceCorpus, assemble_corpus
 from typst import compile as typst_compile
 from typst import overflows
 from typst.compiler import TypstError, template_path

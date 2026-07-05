@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.ai_tell_blocklist import (
+from services.generation.ai_tell_blocklist import (
     BAKED_IN_BLOCKLIST,
     effective_blocklist,
     strip_violations,

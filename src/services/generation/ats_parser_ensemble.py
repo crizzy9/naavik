@@ -27,7 +27,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from services.ats_parser_fidelity import (
+from services.generation.ats_parser_fidelity import (
     ParseScoreReport,
     validate_parse_fidelity,
 )
@@ -51,7 +51,7 @@ _CANONICAL_FIELDS = (
 
 def _openresume_script_path() -> Path:
     """Resolve `scripts/openresume_parser.js` relative to repo root."""
-    return Path(__file__).resolve().parents[2] / "scripts" / "openresume_parser.js"
+    return Path(__file__).resolve().parents[3] / "scripts" / "openresume_parser.js"
 
 
 @dataclass(slots=True)

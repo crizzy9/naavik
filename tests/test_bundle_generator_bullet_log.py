@@ -15,10 +15,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.ats_parser_fidelity import ParseScoreReport
 from services.generation import generate_bundle
-from services.hiring_manager_extractor import HiringManagerHit
-from services.voice_grounding import VoiceCorpus
+from services.generation.ats_parser_fidelity import ParseScoreReport
+from services.generation.hiring_manager_extractor import HiringManagerHit
+from services.generation.voice_grounding import VoiceCorpus
 
 
 def _make_application(**overrides):

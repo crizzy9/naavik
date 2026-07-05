@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from services.generation import generate_bundle
-from services.voice_grounding import VoiceCorpus
+from services.generation.voice_grounding import VoiceCorpus
 
 pytestmark = pytest.mark.uses_sample_data_shims
 

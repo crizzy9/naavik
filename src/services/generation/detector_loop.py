@@ -26,8 +26,8 @@ from llm.prompts.detect_ai_likelihood import build_prompt as build_detect_prompt
 from llm.prompts.refine_to_human import RefinedText
 from llm.prompts.refine_to_human import build_prompt as build_refine_prompt
 from llm.providers.originality import score_text as originality_score_text
-from services import generation as dg
 from services import llm_tracker
+from services.generation.common import svc
 
 if TYPE_CHECKING:
     from sqlmodel.ext.asyncio.session import AsyncSession
@@ -106,7 +106,7 @@ async def run_detector_loop(
     for iter_n in range(max_iters):
         # Budget probe between iterations (also fires before iter 0 so a
         # call into a fully-capped account exits without any LLM spend).
-        if session is not None and await dg.is_cost_capped(session, user_id, settings):
+        if session is not None and await svc().is_cost_capped(session, user_id, settings):
             early_exit = "cost_cap_reached"
             break
 

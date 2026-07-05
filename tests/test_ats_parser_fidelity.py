@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from services.ats_parser_fidelity import (
+from services.generation.ats_parser_fidelity import (
     TIER_SILENT,
     TIER_TOAST,
     ParseScoreReport,
@@ -48,7 +48,7 @@ def test_validate_parse_fidelity_pdfplumber_unavailable_returns_one(tmp_path):
     # Real PDF file must exist for the not-found check to pass.
     pdf_path = tmp_path / "fake.pdf"
     pdf_path.write_bytes(b"%PDF-1.4 fake")
-    with patch("services.ats_parser_fidelity._ensure_pdfplumber", return_value=None):
+    with patch("services.generation.ats_parser_fidelity._ensure_pdfplumber", return_value=None):
         report = validate_parse_fidelity(pdf_path)
     assert report.score == 1.0
     assert report.tier == "silent"
@@ -58,7 +58,7 @@ def test_validate_parse_fidelity_pdfplumber_unavailable_returns_one(tmp_path):
 def test_validate_parse_fidelity_empty_text_extraction_returns_zero(tmp_path):
     pdf_path = tmp_path / "fake.pdf"
     pdf_path.write_bytes(b"%PDF-1.4 fake")
-    with patch("services.ats_parser_fidelity._extract_text", return_value=""):
+    with patch("services.generation.ats_parser_fidelity._extract_text", return_value=""):
         report = validate_parse_fidelity(pdf_path)
     assert report.score == 0.0
     assert report.tier == "surface"
@@ -88,7 +88,7 @@ Sep 2014 - May 2016
 """
     pdf_path = tmp_path / "fake.pdf"
     pdf_path.write_bytes(b"%PDF-1.4 fake")
-    with patch("services.ats_parser_fidelity._extract_text", return_value=sample_text):
+    with patch("services.generation.ats_parser_fidelity._extract_text", return_value=sample_text):
         report = validate_parse_fidelity(pdf_path)
     assert report.score >= 0.875  # at least 7/8 fields
     assert report.tier in ("silent", "toast")
@@ -107,7 +107,7 @@ I do stuff.
 """
     pdf_path = tmp_path / "fake.pdf"
     pdf_path.write_bytes(b"%PDF-1.4 fake")
-    with patch("services.ats_parser_fidelity._extract_text", return_value=sample_text):
+    with patch("services.generation.ats_parser_fidelity._extract_text", return_value=sample_text):
         report = validate_parse_fidelity(pdf_path)
     assert report.score < TIER_TOAST
     assert report.tier == "surface"

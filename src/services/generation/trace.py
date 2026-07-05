@@ -19,7 +19,7 @@ from models import (
     Profile,
     Settings,
 )
-from services.voice_grounding import VoiceCorpus
+from services.generation.voice_grounding import VoiceCorpus
 
 log = logging.getLogger(__name__)
 

@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.council import (
+from services.generation.council import (
     SelectedBullets,
     _borda_merge,
     vote_on_bullet_selection,
@@ -107,7 +107,7 @@ async def test_vote_empty_candidates_short_circuits():
     """Empty candidate list returns empty SelectedBullets without LLM call."""
     session = AsyncMock()
     settings = _settings()
-    with patch("services.council.get_provider") as gp:
+    with patch("services.generation.council.get_provider") as gp:
         result = await vote_on_bullet_selection(
             [],
             {"role": "Eng", "description": "build", "skills_required": [], "company": "X"},
@@ -171,9 +171,9 @@ async def test_vote_via_batch_api_happy_path():
     )
 
     with (
-        patch("services.council.get_provider", return_value=fake_provider),
-        patch("services.council.isinstance", return_value=True),
-        patch("services.council._persist_apiusage", AsyncMock()),
+        patch("services.generation.council.get_provider", return_value=fake_provider),
+        patch("services.generation.council.isinstance", return_value=True),
+        patch("services.generation.council._persist_apiusage", AsyncMock()),
     ):
         result = await vote_on_bullet_selection(
             candidate_bullets,
@@ -237,9 +237,9 @@ async def test_vote_batch_failure_falls_back_to_sync():
     sync_call = AsyncMock(side_effect=sync_returns)
 
     with (
-        patch("services.council.get_provider", return_value=fake_provider),
-        patch("services.council.isinstance", return_value=True),
-        patch("services.council.llm_tracker.tracked_call", sync_call),
+        patch("services.generation.council.get_provider", return_value=fake_provider),
+        patch("services.generation.council.isinstance", return_value=True),
+        patch("services.generation.council.llm_tracker.tracked_call", sync_call),
     ):
         result = await vote_on_bullet_selection(
             candidate_bullets,
@@ -281,9 +281,9 @@ async def test_vote_all_personas_fail_returns_degraded():
     )
 
     with (
-        patch("services.council.get_provider", return_value=fake_provider),
-        patch("services.council.isinstance", return_value=True),
-        patch("services.council._persist_apiusage", AsyncMock()),
+        patch("services.generation.council.get_provider", return_value=fake_provider),
+        patch("services.generation.council.isinstance", return_value=True),
+        patch("services.generation.council._persist_apiusage", AsyncMock()),
     ):
         result = await vote_on_bullet_selection(
             candidate_bullets,

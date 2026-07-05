@@ -25,21 +25,21 @@ from models import (
     Profile,
     Settings,
 )
-from services.ai_tell_blocklist import effective_blocklist, strip_violations
-from services.ats_parser_fidelity import (
+from services.generation.ai_tell_blocklist import effective_blocklist, strip_violations
+from services.generation.ats_parser_fidelity import (
     ParseScoreReport,
 )
-from services.burstiness_check import check_and_score
-from services.constitution import render_preamble
-from services.ethics_preflight import EthicsReport, preflight_check
+from services.generation.burstiness_check import check_and_score
 from services.generation.common import svc
+from services.generation.constitution import render_preamble
 from services.generation.cost_cap import CostCapExceededError
+from services.generation.ethics_preflight import EthicsReport, preflight_check
+from services.generation.hiring_manager_extractor import HiringManagerHit
+from services.generation.keyword_coverage import CoverageReport, compute_coverage
 from services.generation.trace import (
     _initial_trace,
     _persist_trace,
 )
-from services.hiring_manager_extractor import HiringManagerHit
-from services.keyword_coverage import CoverageReport, compute_coverage
 
 log = logging.getLogger(__name__)
 
@@ -654,7 +654,7 @@ async def generate_bundle(
     # checks are free; the judge is ONE tracked call, skipped when no
     # provider or the cost cap is exhausted. Never blocks the bundle.
     if result.resume is not None:
-        from services import generation_eval
+        from services.generation import generation_eval
 
         try:
             run_judge = not await svc().is_cost_capped(session, user_id, settings)

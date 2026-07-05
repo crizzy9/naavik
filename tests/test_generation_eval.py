@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from services.generation_eval import (
+from services.generation.generation_eval import (
     check_bullets_one_line,
     check_contact_line,
     check_cover_first_person,

@@ -29,7 +29,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from llm import LLMProviderError, get_provider
 from models import Application, GeneratedDocumentKind, Job, Settings
 from services import llm_tracker
-from services.ai_tell_blocklist import BAKED_IN_BLOCKLIST
+from services.generation.ai_tell_blocklist import BAKED_IN_BLOCKLIST
 
 log = logging.getLogger(__name__)
 

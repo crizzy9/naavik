@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from services.ats_parser_ensemble import (
+from services.generation.ats_parser_ensemble import (
     EnsembleReport,
     _openresume_script_path,
     ensemble_score,
@@ -49,15 +49,15 @@ async def test_ensemble_all_three_parsers_average(tmp_path):
 
     with (
         patch(
-            "services.ats_parser_ensemble.validate_parse_fidelity",
+            "services.generation.ats_parser_ensemble.validate_parse_fidelity",
             return_value=_mock_pdfplumber_report(0.9),
         ),
         patch(
-            "services.ats_parser_ensemble._try_pyresparser",
+            "services.generation.ats_parser_ensemble._try_pyresparser",
             return_value=(0.9, {}),
         ),
         patch(
-            "services.ats_parser_ensemble._try_openresume",
+            "services.generation.ats_parser_ensemble._try_openresume",
             return_value=(0.9, {}),
         ),
     ):
@@ -79,15 +79,15 @@ async def test_ensemble_pyresparser_unavailable(tmp_path):
 
     with (
         patch(
-            "services.ats_parser_ensemble.validate_parse_fidelity",
+            "services.generation.ats_parser_ensemble.validate_parse_fidelity",
             return_value=_mock_pdfplumber_report(0.8),
         ),
         patch(
-            "services.ats_parser_ensemble._try_pyresparser",
+            "services.generation.ats_parser_ensemble._try_pyresparser",
             return_value=(None, {}),
         ),
         patch(
-            "services.ats_parser_ensemble._try_openresume",
+            "services.generation.ats_parser_ensemble._try_openresume",
             return_value=(0.7, {}),
         ),
     ):
@@ -107,15 +107,15 @@ async def test_ensemble_all_optionals_unavailable_falls_back_to_pdfplumber(tmp_p
 
     with (
         patch(
-            "services.ats_parser_ensemble.validate_parse_fidelity",
+            "services.generation.ats_parser_ensemble.validate_parse_fidelity",
             return_value=_mock_pdfplumber_report(0.6),
         ),
         patch(
-            "services.ats_parser_ensemble._try_pyresparser",
+            "services.generation.ats_parser_ensemble._try_pyresparser",
             return_value=(None, {}),
         ),
         patch(
-            "services.ats_parser_ensemble._try_openresume",
+            "services.generation.ats_parser_ensemble._try_openresume",
             return_value=(None, {}),
         ),
     ):
@@ -132,14 +132,14 @@ async def test_ensemble_node_subprocess_timeout_returns_none(tmp_path):
     """When OpenResume Node subprocess times out, that score becomes None."""
     import subprocess
 
-    from services import ats_parser_ensemble
+    from services.generation import ats_parser_ensemble
 
     pdf = tmp_path / "fake.pdf"
     pdf.write_bytes(b"%PDF-1.4")
 
     # Force the subprocess invocation path
     with (
-        patch("services.ats_parser_ensemble.shutil.which", return_value="/usr/bin/node"),
+        patch("services.generation.ats_parser_ensemble.shutil.which", return_value="/usr/bin/node"),
         patch.object(
             ats_parser_ensemble,
             "_openresume_script_path",
@@ -147,7 +147,7 @@ async def test_ensemble_node_subprocess_timeout_returns_none(tmp_path):
         ),
         patch("pathlib.Path.exists", return_value=True),
         patch(
-            "services.ats_parser_ensemble.subprocess.run",
+            "services.generation.ats_parser_ensemble.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd="node", timeout=10.0),
         ),
     ):
@@ -158,11 +158,11 @@ async def test_ensemble_node_subprocess_timeout_returns_none(tmp_path):
 
 def test_openresume_no_node_returns_none(tmp_path):
     """When `node` is not on PATH, _try_openresume returns (None, {})."""
-    from services.ats_parser_ensemble import _try_openresume
+    from services.generation.ats_parser_ensemble import _try_openresume
 
     pdf = tmp_path / "fake.pdf"
     pdf.write_bytes(b"%PDF-1.4")
-    with patch("services.ats_parser_ensemble.shutil.which", return_value=None):
+    with patch("services.generation.ats_parser_ensemble.shutil.which", return_value=None):
         score, fields = _try_openresume(pdf)
     assert score is None
     assert fields == {}
@@ -180,13 +180,13 @@ def test_openresume_script_path_exists():
 
 def test_pyresparser_no_module_returns_none(tmp_path):
     """When `pyresparser` isn't installed, returns (None, {})."""
-    from services.ats_parser_ensemble import _try_pyresparser
+    from services.generation.ats_parser_ensemble import _try_pyresparser
 
     pdf = tmp_path / "fake.pdf"
     pdf.write_bytes(b"%PDF-1.4")
     # importlib.import_module should raise ImportError
     with patch(
-        "services.ats_parser_ensemble.importlib.import_module",
+        "services.generation.ats_parser_ensemble.importlib.import_module",
         side_effect=ImportError("no module"),
     ):
         score, fields = _try_pyresparser(pdf)
@@ -201,15 +201,15 @@ async def test_ensemble_aggregate_score_rounding(tmp_path):
     pdf.write_bytes(b"%PDF-1.4")
     with (
         patch(
-            "services.ats_parser_ensemble.validate_parse_fidelity",
+            "services.generation.ats_parser_ensemble.validate_parse_fidelity",
             return_value=_mock_pdfplumber_report(0.333),
         ),
         patch(
-            "services.ats_parser_ensemble._try_pyresparser",
+            "services.generation.ats_parser_ensemble._try_pyresparser",
             return_value=(0.667, {}),
         ),
         patch(
-            "services.ats_parser_ensemble._try_openresume",
+            "services.generation.ats_parser_ensemble._try_openresume",
             return_value=(None, {}),
         ),
     ):

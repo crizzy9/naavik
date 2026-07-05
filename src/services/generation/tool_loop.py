@@ -41,11 +41,11 @@ from llm.prompts.orchestrate_refinement import (
     TOOL_DEFINITIONS,
     build_orchestrator_prompt,
 )
-from services import generation as dg
 from services import llm_tracker
-from services.ats_parser_fidelity import validate_parse_fidelity
-from services.detector_loop import run_detector_loop
-from services.keyword_coverage import compute_coverage
+from services.generation.ats_parser_fidelity import validate_parse_fidelity
+from services.generation.common import svc
+from services.generation.detector_loop import run_detector_loop
+from services.generation.keyword_coverage import compute_coverage
 from services.llm_tracker import _persist_usage as _persist_apiusage
 
 if TYPE_CHECKING:
@@ -383,7 +383,7 @@ async def orchestrate_refinement(
     final_decision = "exhausted"
 
     for iter_n in range(max_iters):
-        if session is not None and await dg.is_cost_capped(session, user_id, settings):
+        if session is not None and await svc().is_cost_capped(session, user_id, settings):
             iterations.append(IterationRecord(iter_n=iter_n, decision="cost_cap"))
             return ToolLoopReport(
                 final_decision="exhausted",

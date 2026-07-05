@@ -22,14 +22,14 @@ from models import (
     Profile,
     Settings,
 )
-from services.ai_tell_blocklist import effective_blocklist
-from services.constitution import render_preamble
+from services.generation.ai_tell_blocklist import effective_blocklist
 from services.generation.bundle import (
     BundleResult,
     _extract_must_haves,
     _resume_text_for_coverage,
 )
 from services.generation.common import svc
+from services.generation.constitution import render_preamble
 from services.generation.trace import _persist_trace
 
 log = logging.getLogger(__name__)
@@ -80,11 +80,11 @@ async def _generate_bundle_premium(
     """
     # Lazy-import the PREMIUM machinery so FREE callers don't pay the import
     # cost (council pulls Anthropic batch; detector pulls Originality).
-    from services.ats_parser_ensemble import ensemble_score
-    from services.council import vote_on_bullet_selection
-    from services.critique_council import critique_bundle
-    from services.detector_loop import run_detector_loop
-    from services.tool_loop import orchestrate_refinement
+    from services.generation.ats_parser_ensemble import ensemble_score
+    from services.generation.council import vote_on_bullet_selection
+    from services.generation.critique_council import critique_bundle
+    from services.generation.detector_loop import run_detector_loop
+    from services.generation.tool_loop import orchestrate_refinement
 
     # First run the FREE composite (recursive call with explicit tier="free"
     # to avoid infinite loop). This handles cost-cap pre-flight + the 9-stage
