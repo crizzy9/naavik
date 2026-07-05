@@ -43,7 +43,6 @@ from config import settings as app_settings
 from db.session import get_session
 from models import (
     RevokedJwt,
-    Settings,
     SigningAlgorithm,
     TenantSigningKey,
     TenantSigningKeyStatus,
@@ -452,19 +451,6 @@ async def get_user_by_id(session: AsyncSession, user_id: int) -> User | None:
     stmt = select(User).where(User.id == user_id, User.deleted_at.is_(None))
     result = await session.exec(stmt)
     return result.one_or_none()
-
-
-async def get_or_create_settings(session: AsyncSession, user_id: int) -> Settings:
-    """Settings is a singleton per user — auto-create on first read."""
-    stmt = select(Settings).where(Settings.user_id == user_id)
-    result = await session.exec(stmt)
-    row = result.one_or_none()
-    if row is not None:
-        return row
-    row = Settings(user_id=user_id)
-    session.add(row)
-    await session.flush()
-    return row
 
 
 async def authenticate(

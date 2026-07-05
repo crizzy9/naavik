@@ -380,34 +380,6 @@ async def notify_application_submitted(
     )
 
 
-async def notify_auto_apply_failed(
-    *,
-    settings: Settings,
-    application: Application,
-    http_client: httpx.AsyncClient | None = None,
-) -> None:
-    await asyncio.gather(
-        send_discord(
-            settings=settings,
-            event=EVENT_AUTO_APPLY_FAILED,
-            application=application,
-            http_client=http_client,
-        ),
-        send_telegram(
-            settings=settings,
-            event=EVENT_AUTO_APPLY_FAILED,
-            application=application,
-            http_client=http_client,
-        ),
-        push_toast(
-            "warning",
-            "Auto-apply needs attention",
-            f"{application.company} · check Discover stuck queue",
-        ),
-        return_exceptions=True,
-    )
-
-
 async def notify_priority_email(
     *,
     settings: Settings,

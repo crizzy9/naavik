@@ -1694,45 +1694,6 @@ async def compute_outreach_engagement(session: AsyncSession, application_id: int
     return "cold"
 
 
-# ── Recruiter-state derivation (cron in Phase 4) ────────────────────────
-
-
-async def derive_recruiter_states(session: AsyncSession) -> int:
-    """Auto-derive `Application.recruiter_state` per DATA_MODEL.md § E.
-
-    Wave 6 ships the function; the `tracking.derive_recruiter_state` cron is
-    wired in Phase 4. For Wave 6 we expose it so the auto-apply path can
-    refresh recruiter_state in batch when other code calls it.
-    """
-    apps = (
-        await session.exec(
-            select(Application).where(
-                Application.status != ApplicationStatus.DRAFT,
-                Application.deleted_at.is_(None),
-            )
-        )
-    ).all()
-    updated = 0
-    now = datetime.now(UTC)
-    for a in apps:
-        # Phase 4 will look at EmailThread.messages; Wave 6 is a no-op.
-        if a.recruiter_state == RecruiterState.STALLED:
-            continue
-        # Heuristic placeholder: if applied >14d and still NONE, mark SILENT.
-        if (
-            a.applied_at is not None
-            and a.recruiter_state == RecruiterState.NONE
-            and a.applied_at <= now - timedelta(days=14)
-        ):
-            a.recruiter_state = RecruiterState.SILENT
-            a.updated_at = now
-            session.add(a)
-            updated += 1
-    if updated:
-        await session.flush()
-    return updated
-
-
 # ── Stuck-queue surface ────────────────────────────────────────────────
 
 

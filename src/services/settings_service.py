@@ -202,30 +202,6 @@ async def update_notifications(
     return s
 
 
-async def update_account_password(
-    session: AsyncSession,
-    user_id: int,
-    *,
-    current_password: str,
-    new_password: str,
-) -> bool:
-    """Verify current password, then store new bcrypt hash on `User.password_hash`."""
-    from models import User
-    from services.auth import hash_password, verify_password
-
-    stmt = select(User).where(User.id == user_id, User.deleted_at.is_(None))
-    user = (await session.exec(stmt)).one_or_none()
-    if user is None:
-        return False
-    if not verify_password(current_password, user.password_hash):
-        return False
-    user.password_hash = hash_password(new_password)
-    user.updated_at = datetime.now(UTC)
-    session.add(user)
-    await session.flush()
-    return True
-
-
 # ── Generation tier + Originality (plan 67 / 0.3.4) ──────────────────────
 
 

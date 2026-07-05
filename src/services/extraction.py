@@ -17,16 +17,14 @@ Wave 6 ships the pipeline; Phase 2+ adds OCR fallback for image-only PDFs.
 
 from __future__ import annotations
 
-import json
 import logging
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from llm import LLMProvider, LLMProviderError, get_provider
+from llm import LLMProvider, get_provider
 from models import Bullet, Experience, Profile, Settings
 from services import llm_tracker
 
@@ -89,50 +87,7 @@ async def extract_to_profile(
     return profile
 
 
-async def extract_to_profile_sse(
-    session: AsyncSession,
-    *,
-    user_id: int,
-    settings: Settings,
-    pdf_path: Path,
-) -> AsyncIterator[str]:
-    """Same as `extract_to_profile` but yields SSE events for Onboarding step 2."""
-
-    async def _gen() -> AsyncIterator[str]:
-        yield _sse_event("extracting", {"step": 1, "of": 4, "label": "Reading resume"})
-        try:
-            text = await extract_resume_text(pdf_path)
-        except ExtractionError as exc:
-            yield _sse_event("error", {"message": str(exc)})
-            return
-        yield _sse_event("structuring", {"step": 2, "of": 4, "label": "Structuring profile"})
-        try:
-            provider = get_provider(settings)
-            structured = await _structure_with_llm(
-                session=session,
-                user_id=user_id,
-                provider=provider,
-                resume_text=text,
-            )
-        except (LLMProviderError, ExtractionError) as exc:
-            yield _sse_event("error", {"message": str(exc)})
-            return
-        yield _sse_event("persisting", {"step": 3, "of": 4, "label": "Saving"})
-        try:
-            await _persist_profile(session, user_id=user_id, structured=structured)
-        except Exception as exc:  # noqa: BLE001
-            yield _sse_event("error", {"message": str(exc)})
-            return
-        yield _sse_event("done", {"step": 4, "of": 4, "label": "Profile ready", "complete": True})
-
-    return _gen()
-
-
 # ── Internals ──────────────────────────────────────────────────────────
-
-
-def _sse_event(name: str, payload: dict[str, Any]) -> str:
-    return f"event: {name}\ndata: {json.dumps(payload)}\n\n"
 
 
 async def _structure_with_llm(
@@ -407,5 +362,4 @@ __all__ = [
     "ExtractionError",
     "extract_resume_text",
     "extract_to_profile",
-    "extract_to_profile_sse",
 ]

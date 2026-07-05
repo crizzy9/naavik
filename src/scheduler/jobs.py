@@ -654,10 +654,6 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
     scraping.register_scraping_jobs(scheduler)
 
 
-def registered_job_ids(scheduler: AsyncIOScheduler) -> list[str]:
-    return [j.id for j in scheduler.get_jobs()]
-
-
 __all__ = [
     "aggregate_costs",
     "auto_apply",
@@ -672,7 +668,6 @@ __all__ = [
     "expire_retiring_signing_keys",
     "refresh_oauth_tokens",
     "register_all",
-    "registered_job_ids",
     "score_aggregate_daily",
     "score_pending",
     "score_recompute_stale",
