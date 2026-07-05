@@ -22,6 +22,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
+from api.deps import owned_application_or_404
 from config import settings as app_settings
 from db.session import get_session
 from models import ApplicationStatus, ClosedReason, Settings, User
@@ -55,9 +56,9 @@ async def submit(
 
     from services import settings as settings_service
 
-    application = await svc.get_application(session, application_id)
-    if application is None or application.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Application not found")
+    application = await owned_application_or_404(
+        session, application_id, current_user.id, allow_deleted=True
+    )
     user_settings = await settings_service.get_or_create(session, user_id=current_user.id)
 
     # Honest-submit guard (2026-07): boards without a working auto-submit
@@ -173,9 +174,7 @@ async def discard(
 
     Plan 85 / 0.4.0.21 — IDOR boundary: 404 on cross-user / missing app.
     """
-    application = await svc.get_application(session, application_id)
-    if application is None or application.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Application not found")
+    await owned_application_or_404(session, application_id, current_user.id, allow_deleted=True)
     try:
         await svc.discard_draft(session, application_id)
     except svc.IllegalStateTransition as exc:
@@ -200,9 +199,7 @@ async def put_status(
 
     Plan 85 / 0.4.0.21 — IDOR boundary: 404 on cross-user / missing app.
     """
-    application = await svc.get_application(session, application_id)
-    if application is None or application.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Application not found")
+    await owned_application_or_404(session, application_id, current_user.id, allow_deleted=True)
     raw = payload.get("status")
     if not raw:
         raise HTTPException(status_code=422, detail="`status` required")
@@ -259,9 +256,7 @@ async def move(
     target = payload.get("target_status")
     if not (app_id and target):
         return Response(status_code=204)
-    application = await svc.get_application(session, app_id)
-    if application is None or application.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Application not found")
+    await owned_application_or_404(session, app_id, current_user.id, allow_deleted=True)
     try:
         new_status = ApplicationStatus(target)
     except ValueError as exc:
@@ -291,9 +286,7 @@ async def get_postmortem(
     IDOR boundary: 404 on cross-user / missing app (no existence leak).
     Path-traversal guard: strict UTC-timestamp regex + `resolve().relative_to()`.
     """
-    app = await svc.get_application(session, application_id)
-    if app is None or app.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Application not found")
+    await owned_application_or_404(session, application_id, current_user.id, allow_deleted=True)
     if not _POSTMORTEM_TS_RE.match(ts):
         raise HTTPException(status_code=400, detail="invalid timestamp")
 
@@ -334,9 +327,7 @@ async def get_auto_apply_artifact(
     """
     from fastapi.responses import FileResponse
 
-    app = await svc.get_application(session, application_id)
-    if app is None or app.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Application not found")
+    await owned_application_or_404(session, application_id, current_user.id, allow_deleted=True)
     if not _ARTIFACT_NAME_RE.match(filename):
         raise HTTPException(status_code=400, detail="invalid artifact name")
     base = (
@@ -375,9 +366,9 @@ async def generate_bundle_route(
     Ethics rejection (> 2 bullets fabricated) returns 422.
     Plan 75 / 0.3.3.06 — rate limited 10/hr per user.
     """
-    application = await svc.get_application(session, application_id)
-    if application is None or application.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Application not found")
+    application = await owned_application_or_404(
+        session, application_id, current_user.id, allow_deleted=True
+    )
 
     settings = (
         await session.exec(select(Settings).where(Settings.user_id == current_user.id))

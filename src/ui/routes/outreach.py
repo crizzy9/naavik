@@ -11,11 +11,15 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
 from api.deps import effective_user_id as _effective_user_id
-from api.deps import get_owned_contact
+from api.deps import (
+    get_owned_contact,
+    owned_application_or_404,
+    owned_contact_or_404,
+    owned_message_or_404,
+)
 from db.session import get_session
 from models import Contact, User
 from models.enums import OutreachIntent, OutreachStatus
-from services import applications
 from services import outreach as contact_tracker
 from services import outreach as outreach_service
 from services.auth import require_authed_session
@@ -85,9 +89,7 @@ async def fragment_outreach_draft(
     """Return a freshly-drafted message card for a contact the caller owns."""
     user_id = _effective_user_id(user)
     if application_id is not None:
-        app_row = await applications.get_application(session, application_id)
-        if app_row is None or app_row.user_id != user_id:
-            raise HTTPException(status_code=404, detail="Application not found")
+        await owned_application_or_404(session, application_id, user_id, allow_deleted=True)
     body = (
         f"Hey {contact.name.split()[0]} — quick follow-up on the conversation. "
         "Happy to share an updated CV if helpful."
@@ -141,9 +143,7 @@ async def get_contacts(
     elif app_id:
         # Ownership-scope by the application (plan 91 Phase 1.3) — the join-only
         # accessor previously returned contacts linked to any user's app.
-        app_row = await applications.get_application(session, app_id)
-        if app_row is None or app_row.user_id != user_id:
-            raise HTTPException(status_code=404, detail="Application not found")
+        await owned_application_or_404(session, app_id, user_id, allow_deleted=True)
         items = await contact_tracker.list_contacts_for_application(session, app_id)
     else:
         items = await contact_tracker.list_contacts(session, user_id)
@@ -238,14 +238,10 @@ async def get_outreach_messages(
     if app_id:
         # Ownership-scope by the referenced app/contact (plan 91 Phase 1.3) —
         # the by-id accessors previously returned any user's messages.
-        app_row = await applications.get_application(session, app_id)
-        if app_row is None or app_row.user_id != user_id:
-            raise HTTPException(status_code=404, detail="Application not found")
+        await owned_application_or_404(session, app_id, user_id, allow_deleted=True)
         msgs = await outreach_service.list_messages_for_application(session, app_id)
     elif contact_id:
-        contact = await contact_tracker.get_contact(session, contact_id)
-        if contact is None or contact.user_id != user_id:
-            raise HTTPException(status_code=404, detail="Contact not found")
+        await owned_contact_or_404(session, contact_id, user_id)
         msgs = await outreach_service.list_messages_for_contact(session, contact_id)
     else:
         msgs = await outreach_service.list_all_messages(session, user_id)
@@ -267,13 +263,9 @@ async def post_outreach_draft(
         intent = OutreachIntent(intent_str)
     except ValueError:
         raise HTTPException(status_code=422, detail=f"Unknown intent {intent_str!r}") from None
-    contact = await contact_tracker.get_contact(session, contact_id)
-    if contact is None or contact.user_id != user_id:
-        raise HTTPException(status_code=404, detail="Contact not found")
+    contact = await owned_contact_or_404(session, contact_id, user_id)
     if app_id is not None:
-        app_row = await applications.get_application(session, int(app_id))
-        if app_row is None or app_row.user_id != user_id:
-            raise HTTPException(status_code=404, detail="Application not found")
+        await owned_application_or_404(session, int(app_id), user_id, allow_deleted=True)
     body = (
         f"Hey {contact.name.split()[0]} — quick check-in. Let me know if there's "
         "anything I can do to help move things along."
@@ -301,9 +293,7 @@ async def post_outreach_send(
     msg_id = int(payload.get("message_id", 0))
     # Ownership check before mutating (plan 91 Phase 1.3) — mark_sent flipped
     # any user's DRAFT→SENT by id.
-    existing = await outreach_service.get_message(session, msg_id)
-    if existing is None or existing.user_id != _effective_user_id(user):
-        raise HTTPException(status_code=404, detail="Message not found")
+    await owned_message_or_404(session, msg_id, _effective_user_id(user))
     msg = await outreach_service.mark_sent(session, msg_id)
     if msg is None:
         raise HTTPException(status_code=404, detail="Message not found")

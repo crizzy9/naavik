@@ -249,14 +249,9 @@ async def _application_or_404(session: AsyncSession, application_id: int, user: 
     `getattr` to tolerate test fixtures that build minimal `SimpleNamespace`
     application stand-ins without the soft-delete column.
     """
-    a = await applications.get_application(session, application_id)
-    if (
-        a is None
-        or a.user_id != _effective_user_id(user)
-        or getattr(a, "deleted_at", None) is not None
-    ):
-        raise HTTPException(status_code=404, detail="Application not found")
-    return a
+    from api.deps import owned_application_or_404
+
+    return await owned_application_or_404(session, application_id, _effective_user_id(user))
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -809,9 +804,11 @@ async def get_application(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
-    a = await applications.get_application(session, application_id)
-    if a is None or a.user_id != _effective_user_id(user):
-        raise HTTPException(status_code=404, detail="Application not found")
+    from api.deps import owned_application_or_404
+
+    a = await owned_application_or_404(
+        session, application_id, _effective_user_id(user), allow_deleted=True
+    )
     return a.model_dump(mode="json")
 
 
@@ -833,9 +830,11 @@ async def get_application_bundle(
     import zipfile
     from pathlib import Path as _Path
 
-    a = await applications.get_application(session, application_id)
-    if a is None or a.user_id != _effective_user_id(user):
-        raise HTTPException(status_code=404, detail="Application not found")
+    from api.deps import owned_application_or_404
+
+    a = await owned_application_or_404(
+        session, application_id, _effective_user_id(user), allow_deleted=True
+    )
 
     docs = await applications.latest_documents(session, application_id)
     screeners = await applications.list_screener_answers_for(session, application_id)

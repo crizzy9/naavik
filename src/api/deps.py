@@ -30,7 +30,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.session import get_session
-from models import Application, Bullet, Contact, User
+from models import Application, Bullet, Contact, EmailThread, Job, OutreachMessage, User
 from services import auth
 from services.auth import SESSION_COOKIE
 
@@ -220,7 +220,84 @@ async def require_authed_session(
     return user
 
 
-# ── Ownership guards (plan 91 Phase 1.4) ─────────────────────────────────
+# ── Ownership guards (plan 91 Phase 1.4; plan 94 slice A rollout) ────────
+#
+# The plain-async `owned_*_or_404` helpers are the ONE implementation of
+# fetch + user-id boundary (IDOR → 404, never 403 — no cross-user existence
+# oracle). Route handlers on the `require_password_complete` tier call them
+# directly with `current_user.id`; the `Depends()` forms below wrap them for
+# the `require_authed_session` tier. They read the service layer through the
+# package surfaces at call time so conftest shims keep intercepting.
+#
+# `allow_deleted=True` preserves the pre-94 behaviour of the /api/v1
+# application routes and two discover cover-section routes, which never
+# gated on `deleted_at` (the UI helpers do, per plan 86) — recorded in plan
+# 94 § Findings for the Q6 RAS→RPC re-audit; do not "fix" silently.
+
+
+async def owned_job_or_404(session: AsyncSession, job_id: int, user_id: int) -> Job:
+    """Fetch a live (non-soft-deleted) job the user owns, else 404."""
+    from services import jobs as job_service
+
+    job = await job_service.get_job(session, job_id)
+    if job is None or job.user_id != user_id or job.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+async def owned_application_or_404(
+    session: AsyncSession,
+    application_id: int,
+    user_id: int,
+    *,
+    allow_deleted: bool = False,
+) -> Application:
+    """Fetch an application the user owns, else 404.
+
+    `getattr` tolerates test fixtures that pass minimal SimpleNamespace
+    stand-ins without the soft-delete column (plan 86 note).
+    """
+    from services import applications as application_service
+
+    a = await application_service.get_application(session, application_id)
+    if (
+        a is None
+        or a.user_id != user_id
+        or (not allow_deleted and getattr(a, "deleted_at", None) is not None)
+    ):
+        raise HTTPException(status_code=404, detail="Application not found")
+    return a
+
+
+async def owned_contact_or_404(session: AsyncSession, contact_id: int, user_id: int) -> Contact:
+    from services import outreach as contact_tracker
+
+    contact = await contact_tracker.get_contact(session, contact_id)
+    if contact is None or contact.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    return contact
+
+
+async def owned_message_or_404(
+    session: AsyncSession, message_id: int, user_id: int
+) -> OutreachMessage:
+    from services import outreach as outreach_service
+
+    msg = await outreach_service.get_message(session, message_id)
+    if msg is None or msg.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return msg
+
+
+async def owned_email_thread_or_404(
+    session: AsyncSession, thread_id: int, user_id: int
+) -> EmailThread:
+    from services import email as email_service
+
+    t = await email_service.get_thread(session, thread_id)
+    if t is None or t.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    return t
 
 
 async def get_owned_contact(
@@ -230,12 +307,7 @@ async def get_owned_contact(
 ) -> Contact:
     """Fetch a contact the caller owns, else 404 (same shape as a missing row —
     no cross-user existence oracle)."""
-    from services import outreach as contact_tracker
-
-    contact = await contact_tracker.get_contact(session, contact_id)
-    if contact is None or contact.user_id != effective_user_id(user):
-        raise HTTPException(status_code=404, detail="Contact not found")
-    return contact
+    return await owned_contact_or_404(session, contact_id, effective_user_id(user))
 
 
 async def get_owned_bullet(
@@ -261,10 +333,8 @@ async def get_owned_application(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ) -> Application:
-    """Fetch an application the caller owns, else 404."""
-    from services import applications as application_service
-
-    application = await application_service.get_application(session, application_id)
-    if application is None or application.user_id != effective_user_id(user):
-        raise HTTPException(status_code=404, detail="Application not found")
-    return application
+    """Fetch an application the caller owns, else 404. `allow_deleted=True`
+    preserves this dep's pre-94 semantics (no soft-delete gate)."""
+    return await owned_application_or_404(
+        session, application_id, effective_user_id(user), allow_deleted=True
+    )

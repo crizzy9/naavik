@@ -62,10 +62,9 @@ async def _job_or_404(session: AsyncSession, job_id: int, user_id: int):
     Returns 404 (not 403) on cross-user access so the surface doesn't leak
     "job N belongs to a different user" — the IDOR mitigation pattern.
     """
-    job = await job_service.get_job(session, job_id)
-    if job is None or job.user_id != user_id or job.deleted_at is not None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    from api.deps import owned_job_or_404
+
+    return await owned_job_or_404(session, job_id, user_id)
 
 
 async def _last_scrape_run(session: AsyncSession, scrape_run_id: int | None) -> JobScrapeRun | None:

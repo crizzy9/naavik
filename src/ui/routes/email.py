@@ -55,9 +55,9 @@ async def get_email_thread(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
-    t = await email_service.get_thread(session, thread_id)
-    if t is None or t.user_id != _effective_user_id(user):
-        raise HTTPException(status_code=404, detail="Thread not found")
+    from api.deps import owned_email_thread_or_404
+
+    t = await owned_email_thread_or_404(session, thread_id, _effective_user_id(user))
     return t.model_dump(mode="json")
 
 
@@ -69,9 +69,9 @@ async def post_email_thread_draft_reply(
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    t = await email_service.get_thread(session, thread_id)
-    if t is None or t.user_id != _effective_user_id(user):
-        raise HTTPException(status_code=404, detail="Thread not found")
+    from api.deps import owned_email_thread_or_404
+
+    t = await owned_email_thread_or_404(session, thread_id, _effective_user_id(user))
     intent = (payload or {}).get("intent", "follow_up")
     # Plan 90 / 0.5.0.06 — graceful no-LLM degrade via the dedicated draft
     # prompt. JSON-only response; auto-send wire deferred to 0.5.0.06b.

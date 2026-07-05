@@ -178,8 +178,10 @@ def test_rescore_happy_path_calls_orchestrator():
         llm_model="claude-sonnet-4-6",
     )
 
+    # Plan 94 slice A: the route reads the job through the service layer
+    # (`owned_job_or_404` → `services.jobs.get_job`) instead of a raw select,
+    # so the job is stubbed at that seam; exec only serves Profile + Settings.
     exec_calls = [
-        MagicMock(one_or_none=lambda: job),  # Job lookup
         MagicMock(one_or_none=lambda: profile),  # Profile lookup
         MagicMock(one_or_none=lambda: settings),  # Settings lookup
     ]
@@ -209,9 +211,16 @@ def test_rescore_happy_path_calls_orchestrator():
         return JobScore(score=0.42, explanation="ok")
 
     try:
-        with patch(
-            "services.scorer.orchestrator.score_job_layered",
-            new=_stub_score,
+
+        async def _stub_get_job(_session, _job_id):
+            return job
+
+        with (
+            patch("services.jobs.get_job", new=_stub_get_job),
+            patch(
+                "services.scorer.orchestrator.score_job_layered",
+                new=_stub_score,
+            ),
         ):
             r = client.post(
                 "/api/v1/jobs/1/rescore",

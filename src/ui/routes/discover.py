@@ -83,10 +83,9 @@ async def get_discover(
 
 
 async def _job_or_404(session: AsyncSession, job_id: int, user_id: int):
-    job = await job_service.get_job(session, job_id)
-    if job is None or job.user_id != user_id or job.deleted_at is not None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    from api.deps import owned_job_or_404
+
+    return await owned_job_or_404(session, job_id, user_id)
 
 
 async def _ensure_draft_and_dispatch(
@@ -685,14 +684,11 @@ async def post_rescore(
 
     from sqlmodel import select as _select
 
-    from models import Job, Profile, Settings
+    from api.deps import owned_job_or_404
+    from models import Profile, Settings
     from services.scorer.orchestrator import score_job_layered
 
-    job = (
-        await session.exec(_select(Job).where(Job.id == job_id, Job.deleted_at.is_(None)))
-    ).one_or_none()
-    if job is None or job.user_id != effective_uid:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = await owned_job_or_404(session, job_id, effective_uid)
 
     profile = (
         await session.exec(_select(Profile).where(Profile.user_id == effective_uid))
@@ -889,14 +885,9 @@ async def fragment_cover_section_save(
 
 
 async def _application_owned_or_404(session, application_id: int, user_id: int):
-    application = await applications.get_application(session, application_id)
-    if (
-        application is None
-        or application.user_id != user_id
-        or getattr(application, "deleted_at", None) is not None
-    ):
-        raise HTTPException(status_code=404, detail="Application not found")
-    return application
+    from api.deps import owned_application_or_404
+
+    return await owned_application_or_404(session, application_id, user_id)
 
 
 async def _ledger_response(
@@ -1204,13 +1195,7 @@ async def fragment_generate_bundle(
     from services.generation import dispatch as generation_dispatch
 
     user_id = _effective_user_id(user)
-    application = await applications.get_application(session, application_id)
-    if (
-        application is None
-        or application.user_id != user_id
-        or getattr(application, "deleted_at", None) is not None
-    ):
-        raise HTTPException(status_code=404, detail="Application not found")
+    application = await _application_owned_or_404(session, application_id, user_id)
 
     job = None
     if application.job_id:
@@ -1250,9 +1235,9 @@ async def get_resume_pdf(
     from fastapi.responses import FileResponse
 
     user_id = _effective_user_id(user)
-    application = await applications.get_application(session, application_id)
-    if application is None or application.user_id != user_id:
-        raise HTTPException(status_code=404, detail="Application not found")
+    from api.deps import owned_application_or_404
+
+    await owned_application_or_404(session, application_id, user_id, allow_deleted=True)
 
     docs = await applications.latest_documents(session, application_id)
     resume = next((d for d in docs if str(d.kind.value) == "resume"), None)
@@ -1280,9 +1265,9 @@ async def get_cover_letter_pdf(
     from fastapi.responses import FileResponse
 
     user_id = _effective_user_id(user)
-    application = await applications.get_application(session, application_id)
-    if application is None or application.user_id != user_id:
-        raise HTTPException(status_code=404, detail="Application not found")
+    from api.deps import owned_application_or_404
+
+    await owned_application_or_404(session, application_id, user_id, allow_deleted=True)
 
     docs = await applications.latest_documents(session, application_id)
     cover = next((d for d in docs if str(d.kind.value) == "cover_letter"), None)
@@ -1317,13 +1302,7 @@ async def post_cover_generate(
     from services.generation import regenerate_cover_letter
 
     user_id = _effective_user_id(user)
-    application = await applications.get_application(session, application_id)
-    if (
-        application is None
-        or application.user_id != user_id
-        or getattr(application, "deleted_at", None) is not None
-    ):
-        raise HTTPException(status_code=404, detail="Application not found")
+    application = await _application_owned_or_404(session, application_id, user_id)
 
     settings = await settings_service.get_or_create(session, user_id=user_id)
     try:
