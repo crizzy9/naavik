@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from services.notifications import (
+from services.notify import (
     EVENT_APPLICATION_SENT,
     EVENT_AUTO_APPLY_FAILED,
     EVENT_NEW_HIGH_SCORE,
@@ -153,7 +153,7 @@ async def test_send_discord_no_op_when_event_muted():
     s = _settings(notifications_enabled={EVENT_NEW_HIGH_SCORE: False})
     captured = {}
     client = _mock_client(captured)
-    with patch("services.notifications._discord_url", return_value="https://discord/x"):
+    with patch("services.notify._discord_url", return_value="https://discord/x"):
         ok = await send_discord(
             settings=s, event=EVENT_NEW_HIGH_SCORE, job=_job(), http_client=client
         )
@@ -165,7 +165,7 @@ async def test_send_discord_no_op_when_event_muted():
 @pytest.mark.asyncio
 async def test_send_discord_no_op_without_webhook():
     s = _settings()
-    with patch("services.notifications._discord_url", return_value=None):
+    with patch("services.notify._discord_url", return_value=None):
         ok = await send_discord(settings=s, event=EVENT_NEW_HIGH_SCORE, job=_job())
     assert ok is False
 
@@ -176,7 +176,7 @@ async def test_send_discord_posts_embed():
     captured = {}
     client = _mock_client(captured)
     with patch(
-        "services.notifications._discord_url",
+        "services.notify._discord_url",
         return_value="https://discord.example/webhook",
     ):
         ok = await send_discord(
@@ -192,8 +192,8 @@ async def test_send_discord_posts_embed():
 async def test_send_telegram_no_op_without_token_or_chat():
     s = _settings()
     with (
-        patch("services.notifications._telegram_token", return_value=None),
-        patch("services.notifications._telegram_chat_id", return_value="42"),
+        patch("services.notify._telegram_token", return_value=None),
+        patch("services.notify._telegram_chat_id", return_value="42"),
     ):
         ok = await send_telegram(settings=s, event=EVENT_NEW_HIGH_SCORE, job=_job())
     assert ok is False
@@ -205,8 +205,8 @@ async def test_send_telegram_posts_message():
     captured = {}
     client = _mock_client(captured)
     with (
-        patch("services.notifications._telegram_token", return_value="bot-token"),
-        patch("services.notifications._telegram_chat_id", return_value="42"),
+        patch("services.notify._telegram_token", return_value="bot-token"),
+        patch("services.notify._telegram_chat_id", return_value="42"),
     ):
         ok = await send_telegram(
             settings=s, event=EVENT_NEW_HIGH_SCORE, job=_job(), http_client=client
@@ -239,8 +239,8 @@ async def test_send_telegram_high_score_hostile_role_renders_as_plain_text():
     captured = {}
     client = _mock_client(captured)
     with (
-        patch("services.notifications._telegram_token", return_value="bot-token"),
-        patch("services.notifications._telegram_chat_id", return_value="42"),
+        patch("services.notify._telegram_token", return_value="bot-token"),
+        patch("services.notify._telegram_chat_id", return_value="42"),
     ):
         ok = await send_telegram(
             settings=s, event=EVENT_NEW_HIGH_SCORE, job=hostile, http_client=client
@@ -276,8 +276,8 @@ async def test_notify_new_high_score_skips_when_below_threshold():
         return False
 
     with (
-        patch("services.notifications.send_discord", new=_fake_discord),
-        patch("services.notifications.send_telegram", new=_fake_tg),
+        patch("services.notify.send_discord", new=_fake_discord),
+        patch("services.notify.send_telegram", new=_fake_tg),
     ):
         await notify_new_high_score(settings=s, job=job)
     assert discord_called is False
@@ -291,8 +291,8 @@ async def test_notify_new_high_score_dispatches_when_above_threshold():
     discord = AsyncMock(return_value=True)
     tg = AsyncMock(return_value=True)
     with (
-        patch("services.notifications.send_discord", new=discord),
-        patch("services.notifications.send_telegram", new=tg),
+        patch("services.notify.send_discord", new=discord),
+        patch("services.notify.send_telegram", new=tg),
     ):
         await notify_new_high_score(settings=s, job=job)
     discord.assert_awaited()
@@ -305,8 +305,8 @@ async def test_notify_application_submitted_fans_out_to_both_channels():
     discord = AsyncMock(return_value=True)
     tg = AsyncMock(return_value=True)
     with (
-        patch("services.notifications.send_discord", new=discord),
-        patch("services.notifications.send_telegram", new=tg),
+        patch("services.notify.send_discord", new=discord),
+        patch("services.notify.send_telegram", new=tg),
     ):
         await notify_application_submitted(settings=s, application=_application())
     discord.assert_awaited_once()
@@ -418,8 +418,8 @@ async def test_notify_scrape_run_summary_no_op_when_no_new_jobs():
     discord = AsyncMock(return_value=False)
     tg = AsyncMock(return_value=False)
     with (
-        patch("services.notifications._send_discord_scrape_run", new=discord),
-        patch("services.notifications._send_telegram_scrape_run", new=tg),
+        patch("services.notify._send_discord_scrape_run", new=discord),
+        patch("services.notify._send_telegram_scrape_run", new=tg),
     ):
         await notify_scrape_run_summary(settings=s, run=run, top_jobs=[])
     discord.assert_not_awaited()
@@ -434,8 +434,8 @@ async def test_notify_scrape_run_summary_fans_out_to_both_channels():
     discord = AsyncMock(return_value=True)
     tg = AsyncMock(return_value=True)
     with (
-        patch("services.notifications._send_discord_scrape_run", new=discord),
-        patch("services.notifications._send_telegram_scrape_run", new=tg),
+        patch("services.notify._send_discord_scrape_run", new=discord),
+        patch("services.notify._send_telegram_scrape_run", new=tg),
     ):
         await notify_scrape_run_summary(settings=s, run=run, top_jobs=_top_jobs(3))
     discord.assert_awaited_once()
@@ -453,8 +453,8 @@ async def test_notify_scrape_run_summary_survives_one_channel_failure():
 
     tg = AsyncMock(return_value=True)
     with (
-        patch("services.notifications._send_discord_scrape_run", new=_boom),
-        patch("services.notifications._send_telegram_scrape_run", new=tg),
+        patch("services.notify._send_discord_scrape_run", new=_boom),
+        patch("services.notify._send_telegram_scrape_run", new=tg),
     ):
         # The whole gather must not raise.
         await notify_scrape_run_summary(settings=s, run=run, top_jobs=_top_jobs(3))
@@ -464,14 +464,14 @@ async def test_notify_scrape_run_summary_survives_one_channel_failure():
 @pytest.mark.asyncio
 async def test_send_discord_scrape_run_posts_embed():
     """Happy path: builds an embed and posts to the configured webhook."""
-    from services.notifications import _send_discord_scrape_run
+    from services.notify import _send_discord_scrape_run
 
     s = _settings()
     run = _scrape_run(new_jobs=5)
     captured = {}
     client = _mock_client(captured)
     with patch(
-        "services.notifications._discord_url",
+        "services.notify._discord_url",
         return_value="https://discord.example/webhook/scrape-run",
     ):
         ok = await _send_discord_scrape_run(
@@ -489,15 +489,15 @@ async def test_send_telegram_scrape_run_posts_plaintext():
     injection defense — scraper-controlled role/company/url could otherwise
     forge `[phish](url)` clickable links).
     """
-    from services.notifications import _send_telegram_scrape_run
+    from services.notify import _send_telegram_scrape_run
 
     s = _settings()
     run = _scrape_run(new_jobs=5)
     captured = {}
     client = _mock_client(captured)
     with (
-        patch("services.notifications._telegram_token", return_value="bot-token"),
-        patch("services.notifications._telegram_chat_id", return_value="42"),
+        patch("services.notify._telegram_token", return_value="bot-token"),
+        patch("services.notify._telegram_chat_id", return_value="42"),
     ):
         ok = await _send_telegram_scrape_run(
             settings=s, run=run, top_jobs=_top_jobs(3), http_client=client
@@ -517,7 +517,7 @@ async def test_send_telegram_scrape_run_hostile_role_renders_as_plain_text():
     link — because no parse_mode is set, Telegram falls back to text
     rendering and the brackets/parens stay literal.
     """
-    from services.notifications import _send_telegram_scrape_run
+    from services.notify import _send_telegram_scrape_run
 
     hostile = [
         SimpleNamespace(
@@ -532,8 +532,8 @@ async def test_send_telegram_scrape_run_hostile_role_renders_as_plain_text():
     captured = {}
     client = _mock_client(captured)
     with (
-        patch("services.notifications._telegram_token", return_value="bot-token"),
-        patch("services.notifications._telegram_chat_id", return_value="42"),
+        patch("services.notify._telegram_token", return_value="bot-token"),
+        patch("services.notify._telegram_chat_id", return_value="42"),
     ):
         ok = await _send_telegram_scrape_run(
             settings=s, run=run, top_jobs=hostile, http_client=client

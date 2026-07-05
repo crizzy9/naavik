@@ -41,7 +41,7 @@ from scraper.redaction import safe_exc
 from scraper.sites import scrapers as scraper_registry
 from scraper.types import ScrapeQuery
 from services import env_secrets
-from services.notifications import notify_admin_error
+from services.notify import notify_admin_error
 from services.scraper_service import run_scraper
 
 log = logging.getLogger(__name__)

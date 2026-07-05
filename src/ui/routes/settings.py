@@ -993,11 +993,11 @@ async def post_notifications_test(
     """Send a REAL test message to the configured Discord/Telegram channel.
 
     Was a stub that reported success without sending anything. Now dispatches
-    an actual message via `services.notifications` and reports the true
+    an actual message via `services.notify` and reports the true
     outcome — including an honest "not configured" message when the channel's
     env var is unset.
     """
-    from services import notifications
+    from services import notify
 
     if channel == "discord" and not app_settings.discord_webhook_url:
         return HTMLResponse(
@@ -1013,7 +1013,7 @@ async def post_notifications_test(
             status_code=422,
         )
 
-    ok = await notifications.send_test_message(channel=channel)
+    ok = await notify.send_test_message(channel=channel)
     if ok:
         return HTMLResponse(f'<span class="text-emerald-300">Sent a test {channel} message.</span>')
     return HTMLResponse(

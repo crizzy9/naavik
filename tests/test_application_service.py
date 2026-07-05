@@ -1120,9 +1120,7 @@ async def test_submit_draft_default_notify_fn_fires_when_settings_configured():
 
     with (
         patch("services.application_service.ats_dispatch", return_value=fake_adapter),
-        patch(
-            "services.notifications.notify_application_submitted", new=notify_application_submitted
-        ),
+        patch("services.notify.notify_application_submitted", new=notify_application_submitted),
     ):
         out = await submit_draft(session, app_row.id)
 
@@ -1164,9 +1162,7 @@ async def test_submit_draft_default_notify_fn_skipped_when_no_settings():
 
     with (
         patch("services.application_service.ats_dispatch", return_value=fake_adapter),
-        patch(
-            "services.notifications.notify_application_submitted", new=notify_application_submitted
-        ),
+        patch("services.notify.notify_application_submitted", new=notify_application_submitted),
     ):
         out = await submit_draft(session, app_row.id)
 
@@ -1209,7 +1205,7 @@ async def test_submit_draft_explicit_notify_fn_overrides_default():
     with (
         patch("services.application_service.ats_dispatch", return_value=fake_adapter),
         patch(
-            "services.notifications.notify_application_submitted",
+            "services.notify.notify_application_submitted",
             new=default_notify_application_submitted,
         ),
     ):

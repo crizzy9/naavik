@@ -10,7 +10,7 @@ On successful classification, emits `EMAIL_RECEIVED` AppEvent and (if the
 message is tied to an Application) computes a non-destructive
 `SuggestedTransition` + emits `EMAIL_STATUS_SUGGESTED` AppEvent for the
 human-confirm banner. Also fans out priority notifications via
-`notifications.notify_priority_email`.
+`notify.notify_priority_email`.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from models import (
     UnclassifiedReason,
 )
 from models.enums import EmailClassification
-from services import email_status_mapper, llm_tracker, notifications
+from services import email_status_mapper, llm_tracker, notify
 from services.email_sync import _MAX_SENDER_EMAIL_LEN, _MAX_SUBJECT_LEN
 
 log = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ async def _post_classify_dispatch(
     - If the message is linked to an Application, compute a suggestion and
       emit EMAIL_STATUS_SUGGESTED so the in-app banner can render.
     - Fire priority notifications for INTERVIEW_REQUEST / OFFER / REJECTION /
-      ASSESSMENT via `notifications.notify_priority_email`.
+      ASSESSMENT via `notify.notify_priority_email`.
     """
     classification = msg.classification
     if classification is None:
@@ -130,7 +130,7 @@ async def _post_classify_dispatch(
                 )
             if settings is not None:
                 try:
-                    await notifications.notify_priority_email(
+                    await notify.notify_priority_email(
                         settings=settings,
                         application=application,
                         classification=classification,

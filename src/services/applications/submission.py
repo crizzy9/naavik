@@ -218,7 +218,7 @@ def _default_notify_fn(settings: Settings | None):
     """
     if settings is None:
         return None
-    from services.notifications import notify_application_submitted
+    from services.notify import notify_application_submitted
 
     async def _notify(application: Application) -> None:
         await notify_application_submitted(settings=settings, application=application)

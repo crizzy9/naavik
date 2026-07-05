@@ -32,7 +32,7 @@ def _wire(monkeypatch, *, health, settings_row=...):
     async def _notify(*, settings, message, http_client=None):
         sent.append(message)
 
-    monkeypatch.setattr("services.notifications.notify_admin_error", _notify)
+    monkeypatch.setattr("services.notify.notify_admin_error", _notify)
 
     if settings_row is ...:
         settings_row = SimpleNamespace(user_id=1, notify_on_errors=True)

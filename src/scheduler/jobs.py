@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 async def auto_apply() -> None:
     """`applications.auto_apply` — every 5min."""
     from services.application_service import process_auto_apply_queue
-    from services.notifications import notify_application_submitted
+    from services.notify import notify_application_submitted
 
     async with async_session() as session:
         from sqlmodel import select as _select
@@ -441,7 +441,7 @@ async def _maybe_alert_linkedin_session() -> None:
     """
     from models import Settings
     from services import linkedin_resolver
-    from services.notifications import notify_admin_error
+    from services.notify import notify_admin_error
 
     health = linkedin_resolver.read_session_health()
     if not health or health.get("status") != "not_logged_in" or health.get("alerted"):

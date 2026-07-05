@@ -1,8 +1,9 @@
 """Event vocabulary, per-channel renderers, toggles, composite emitters.
 
-Split out of services/notifications.py in plan 91 Phase 4.6;
+Split out of the former services/notifications.py in plan 91 Phase 4.6;
 behaviour unchanged. Internal calls to patched seams route through
-`svc()` (the facade) so test interception keeps working.
+`svc()` (the `services.notify` package surface) so test interception
+keeps working.
 """
 
 from __future__ import annotations
@@ -19,12 +20,12 @@ log = logging.getLogger(__name__)
 
 
 def svc():
-    """The `services.notifications` facade, resolved at call time — keeps
-    `patch("services.notifications.X")` seams intercepting internal calls
-    (plan 91 Phase 4.6)."""
-    from services import notifications
+    """The `services.notify` package surface, resolved at call time — keeps
+    `patch("services.notify.X")` seams intercepting internal calls
+    (plan 91 Phase 4.6 / plan 92 teardown)."""
+    from services import notify
 
-    return notifications
+    return notify
 
 
 # Per-event toggle keys (matching Settings.notifications_enabled JSON shape).
