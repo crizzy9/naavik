@@ -42,7 +42,7 @@ async def get_outreach(
     )
     ctx["active_sidebar"] = "outreach"
     ctx["active_template_path"] = "/outreach"
-    return templates.TemplateResponse(request, "pages/outreach.html", ctx)
+    return templates.TemplateResponse(request, "pages/outreach/outreach.html", ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ async def fragment_app_detail(
     )
     if ctx.get("detail") is None:
         raise HTTPException(status_code=404, detail="Application not found")
-    return templates.TemplateResponse(request, "pages/_outreach_detail.html", ctx)
+    return templates.TemplateResponse(request, "pages/outreach/_outreach_detail.html", ctx)
 
 
 @router.post(
@@ -104,7 +104,7 @@ async def fragment_outreach_draft(
     await session.commit()
     return templates.TemplateResponse(
         request,
-        "components/outreach_message_card.html",
+        "components/outreach/outreach_message_card.html",
         {
             "message": {
                 "id": msg.id,

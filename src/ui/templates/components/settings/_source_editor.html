@@ -1,0 +1,52 @@
+{#
+  _source_editor.html — the per-source Configure popover body.
+
+  Extracted from _source_row.html so PUT /api/v1/settings/sources can
+  return EXACTLY this subtree for the source that submitted — the editor
+  forms target `closest [data-source-editor]` with outerHTML, and
+  returning the whole Sources panel here is what stacked a second copy
+  of the view inside the popover (the P4 view-stacking bug).
+
+  Args:
+    view : one row of _build_sources_view (source, configure, rate_limit).
+#}
+{% set v = view %}
+<div data-source-editor="{{ v.source }}" class="mt-2 p-3 rounded-md border border-slate-800 bg-slate-950/60 text-slate-300 max-w-xs sm:max-w-sm">
+  {# Plan 58 / 0.2.7.06 — rate-limit editor renders for every source. #}
+  {% include "components/settings/_rate_limit_editor.html" %}
+  {% if v.configure.kind == "env" %}
+    <p class="mt-3 text-[11px] text-slate-400 leading-relaxed border-t border-slate-800 pt-3">
+      Set <code class="font-mono text-slate-200">{{ v.configure.env_var }}</code>
+      in <code class="font-mono text-slate-200">.env</code> (CSV of company slugs).
+      Restart the app after editing — pydantic-settings loads env at boot.
+    </p>
+    {% if v.configure.example %}
+      <p class="mt-1.5 text-[11px] font-mono text-slate-500 break-all">{{ v.configure.example }}</p>
+    {% endif %}
+    {% if v.configure.current %}
+      <p class="mt-1.5 text-[11px] text-emerald-300">
+        Currently tracking: <span class="font-mono">{{ v.configure.current }}</span>
+      </p>
+    {% endif %}
+  {% elif v.configure.kind == "db" %}
+    {# Plan 58 / 0.2.7.06 — LinkedIn/Indeed get the derived-from-profile
+       panel + override form (docs/design/JOB_SEARCH_PREFERENCES.md § D). #}
+    {% include "components/settings/_keywords_editor.html" %}
+  {% elif v.configure.kind == "db-workday" %}
+    {# Plan 56 / 0.2.7.04 — Workday is per-tenant DB-stored (Settings.workday_companies);
+       the WORKDAY_COMPANIES env-slot in src/config.py is dead-letter until 0.2.7.06. #}
+    <p class="mt-3 text-[11px] text-slate-400 leading-relaxed border-t border-slate-800 pt-3">
+      Workday companies are per-user. Update via
+      <code class="font-mono text-slate-200">PUT /api/v1/settings/sources</code>
+      (writable editor lands in <code class="font-mono">0.2.7.06</code>).
+    </p>
+    {% if v.configure.companies %}
+      <p class="mt-1.5 text-[11px] text-slate-300">
+        Tracking:
+        <span class="font-mono text-slate-200">{{ v.configure.companies | join(", ") }}</span>
+      </p>
+    {% else %}
+      <p class="mt-1.5 text-[11px] text-slate-500 italic">No companies set.</p>
+    {% endif %}
+  {% endif %}
+</div>

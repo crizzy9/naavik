@@ -79,7 +79,7 @@ async def get_discover(
     )
     ctx["active_sidebar"] = "jobs"
     ctx["active_template_path"] = "/discover"
-    return templates.TemplateResponse(request, "pages/discover.html", ctx)
+    return templates.TemplateResponse(request, "pages/discover/discover.html", ctx)
 
 
 async def _job_or_404(session: AsyncSession, job_id: int, user_id: int):
@@ -141,7 +141,7 @@ async def get_review(
     )
     ctx["active_sidebar"] = "jobs"
     ctx["active_template_path"] = "/discover/:id"
-    return templates.TemplateResponse(request, "pages/discover_review.html", ctx)
+    return templates.TemplateResponse(request, "pages/discover/discover_review.html", ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -342,7 +342,7 @@ async def _next_card_response(
     if not queue:
         return templates.TemplateResponse(
             request,
-            "components/empty_state.html",
+            "components/common/empty_state.html",
             {
                 "icon": "check-circle-2",
                 "line": "No more matches. Naavik scans hourly — check back soon.",
@@ -355,7 +355,7 @@ async def _next_card_response(
         warm_label = c.name.split()[0] if c else None
     return templates.TemplateResponse(
         request,
-        "components/swipe_card.html",
+        "components/discover/swipe_card.html",
         {"job": dctx.swipe_card_dict(next_job, warm_intro_label=warm_label)},
     )
 
@@ -391,7 +391,7 @@ async def fragment_expanded(
     ctx = await drctx.build_review_ctx(
         session, user_id=user_id, job=job, application=app, eager=eager
     )
-    return templates.TemplateResponse(request, "pages/_discover_review_inline.html", ctx)
+    return templates.TemplateResponse(request, "pages/discover/_discover_review_inline.html", ctx)
 
 
 @router.get(
@@ -432,7 +432,9 @@ async def fragment_workspace(
         application=app,
         eager=settings.eager_review_generation,
     )
-    return templates.TemplateResponse(request, "pages/_discover_review_workspace.html", ctx)
+    return templates.TemplateResponse(
+        request, "pages/discover/_discover_review_workspace.html", ctx
+    )
 
 
 @router.post(
@@ -466,7 +468,9 @@ async def fragment_tailor(
     ctx = await drctx.build_review_ctx(
         session, user_id=user_id, job=job, application=app, eager=False
     )
-    return templates.TemplateResponse(request, "pages/_discover_review_workspace.html", ctx)
+    return templates.TemplateResponse(
+        request, "pages/discover/_discover_review_workspace.html", ctx
+    )
 
 
 @router.get(
@@ -486,7 +490,7 @@ async def fragment_queue(
         user_id=_effective_user_id(user),
         filters=filters,
     )
-    return templates.TemplateResponse(request, "pages/_discover_queue.html", ctx)
+    return templates.TemplateResponse(request, "pages/discover/_discover_queue.html", ctx)
 
 
 @router.get(
@@ -504,7 +508,7 @@ async def fragment_match_breakdown(
     job = await _job_or_404(session, job_id, user_id)
     return templates.TemplateResponse(
         request,
-        "components/match_breakdown.html",
+        "components/discover/match_breakdown.html",
         {"breakdown": job.match_breakdown, "overall": job.score},
     )
 
@@ -747,7 +751,7 @@ async def get_skipped(
 async def add_by_url_modal(request: Request):
     return templates.TemplateResponse(
         request,
-        "components/add_by_url_modal.html",
+        "components/discover/add_by_url_modal.html",
         {},
     )
 
@@ -774,7 +778,7 @@ async def fragment_tailored_bullets(
     bullets = await drctx.tailored_bullet_groups(session, user_id=user_id)
     return templates.TemplateResponse(
         request,
-        "pages/_apply_tailored_bullets.html",
+        "pages/discover/_apply_tailored_bullets.html",
         {"groups": bullets},
     )
 
@@ -798,7 +802,7 @@ async def fragment_cover_section(
     text = sections.get(section, "")
     return templates.TemplateResponse(
         request,
-        "components/cover_letter_section.html",
+        "components/discover/cover_letter_section.html",
         {
             "application_id": application_id,
             "section": section,
@@ -866,7 +870,7 @@ async def fragment_cover_section_save(
     await session.commit()
     response = templates.TemplateResponse(
         request,
-        "components/cover_letter_section.html",
+        "components/discover/cover_letter_section.html",
         {
             "application_id": application_id,
             "section": section,
@@ -918,7 +922,7 @@ async def _ledger_response(
     page_count = getattr(doc, "page_count", None) if doc is not None else None
     response = templates.TemplateResponse(
         request,
-        "pages/_apply_tailored_bullets.html",
+        "pages/discover/_apply_tailored_bullets.html",
         {
             "groups": groups,
             "application_id": application.id,
@@ -1227,7 +1231,9 @@ async def fragment_generate_bundle(
     ctx = await drctx.build_review_ctx(
         session, user_id=user_id, job=job, application=application, eager=False
     )
-    response = templates.TemplateResponse(request, "pages/_discover_review_workspace.html", ctx)
+    response = templates.TemplateResponse(
+        request, "pages/discover/_discover_review_workspace.html", ctx
+    )
     response.headers["HX-Trigger"] = _json.dumps({"showToast": toast})
     return response
 
@@ -1344,7 +1350,7 @@ async def post_cover_generate(
     ]
     return templates.TemplateResponse(
         request,
-        "pages/_apply_cover_letter_text.html",
+        "pages/discover/_apply_cover_letter_text.html",
         {
             "application": {"id": application_id},
             "cover_sections": cover_sections,
@@ -1375,7 +1381,7 @@ async def put_screener(
     await session.commit()
     return templates.TemplateResponse(
         request,
-        "components/screener_question_card.html",
+        "components/discover/screener_question_card.html",
         {
             "answer": {
                 "id": a.id,
@@ -1409,7 +1415,7 @@ async def fragment_screener(
         raise HTTPException(status_code=404, detail="Answer not found")
     return templates.TemplateResponse(
         request,
-        "components/screener_question_card.html",
+        "components/discover/screener_question_card.html",
         {
             "answer": {
                 "id": a.id,

@@ -1,0 +1,36 @@
+{#
+  editor_field.html — profile-editor field with autosave on blur per
+  INTERACTIONS.md § B.1.
+
+  Args:
+    label             : field caption (required)
+    name              : field name (required) — used in autosave URL
+    value             : initial value
+    type              : "text" / "email" / "number" / "textarea" / "date" / "select"
+    placeholder       : placeholder text
+    mono              : bool — JetBrains Mono
+    autosave_url      : HTMX PUT target (default: "/api/v1/profile/{name}")
+    autosave_enabled  : bool (default: true)
+    hint              : optional right-aligned label hint
+    id                : explicit DOM id
+    options           : list[(value, label)] — required when type="select" (Issue 4)
+#}
+{% set type_ = type | default("text") %}
+{% set autosave_enabled = autosave_enabled | default(true) %}
+{% set autosave_url = autosave_url | default("/api/v1/profile/" ~ name) %}
+{% set _id = id | default("editor-" ~ name) %}
+
+{% if autosave_enabled %}
+  {# `<select>` fires `change` on user pick; text inputs fire on `blur changed`. #}
+  {% set _trigger = "change delay:200ms" if type_ == "select" else "blur changed delay:500ms" %}
+  {% set _attrs = 'hx-put="' ~ autosave_url ~ '" hx-trigger="' ~ _trigger ~ '" hx-swap="none" hx-include="this"' %}
+{% else %}
+  {% set _attrs = "" %}
+{% endif %}
+
+<div>
+  {% with label=label, for_id=_id, hint=hint %}{% include "components/common/field_label.html" %}{% endwith %}
+  {% with name=name, type=type_, value=value, placeholder=placeholder, mono=mono, id=_id, extra_attrs=_attrs, options=options %}
+    {% include "components/common/input.html" %}
+  {% endwith %}
+</div>

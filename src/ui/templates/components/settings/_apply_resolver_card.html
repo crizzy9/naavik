@@ -1,0 +1,69 @@
+{#
+  Apply-target resolution ops card — Settings · AI & Automation.
+
+  Shows the Tier-B LinkedIn session health (the resolver's authenticated
+  fallback lives or dies with it) + resolution pipeline counts, so a dead
+  session or a growing unresolved backlog is visible without reading logs.
+
+  Args:
+    apply_resolver: {
+      stats: dict | none        — resolver_stats() output (none under shims)
+      session_health: dict|none — {"status","at","landing_url","alerted"}
+      auth_available: bool      — Tier B configured (cookie or profile)
+    }
+#}
+{% from "components/common/_macros.html" import chip %}
+{% set _health = apply_resolver.session_health %}
+{% set _status = _health.status if _health else none %}
+<section class="bg-slate-900 border border-slate-800 rounded-lg p-6 flex flex-col gap-4"
+         data-testid="apply-resolver-card">
+  <div class="flex items-center justify-between gap-3">
+    <div>
+      <div class="text-sm text-slate-100">Apply-target resolution</div>
+      <div class="text-xs text-slate-500">Where each scraped job actually applies — resolved from LinkedIn (guest page → board APIs → authenticated session), retried on a backoff ladder when it can't.</div>
+    </div>
+    {% if _status == "ok" %}
+      {{ chip("linkedin session · ok", tone="emerald") }}
+    {% elif _status == "not_logged_in" %}
+      {{ chip("linkedin session · NOT LOGGED IN", tone="rose") }}
+    {% elif _status == "error" %}
+      {{ chip("linkedin session · error", tone="amber") }}
+    {% elif apply_resolver.auth_available %}
+      {{ chip("linkedin session · never attempted", tone="slate") }}
+    {% else %}
+      {{ chip("linkedin session · not configured", tone="slate") }}
+    {% endif %}
+  </div>
+
+  {% if _health and _health.at %}
+    <div class="text-xs text-slate-500 font-mono">last authenticated attempt · {{ _health.at[:19] | replace("T", " ") }} UTC</div>
+  {% endif %}
+
+  {% if _status != "ok" %}
+    <div class="text-xs text-slate-400 bg-slate-950 border border-slate-800 rounded-md p-3 font-mono leading-relaxed">
+      {% if not apply_resolver.auth_available %}
+        Tier B (authenticated LinkedIn) is off — offsite jobs that the public board APIs can't confirm stay unresolved.<br>
+      {% endif %}
+      Bootstrap / refresh the session:<br>
+      uv run python scripts/linkedin_login.py --from-firefox ~/.mozilla/firefox/&lt;profile&gt;/cookies.sqlite<br>
+      # or set LINKEDIN_SESSION_COOKIE in .env and restart
+    </div>
+  {% endif %}
+
+  {% if apply_resolver.stats %}
+    {% set s = apply_resolver.stats %}
+    <div class="flex flex-wrap items-center gap-2">
+      {{ chip("resolved · " ~ s.resolved, tone="emerald") }}
+      {{ chip("pending · " ~ s.pending, tone="slate") }}
+      {{ chip("retry due · " ~ s.retry_due, tone=("amber" if s.retry_due else "slate")) }}
+      {{ chip("retry scheduled · " ~ s.retry_scheduled, tone="slate") }}
+      {{ chip("exhausted · " ~ s.exhausted, tone=("rose" if s.exhausted else "slate")) }}
+    </div>
+    <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+      <span class="uppercase tracking-wide font-mono text-[10px]">resolved via</span>
+      {% for via, n in s.by_via | dictsort %}
+        {{ chip(via ~ " · " ~ n, tone="indigo" if via in ("direct", "linkedin_guest_slug", "linkedin_auth", "board_trust", "manual") else "slate") }}
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>

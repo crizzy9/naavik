@@ -1,0 +1,36 @@
+{#
+  certification_edit_card.html — one certification slot in the editor.
+
+  Args:
+    cert : dict from profile_ctx.certification_dicts (id, title, issuer,
+           date_value, description)
+#}
+<section id="certification-{{ cert.id }}" class="bg-slate-900 border border-slate-800 rounded-lg p-6 scroll-mt-6">
+  <div class="flex items-baseline justify-between mb-5 gap-3">
+    <div class="text-base font-medium text-slate-50 truncate">Certification · {{ cert.title }}</div>
+    <button type="button"
+            class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
+            hx-get="/_modal/confirm?title=Remove+certification%3F&message=Removes+%22{{ cert.title | urlencode }}%22.&action=/api/v1/certifications/{{ cert.id }}&label=Remove&tone=danger&method=delete"
+            hx-target="#modal-region"
+            hx-swap="innerHTML">
+      <i data-lucide="trash-2" class="h-3.5 w-3.5" stroke-width="1.5"></i>Remove
+    </button>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    {% with label="TITLE", name="cert_title_" ~ cert.id, value=cert.title, autosave_enabled=false %}{% include "components/common/editor_field.html" %}{% endwith %}
+    {% with label="ISSUER", name="cert_issuer_" ~ cert.id, value=cert.issuer, autosave_enabled=false %}{% include "components/common/editor_field.html" %}{% endwith %}
+    {% with label="DATE", name="cert_date_" ~ cert.id, value=cert.date_value, type="date", autosave_enabled=false %}{% include "components/common/editor_field.html" %}{% endwith %}
+  </div>
+  <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+    {% with label="DESCRIPTION (OPTIONAL)", name="cert_description_" ~ cert.id, type="textarea", value=cert.description or "", autosave_enabled=false %}{% include "components/common/editor_field.html" %}{% endwith %}
+    <div>
+      {% with label="RESUME INCLUSION", for_id="cert_selection_override_" ~ cert.id, hint="always/never wins · auto = fit by page space" %}
+        {% include "components/common/field_label.html" %}
+      {% endwith %}
+      {% with name="cert_selection_override_" ~ cert.id, type="select", value=cert.selection_override,
+              options=[("", "Auto (AI decides)"), ("always_include", "Always include"), ("never_include", "Never include")] %}
+        {% include "components/common/input.html" %}
+      {% endwith %}
+    </div>
+  </div>
+</section>

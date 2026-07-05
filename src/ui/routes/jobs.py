@@ -86,7 +86,7 @@ async def get_job_detail(
     ctx = await jobs_ctx.build_job_detail_ctx(session, job=job, scrape_run=scrape_run)
     ctx["active_sidebar"] = "jobs"
     ctx["active_template_path"] = "/jobs/:id"
-    return templates.TemplateResponse(request, "pages/job_detail.html", ctx)
+    return templates.TemplateResponse(request, "pages/jobs/job_detail.html", ctx)
 
 
 @router.get(
@@ -109,7 +109,7 @@ async def get_job_detail_fragment(
     job = await _job_or_404(session, job_id, _effective_user_id(user))
     scrape_run = await _last_scrape_run(session, job.last_scrape_run_id)
     ctx = await jobs_ctx.build_job_detail_ctx(session, job=job, scrape_run=scrape_run)
-    return templates.TemplateResponse(request, "pages/_job_detail_body.html", ctx)
+    return templates.TemplateResponse(request, "pages/jobs/_job_detail_body.html", ctx)
 
 
 @router.get("/api/v1/jobs/{job_id}", name="jobs_get")
@@ -136,7 +136,7 @@ async def get_job_json(
 async def manual_job_modal(request: Request):
     return templates.TemplateResponse(
         request,
-        "components/_manual_job_entry_modal.html",
+        "components/jobs/_manual_job_entry_modal.html",
         {},
     )
 
@@ -193,7 +193,7 @@ async def post_job_manual(
 async def _apply_target_card_response(request: Request, session: AsyncSession, job):
     ctx = await jobs_ctx.build_job_detail_ctx(session, job=job)
     return templates.TemplateResponse(
-        request, "components/_apply_target_card.html", {"j": ctx["job"]}
+        request, "components/jobs/_apply_target_card.html", {"j": ctx["job"]}
     )
 
 

@@ -51,12 +51,12 @@ router = APIRouter()
 # Submissions merged into ONE "AI & Automation" tab. The old tab URLs
 # 307-redirect to /settings/ai-automation.
 _TAB_TEMPLATES: dict[str, str] = {
-    "ai-automation": "pages/_settings_ai_automation.html",
-    "deployment": "pages/_settings_deployment.html",
-    "account": "pages/_settings_account.html",
-    "notifications": "pages/_settings_notifications.html",
-    "sources": "pages/_settings_sources.html",
-    "security": "pages/_settings_security.html",
+    "ai-automation": "pages/settings/_settings_ai_automation.html",
+    "deployment": "pages/settings/_settings_deployment.html",
+    "account": "pages/settings/_settings_account.html",
+    "notifications": "pages/settings/_settings_notifications.html",
+    "sources": "pages/settings/_settings_sources.html",
+    "security": "pages/settings/_settings_security.html",
 }
 
 _MERGED_TAB_REDIRECTS = {"llm-provider", "generation", "auto-apply", "submissions"}
@@ -762,7 +762,7 @@ async def get_settings(
     ctx = await _ctx_for_tab(
         request, "ai-automation", session=session, user_id=_effective_user_id(user)
     )
-    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+    return templates.TemplateResponse(request, "pages/settings/settings.html", ctx)
 
 
 @router.get("/settings/sources", response_class=HTMLResponse, name="settings_sources")
@@ -779,7 +779,7 @@ async def get_settings_sources(
     canonical entry; tests override via `app.dependency_overrides`.
     """
     ctx = await _ctx_for_tab(request, "sources", session=session, user_id=_effective_user_id(_user))
-    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+    return templates.TemplateResponse(request, "pages/settings/settings.html", ctx)
 
 
 _MANUAL_RUN_MAX_LISTINGS = 10
@@ -885,7 +885,7 @@ async def get_settings_merged_alias(
     ctx = await _ctx_for_tab(
         request, "ai-automation", session=session, user_id=_effective_user_id(_user)
     )
-    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+    return templates.TemplateResponse(request, "pages/settings/settings.html", ctx)
 
 
 @router.get("/settings/security", response_class=HTMLResponse, name="settings_security")
@@ -904,7 +904,7 @@ async def get_settings_security(
     ctx = await _ctx_for_tab(
         request, "security", session=session, user_id=_effective_user_id(_user)
     )
-    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+    return templates.TemplateResponse(request, "pages/settings/settings.html", ctx)
 
 
 @router.get("/settings/{tab}", response_class=HTMLResponse, name="settings_tab")
@@ -917,7 +917,7 @@ async def get_settings_tab(
     if tab not in _VALID_TABS:
         raise HTTPException(status_code=404, detail="Unknown settings tab")
     ctx = await _ctx_for_tab(request, tab, session=session, user_id=_effective_user_id(user))
-    return templates.TemplateResponse(request, "pages/settings.html", ctx)
+    return templates.TemplateResponse(request, "pages/settings/settings.html", ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -929,7 +929,7 @@ async def get_settings_tab(
 # stub that previously lived here was deleted. The real handler in
 # `src/api/settings.py:put_llm` now serves both JSON and HTMX form clients.
 # `post_llm_test` stays here because it produces the
-# `components/connection_status_card.html` fragment that the LLM tab's
+# `components/settings/connection_status_card.html` fragment that the LLM tab's
 # "Test connection" button mounts via /_fragments/settings/test-connection.
 
 
@@ -945,7 +945,7 @@ async def post_llm_test(request: Request, fail: Annotated[str | None, Query()] =
     if fail:
         return templates.TemplateResponse(
             request,
-            "components/connection_status_card.html",
+            "components/settings/connection_status_card.html",
             {
                 "ok": False,
                 "provider": "Anthropic API",
@@ -955,7 +955,7 @@ async def post_llm_test(request: Request, fail: Annotated[str | None, Query()] =
         )
     return templates.TemplateResponse(
         request,
-        "components/connection_status_card.html",
+        "components/settings/connection_status_card.html",
         {"ok": True, "latency_ms": 412, "model": "claude-sonnet-4-6"},
     )
 
@@ -1194,7 +1194,7 @@ async def get_settings_llm_model_options(
     )
     return templates.TemplateResponse(
         request,
-        "pages/_settings_llm_model_field.html",
+        "pages/settings/_settings_llm_model_field.html",
         {
             "provider_id": provider,
             "models": model_options,

@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}Edit profile — Naavik{% endblock %}
+
+{% block main %}
+<div class="px-6 lg:px-8 py-6 lg:py-8 max-w-7xl mx-auto">
+  <header class="flex items-baseline justify-between gap-3 mb-6 flex-wrap">
+    <div class="min-w-0">
+      <nav class="text-xs text-slate-500 mb-1 truncate">
+        <a href="/profile" class="hover:text-slate-300">Profile</a>
+        <span aria-hidden="true">›</span>
+        Edit
+      </nav>
+      <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Edit profile</h1>
+    </div>
+    <div class="flex items-center gap-2 shrink-0 flex-wrap">
+      <span id="profile-edit-save-result"
+            class="text-xs text-slate-500"
+            aria-live="polite"
+            data-testid="profile-edit-save-result"></span>
+      <button type="submit"
+              form="profile-edit-form"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              data-testid="profile-edit-save">
+        <i data-lucide="check" class="h-4 w-4" stroke-width="1.5"></i>
+        Save changes
+      </button>
+      <a href="/profile" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm transition">
+        <i data-lucide="eye" class="h-4 w-4" stroke-width="1.5"></i>
+        Preview
+      </a>
+      <button type="button"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 text-sm transition"
+              hx-get="/_modal/confirm?title=Discard+unsaved+edits%3F&message=Discard+returns+to+the+last+saved+version.&action=/profile&label=Discard&tone=warning&method=get"
+              hx-target="#modal-region"
+              hx-swap="innerHTML">
+        <i data-lucide="undo" class="h-4 w-4" stroke-width="1.5"></i>
+        Discard
+      </button>
+    </div>
+  </header>
+
+  <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-6 lg:gap-8">
+    <div class="flex flex-col gap-6 min-w-0">
+      <form id="profile-edit-form"
+            hx-put="/api/v1/profile"
+            hx-target="#profile-edit-save-result"
+            hx-swap="innerHTML"
+            hx-disabled-elt="find button[type=submit]"
+            class="flex flex-col gap-6">
+      {# Identity card — autosave_enabled=false: fields submit via the parent
+         #profile-edit-form on Save (0.7.0.48 fold-in for bug #4). #}
+      {% set _identity_body %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {% with label="FULL NAME", name="full_name", value=profile.full_name, autosave_enabled=false %}{% include "components/common/editor_field.html" %}{% endwith %}
+          {% with label="HEADLINE", name="headline", value=profile.headline, autosave_enabled=false %}{% include "components/common/editor_field.html" %}{% endwith %}
+          {% with label="CURRENT COMPANY", name="current_company", value=profile.current_company, autosave_enabled=false %}{% include "components/common/editor_field.html" %}{% endwith %}
+          {% with label="LOCATION", name="location", value=profile.location, autosave_enabled=false %}{% include "components/common/editor_field.html" %}{% endwith %}
+        </div>
+        {# Contact + links row — these flow straight into the tailored resume
+           header (email · phone · linkedin · github · portfolio). #}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+          {% with label="EMAIL", name="email", value=profile.email, autosave_enabled=false %}{% include "components/common/editor_field.html" %}{% endwith %}
+          {% with label="PHONE", name="phone", value=profile.phone, autosave_enabled=false, placeholder="+1 (555) 555-0100" %}{% include "components/common/editor_field.html" %}{% endwith %}
+          {% with label="LINKEDIN HANDLE", name="linkedin_handle", value=profile.linkedin_handle, autosave_enabled=false, placeholder="handle, e.g. shyampadia" %}{% include "components/common/editor_field.html" %}{% endwith %}
+          {% with label="GITHUB HANDLE", name="github_handle", value=profile.github_handle, autosave_enabled=false, placeholder="handle, e.g. crizzy9" %}{% include "components/common/editor_field.html" %}{% endwith %}
+          {% with label="PORTFOLIO URL", name="portfolio_url", value=profile.portfolio_url, autosave_enabled=false, placeholder="e.g. crypticsoul.dev" %}{% include "components/common/editor_field.html" %}{% endwith %}
+        </div>
+      {% endset %}
+      {% with title="Identity", body=_identity_body %}
+        {% include "components/profile/editor_card.html" %}
+      {% endwith %}
+
+      {# Summary #}
+      {% set _summary_body %}
+        {# Same fallback as the view page — parsed resumes often fill only
+           summary_short, and an empty edit box next to a populated view
+           reads as data loss. Saving writes the text back to summary_full. #}
+        {% with label="SUMMARY", name="summary_full", type="textarea", value=profile.summary_full or profile.summary_short, autosave_enabled=false %}
+          {% include "components/common/editor_field.html" %}
+        {% endwith %}
+      {% endset %}
+      {% with title="Summary", anchor_id="summary", body=_summary_body %}
+        {% include "components/profile/editor_card.html" %}
+      {% endwith %}
+
+      {# Per-experience cards — add/remove slots + always-editable fields.
+         Cards render via components/profile/experience_edit_card.html (also returned
+         by POST /api/v1/experiences for the append-without-reload add). #}
+      <div id="experience" class="flex items-baseline justify-between gap-3 scroll-mt-6">
+        <h2 class="text-base font-medium text-slate-50">Experience</h2>
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                hx-post="/api/v1/experiences"
+                hx-target="#experience-edit-list"
+                hx-swap="beforeend"
+                data-testid="add-experience">
+          <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Add role
+        </button>
+      </div>
+      <div id="experience-edit-list" class="flex flex-col gap-6">
+        {% for exp in experiences %}
+          {% with exp=exp %}{% include "components/profile/experience_edit_card.html" %}{% endwith %}
+        {% endfor %}
+      </div>
+
+      {# Education #}
+      <div id="education" class="flex items-baseline justify-between gap-3 scroll-mt-6">
+        <h2 class="text-base font-medium text-slate-50">Education</h2>
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                hx-post="/api/v1/educations"
+                hx-target="#education-edit-list"
+                hx-swap="beforeend"
+                data-testid="add-education">
+          <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Add education
+        </button>
+      </div>
+      <div id="education-edit-list" class="flex flex-col gap-6">
+        {% for edu in educations %}
+          {% with edu=edu %}{% include "components/profile/education_edit_card.html" %}{% endwith %}
+        {% endfor %}
+      </div>
+
+      {# Skills #}
+      <section id="skills" class="bg-slate-900 border border-slate-800 rounded-lg p-6 scroll-mt-6">
+        <div class="flex items-baseline justify-between mb-5 gap-3">
+          <h2 class="text-base font-medium text-slate-50">Skills</h2>
+          <button type="button"
+                  class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+                  hx-post="/api/v1/skills"
+                  hx-target="#skill-edit-list"
+                  hx-swap="beforeend"
+                  data-testid="add-skill-group">
+            <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+            Add group
+          </button>
+        </div>
+        <div id="skill-edit-list" class="flex flex-col gap-4">
+          {% for skill in skills %}
+            {% with skill=skill %}{% include "components/profile/skill_edit_card.html" %}{% endwith %}
+          {% endfor %}
+        </div>
+      </section>
+
+      {# Projects #}
+      <div id="projects" class="flex items-baseline justify-between gap-3 scroll-mt-6">
+        <h2 class="text-base font-medium text-slate-50">Projects</h2>
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                hx-post="/api/v1/projects"
+                hx-vals='{"kind": "project"}'
+                hx-target="#project-edit-list"
+                hx-swap="beforeend"
+                data-testid="add-project">
+          <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Add project
+        </button>
+      </div>
+      <div id="project-edit-list" class="flex flex-col gap-6">
+        {% for proj in projects %}
+          {% with proj=proj %}{% include "components/profile/project_edit_card.html" %}{% endwith %}
+        {% endfor %}
+      </div>
+
+      {# Open-source contributions #}
+      <div id="open-source" class="flex items-baseline justify-between gap-3 scroll-mt-6">
+        <h2 class="text-base font-medium text-slate-50">Open source</h2>
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                hx-post="/api/v1/projects"
+                hx-vals='{"kind": "open_source"}'
+                hx-target="#oss-edit-list"
+                hx-swap="beforeend"
+                data-testid="add-open-source">
+          <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Add contribution
+        </button>
+      </div>
+      <div id="oss-edit-list" class="flex flex-col gap-6">
+        {% for proj in open_source %}
+          {% with proj=proj %}{% include "components/profile/project_edit_card.html" %}{% endwith %}
+        {% endfor %}
+      </div>
+
+      {# Certifications #}
+      <div id="certifications" class="flex items-baseline justify-between gap-3 scroll-mt-6">
+        <h2 class="text-base font-medium text-slate-50">Certifications</h2>
+        <button type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                hx-post="/api/v1/certifications"
+                hx-target="#certification-edit-list"
+                hx-swap="beforeend"
+                data-testid="add-certification">
+          <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Add certification
+        </button>
+      </div>
+      <div id="certification-edit-list" class="flex flex-col gap-6">
+        {% for cert in certifications %}
+          {% with cert=cert %}{% include "components/profile/certification_edit_card.html" %}{% endwith %}
+        {% endfor %}
+      </div>
+
+      {# Application questions — autosave_enabled=false: fields submit via the
+         parent #profile-edit-form on Save (0.7.0.48 fold-in for bug #4). #}
+      {% with profile=profile, autosave_enabled=false %}
+        {% include "components/profile/application_qs_form.html" %}
+      {% endwith %}
+      </form>
+
+      {# Job-search preferences — sibling of #profile-edit-form (own forms;
+         HTML forbids nesting). Drives ALL scrapers; see
+         docs/design/JOB_SEARCH_PREFERENCES.md. #}
+      {% include "components/profile/_search_prefs_editor.html" %}
+
+      {# Raw resume text — source-of-truth for what the parser saw.
+         Sibling of #profile-edit-form (not nested) because it carries its own
+         <form hx-post="/api/v1/extraction/upload"> and HTML forbids nested forms. #}
+      <details class="bg-slate-900 border border-slate-800 rounded-lg p-5 group">
+        <summary class="flex items-center justify-between gap-3 cursor-pointer text-sm font-medium text-slate-100 list-none">
+          <span class="flex items-center gap-2">
+            <i data-lucide="file-text" class="h-4 w-4 text-slate-400" stroke-width="1.5"></i>
+            Raw resume text (parsed source)
+            {% if profile.raw_resume_text %}
+              <span class="text-xs text-slate-500 font-mono">· {{ profile.raw_resume_text | length }} chars</span>
+            {% else %}
+              <span class="text-xs text-slate-500">· none uploaded yet</span>
+            {% endif %}
+          </span>
+          <i data-lucide="chevron-down" class="h-4 w-4 text-slate-500 group-open:rotate-180 transition" stroke-width="1.5"></i>
+        </summary>
+        <div class="mt-4 flex flex-col gap-4">
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Updated when you upload a resume PDF. Edit the profile fields above — this is read-only source-of-truth showing what the heuristic parser saw.
+          </p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <label for="resume-replace-input"
+                   class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium cursor-pointer transition">
+              <i data-lucide="upload" class="h-4 w-4" stroke-width="1.5"></i>
+              Replace resume
+            </label>
+            <span class="text-xs text-slate-500">PDF only · max 10 MB</span>
+          </div>
+          <form
+            hx-post="/api/v1/extraction/upload"
+            hx-encoding="multipart/form-data"
+            hx-target="#resume-replace-result"
+            hx-target-error="#resume-replace-result"
+            hx-swap="innerHTML"
+            hx-indicator="#resume-replace-indicator"
+            hx-trigger="change from:#resume-replace-input">
+            <input id="resume-replace-input" name="resume" type="file" accept="application/pdf" class="sr-only">
+          </form>
+          <span id="resume-replace-indicator" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-indigo-300">
+            <span class="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+            Uploading &amp; parsing — the AI parse can take ~30s…
+          </span>
+          <div id="resume-replace-result"></div>
+          {% if profile.raw_resume_text %}
+            {# Plan 0.7.0.48 W3 hacker LOW fold-in (2026-05-25): truncate
+               unbounded raw_resume_text render at 32 KB so an adversarial
+               PDF can't slow a single-page render to a crawl (self-DoS).
+               The `max-h-96 overflow-auto` already scroll-bounds the
+               visible area; this caps the bytes the browser parses. #}
+            {% set _resume_display_cap = 32 * 1024 %}
+            <pre class="bg-slate-950 border border-slate-800 rounded p-4 text-xs text-slate-300 font-mono whitespace-pre-wrap max-h-96 overflow-auto">{{ profile.raw_resume_text[:_resume_display_cap] }}{% if profile.raw_resume_text | length > _resume_display_cap %}
+
+… (truncated · upload smaller resume to see more){% endif %}</pre>
+          {% else %}
+            <div class="text-xs text-slate-500 italic">Upload a resume from /onboarding (or the button above) to populate.</div>
+          {% endif %}
+        </div>
+      </details>
+    </div>
+
+    {# Sticky right rail #}
+    <aside class="hidden lg:block">
+      <div class="flex flex-col gap-6 sticky top-6">
+        {% set _edit_anchors = [
+          {"id": "summary", "label": "Summary"},
+        ] %}
+        {% with anchors=anchors, active_id="experience" %}
+          {% include "components/common/section_anchor_nav.html" %}
+        {% endwith %}
+        {% with missing_count=readiness.missing_count, fields=readiness.fields %}
+          {% include "components/profile/application_readiness_card.html" %}
+        {% endwith %}
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

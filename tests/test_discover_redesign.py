@@ -44,7 +44,7 @@ def test_action_bar_has_no_duplicate_keyboard_hints(client: TestClient, auth_coo
     assert ">skip<" not in body or "skip · auto-apply" not in body
     # Specifically, the keyboard_hints partial (which produced the strip) is
     # not used in the action bar anymore.
-    assert "components/keyboard_hints.html" not in body
+    assert "components/common/keyboard_hints.html" not in body
 
 
 def test_buttons_are_inline_not_stacked(client: TestClient, auth_cookies) -> None:

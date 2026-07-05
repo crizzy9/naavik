@@ -1,4 +1,4 @@
-"""Match panel (components/match_panel.html + requirement matching)."""
+"""Match panel (components/discover/match_panel.html + requirement matching)."""
 
 from __future__ import annotations
 

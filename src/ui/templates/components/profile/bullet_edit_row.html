@@ -1,0 +1,47 @@
+{% from "components/common/_macros.html" import tag_chip, chip %}
+{#
+  bullet_edit_row.html — bullet row in Profile editor with drag handle + actions.
+
+  Args:
+    bullet  : dict with id, text, tags, selection_override
+    editing : bool — inline-edit mode (rare; usually opens modal)
+#}
+<div class="bullet-edit-row group flex items-start gap-2 px-3 py-2.5 rounded-lg hover:bg-slate-800/30 transition"
+     data-bullet-id="{{ bullet.id }}">
+  {# Plan 09a · Issue 10.f — drag handle visible + larger tap target on touch devices. #}
+  <button type="button"
+          class="drag-handle opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-slate-500 lg:text-slate-600 hover:text-slate-300 cursor-grab transition shrink-0 mt-0.5 p-1 -m-1"
+          aria-label="Drag to reorder">
+    <i data-lucide="grip-vertical" class="h-5 w-5 lg:h-4 lg:w-4" stroke-width="1.5"></i>
+  </button>
+  <div class="flex-1 min-w-0">
+    <p class="text-sm text-slate-200 line-clamp-2 leading-relaxed">{{ bullet.text }}</p>
+    <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+      {% for t in bullet.tags or [] %}{{ tag_chip(t) }}{% endfor %}
+      {% if bullet.selection_override == "always_include" %}
+        {{ chip("pinned · always", tone="emerald") }}
+      {% elif bullet.selection_override == "never_include" %}
+        {{ chip("pinned · never", tone="slate") }}
+      {% endif %}
+    </div>
+  </div>
+  {# Plan 09a · Issue 10.f — edit/delete buttons visible on touch (no hover available). #}
+  <div class="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 flex items-center gap-1 shrink-0 transition">
+    <button type="button"
+            class="p-1.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+            aria-label="Edit bullet"
+            hx-get="/_modal/bullet-editor/{{ bullet.id }}"
+            hx-target="#modal-region"
+            hx-swap="innerHTML">
+      <i data-lucide="pencil" class="h-4 w-4" stroke-width="1.5"></i>
+    </button>
+    <button type="button"
+            class="p-1.5 rounded text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+            aria-label="Delete bullet"
+            hx-get="/_modal/confirm?title=Delete+bullet&message=This+can%27t+be+undone.+The+bullet%27s+history+will+remain+in+audit+logs.&action=/api/v1/bullets/{{ bullet.id }}&label=Delete&tone=danger&method=delete"
+            hx-target="#modal-region"
+            hx-swap="innerHTML">
+      <i data-lucide="trash-2" class="h-4 w-4" stroke-width="1.5"></i>
+    </button>
+  </div>
+</div>

@@ -25,7 +25,7 @@ def env() -> Environment:
 
 
 def _render(env: Environment, restriction: str | None, **kwargs) -> str:
-    tpl = env.get_template("components/visa_status_chip.html")
+    tpl = env.get_template("components/discover/visa_status_chip.html")
     return tpl.render(restriction=restriction, **kwargs)
 
 
@@ -107,7 +107,7 @@ def test_swipe_card_mounts_visa_chip(env):
         "gaps": [],
         "visa_note": None,
     }
-    tpl = env.get_template("components/swipe_card.html")
+    tpl = env.get_template("components/discover/swipe_card.html")
     out = tpl.render(job=job_dict, dimmed=False, swiping_dir=None)
     # visa_status_chip included → sentinel attribute present.
     assert 'data-visa-chip="sponsorship_available"' in out
@@ -144,6 +144,6 @@ def test_swipe_card_omits_visa_chip_when_restriction_absent(env):
         "gaps": [],
         "visa_note": None,
     }
-    tpl = env.get_template("components/swipe_card.html")
+    tpl = env.get_template("components/discover/swipe_card.html")
     out = tpl.render(job=job_dict, dimmed=False, swiping_dir=None)
     assert "data-visa-chip" not in out

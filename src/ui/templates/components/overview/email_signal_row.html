@@ -1,0 +1,33 @@
+{#
+  email_signal_row.html — email signal row on Overview right rail.
+
+  Args:
+    signal : dict with sender, sender_initial, sender_color, subject, classification,
+             classification_label, score (int 0-100), relative_time
+#}
+{% set s = signal %}
+{% set _class_color = {
+  "OFFER":     {"text": "text-emerald-300", "ring": "ring-emerald-500/30", "bg": "bg-emerald-500/15"},
+  "INTERVIEW": {"text": "text-amber-300",   "ring": "ring-amber-500/30",   "bg": "bg-amber-500/15"},
+  "REJECTION": {"text": "text-rose-300",    "ring": "ring-rose-500/30",    "bg": "bg-rose-500/15"},
+  "ASSESSMENT":{"text": "text-sky-300",     "ring": "ring-sky-500/30",     "bg": "bg-sky-500/15"},
+  "FOLLOW_UP": {"text": "text-slate-300",   "ring": "ring-slate-700",      "bg": "bg-slate-800"},
+  "OTHER":     {"text": "text-slate-300",   "ring": "ring-slate-700",      "bg": "bg-slate-800"},
+} %}
+{% set _c = _class_color.get(s.classification, _class_color["OTHER"]) %}
+<div class="flex items-center gap-3 py-2.5 border-b border-slate-800/50 last:border-0">
+  {% with kind="company", text=s.sender_initial | default(s.sender[:1] | upper), size="sm", color_override=s.sender_color | default("bg-slate-700") %}
+    {% include "components/common/avatar.html" %}
+  {% endwith %}
+  <div class="flex-1 min-w-0">
+    <div class="text-sm text-slate-100 truncate">{{ s.subject }}</div>
+    <div class="text-xs text-slate-500 truncate">{{ s.sender }}</div>
+  </div>
+  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide ring-1 shrink-0 {{ _c.bg }} {{ _c.text }} {{ _c.ring }}">
+    {{ s.classification_label | default(s.classification) }}
+  </span>
+  {% if s.score is defined and s.score is not none %}
+    <span class="font-mono text-xs text-cyan-300 tabular-nums shrink-0">{{ s.score }}</span>
+  {% endif %}
+  <span class="font-mono text-xs text-slate-500 tabular-nums shrink-0">{{ s.relative_time }}</span>
+</div>

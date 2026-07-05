@@ -70,7 +70,7 @@ def test_swipe_card_template_renders_visa_chip_when_true():
         autoescape=True,
     )
     # The swipe_card depends on _macros — Jinja resolves cross-imports via loader.
-    template = env.get_template("components/swipe_card.html")
+    template = env.get_template("components/discover/swipe_card.html")
     job = swipe_card_dict(_job_with_breakdown(visa_concern=True))
     html = template.render(job=job)
     assert "VISA · sponsorship blocked" in html
@@ -81,7 +81,7 @@ def test_swipe_card_template_omits_visa_chip_when_false():
         loader=FileSystemLoader("src/ui/templates"),
         autoescape=True,
     )
-    template = env.get_template("components/swipe_card.html")
+    template = env.get_template("components/discover/swipe_card.html")
     job = swipe_card_dict(_job_with_breakdown(visa_concern=False))
     html = template.render(job=job)
     assert "VISA · sponsorship blocked" not in html

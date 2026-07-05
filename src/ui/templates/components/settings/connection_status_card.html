@@ -1,0 +1,24 @@
+{#
+  connection_status_card.html — inline status card returned from
+  POST /_fragments/settings/test-connection.
+
+  Args:
+    ok            : bool (required)
+    latency_ms    : int (when ok)
+    model         : str (when ok)
+    provider      : str (default "the API")
+    error_code    : int (when !ok)
+    error_message : str (when !ok)
+#}
+{% set provider = provider | default("the API") %}
+{% if ok %}
+  {% with tone="success", icon="check-circle-2", title="Connection ok",
+          body="Responded in <span class=\"font-mono\">" ~ (latency_ms or 0) ~ "ms</span> · model <span class=\"font-mono\">" ~ (model or "unknown") ~ "</span>" %}
+    {% include "components/common/info_card.html" %}
+  {% endwith %}
+{% else %}
+  {% with tone="danger", icon="alert-circle", title="Couldn't reach " ~ provider,
+          body="<span class=\"font-mono\">" ~ (error_code or "—") ~ "</span> " ~ (error_message or "Unknown error") ~ " — check your key." %}
+    {% include "components/common/info_card.html" %}
+  {% endwith %}
+{% endif %}

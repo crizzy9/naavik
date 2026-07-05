@@ -1,4 +1,4 @@
-"""Unit tests for the new `rationale` arg on `components/tailored_bullet_row.html`
+"""Unit tests for the new `rationale` arg on `components/discover/tailored_bullet_row.html`
 (plan 72 / 0.3.2.02 — Variant A inline ledger).
 
 Covers:
@@ -41,7 +41,7 @@ _BULLET = {
 
 def test_rationale_none_backward_compatible(env: Environment) -> None:
     """Legacy call without `rationale` arg renders identical to pre-plan-72."""
-    out = env.get_template("components/tailored_bullet_row.html").render(
+    out = env.get_template("components/discover/tailored_bullet_row.html").render(
         bullet=_BULLET,
         selected=True,
         trimmed_line="Built ML personalization platform; +23% homepage CTR.",
@@ -57,7 +57,7 @@ def test_rationale_none_backward_compatible(env: Environment) -> None:
 
 def test_rationale_selected_renders_cyan_why_kept(env: Environment) -> None:
     """Selected bullet + rationale.why_selected → cyan italic ledger line."""
-    out = env.get_template("components/tailored_bullet_row.html").render(
+    out = env.get_template("components/discover/tailored_bullet_row.html").render(
         bullet=_BULLET,
         selected=True,
         trimmed_line="Built ML personalization platform; +23% homepage CTR.",
@@ -79,7 +79,7 @@ def test_rationale_selected_renders_cyan_why_kept(env: Environment) -> None:
 
 def test_rationale_dropped_renders_slate_why_dropped(env: Environment) -> None:
     """Dropped bullet + rationale.why_dropped → slate italic ledger line."""
-    out = env.get_template("components/tailored_bullet_row.html").render(
+    out = env.get_template("components/discover/tailored_bullet_row.html").render(
         bullet=_BULLET,
         selected=False,
         trimmed_line="Older role bullet that did not survive the JD filter.",
@@ -101,7 +101,7 @@ def test_rationale_dropped_renders_slate_why_dropped(env: Environment) -> None:
 
 def test_rationale_selected_without_why_selected_renders_no_ledger(env: Environment) -> None:
     """Selected bullet with null `why_selected` → no ledger line (graceful)."""
-    out = env.get_template("components/tailored_bullet_row.html").render(
+    out = env.get_template("components/discover/tailored_bullet_row.html").render(
         bullet=_BULLET,
         selected=True,
         trimmed_line="Bullet text.",
@@ -114,7 +114,7 @@ def test_rationale_selected_without_why_selected_renders_no_ledger(env: Environm
 
 def test_rationale_dropped_without_why_dropped_renders_no_ledger(env: Environment) -> None:
     """Dropped bullet with null `why_dropped` → no ledger line."""
-    out = env.get_template("components/tailored_bullet_row.html").render(
+    out = env.get_template("components/discover/tailored_bullet_row.html").render(
         bullet=_BULLET,
         selected=False,
         trimmed_line="Bullet text.",
@@ -129,7 +129,7 @@ def test_rationale_cross_state_does_not_show_wrong_line(env: Environment) -> Non
     """A selected bullet whose rationale only carries `why_dropped` (cross-state
     accident) shows NEITHER line — guard prevents leak.
     """
-    out = env.get_template("components/tailored_bullet_row.html").render(
+    out = env.get_template("components/discover/tailored_bullet_row.html").render(
         bullet=_BULLET,
         selected=True,
         trimmed_line="Bullet text.",

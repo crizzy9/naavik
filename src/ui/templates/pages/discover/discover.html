@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Discover — Naavik{% endblock %}
+
+{% block main %}
+{# Discover uses the full viewport width on lg+ (no max-w-7xl cap) but clamps
+   to 1400px on 2xl+ (>=1536px) so the swipe card doesn't sprawl on 4K monitors.
+   Other pages keep their max-w-7xl wrapper. #}
+<div class="px-6 lg:px-8 py-6 lg:py-8 flex flex-col gap-5 2xl:max-w-[1400px] 2xl:mx-auto">
+  <header class="flex items-baseline justify-between gap-3 flex-wrap">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">Discover</h1>
+      <p class="mt-1 text-sm text-slate-400">
+        {{ unswiped_count }} new matches · sorted by score · swipe through your queue
+      </p>
+    </div>
+    <div class="flex items-center gap-2 shrink-0 flex-wrap">
+      <a href="/discover?filter=saved"
+         class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs">
+        <i data-lucide="bookmark" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        Saved · <span class="font-mono">{{ saved_count }}</span>
+      </a>
+      <button type="button"
+              data-filter-toolbar-toggle
+              data-filter-active="{{ filters_active | default(0) }}"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs"
+              onclick="document.getElementById('filter-toolbar').classList.toggle('hidden')">
+        <i data-lucide="sliders-horizontal" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        Filters{% if filters_active and filters_active > 0 %} · <span class="font-mono text-indigo-300">{{ filters_active }}</span>{% endif %}
+      </button>
+      <button type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-medium"
+              hx-get="/_modal/add-by-url"
+              hx-target="#modal-region"
+              hx-swap="innerHTML">
+        <i data-lucide="plus" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        Add by URL
+      </button>
+    </div>
+  </header>
+
+  {% with filters=filters, filters_active=filters_active %}
+    {% include "components/discover/filter_toolbar.html" %}
+  {% endwith %}
+
+  {# Plan 78 § D.5 (0.4.0.20) — surface auto-apply dry-run mode so the
+     operator can't miss the fact that submissions won't actually fire. #}
+  {% if auto_apply_dry_run %}
+    {% with tone="warning", icon="flask-conical", title="Auto-apply DRY RUN",
+            body="Queued DRAFTs will be marked dry-run rather than submitted. Disable in <a href='/settings/auto-apply' class='underline'>Settings &middot; Auto-apply</a> to resume real submissions." %}
+      {% include "components/common/info_card.html" %}
+    {% endwith %}
+  {% endif %}
+
+  {% with stats=stats %}
+    {% include "components/discover/discover_stats_strip.html" %}
+  {% endwith %}
+
+  {# Live scrape-run status — queued → running → found N → done/failed.
+     Lazy-loads then self-polls while active (JOB_SEARCH_PREFERENCES.md § G). #}
+  <div hx-get="/_fragments/scrape-status" hx-trigger="load" hx-swap="outerHTML"></div>
+
+  {# Plan 09a · Issue 8D — #discover-main is the swap target that the Review &
+     apply button expands into the full workspace. The "Back to queue" button
+     inside the expanded fragment swaps it back via /_fragments/discover/queue. #}
+  <div id="discover-main"
+       hx-get="/_fragments/discover/queue"
+       hx-trigger="queue-refresh from:body"
+       hx-swap="innerHTML">
+    {% include "pages/discover/_discover_queue.html" %}
+  </div>
+</div>
+
+<script>
+  // Per INTERACTIONS.md § F.1 — register Discover keyboard map.
+  if (window.naavikKeys) {
+    window.naavikKeys.register("/discover", {
+      "ArrowLeft":  function () { var b = document.getElementById("discover-skip-btn"); if (b) b.click(); },
+      "ArrowRight": function () { var b = document.getElementById("discover-auto-apply-btn"); if (b) b.click(); },
+      "ArrowUp":    function () { var b = document.getElementById("discover-save-btn"); if (b) b.click(); },
+      "Enter":      function () { var b = document.getElementById("discover-review-btn"); if (b) b.click(); },
+    });
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,128 @@
+{% from "components/common/_macros.html" import deployment_badge %}
+{#
+  sidebar.html — persistent left navigation per COMPONENTS.md § H.1.
+
+  Args:
+    active             : "overview" / "profile" / "jobs" / "tracking" / "outreach" / "settings" / None
+    user_name          : display name (default: "Shyam Padia")
+    user_initials      : 2-char fallback for the avatar (default: "SP")
+    deployment_mode    : "self-hosted" / "cloud" (default: "self-hosted")
+    unswiped_count     : Discover badge (Jobs item)
+    followup_count     : Tracking badge
+#}
+{# Accepts either `active` (catalog name) or `active_sidebar` (route handler context). #}
+{% set active = active | default(active_sidebar) | default(none) %}
+{# Identity comes from the auth dependency (request.state.user_display_name)
+   - never a hardcoded sample name. The dev fake-session path has no user,
+   so fall back to a neutral placeholder. #}
+{% set _state_name = request.state.user_display_name | default(none, true) if request else none %}
+{% set user_name = user_name | default(_state_name, true) | default("Account", true) %}
+{% set user_initials = user_initials | default((user_name[:2] | upper), true) %}
+{% set deployment_mode = deployment_mode | default("self-hosted") %}
+{% set unswiped_count = unswiped_count | default(0) %}
+{% set followup_count = followup_count | default(0) %}
+
+{# Mobile hamburger toggle — sits inline with main, only visible <lg. #}
+<button
+  type="button"
+  data-sidebar-toggle
+  aria-label="Open sidebar"
+  aria-expanded="false"
+  aria-controls="sidebar-drawer"
+  class="fixed top-3 left-3 z-30 lg:hidden h-9 w-9 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+  <i data-lucide="menu" class="h-5 w-5" stroke-width="1.5"></i>
+</button>
+
+{# Mobile backdrop — sits behind the sidebar when drawer-open. #}
+<div
+  data-sidebar-backdrop
+  class="fixed inset-0 z-30 bg-black/50 lg:hidden hidden"
+  aria-hidden="true"></div>
+
+<aside id="sidebar-drawer" class="sidebar fixed lg:sticky top-0 left-0 z-40 h-screen w-64 shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col p-4 gap-1">
+  {# Close button — only visible on mobile while drawer is open. The hamburger
+     outside is covered by the open drawer (z-30 < z-40), so users need an
+     in-drawer affordance. #}
+  <button
+    type="button"
+    data-sidebar-toggle
+    aria-label="Close sidebar"
+    class="absolute top-3 right-3 lg:hidden h-8 w-8 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-100 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+    <i data-lucide="x" class="h-4 w-4" stroke-width="1.5"></i>
+  </button>
+  {# Brand lockup #}
+  <a href="/" hx-boost="false" class="flex items-center gap-2.5 px-2 py-2 group focus:outline-none focus:ring-2 focus:ring-indigo-500/40 rounded-lg">
+    <div class="h-9 w-9 rounded-lg bg-indigo-500 flex items-center justify-center ring-1 ring-indigo-400/40 group-hover:ring-indigo-300/60 transition shrink-0">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+      </svg>
+    </div>
+    <span class="font-semibold text-base text-slate-50 tracking-tight">Naavik</span>
+  </a>
+
+  <nav class="mt-4 flex-1 flex flex-col gap-0.5" aria-label="Primary">
+    {# Overview #}
+    <a href="/" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 {% if active == 'overview' %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
+      <i data-lucide="layout-dashboard" class="h-5 w-5 shrink-0" stroke-width="1.5"></i>
+      <span class="flex-1">Overview</span>
+    </a>
+
+    {# Profile #}
+    <a href="/profile" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 {% if active == 'profile' %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
+      <i data-lucide="user-round" class="h-5 w-5 shrink-0" stroke-width="1.5"></i>
+      <span class="flex-1">Profile</span>
+    </a>
+
+    {# Discover — count badge swap target. (Plan 09a · Issue 5 Option A: label
+       renamed from "Jobs" → "Discover" so sidebar / URL / page heading align.
+       The `active` key remains "jobs" for backwards-compat with route handlers;
+       the `id="sidebar-badge-jobs"` swap target stays for OOB updates.) #}
+    <a href="/discover" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 {% if active == 'jobs' %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
+      <i data-lucide="briefcase" class="h-5 w-5 shrink-0" stroke-width="1.5"></i>
+      <span class="flex-1">Discover</span>
+      <span id="sidebar-badge-jobs" class="font-mono text-[11px] px-1.5 py-0.5 rounded {% if active == 'jobs' %}bg-white/20 text-white{% else %}bg-slate-800 text-slate-400{% endif %} {% if not unswiped_count %}hidden{% endif %}">{{ unswiped_count }}</span>
+    </a>
+
+    {# Tracking — sidebar icon is `inbox` per SCREENS.md § Sidebar IA. #}
+    <a href="/tracking" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 {% if active == 'tracking' %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
+      <i data-lucide="inbox" class="h-5 w-5 shrink-0" stroke-width="1.5"></i>
+      <span class="flex-1">Tracking</span>
+      <span id="sidebar-badge-tracking" class="font-mono text-[11px] px-1.5 py-0.5 rounded {% if active == 'tracking' %}bg-white/20 text-white{% else %}bg-slate-800 text-slate-400{% endif %} {% if not followup_count %}hidden{% endif %}">{{ followup_count }}</span>
+    </a>
+
+    {# Outreach #}
+    <a href="/outreach" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 {% if active == 'outreach' %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
+      <i data-lucide="send" class="h-5 w-5 shrink-0" stroke-width="1.5"></i>
+      <span class="flex-1">Outreach</span>
+    </a>
+
+    {# Settings #}
+    <a href="/settings" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 {% if active == 'settings' %}bg-indigo-500 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-slate-50{% endif %}">
+      <i data-lucide="settings" class="h-5 w-5 shrink-0" stroke-width="1.5"></i>
+      <span class="flex-1">Settings</span>
+    </a>
+  </nav>
+
+  {# Bottom block: avatar + name + deployment badge, with Sign out row below. #}
+  <div class="mt-12 flex flex-col gap-1">
+    <div class="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-center gap-2.5">
+      <div class="h-7 w-7 rounded-full bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-[11px] font-semibold text-white shrink-0">
+        {{ user_initials }}
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium text-slate-50 truncate">{{ user_name }}</div>
+        <div class="mt-0.5">{{ deployment_badge(deployment_mode) }}</div>
+      </div>
+    </div>
+    <button
+      type="button"
+      hx-post="/api/v1/auth/logout"
+      hx-swap="none"
+      data-testid="sidebar-signout"
+      class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-50 transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 w-full">
+      <i data-lucide="log-out" class="h-5 w-5 shrink-0" stroke-width="1.5"></i>
+      <span class="flex-1 text-left">Sign out</span>
+    </button>
+  </div>
+</aside>

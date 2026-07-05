@@ -1,0 +1,46 @@
+{#
+  outreach_message_card.html — AI draft / sent / replied message card.
+
+  Args:
+    message  : dict — id, body, status (PENDING/SENT/OPENED/RESPONDED/ACCEPTED/DECLINED),
+               ai_generated, sent_at, responded_at, contact_name, channel ("linkedin"/"email")
+    editable : bool — drafts editable inline
+#}
+{% set m = message %}
+{% set _is_draft = (m.status | default("PENDING")) in ["PENDING", "DRAFT"] %}
+{% set _wrap_class = "bg-cyan-400/5 border-cyan-400/20" if _is_draft else "bg-slate-900 border-slate-800" %}
+{% set _status_label = (m.status or 'pending') | lower %}
+<article class="p-4 rounded-lg border {{ _wrap_class }}">
+  <header class="flex items-center justify-between gap-2 mb-2">
+    <div class="flex items-center gap-2">
+      {% if m.ai_generated %}{% include "components/common/ai_badge.html" %}{% endif %}
+      <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-mono uppercase tracking-wide">{{ _status_label }}</span>
+    </div>
+    {% if m.contact_name %}<span class="text-xs text-slate-400 truncate">to {{ m.contact_name }}</span>{% endif %}
+  </header>
+
+  {% if _is_draft and editable %}
+    <textarea name="body" rows="4"
+              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-y">{{ m.body }}</textarea>
+  {% else %}
+    <p class="text-sm text-slate-200 leading-relaxed whitespace-pre-line">{{ m.body }}</p>
+  {% endif %}
+
+  <footer class="mt-3 flex items-center gap-2 flex-wrap text-xs text-slate-500">
+    {% if m.sent_at %}<span>sent {{ m.sent_at }}</span>{% endif %}
+    {% if m.responded_at %}<span class="text-emerald-400">replied {{ m.responded_at }}</span>{% endif %}
+    {% if _is_draft %}
+      <div class="ml-auto flex items-center gap-2">
+        <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-slate-300 hover:text-slate-50 hover:bg-slate-800 transition">
+          <i data-lucide="pencil" class="h-3.5 w-3.5" stroke-width="1.5"></i>Edit
+        </button>
+        <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-slate-300 hover:text-slate-50 hover:bg-slate-800 transition">
+          <i data-lucide="refresh-cw" class="h-3.5 w-3.5" stroke-width="1.5"></i>Regen
+        </button>
+        <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-indigo-500 hover:bg-indigo-400 text-white font-medium transition">
+          <i data-lucide="send" class="h-3.5 w-3.5" stroke-width="1.5"></i>Send
+        </button>
+      </div>
+    {% endif %}
+  </footer>
+</article>

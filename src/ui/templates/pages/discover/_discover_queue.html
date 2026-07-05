@@ -1,0 +1,148 @@
+{#
+  _discover_queue.html — the 2-column swipe queue grid (center card + right rail).
+  Factored out of discover.html so plan 09a · Issue 8D's "Back to queue" button
+  can swap this content back into #discover-main after an expansion.
+
+  Args (forwarded from the parent route):
+    current_card, up_next, stuck_drafts, auto_apply_drafts, saved_count
+#}
+<div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+  {# Card stack center #}
+  <div class="flex flex-col items-center gap-4">
+    {% if current_card %}
+      {% with job=current_card %}
+        {% include "components/discover/swipe_card.html" %}
+      {% endwith %}
+      {% with job_id=current_card.id %}
+        {% include "components/discover/discover_action_bar.html" %}
+      {% endwith %}
+    {% else %}
+      {% if filters_active and filters_active > 0 %}
+        {# Plan 36 § G — "filter-with-zero-results empty-state" branch. #}
+        {% with icon="search-x",
+                line="No jobs match the active filters. Clear them or relax one to keep browsing.",
+                cta_label="Clear filters", cta_url="/discover" %}
+          {% include "components/common/empty_state.html" %}
+        {% endwith %}
+      {% elif not search_prefs_ready %}
+        {# No job-search preferences yet — nothing will ever land here until
+           the user sets target titles (docs/design/JOB_SEARCH_PREFERENCES.md). #}
+        {% with icon="radar",
+                line="No job search configured yet. Set your target titles and locations — every job source runs off them.",
+                cta_label="Set up your job search", cta_url="/profile/edit#job-search" %}
+          {% include "components/common/empty_state.html" %}
+        {% endwith %}
+      {% else %}
+        {% with icon="check-circle-2",
+                line="No new matches right now. Scans run on a schedule — or kick one off yourself.",
+                cta_label="Run LinkedIn scan now", cta_url=None %}
+          {% include "components/common/empty_state.html" %}
+        {% endwith %}
+        <button type="button"
+                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium transition"
+                hx-post="/_fragments/settings/sources/linkedin/run"
+                hx-swap="none"
+                hx-disabled-elt="this"
+                data-testid="discover-run-linkedin">
+          <i data-lucide="play" class="h-4 w-4" stroke-width="1.5"></i>
+          Run LinkedIn scan now
+        </button>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {# Right rail — desktop only. Plan 09a follow-up: mobile shows the swipe card
+     fullscreen with no rail/buttons, just touch swipe + tap-to-expand. #}
+  <aside class="hidden lg:flex flex-col gap-4 min-w-0">
+    <section>
+      <header class="flex items-baseline justify-between mb-2 px-1">
+        <span class="text-xs uppercase tracking-wide text-slate-500 font-medium">Up next</span>
+        <span class="text-xs text-slate-500 font-mono">{{ up_next | length }}</span>
+      </header>
+      <div class="flex flex-col gap-2">
+        {% for j in up_next %}
+          {% with job=j %}
+            {% include "components/discover/up_next_card.html" %}
+          {% endwith %}
+        {% endfor %}
+      </div>
+    </section>
+
+    {% if stuck_drafts %}
+      <section>
+        <header class="flex items-baseline justify-between mb-2 px-1">
+          <span class="text-xs uppercase tracking-wide text-amber-300 font-medium">
+            Stuck in queue · <span class="font-mono">{{ stuck_drafts | length }}</span>
+          </span>
+        </header>
+        <div class="flex flex-col gap-2">
+          {% for j in stuck_drafts %}
+            {% with job=j, state="stuck", last_failure=j.last_failure, application_id=j.application_id %}
+              {% include "components/discover/up_next_card.html" %}
+            {% endwith %}
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% if ready_for_you %}
+      <section data-testid="ready-for-you-section">
+        <header class="flex items-baseline justify-between mb-2 px-1">
+          <span class="text-xs uppercase tracking-wide text-amber-300 font-medium">
+            Ready for you to submit · <span class="font-mono">{{ ready_for_you | length }}</span>
+          </span>
+        </header>
+        <div class="flex flex-col gap-2">
+          {% for j in ready_for_you %}
+            <div class="flex flex-col gap-1 p-2 rounded-lg border border-amber-500/30 bg-amber-500/5">
+              {% with job=j, phase=none %}
+                {% include "components/discover/up_next_card.html" %}
+              {% endwith %}
+              <p class="px-1 text-[11px] text-amber-200/80 leading-snug">
+                {{ j.phase.reason if j.phase and j.phase.reason else "Documents are prepared — submit this one yourself." }}
+              </p>
+              <div class="flex items-center gap-2 px-1 pb-1">
+                <a href="/discover/{{ j.id }}" class="text-[11px] text-slate-300 hover:text-slate-100 underline underline-offset-2">Open documents</a>
+                {% if j.jd_url %}
+                  <a href="{{ j.jd_url }}" target="_blank" rel="noopener" hx-boost="false" class="text-[11px] text-slate-300 hover:text-slate-100 underline underline-offset-2">Open posting ↗</a>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% if auto_apply_drafts %}
+      <section>
+        <header class="flex items-baseline justify-between mb-2 px-1">
+          <span class="text-xs uppercase tracking-wide text-emerald-300 font-medium">
+            Auto-apply queued · <span class="font-mono">{{ auto_apply_drafts | length }}</span>
+          </span>
+        </header>
+        <div class="flex flex-col gap-2">
+          {% for j in auto_apply_drafts %}
+            {% with job=j, phase=j.phase %}
+              {% include "components/discover/up_next_card.html" %}
+            {% endwith %}
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    <section class="p-3.5 rounded-lg bg-slate-950 border border-slate-800">
+      <header class="flex items-baseline justify-between gap-2">
+        <span class="text-xs uppercase tracking-wide text-slate-400 font-medium">Saved for later · <span class="font-mono">{{ saved_count }}</span></span>
+        <a href="/discover?filter=saved" class="text-xs text-slate-400 hover:text-slate-100">→</a>
+      </header>
+      <p class="mt-1.5 text-xs text-slate-400 leading-relaxed">
+        You've stashed {{ saved_count }} jobs to revisit. They won't be auto-applied until you decide.
+      </p>
+    </section>
+
+    {% with title="Tip",
+            body="Tap to expand a job and refine the resume / cover letter before applying. Right-swipe lets Naavik tailor and submit on its own." %}
+      {% include "components/common/tip_card.html" %}
+    {% endwith %}
+  </aside>
+</div>

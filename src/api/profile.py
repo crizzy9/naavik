@@ -369,7 +369,7 @@ async def put_search_prefs(
     await session.commit()
     return templates.TemplateResponse(
         request,
-        "components/_search_prefs_editor.html",
+        "components/profile/_search_prefs_editor.html",
         _search_prefs_ctx(profile),
     )
 
@@ -406,7 +406,7 @@ async def post_experience(
     await session.commit()
     return templates.TemplateResponse(
         request,
-        "components/experience_edit_card.html",
+        "components/profile/experience_edit_card.html",
         {"exp": {"model": exp, "display": pctx.experience_dict(exp), "bullets": []}},
     )
 
@@ -440,7 +440,7 @@ async def post_education(
     await session.commit()
     return templates.TemplateResponse(
         request,
-        "components/education_edit_card.html",
+        "components/profile/education_edit_card.html",
         {"edu": pctx.education_dicts([edu])[0]},
     )
 
@@ -478,7 +478,7 @@ async def post_project(
     await session.commit()
     return templates.TemplateResponse(
         request,
-        "components/project_edit_card.html",
+        "components/profile/project_edit_card.html",
         {"proj": pctx.project_dicts([proj])[0]},
     )
 
@@ -512,7 +512,7 @@ async def post_skill(
     await session.commit()
     return templates.TemplateResponse(
         request,
-        "components/skill_edit_card.html",
+        "components/profile/skill_edit_card.html",
         {"skill": pctx.skill_dicts([skill])[0]},
     )
 
@@ -546,7 +546,7 @@ async def post_certification(
     await session.commit()
     return templates.TemplateResponse(
         request,
-        "components/certification_edit_card.html",
+        "components/profile/certification_edit_card.html",
         {"cert": pctx.certification_dicts([cert])[0]},
     )
 
@@ -583,7 +583,7 @@ async def put_field(
     if fail:
         return templates.TemplateResponse(
             request,
-            "components/autosave_indicator.html",
+            "components/profile/autosave_indicator.html",
             {"state": "error", "error_message": "Couldn't save — retry"},
             status_code=422,
         )
@@ -608,7 +608,7 @@ async def put_field(
 
     return templates.TemplateResponse(
         request,
-        "components/autosave_indicator.html",
+        "components/profile/autosave_indicator.html",
         {"state": "saved", "relative_time": "just now"},
     )
 
@@ -738,7 +738,7 @@ async def post_bullet_rewrite(
     came back byte-identical ("Rewrite did nothing"). Now the modal submits
     a `rewrite_style` chip and the CURRENT textarea text (so unsaved edits
     are rewritten, not the stored row), and gets back clickable variant
-    cards (`components/bullet_rewrite_results.html`). Picking a card fills
+    cards (`components/profile/bullet_rewrite_results.html`). Picking a card fills
     the textarea client-side; nothing persists until the normal Save PUT.
     Friendly 422 when no provider is configured.
     """
@@ -799,7 +799,7 @@ async def post_bullet_rewrite(
         )
     response = templates.TemplateResponse(
         request,
-        "components/bullet_rewrite_results.html",
+        "components/profile/bullet_rewrite_results.html",
         {"variants": variants, "note": rewrite.note.strip(), "style": style},
     )
     response.headers["HX-Trigger"] = json.dumps(
@@ -847,7 +847,7 @@ def _bullet_row_response(request: Request, bullet) -> HTMLResponse:
     """Render the bullet_edit_row partial — same shape plan 09 produced."""
     return templates.TemplateResponse(
         request,
-        "components/bullet_edit_row.html",
+        "components/profile/bullet_edit_row.html",
         {
             "bullet": {
                 "id": bullet.id,

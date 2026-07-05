@@ -71,7 +71,7 @@ async def get_tracking(
         )
     ctx["active_sidebar"] = "tracking"
     ctx["active_template_path"] = "/tracking"
-    return templates.TemplateResponse(request, "pages/tracking.html", ctx)
+    return templates.TemplateResponse(request, "pages/tracking/tracking.html", ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ async def fragment_board(
         show_closed=bool(show_closed),
         show_drafts=bool(show_drafts),
     )
-    return templates.TemplateResponse(request, "pages/_tracking_board.html", ctx)
+    return templates.TemplateResponse(request, "pages/tracking/_tracking_board.html", ctx)
 
 
 @router.get("/_fragments/tracking/list", response_class=HTMLResponse, name="tracking_list_fragment")
@@ -117,7 +117,7 @@ async def fragment_list(
         show_closed=bool(show_closed),
         show_drafts=bool(show_drafts),
     )
-    return templates.TemplateResponse(request, "pages/_tracking_list.html", ctx)
+    return templates.TemplateResponse(request, "pages/tracking/_tracking_list.html", ctx)
 
 
 @router.get(
@@ -141,7 +141,7 @@ async def fragment_library(
         q=q,
         score_min=score_min,
     )
-    return templates.TemplateResponse(request, "pages/_tracking_library.html", ctx)
+    return templates.TemplateResponse(request, "pages/tracking/_tracking_library.html", ctx)
 
 
 _LIBRARY_ACTIONS: dict[str, tuple[JobQueueState, str]] = {
@@ -210,7 +210,7 @@ async def library_row_action(
     ctx = await tctx.build_library_ctx(
         session, user_id=user_id, state=state, q=q, score_min=score_min
     )
-    response = templates.TemplateResponse(request, "pages/_tracking_library.html", ctx)
+    response = templates.TemplateResponse(request, "pages/tracking/_tracking_library.html", ctx)
     response.headers["HX-Trigger"] = _json.dumps({"showToast": {"tone": "success", "text": toast}})
     return response
 
@@ -230,7 +230,7 @@ async def fragment_followup(
         return HTMLResponse("")
     return templates.TemplateResponse(
         request,
-        "components/followup_banner.html",
+        "components/tracking/followup_banner.html",
         {"count": ctx["followup_count"], "items": ctx["followup_items"]},
     )
 
@@ -307,7 +307,7 @@ async def get_tracking_analytics(
         "by_tag": by_tag,
         "window_days": window_days,
     }
-    return templates.TemplateResponse(request, "pages/tracking_analytics.html", ctx)
+    return templates.TemplateResponse(request, "pages/tracking/tracking_analytics.html", ctx)
 
 
 @router.get("/tracking/{application_id}", response_class=HTMLResponse, name="tracking_detail")
@@ -326,7 +326,7 @@ async def get_tracking_detail(
     ctx["active_sidebar"] = "tracking"
     ctx["active_template_path"] = "/tracking"
     ctx["slide_over_open"] = True
-    return templates.TemplateResponse(request, "pages/tracking.html", ctx)
+    return templates.TemplateResponse(request, "pages/tracking/tracking.html", ctx)
 
 
 @router.get(
@@ -342,7 +342,7 @@ async def fragment_application(
 ):
     application = await _application_or_404(session, application_id, user)
     ctx = await tctx.build_application_detail_ctx(session, application)
-    return templates.TemplateResponse(request, "components/_application_detail.html", ctx)
+    return templates.TemplateResponse(request, "components/tracking/_application_detail.html", ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -394,7 +394,7 @@ async def get_postmortem_modal(
 
     return templates.TemplateResponse(
         request,
-        "components/postmortem_modal.html",
+        "components/tracking/postmortem_modal.html",
         {
             "application_id": application_id,
             "ts": ts,
@@ -477,7 +477,7 @@ async def fragment_timeline(
         )
     return templates.TemplateResponse(
         request,
-        "components/_application_timeline_full.html",
+        "components/tracking/_application_timeline_full.html",
         {"application_id": application_id, "events": rows},
     )
 
@@ -672,7 +672,7 @@ async def put_bullet_override(
     detail_ctx = await tctx.build_application_detail_ctx(session, application)
     return templates.TemplateResponse(
         request,
-        "components/_application_detail.html",
+        "components/tracking/_application_detail.html",
         {**detail_ctx, "csrf_token": ""},
     )
 
@@ -950,7 +950,7 @@ async def post_bulk_move_stage(
         show_closed=True,
         show_drafts=bool(show_drafts),
     )
-    response = templates.TemplateResponse(request, "pages/_tracking_list.html", ctx)
+    response = templates.TemplateResponse(request, "pages/tracking/_tracking_list.html", ctx)
     response.headers["HX-Trigger"] = _bulk_toast_header(success, len(failed))
     return response
 
@@ -987,6 +987,6 @@ async def post_bulk_archive(
         show_closed=True,
         show_drafts=bool(show_drafts),
     )
-    response = templates.TemplateResponse(request, "pages/_tracking_list.html", ctx)
+    response = templates.TemplateResponse(request, "pages/tracking/_tracking_list.html", ctx)
     response.headers["HX-Trigger"] = _bulk_toast_header(success, len(failed))
     return response

@@ -1,0 +1,40 @@
+{% from "components/common/_macros.html" import chip %}
+{#
+  outreach_app_row.html — application row in Outreach left pane.
+
+  Args:
+    application : dict — id, company, company_initial, company_color, role, team,
+                  contacts_count, last_touch, status, status_label,
+                  outreach_engagement (str: "awaiting_reply" / "call_booked"
+                                            / "referred" / "no_reply_7d")
+    selected    : bool
+#}
+{% set selected = selected | default(false) %}
+{% set a = application %}
+{% set _eng_map = {
+  "awaiting_reply": {"label": "AWAITING REPLY", "tone": "amber"},
+  "call_booked":    {"label": "CALL BOOKED",    "tone": "cyan"},
+  "referred":       {"label": "REFERRED",       "tone": "emerald"},
+  "no_reply_7d":    {"label": "NO REPLY · 7D",  "tone": "rose"},
+  "active":         {"label": "ACTIVE",         "tone": "indigo"},
+  "cold":           {"label": "COLD",           "tone": "slate"},
+} %}
+{% set _eng = _eng_map.get(a.outreach_engagement, _eng_map["active"]) %}
+<a href="/outreach?application={{ a.id }}"
+   class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40
+          {% if selected %}bg-indigo-500/10 border-l-2 border-indigo-500{% else %}border-l-2 border-transparent hover:bg-slate-800/50{% endif %}">
+  {% with kind="company", text=a.company_initial | default(a.company[:1] | upper), size="sm", color_override=a.company_color | default("bg-slate-700") %}
+    {% include "components/common/avatar.html" %}
+  {% endwith %}
+  <div class="flex-1 min-w-0">
+    <div class="text-sm text-slate-100 truncate">{{ a.role }}{% if a.team %} <span class="text-slate-500">· {{ a.team }}</span>{% endif %}</div>
+    <div class="text-xs text-slate-400 truncate">
+      {% if a.contacts_count %}<span class="font-mono">{{ a.contacts_count }}</span> contacts{% endif %}
+      {% if a.last_touch %} · {{ a.last_touch }}{% endif %}
+      {% if a.status_label %} · {{ a.status_label }}{% endif %}
+    </div>
+  </div>
+  <div class="shrink-0">
+    {{ chip(_eng.label, tone=_eng.tone) }}
+  </div>
+</a>

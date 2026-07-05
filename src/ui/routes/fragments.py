@@ -111,7 +111,7 @@ async def get_scrape_status(
     any_active = bool(queued) or bool(running_sources)
     return templates.TemplateResponse(
         request,
-        "components/_scrape_status_strip.html",
+        "components/settings/_scrape_status_strip.html",
         {"runs": runs[:6], "poll": any_active},
     )
 
@@ -129,7 +129,7 @@ async def confirm_modal(
 ):
     return templates.TemplateResponse(
         request,
-        "components/confirm_modal.html",
+        "components/common/confirm_modal.html",
         {
             "title": title,
             "message": message,
@@ -158,7 +158,7 @@ async def bullet_editor_modal(
     role_label = f"{exp.company} · {exp.title}" if exp else "Bullet"
     return templates.TemplateResponse(
         request,
-        "components/bullet_editor_modal.html",
+        "components/profile/bullet_editor_modal.html",
         {
             "bullet": pctx.bullet_dict(bullet),
             "role_label": role_label,
@@ -178,7 +178,7 @@ async def profile_bullet_row(
     # Auth + ownership via the dependency (plan 91 Phase 1.2).
     return templates.TemplateResponse(
         request,
-        "components/bullet_edit_row.html",
+        "components/profile/bullet_edit_row.html",
         {"bullet": pctx.bullet_dict(bullet)},
     )
 
@@ -195,6 +195,6 @@ async def onboarding_step(request: Request, step: int):
         raise HTTPException(status_code=404, detail="Unknown step")
     return templates.TemplateResponse(
         request,
-        "pages/_onboarding_step_upload.html",
+        "pages/auth/_onboarding_step_upload.html",
         {},
     )

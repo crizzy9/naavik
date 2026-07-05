@@ -59,7 +59,7 @@ async def get_login(
     resolved_mode = mode or "signin"
     return templates.TemplateResponse(
         request,
-        "pages/login.html",
+        "pages/auth/login.html",
         {
             "active_sidebar": None,
             "active_template_path": "/login",
@@ -76,7 +76,7 @@ async def get_onboarding(request: Request):
     """
     return templates.TemplateResponse(
         request,
-        "pages/onboarding.html",
+        "pages/auth/onboarding.html",
         {
             "active_sidebar": None,
             "active_template_path": "/onboarding",
@@ -101,7 +101,7 @@ async def get_change_password(
     """
     return templates.TemplateResponse(
         request,
-        "pages/change_password.html",
+        "pages/auth/change_password.html",
         {
             "active_sidebar": None,
             "active_template_path": "/auth/change-password",
@@ -270,7 +270,7 @@ async def post_extraction_upload(
 
     return templates.TemplateResponse(
         request,
-        "pages/_onboarding_step_uploaded.html",
+        "pages/auth/_onboarding_step_uploaded.html",
         {
             "chars": len(extracted),
             "filename": safe_name,

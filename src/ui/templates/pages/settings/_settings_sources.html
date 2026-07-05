@@ -1,0 +1,146 @@
+{#
+  Settings · Sources tab body.
+
+  Args:
+    settings    : Settings singleton (sources_enabled + source_schedules dicts + workday_companies)
+    sources_view : list[dict] — one entry per source per plan 49 § D.1 contract.
+      Each entry is the `view` arg to components/settings/_source_row.html.
+
+  Plan 49 / 0.2.0.16 § D — 6 per-source rows. Each row composes configured /
+  unconfigured indicator (env-vs-DB), last-run timestamp + status chip,
+  resolved rate-limit (read-only), and a "Configure →" `<details>` popover
+  that degrades the per-source editor link until 0.2.5.05 / 0.2.5.06 ship.
+#}
+<div class="flex flex-col gap-6 max-w-3xl">
+  {# Live scrape-run status — mirrors the Discover strip. #}
+  <div hx-get="/_fragments/scrape-status" hx-trigger="load" hx-swap="outerHTML"></div>
+
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <header class="flex items-baseline justify-between gap-3 mb-2">
+      <div>
+        <h2 class="text-base font-medium text-slate-50">Job sources</h2>
+        <p class="text-xs text-slate-400 mt-0.5">
+          Per-source enable + configuration. Company-list sources read
+          <code class="font-mono text-slate-300">.env</code>; LinkedIn /
+          Indeed read per-user keywords. See
+          <a href="https://github.com/crizzy9/naavik#configuration"
+             class="text-indigo-300 hover:text-indigo-200 underline"
+             target="_blank" rel="noopener">README · Scraper sources</a>.
+        </p>
+      </div>
+      <span class="text-xs text-slate-500 font-mono shrink-0">
+        {{ (settings.sources_enabled.values() | select | list | length) }} / {{ settings.sources_enabled | length }} enabled
+      </span>
+    </header>
+
+    <ul class="flex flex-col divide-y divide-slate-800/50">
+      {% for v in sources_view %}
+        {% with view=v %}
+          {% include "components/settings/_source_row.html" %}
+        {% endwith %}
+      {% endfor %}
+    </ul>
+  </section>
+
+  {% if settings.workday_companies %}
+    <section class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+      <h2 class="text-base font-medium text-slate-50">Workday companies tracked</h2>
+      <p class="text-xs text-slate-400 mt-0.5">
+        Per-tenant watchlist (Workday has no public discovery feed).
+        Currently from <code class="font-mono text-slate-300">Settings.workday_companies</code>.
+      </p>
+      <ul class="mt-4 flex flex-wrap gap-1.5">
+        {% for c in settings.workday_companies %}
+          <li class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-mono">
+            {{ c }}
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  {# Plan 54 / 0.2.5.04 — recent scraper-run history table. #}
+  {% set _runs = recent_scrape_runs | default([]) %}
+  {% set _run_tone = {
+      "running":   "indigo",
+      "success":   "emerald",
+      "partial":   "amber",
+      "failed":    "rose",
+      "timed_out": "rose",
+  } %}
+  <section data-recent-scrape-runs class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <header class="flex items-baseline justify-between gap-3 mb-4">
+      <div>
+        <h2 class="text-base font-medium text-slate-50">Recent scraper runs</h2>
+        <p class="text-xs text-slate-400 mt-0.5">
+          Latest {{ _runs | length }} runs across all sources. Capped at 50.
+        </p>
+      </div>
+    </header>
+
+    {% if _runs %}
+      <div class="overflow-x-auto">
+        <table data-scrape-runs-table class="table w-full text-sm">
+          <thead>
+            <tr class="text-xs uppercase tracking-wide text-slate-400">
+              <th class="text-left font-medium">Source</th>
+              <th class="text-left font-medium">Status</th>
+              <th class="text-right font-medium">Started</th>
+              <th class="text-right font-medium">Duration</th>
+              <th class="text-right font-medium">Listings</th>
+              <th class="text-right font-medium">New</th>
+              <th class="text-left font-medium">Errors</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/50">
+            {% for run in _runs %}
+              {% set _status_value = run.status.value if run.status is not string else run.status %}
+              {% set _tone = _run_tone.get(_status_value, "slate") %}
+              <tr data-scrape-run-row data-status="{{ _status_value }}" data-source="{{ run.source.value if run.source is not string else run.source }}">
+                <td class="py-2.5 font-mono text-slate-200 uppercase text-xs">{{ run.source.value if run.source is not string else run.source }}</td>
+                <td class="py-2.5">
+                  <span data-scrape-run-status="{{ _status_value }}" class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono ring-1
+                       {% if _tone == 'emerald' %}bg-emerald-500/15 text-emerald-200 ring-emerald-500/30
+                       {% elif _tone == 'amber' %}bg-amber-500/15 text-amber-200 ring-amber-500/30
+                       {% elif _tone == 'rose' %}bg-rose-500/15 text-rose-200 ring-rose-500/30
+                       {% elif _tone == 'indigo' %}bg-indigo-500/15 text-indigo-200 ring-indigo-500/30
+                       {% else %}bg-slate-800 text-slate-300 ring-slate-700{% endif %}">
+                    {{ _status_value }}
+                  </span>
+                </td>
+                <td class="py-2.5 text-right tabular-nums text-slate-300 text-xs">
+                  {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}
+                </td>
+                <td class="py-2.5 text-right tabular-nums text-slate-400 text-xs">
+                  {% if run.duration_ms %}{{ run.duration_ms }}ms{% else %}—{% endif %}
+                </td>
+                <td class="py-2.5 text-right tabular-nums text-slate-200">{{ run.listings_returned }}</td>
+                <td class="py-2.5 text-right tabular-nums text-emerald-300">{{ run.new_jobs }}</td>
+                <td class="py-2.5 text-xs text-rose-300 max-w-xs">
+                  {% if run.errors %}
+                    <span data-scrape-run-errors class="truncate inline-block max-w-full align-middle" title="{{ run.errors[0] }}">{{ run.errors[0] | truncate(60) }}</span>
+                    {% if run.errors | length > 1 %}
+                      <span class="text-slate-500"> · +{{ run.errors | length - 1 }} more</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-slate-600">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div data-scrape-runs-empty class="flex flex-col items-center justify-center gap-2 py-8 text-center">
+        <span class="inline-flex h-10 w-10 items-center justify-center rounded-md bg-slate-800/80 text-slate-400">
+          <i data-lucide="rss" class="h-5 w-5" stroke-width="1.5"></i>
+        </span>
+        <p class="text-sm text-slate-300">No scraper runs yet.</p>
+        <p class="text-xs text-slate-500 max-w-sm">
+          Runs appear here when the scheduler fires the per-source cron.
+        </p>
+      </div>
+    {% endif %}
+  </section>
+</div>

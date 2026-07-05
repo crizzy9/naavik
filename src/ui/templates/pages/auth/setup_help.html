@@ -1,0 +1,147 @@
+{#
+  setup_help.html — first-run diagnostic + recovery page (plan 83 / 0.7.0.36).
+
+  Args:
+    state           : services.first_run.FirstRunState
+    runbook_anchor  : str — URL fragment to the RUNBOOK § first-run section
+#}
+{% extends "components/shell/auth_shell.html" %}
+{% block title %}Setup help — Naavik{% endblock %}
+
+{% block caller %}
+<div id="setup-help-card" class="w-full max-w-[640px] bg-slate-900 border border-slate-800 rounded-xl p-7 shadow-2xl shadow-black/45">
+
+  <div class="flex items-center gap-3 mb-6">
+    <div class="h-10 w-10 rounded-lg bg-indigo-500 flex items-center justify-center ring-1 ring-indigo-400/40 shrink-0">
+      <i data-lucide="life-buoy" class="h-5 w-5 text-white" stroke-width="1.5"></i>
+    </div>
+    <span class="font-semibold text-lg text-slate-50 tracking-tight">Naavik · Setup help</span>
+  </div>
+
+  <h1 class="text-2xl font-semibold text-slate-50 tracking-tight">First-run authentication</h1>
+  <p class="mt-1.5 text-sm text-slate-400">
+    Naavik does not auto-seed a user. On a fresh database you create your account via
+    <a href="/signup" class="text-indigo-300 hover:text-indigo-200 underline">/signup</a>.
+    See <a href="https://github.com/crizzy9/naavik/blob/main/docs/RUNBOOK.md{{ runbook_anchor }}"
+           class="text-indigo-300 hover:text-indigo-200 underline"
+           target="_blank" rel="noopener">RUNBOOK § 2.12</a> for full troubleshooting.
+  </p>
+
+  {# ── Diagnostic table — one signal (user_count) ─────────────────────── #}
+  <section data-setup-help-diagnostic class="mt-6 rounded-lg bg-slate-950/50 border border-slate-800 overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-900/60 text-[11px] uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left font-medium w-44">Signal</th>
+          <th class="px-4 py-2 text-left font-medium">State</th>
+          <th class="px-4 py-2 text-right font-medium w-20">Status</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800 text-slate-300">
+        <tr data-signal="users">
+          <td class="px-4 py-2.5 font-mono text-xs text-slate-400">user_count</td>
+          <td class="px-4 py-2.5">
+            {% if state.user_count == 0 %}
+              no users yet — sign-up form will render on /login
+            {% else %}
+              {{ state.user_count }} user{{ "" if state.user_count == 1 else "s" }} present — sign-in available
+            {% endif %}
+          </td>
+          <td class="px-4 py-2.5 text-right">
+            {% if state.user_count == 0 %}
+              <span class="inline-flex items-center gap-1 text-xs text-emerald-300"><i data-lucide="user-plus" class="h-4 w-4" stroke-width="1.5"></i>fresh</span>
+            {% else %}
+              <span class="inline-flex items-center gap-1 text-xs text-slate-400"><i data-lucide="users" class="h-4 w-4" stroke-width="1.5"></i>{{ state.user_count }}</span>
+            {% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  {# ── Overall verdict ──────────────────────────────────────────────── #}
+  <div class="mt-5">
+    {% if state.is_first_run %}
+      {% with tone="info",
+              icon="user-plus",
+              title="Fresh install — no user yet.",
+              body="Visit <a href=\"/login?mode=signup\" class=\"underline hover:text-indigo-100\">/login?mode=signup</a> to create the first account." %}
+        {% include "components/common/info_card.html" %}
+      {% endwith %}
+    {% else %}
+      {% with tone="info",
+              icon="check-circle-2",
+              title="An account exists on this instance.",
+              body="Visit <a href=\"/login\" class=\"underline hover:text-indigo-100\">/login</a> to sign in." %}
+        {% include "components/common/info_card.html" %}
+      {% endwith %}
+    {% endif %}
+  </div>
+
+  {# ── Recovery recipes ─────────────────────────────────────────────── #}
+  <section data-setup-help-recipes class="mt-6 flex flex-col gap-4">
+    <h2 class="text-base font-medium text-slate-50">Recovery options</h2>
+
+    {# Recipe 1 — visit signup #}
+    <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+      <div class="flex items-baseline justify-between gap-3 mb-2">
+        <h3 class="text-sm font-medium text-slate-100">1. Create your account via <code class="font-mono text-slate-200">/signup</code></h3>
+        <span class="text-[10px] font-mono uppercase tracking-wide text-emerald-300/80 ring-1 ring-emerald-500/30 bg-emerald-500/5 px-1.5 py-0.5 rounded">canonical</span>
+      </div>
+      <p class="text-xs text-slate-400 mb-2">
+        First-time setup on a self-hosted instance is signup-driven. The form is enabled while the User table is empty.
+      </p>
+<pre class="font-mono text-xs bg-slate-900 border border-slate-800 rounded p-3 text-slate-200 overflow-x-auto">
+# Open in your browser:
+http://localhost:8003/login?mode=signup
+
+# Or hit the API directly (replace [email protected] / your-12+-char-password):
+curl -X POST http://localhost:8003/api/v1/auth/signup \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d '[email protected]&password=your-12-char-password'
+</pre>
+    </div>
+
+    {# Recipe 2 — Check orchestrator logs #}
+    <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+      <div class="flex items-baseline justify-between gap-3 mb-2">
+        <h3 class="text-sm font-medium text-slate-100">2. App not responding? Check orchestrator logs</h3>
+        <span class="text-[10px] font-mono uppercase tracking-wide text-slate-500 ring-1 ring-slate-700 bg-slate-900 px-1.5 py-0.5 rounded">debug</span>
+      </div>
+      <p class="text-xs text-slate-400 mb-2">
+        If <code class="font-mono">/login</code> doesn't load at all, Postgres or alembic likely failed. The orchestrator multiplexes <code class="font-mono">[db]</code> / <code class="font-mono">[migrate]</code> / <code class="font-mono">[app]</code> log lines.
+      </p>
+<pre class="font-mono text-xs bg-slate-900 border border-slate-800 rounded p-3 text-slate-200 overflow-x-auto">
+# Tail the orchestrator output. If [migrate] errored, fix that first.
+nix run .#dev
+</pre>
+    </div>
+
+    {# Recipe 3 — Drop the dev DB #}
+    <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+      <div class="flex items-baseline justify-between gap-3 mb-2">
+        <h3 class="text-sm font-medium text-slate-100">3. Reset everything and start fresh</h3>
+        <span class="text-[10px] font-mono uppercase tracking-wide text-rose-300/80 ring-1 ring-rose-500/30 bg-rose-500/5 px-1.5 py-0.5 rounded">destructive</span>
+      </div>
+      <p class="text-xs text-slate-400 mb-2">
+        Wipes the local Postgres data so you can sign up again from a clean slate. Loses any locally-entered data.
+      </p>
+<pre class="font-mono text-xs bg-slate-900 border border-slate-800 rounded p-3 text-slate-200 overflow-x-auto">
+rm -rf .naavik/db
+nix run .#dev
+</pre>
+    </div>
+  </section>
+
+  <footer class="mt-6 flex items-center justify-between gap-3 text-xs text-slate-500">
+    <a href="/login" class="text-indigo-300 hover:text-indigo-200 transition">← Back to sign in</a>
+    <div class="flex items-center gap-3">
+      <a href="https://github.com/crizzy9/naavik/blob/main/docs/RUNBOOK.md{{ runbook_anchor }}"
+         hx-boost="false" target="_blank" rel="noopener"
+         class="hover:text-slate-300 transition">RUNBOOK · First-run auth</a>
+      <span aria-hidden="true">·</span>
+      <a href="https://github.com/crizzy9/naavik" hx-boost="false" class="hover:text-slate-300 transition">Source</a>
+    </div>
+  </footer>
+</div>
+{% endblock %}

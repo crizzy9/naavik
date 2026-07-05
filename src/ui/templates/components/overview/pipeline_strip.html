@@ -1,0 +1,39 @@
+{% from "components/common/_macros.html" import status_dot %}
+{#
+  pipeline_strip.html — compact horizontal mini-Kanban showing 5 stage counts.
+  Per Overview.jsx mockup: dot + uppercase label on top, large mono count
+  below, thin proportional bar underneath. Offer card glows when non-zero.
+
+  Args:
+    counts : dict {APPLIED, RECRUITER_SCREEN, ONSITE_LOOP, OFFER, CLOSED}
+#}
+{% set _stages = [
+  {"key": "APPLIED",          "label": "Applied"},
+  {"key": "RECRUITER_SCREEN", "label": "Recruiter"},
+  {"key": "ONSITE_LOOP",      "label": "Onsite"},
+  {"key": "OFFER",            "label": "Offer"},
+  {"key": "CLOSED",           "label": "Closed"},
+] %}
+{% set _max = [counts.get("APPLIED", 0), counts.get("RECRUITER_SCREEN", 0),
+               counts.get("ONSITE_LOOP", 0), counts.get("OFFER", 0),
+               counts.get("CLOSED", 0), 1] | max %}
+<div id="overview-pipeline" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 p-4 bg-slate-900 border border-slate-800 rounded-lg">
+  {% for st in _stages %}
+    {% set _n = counts.get(st.key, 0) %}
+    {% set _offer_glow = st.key == "OFFER" and _n > 0 %}
+    <div class="rounded-lg bg-slate-950 border p-3
+                {% if _offer_glow %}border-emerald-500/50 shadow-[0_0_16px_rgba(52,211,153,0.15)]
+                {% else %}border-slate-800/60{% endif %}">
+      <div class="flex items-center gap-1.5 mb-1.5 text-[10.5px] uppercase tracking-wide font-medium font-mono text-slate-400">
+        {{ status_dot(st.key) }}
+        <span class="truncate">{{ st.label }}</span>
+      </div>
+      <div class="font-mono text-2xl font-bold tabular-nums
+                  {% if _offer_glow %}text-emerald-400{% else %}text-slate-50{% endif %}">{{ _n }}</div>
+      <div class="mt-2 h-[3px] rounded-full bg-slate-800 overflow-hidden">
+        <div class="h-full rounded-full {{ STATUS_DOT_COLORS.get(st.key, 'bg-slate-500') }}"
+             style="width: {{ (100 * _n / _max) | round(1) }}%"></div>
+      </div>
+    </div>
+  {% endfor %}
+</div>

@@ -33,7 +33,7 @@ def test_action_bar_review_apply_opens_job_workspace_inline(env: Environment):
     `GET /_fragments/discover/expanded/<id>` swapped into `#discover-main`
     (SCREENS.md § 7 wiring). The plan-77 preview-card detour (which left
     the user on the queue) is gone."""
-    html = env.get_template("components/discover_action_bar.html").render(job_id=42)
+    html = env.get_template("components/discover/discover_action_bar.html").render(job_id=42)
     assert 'hx-get="/_fragments/discover/expanded/42"' in html, html
     assert 'hx-target="#discover-main"' in html
     # Old preview-card wiring is gone.

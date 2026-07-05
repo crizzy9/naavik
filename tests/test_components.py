@@ -157,9 +157,9 @@ _SIGNAL = {
 # Each tuple: (template_name, kwargs)
 _CASES: list[tuple[str, dict]] = [
     # ---- Shell ----
-    ("auth_shell.html", {}),  # extends base; render only checks parse
+    ("shell/auth_shell.html", {}),  # extends base; render only checks parse
     (
-        "sidebar.html",
+        "shell/sidebar.html",
         {
             "active": "overview",
             "user_name": "Shyam Padia",
@@ -169,26 +169,26 @@ _CASES: list[tuple[str, dict]] = [
             "followup_count": 12,
         },
     ),
-    ("version_pill.html", {"version": "0.4.2", "mode": "self-hosted"}),
-    ("api_status_dot.html", {"online": True}),
-    ("deployment_badge.html", {"mode": "self-hosted"}),
+    ("common/version_pill.html", {"version": "0.4.2", "mode": "self-hosted"}),
+    ("shell/api_status_dot.html", {"online": True}),
+    ("settings/deployment_badge.html", {"mode": "self-hosted"}),
     # ---- Atomics ----
-    ("button.html", {"variant": "primary", "label": "Save"}),
-    ("input.html", {"name": "email", "type": "email", "placeholder": "you@example.com"}),
-    ("card.html", {"title": "Recent activity", "sub": "last 24h", "body": "<p>hi</p>"}),
-    ("status_dot.html", {"status": "APPLIED"}),
-    ("status_badge.html", {"status": "ONSITE_LOOP"}),
-    ("score_circle.html", {"score": 86, "size": "default"}),
-    ("ai_badge.html", {"qualifier": "enthusiastic"}),
-    ("field_label.html", {"label": "Tags", "for_id": "tags", "hint": "3 selected"}),
+    ("common/button.html", {"variant": "primary", "label": "Save"}),
+    ("common/input.html", {"name": "email", "type": "email", "placeholder": "you@example.com"}),
+    ("common/card.html", {"title": "Recent activity", "sub": "last 24h", "body": "<p>hi</p>"}),
+    ("common/status_dot.html", {"status": "APPLIED"}),
+    ("common/status_badge.html", {"status": "ONSITE_LOOP"}),
+    ("common/score_circle.html", {"score": 86, "size": "default"}),
+    ("common/ai_badge.html", {"qualifier": "enthusiastic"}),
+    ("common/field_label.html", {"label": "Tags", "for_id": "tags", "hint": "3 selected"}),
     (
-        "info_card.html",
+        "common/info_card.html",
         {"tone": "info", "icon": "key", "title": "SSO coming soon", "body": "<p>foo</p>"},
     ),
-    ("spinner.html", {"size": "sm"}),
-    ("toast.html", {"tone": "success", "message": "Bullet saved"}),
+    ("common/spinner.html", {"size": "sm"}),
+    ("common/toast.html", {"tone": "success", "message": "Bullet saved"}),
     (
-        "empty_state.html",
+        "common/empty_state.html",
         {
             "icon": "search",
             "line": "No new matches today.",
@@ -196,16 +196,19 @@ _CASES: list[tuple[str, dict]] = [
             "cta_url": "/discover",
         },
     ),
-    ("avatar.html", {"kind": "user", "text": "SP", "size": "sm", "shape": "circle"}),
+    ("common/avatar.html", {"kind": "user", "text": "SP", "size": "sm", "shape": "circle"}),
     # ---- Forms ----
-    ("editor_field.html", {"label": "FULL NAME", "name": "full_name", "value": "Shyam Padia"}),
     (
-        "editor_card.html",
+        "common/editor_field.html",
+        {"label": "FULL NAME", "name": "full_name", "value": "Shyam Padia"},
+    ),
+    (
+        "profile/editor_card.html",
         {"title": "Identity", "subtitle": "Required", "body": "<div>fields</div>"},
     ),
-    ("autosave_indicator.html", {"state": "saved", "relative_time": "12s ago"}),
+    ("profile/autosave_indicator.html", {"state": "saved", "relative_time": "12s ago"}),
     (
-        "modal.html",
+        "common/modal.html",
         {
             "id": "demo-modal",
             "title": "Edit bullet",
@@ -216,7 +219,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "confirm_modal.html",
+        "common/confirm_modal.html",
         {
             "title": "Delete bullet",
             "message": "Cannot be undone",
@@ -228,10 +231,10 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     # ---- Onboarding ----
-    ("step_indicator.html", {"current_step": 2}),
-    ("dropzone.html", {"upload_url": "/api/v1/extraction/upload"}),
+    ("common/step_indicator.html", {"current_step": 2}),
+    ("common/dropzone.html", {"upload_url": "/api/v1/extraction/upload"}),
     (
-        "extraction_checklist.html",
+        "profile/extraction_checklist.html",
         {
             "items": [
                 {"label": "Reading PDF", "status": "done", "count": "4 pages"},
@@ -241,7 +244,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "extracted_field_row.html",
+        "profile/extracted_field_row.html",
         {
             "id": "row-name",
             "label": "NAME",
@@ -250,20 +253,20 @@ _CASES: list[tuple[str, dict]] = [
             "state": "extracted",
         },
     ),
-    ("progress_bar.html", {"value": 0.42, "gradient": True}),
+    ("common/progress_bar.html", {"value": 0.42, "gradient": True}),
     # ---- Profile / Bullet ----
-    ("profile_hero.html", {"profile": _PROFILE, "editable": True}),
+    ("profile/profile_hero.html", {"profile": _PROFILE, "editable": True}),
     (
-        "contact_chip.html",
+        "profile/contact_chip.html",
         {"kind": "mail", "value": "shyam@example.com", "href": "mailto:shyam@example.com"},
     ),
     (
-        "experience_card.html",
+        "profile/experience_card.html",
         {"experience": _EXPERIENCE, "bullets": _BULLETS, "expanded": False},
     ),
-    ("bullet_row.html", {"bullet": _BULLET}),
+    ("profile/bullet_row.html", {"bullet": _BULLET}),
     (
-        "section_anchor_nav.html",
+        "common/section_anchor_nav.html",
         {
             "anchors": [
                 {"id": "summary", "label": "Summary"},
@@ -273,7 +276,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "application_readiness_card.html",
+        "profile/application_readiness_card.html",
         {
             "missing_count": 4,
             "fields": [
@@ -287,14 +290,14 @@ _CASES: list[tuple[str, dict]] = [
             ],
         },
     ),
-    ("application_qs_form.html", {"profile": _PROFILE, "region": "US"}),
-    ("bullet_edit_row.html", {"bullet": _BULLET}),
-    ("tag_picker.html", {"selected": ["ai-ml", "platform"]}),
-    ("selection_override.html", {"current": "always_include"}),
-    ("bullet_textarea.html", {"value": _BULLET["text"]}),
+    ("profile/application_qs_form.html", {"profile": _PROFILE, "region": "US"}),
+    ("profile/bullet_edit_row.html", {"bullet": _BULLET}),
+    ("common/tag_picker.html", {"selected": ["ai-ml", "platform"]}),
+    ("profile/selection_override.html", {"current": "always_include"}),
+    ("profile/bullet_textarea.html", {"value": _BULLET["text"]}),
     # ---- Overview ----
     (
-        "kpi_card.html",
+        "common/kpi_card.html",
         {
             "label": "RESPONSE RATE · 90D",
             "value": "11.3%",
@@ -304,7 +307,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "priority_action_row.html",
+        "overview/priority_action_row.html",
         {
             "index": 1,
             "kind": "offer",
@@ -316,9 +319,9 @@ _CASES: list[tuple[str, dict]] = [
             "cta_url": "/tracking/123",
         },
     ),
-    ("email_signal_row.html", {"signal": _SIGNAL}),
+    ("overview/email_signal_row.html", {"signal": _SIGNAL}),
     (
-        "pipeline_strip.html",
+        "overview/pipeline_strip.html",
         {
             "counts": {
                 "APPLIED": 14,
@@ -330,16 +333,16 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     # ---- Discover ----
-    ("swipe_card.html", {"job": _JOB, "dimmed": False, "swiping_dir": None}),
+    ("discover/swipe_card.html", {"job": _JOB, "dimmed": False, "swiping_dir": None}),
     (
-        "match_breakdown.html",
+        "discover/match_breakdown.html",
         {
             "breakdown": {"ai-ml": 0.95, "platform": 0.88, "leadership": 0.82},
             "overall": 0.86,
         },
     ),
     (
-        "score_card.html",
+        "discover/score_card.html",
         {
             "score": 86,
             "match_breakdown": {
@@ -357,9 +360,9 @@ _CASES: list[tuple[str, dict]] = [
             "expanded": True,
         },
     ),
-    ("discover_action_bar.html", {"job_id": 42}),
+    ("discover/discover_action_bar.html", {"job_id": 42}),
     (
-        "swipe_action_btn.html",
+        "discover/swipe_action_btn.html",
         {
             "icon": "x",
             "label": "Skip",
@@ -369,7 +372,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "discover_stats_strip.html",
+        "discover/discover_stats_strip.html",
         {
             "stats": {
                 "applied": 4,
@@ -382,7 +385,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "up_next_card.html",
+        "discover/up_next_card.html",
         {
             "job": {
                 "id": 51,
@@ -397,18 +400,18 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "tip_card.html",
+        "common/tip_card.html",
         {"title": "Tip", "body": "Tap to expand a job before applying."},
     ),
-    ("keyboard_hints.html", {}),
+    ("common/keyboard_hints.html", {}),
     # ---- Discover · review ----
-    ("apply_topbar.html", {"job": _JOB, "application": _APPLICATION}),
+    ("discover/apply_topbar.html", {"job": _JOB, "application": _APPLICATION}),
     (
-        "warm_intro_card.html",
+        "discover/warm_intro_card.html",
         {"contact": _CONTACT, "referrals_this_year": 4},
     ),
     (
-        "tailored_bullet_row.html",
+        "discover/tailored_bullet_row.html",
         {
             "bullet": _BULLET,
             "selected": True,
@@ -417,7 +420,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "cover_letter_section.html",
+        "discover/cover_letter_section.html",
         {
             "application_id": 99,
             "section": "intro",
@@ -427,7 +430,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "screener_question_card.html",
+        "discover/screener_question_card.html",
         {
             "answer": {
                 "id": 1,
@@ -439,7 +442,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "apply_action_bar.html",
+        "discover/apply_action_bar.html",
         {
             "application": {"id": 99},
             "screener_count": 3,
@@ -449,13 +452,13 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     # ---- Tracking ----
-    ("view_toggle.html", {"current_view": "board"}),
+    ("common/view_toggle.html", {"current_view": "board"}),
     (
-        "provider_chip.html",
+        "outreach/provider_chip.html",
         {"provider": "gmail", "icon": "mail", "connected": True, "sub": "synced 2m ago"},
     ),
     (
-        "integration_card.html",
+        "tracking/integration_card.html",
         {
             "name": "Gmail",
             "icon": "mail",
@@ -465,7 +468,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "followup_banner.html",
+        "tracking/followup_banner.html",
         {
             "count": 2,
             "items": [
@@ -480,16 +483,16 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "stage_column.html",
+        "tracking/stage_column.html",
         {"status": "APPLIED", "cards": [_APPLICATION], "column_id": "col-applied"},
     ),
-    ("tracking_card.html", {"application": _APPLICATION}),
+    ("tracking/tracking_card.html", {"application": _APPLICATION}),
     (
-        "tracking_list_row.html",
+        "tracking/tracking_list_row.html",
         {"application": dict(_APPLICATION, last_activity="2d ago", source="manual")},
     ),
     (
-        "tracking_board.html",
+        "tracking/tracking_board.html",
         {
             "columns": [{"status": "APPLIED", "cards": [_APPLICATION]}],
             "show_closed": False,
@@ -497,9 +500,9 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     # ---- Outreach ----
-    ("outreach_app_row.html", {"application": _APPLICATION, "selected": True}),
+    ("outreach/outreach_app_row.html", {"application": _APPLICATION, "selected": True}),
     (
-        "recommended_move_card.html",
+        "outreach/recommended_move_card.html",
         {
             "application": _APPLICATION,
             "contact": _CONTACT,
@@ -510,7 +513,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "outreach_message_card.html",
+        "outreach/outreach_message_card.html",
         {
             "message": {
                 "id": 1,
@@ -522,18 +525,18 @@ _CASES: list[tuple[str, dict]] = [
             "editable": True,
         },
     ),
-    ("contact_card.html", {"contact": _CONTACT, "state": "referred_you"}),
+    ("outreach/contact_card.html", {"contact": _CONTACT, "state": "referred_you"}),
     (
-        "linkedin_status_chip.html",
+        "outreach/linkedin_status_chip.html",
         {"connected": True, "handle": "shyampadia", "dms_today": 7, "connections": 487},
     ),
     # Plan 78 § D.6 (0.4.0.15) — visa_status_chip catalogue entry.
     (
-        "visa_status_chip.html",
+        "discover/visa_status_chip.html",
         {"restriction": "sponsorship_available"},
     ),
     (
-        "outreach_timeline.html",
+        "outreach/outreach_timeline.html",
         {
             "events": [
                 {
@@ -546,9 +549,9 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     # ---- Settings ----
-    ("settings_tabs.html", {"current_tab": "llm-provider"}),
+    ("settings/settings_tabs.html", {"current_tab": "llm-provider"}),
     (
-        "provider_card.html",
+        "settings/provider_card.html",
         {
             "provider": {
                 "id": "anthropic",
@@ -560,9 +563,9 @@ _CASES: list[tuple[str, dict]] = [
             "selected": True,
         },
     ),
-    ("cost_card.html", {"label": "THIS MONTH", "value": "$3.42", "sub": "≈412k tokens"}),
+    ("settings/cost_card.html", {"label": "THIS MONTH", "value": "$3.42", "sub": "≈412k tokens"}),
     (
-        "deployment_status_card.html",
+        "settings/deployment_status_card.html",
         {
             "mode": "self-hosted",
             "status": "active",
@@ -571,7 +574,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "log_tail.html",
+        "settings/log_tail.html",
         {
             "log_path": "~/.naavik/logs · live tail",
             "lines": [{"timestamp": "14:02:41", "level": "INFO", "message": "ok"}],
@@ -579,7 +582,7 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "on_disk_card.html",
+        "settings/on_disk_card.html",
         {
             "paths": [
                 {"label": "DATA DIR", "path": "~/.naavik/data", "sub": "12 MB", "icon": "database"}
@@ -587,15 +590,15 @@ _CASES: list[tuple[str, dict]] = [
         },
     ),
     (
-        "connection_status_card.html",
+        "settings/connection_status_card.html",
         {"ok": True, "latency_ms": 412, "model": "claude-3.5-sonnet", "provider": "Anthropic"},
     ),
     # ---- Skeletons ----
-    ("swipe_card_skeleton.html", {}),
-    ("tracking_card_skeleton.html", {}),
-    ("priority_action_row_skeleton.html", {}),
-    ("email_signal_row_skeleton.html", {}),
-    ("bullet_edit_row_skeleton.html", {}),
+    ("discover/swipe_card_skeleton.html", {}),
+    ("tracking/tracking_card_skeleton.html", {}),
+    ("overview/priority_action_row_skeleton.html", {}),
+    ("overview/email_signal_row_skeleton.html", {}),
+    ("profile/bullet_edit_row_skeleton.html", {}),
 ]
 
 assert len(_CASES) == 85, f"Expected 85 components, got {len(_CASES)}"
@@ -617,7 +620,7 @@ def test_component_renders(env: Environment, template_name: str, kwargs: dict) -
 
 
 def test_score_circle_no_percent_sign(env: Environment) -> None:
-    out = env.get_template("components/score_circle.html").render(score=86, size="default")
+    out = env.get_template("components/common/score_circle.html").render(score=86, size="default")
     # Score number rendered as "86", not "86%".
     assert ">86</span>" in out
     assert "86%" not in out
@@ -629,7 +632,7 @@ def test_score_circle_no_percent_sign(env: Environment) -> None:
 
 def test_score_circle_uses_macro_via_macros_file(env: Environment) -> None:
     # Macro rendering — calls into _macros.html score_circle().
-    macro_module = env.get_template("components/_macros.html").module
+    macro_module = env.get_template("components/common/_macros.html").module
     out = macro_module.score_circle(score=92, size="hero")
     assert ">92</span>" in out
     assert "%" not in out
@@ -644,7 +647,7 @@ def test_status_dot_colors_complete() -> None:
 
 
 def test_sidebar_uses_inbox_not_kanban(env: Environment) -> None:
-    out = env.get_template("components/sidebar.html").render(
+    out = env.get_template("components/shell/sidebar.html").render(
         active="tracking",
         user_name="Shyam",
         user_initials="SP",
@@ -658,7 +661,7 @@ def test_sidebar_uses_inbox_not_kanban(env: Environment) -> None:
 
 def test_sidebar_width_is_w64() -> None:
     """Direct file inspection to enforce the literal `w-64` token."""
-    with open("src/ui/templates/components/sidebar.html") as f:
+    with open("src/ui/templates/components/shell/sidebar.html") as f:
         contents = f.read()
     assert "w-64" in contents
     assert "w-60" not in contents
@@ -668,7 +671,7 @@ def test_no_dark_prefixes_in_components() -> None:
     """No light-mode `dark:` Tailwind prefixes anywhere in components."""
     import glob
 
-    for path in glob.glob("src/ui/templates/components/*.html"):
+    for path in glob.glob("src/ui/templates/components/**/*.html", recursive=True):
         with open(path) as f:
             contents = f.read()
         # The `dark:` prefix must not appear inside any class attribute.

@@ -36,7 +36,7 @@ async def get_setup_help(
     state = await first_run.probe_first_run_state(session)
     return templates.TemplateResponse(
         request,
-        "pages/setup_help.html",
+        "pages/auth/setup_help.html",
         {
             "active_sidebar": None,
             "active_template_path": "/setup-help",

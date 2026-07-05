@@ -487,7 +487,7 @@ async def put_sources(
 
     Two content types accepted (plan 58 / 0.2.7.06):
       * `application/x-www-form-urlencoded` (HTMX paired editors) → returns
-        the re-rendered `pages/_settings_sources.html` partial as HTML.
+        the re-rendered `pages/settings/_settings_sources.html` partial as HTML.
       * `application/json` (machine consumers + the per-source enable toggle
         already wired to this endpoint) → returns JSON with the post-update
         Settings shape.
@@ -566,7 +566,7 @@ async def put_sources(
             if row is not None:
                 return ui_templates.TemplateResponse(
                     request,
-                    "components/_source_editor.html",
+                    "components/settings/_source_editor.html",
                     {"view": row},
                 )
         resp = HTMLResponse('<span class="text-emerald-300">Saved · sources</span>')
@@ -820,7 +820,7 @@ async def post_rotate_jwt_key(
         )
 
     ctx = {"security": await _build_security_view(session, user_id=user_id)}
-    return templates.TemplateResponse(request, "pages/_settings_security.html", ctx)
+    return templates.TemplateResponse(request, "pages/settings/_settings_security.html", ctx)
 
 
 # ── Account bulk PUT (plan 0.7.0.48 W4) ──────────────────────────────────

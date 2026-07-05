@@ -379,14 +379,14 @@ async def test_kpis_by_tag_skips_apps_without_bullet_provenance(
 
 def test_regen_button_renders_on_detail_slide_over() -> None:
     """The Regenerate button is present in the detail-slide-over template."""
-    template = Path("src/ui/templates/components/_application_detail.html").read_text()
+    template = Path("src/ui/templates/components/tracking/_application_detail.html").read_text()
     assert 'data-testid="regenerate-bundle"' in template
     assert 'hx-post="/api/v1/applications/{{ a.id }}/generate-bundle"' in template
 
 
 def test_bullet_override_section_renders_when_bullets_present() -> None:
     """The bullet-override section + per-bullet toggle is in the template."""
-    template = Path("src/ui/templates/components/_application_detail.html").read_text()
+    template = Path("src/ui/templates/components/tracking/_application_detail.html").read_text()
     assert 'data-testid="detail-bullet-overrides"' in template
     assert 'data-testid="bullet-override-toggle-' in template
     # Three pill states should be referenced.
@@ -710,7 +710,7 @@ async def test_generate_bundle_regenerate_kind_cover_letter_skips_resume(
 
 def test_regenerate_button_template_uses_cover_letter_kind() -> None:
     """The Regenerate button template MUST send `regenerate_kind=cover_letter`."""
-    template = Path("src/ui/templates/components/_application_detail.html").read_text()
+    template = Path("src/ui/templates/components/tracking/_application_detail.html").read_text()
     assert "Regenerate cover letter" in template
     assert '"regenerate_kind": "cover_letter"' in template
 
@@ -890,7 +890,7 @@ async def test_tracking_analytics_renders_role_family_section(
     finally:
         tracking_mod.application_analytics = orig  # type: ignore[assignment]
 
-    assert captured["template"] == "pages/tracking_analytics.html"
+    assert captured["template"] == "pages/tracking/tracking_analytics.html"
     ctx = captured["ctx"]
     assert "by_role_family" in ctx
     assert ctx["by_role_family"] == {
@@ -904,14 +904,14 @@ async def test_tracking_analytics_renders_role_family_section(
 
 def test_tracking_analytics_template_includes_breakdown_partials() -> None:
     """`tracking_analytics.html` MUST include both new partials."""
-    template = Path("src/ui/templates/pages/tracking_analytics.html").read_text()
-    assert "components/kpis_by_role_family.html" in template
-    assert "components/kpis_by_tag.html" in template
+    template = Path("src/ui/templates/pages/tracking/tracking_analytics.html").read_text()
+    assert "components/tracking/kpis_by_role_family.html" in template
+    assert "components/tracking/kpis_by_tag.html" in template
 
 
 def test_kpis_by_role_family_partial_renders_table() -> None:
     """The role-family partial renders a table with applied/response/onsite/offer cols."""
-    template = Path("src/ui/templates/components/kpis_by_role_family.html").read_text()
+    template = Path("src/ui/templates/components/tracking/kpis_by_role_family.html").read_text()
     assert 'data-testid="analytics-role-family-table"' in template
     assert "by_role_family" in template
     # Response/Onsite/Offer column headers present.
@@ -922,7 +922,7 @@ def test_kpis_by_role_family_partial_renders_table() -> None:
 
 def test_kpis_by_tag_partial_renders_table() -> None:
     """The tag partial renders a table with the same shape as role-family."""
-    template = Path("src/ui/templates/components/kpis_by_tag.html").read_text()
+    template = Path("src/ui/templates/components/tracking/kpis_by_tag.html").read_text()
     assert 'data-testid="analytics-tag-table"' in template
     assert "by_tag" in template
     assert "Response" in template

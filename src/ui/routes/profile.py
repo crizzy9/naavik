@@ -63,7 +63,7 @@ async def _build_profile_ctx(session: AsyncSession, user_id: int) -> dict[str, o
         "app_questions": pctx.app_questions_pairs(profile),
         "anchors": pctx.PROFILE_ANCHORS,
         "readiness": pctx.application_readiness(profile),
-        # Job-search preferences editor (components/_search_prefs_editor.html)
+        # Job-search preferences editor (components/profile/_search_prefs_editor.html)
         "sp": {
             "target_titles": list(getattr(profile, "target_titles", None) or []),
             "expansions": dict(getattr(profile, "title_expansions", None) or {}),
@@ -82,7 +82,7 @@ async def get_profile(
     ctx = await _build_profile_ctx(session, _effective_user_id(user))
     ctx["active_sidebar"] = "profile"
     ctx["active_template_path"] = "/profile"
-    return templates.TemplateResponse(request, "pages/profile.html", ctx)
+    return templates.TemplateResponse(request, "pages/profile/profile.html", ctx)
 
 
 @router.get("/profile/edit", response_class=HTMLResponse, name="profile_edit")
@@ -94,7 +94,7 @@ async def get_edit(
     ctx = await _build_profile_ctx(session, _effective_user_id(user))
     ctx["active_sidebar"] = "profile"
     ctx["active_template_path"] = "/profile/edit"
-    return templates.TemplateResponse(request, "pages/profile_edit.html", ctx)
+    return templates.TemplateResponse(request, "pages/profile/profile_edit.html", ctx)
 
 
 @router.get("/_fragments/profile/cities", response_class=HTMLResponse, name="profile_cities")
@@ -108,6 +108,6 @@ async def get_city_suggestions(
 
     return templates.TemplateResponse(
         request,
-        "components/_city_suggestions.html",
+        "components/profile/_city_suggestions.html",
         {"items": search_cities(q) if len(q.strip()) >= 2 else []},
     )

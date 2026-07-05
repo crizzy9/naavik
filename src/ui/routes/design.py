@@ -53,7 +53,7 @@ async def design_components(
             raise HTTPException(status_code=404, detail="Not Found")
     return templates.TemplateResponse(
         request,
-        "pages/_design_components.html",
+        "pages/dev/_design_components.html",
         {
             "active_sidebar": None,
             "active_template_path": "/_design/components",

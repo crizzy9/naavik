@@ -149,7 +149,7 @@ async def get_overview(
     counts = await overview_service.pipeline_strip_counts(session, user_id)
     return templates.TemplateResponse(
         request,
-        "pages/overview.html",
+        "pages/overview/overview.html",
         {
             "active_sidebar": "overview",
             "active_template_path": "/",
@@ -187,7 +187,7 @@ async def fragment_priority_actions(
 ):
     user_id = _effective_user_id(user)
     actions = await overview_service.compose_priority_actions(session, user_id)
-    tmpl = templates.get_template("components/priority_action_row.html")
+    tmpl = templates.get_template("components/overview/priority_action_row.html")
     out = []
     for i, a in enumerate(actions, start=1):
         out.append(tmpl.render({**a, "index": i}))
@@ -206,7 +206,7 @@ async def fragment_email_signal(
 ):
     user_id = _effective_user_id(user)
     threads = await email_service.recent_signals(session, user_id, limit=6)
-    tmpl = templates.get_template("components/email_signal_row.html")
+    tmpl = templates.get_template("components/overview/email_signal_row.html")
     out = [tmpl.render({"signal": _signal_view(t)}) for t in threads]
     return HTMLResponse("\n".join(out))
 
@@ -225,7 +225,7 @@ async def fragment_pipeline_strip(
     counts = await overview_service.pipeline_strip_counts(session, user_id)
     return templates.TemplateResponse(
         request,
-        "components/pipeline_strip.html",
+        "components/overview/pipeline_strip.html",
         {"counts": counts},
     )
 
@@ -253,7 +253,7 @@ async def get_email_signals_stream(
     threads = await email_service.recent_signals(session, user_id, limit=10)
 
     async def gen():
-        tmpl = templates.get_template("components/email_signal_row.html")
+        tmpl = templates.get_template("components/overview/email_signal_row.html")
         for t in threads:
             html = tmpl.render({"signal": _signal_view(t)})
             yield f"event: signal\ndata: {html.replace(chr(10), ' ')}\n\n"

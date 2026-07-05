@@ -97,7 +97,7 @@ def test_editor_field_select_uses_change_trigger_when_autosave_enabled() -> None
         autoescape=True,
         undefined=ChainableUndefined,
     )
-    tmpl = env.get_template("components/editor_field.html")
+    tmpl = env.get_template("components/common/editor_field.html")
     out = tmpl.render(
         label="WORK AUTH",
         name="work_authorization",

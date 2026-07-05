@@ -1,0 +1,120 @@
+{# _manual_job_entry_modal.html — `+ Add manually` flow on Tracking (plan 53 § B). #}
+{% set _body %}
+  <form id="manual-job-form"
+        hx-target-error="#manual-job-error"
+        hx-post="/api/v1/jobs/manual"
+        hx-headers='{"X-CSRF-Token": "{{ csrf_token | default("") }}"}'
+        class="flex flex-col gap-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token | default('') }}">
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        {% with label="COMPANY", for_id="manual-job-company" %}
+          {% include "components/common/field_label.html" %}
+        {% endwith %}
+        {% with name="company", id="manual-job-company", type="text", required=true,
+                placeholder="Stripe" %}
+          {% include "components/common/input.html" %}
+        {% endwith %}
+      </div>
+      <div>
+        {% with label="ROLE", for_id="manual-job-role" %}
+          {% include "components/common/field_label.html" %}
+        {% endwith %}
+        {% with name="role", id="manual-job-role", type="text", required=true,
+                placeholder="Senior Software Engineer" %}
+          {% include "components/common/input.html" %}
+        {% endwith %}
+      </div>
+    </div>
+
+    <div>
+      {% with label="URL", for_id="manual-job-url", hint="optional" %}
+        {% include "components/common/field_label.html" %}
+      {% endwith %}
+      {% with name="url", id="manual-job-url", type="text", mono=true,
+              placeholder="https://stripe.com/jobs/listing/..." %}
+        {% include "components/common/input.html" %}
+      {% endwith %}
+    </div>
+
+    <div>
+      {% with label="DESCRIPTION", for_id="manual-job-description" %}
+        {% include "components/common/field_label.html" %}
+      {% endwith %}
+      {% with name="description", id="manual-job-description", type="textarea", required=true,
+              placeholder="Paste the job description here." %}
+        {% include "components/common/input.html" %}
+      {% endwith %}
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        {% with label="SOURCE", for_id="manual-job-source" %}
+          {% include "components/common/field_label.html" %}
+        {% endwith %}
+        {% with name="source", id="manual-job-source", type="select", value="manual",
+                options=[
+                  ("manual", "Manual"),
+                  ("linkedin", "LinkedIn"),
+                  ("greenhouse", "Greenhouse"),
+                  ("lever", "Lever"),
+                  ("ashby", "Ashby"),
+                  ("workday", "Workday"),
+                  ("indeed", "Indeed"),
+                  ("company_direct", "Company direct"),
+                ] %}
+          {% include "components/common/input.html" %}
+        {% endwith %}
+      </div>
+      <div>
+        {% with label="LOCATION", for_id="manual-job-location", hint="optional" %}
+          {% include "components/common/field_label.html" %}
+        {% endwith %}
+        {% with name="location", id="manual-job-location", type="text",
+                placeholder="Remote · NYC · ..." %}
+          {% include "components/common/input.html" %}
+        {% endwith %}
+      </div>
+      <div>
+        {% with label="REMOTE POLICY", for_id="manual-job-remote-policy" %}
+          {% include "components/common/field_label.html" %}
+        {% endwith %}
+        {% with name="remote_policy", id="manual-job-remote-policy", type="select",
+                value="unknown",
+                options=[
+                  ("unknown", "Unknown"),
+                  ("remote", "Remote"),
+                  ("hybrid", "Hybrid"),
+                  ("onsite", "On-site"),
+                ] %}
+          {% include "components/common/input.html" %}
+        {% endwith %}
+      </div>
+    </div>
+
+    <div id="manual-job-result" class="text-xs text-slate-400 min-h-[20px]"></div>
+  </form>
+{% endset %}
+
+{% set _footer %}
+  <div></div>
+  <div class="flex items-center gap-2">
+    <button type="button"
+            class="text-sm text-slate-400 hover:text-slate-100 px-3 py-1.5 rounded hover:bg-slate-800"
+            hx-on:click="document.getElementById('manual-job-modal').close()">
+      Cancel
+    </button>
+    <button type="submit" form="manual-job-form"
+            class="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium">
+      <i data-lucide="plus" class="h-4 w-4" stroke-width="1.5"></i>
+      Add job
+    </button>
+  </div>
+{% endset %}
+
+{% with id="manual-job-modal", title="Add a job manually",
+        subtitle="paste a JD · we'll track it without scraping",
+        body=_body, footer=_footer, size="lg" %}
+  {% include "components/common/modal.html" %}
+{% endwith %}

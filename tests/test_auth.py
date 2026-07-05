@@ -539,7 +539,7 @@ def test_change_password_rejects_missing_csrf_token() -> None:
     endpoint is gated by `Depends(require_csrf)`. A POST without the
     matching `X-CSRF-Token` header (or with mismatched cookie/header) gets
     403, not 422/204 — even with a valid JWT cookie + complexity-passing new
-    password. The HTMX form on `pages/change_password.html` carries the
+    password. The HTMX form on `pages/auth/change_password.html` carries the
     header via the global `base.html` `hx-headers` attribute, so this gate
     is invisible to honest UI clients.
     """

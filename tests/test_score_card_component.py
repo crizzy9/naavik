@@ -1,4 +1,4 @@
-"""Unit tests for `components/score_card.html` (plan 72 / 0.3.2.01).
+"""Unit tests for `components/discover/score_card.html` (plan 72 / 0.3.2.01).
 
 Covers the Variant B (Linear bento, 3-zone) composite: score circle on the
 left, per-dim bars in the middle, strengths/gaps/visa panels on the right,
@@ -52,7 +52,7 @@ def _full_breakdown() -> dict:
 
 def test_renders_full_18_key_shape(env: Environment) -> None:
     """Full 18-key match_breakdown drives every zone."""
-    out = env.get_template("components/score_card.html").render(
+    out = env.get_template("components/discover/score_card.html").render(
         score=86,
         match_breakdown=_full_breakdown(),
         expanded=False,
@@ -76,7 +76,7 @@ def test_renders_full_18_key_shape(env: Environment) -> None:
 
 def test_expanded_shows_provenance_footer(env: Environment) -> None:
     """`expanded=True` renders the layer-provenance + scored_at footer."""
-    out = env.get_template("components/score_card.html").render(
+    out = env.get_template("components/discover/score_card.html").render(
         score=86,
         match_breakdown=_full_breakdown(),
         expanded=True,
@@ -92,7 +92,7 @@ def test_expanded_shows_provenance_footer(env: Environment) -> None:
 
 def test_collapsed_omits_provenance_footer(env: Environment) -> None:
     """Default `expanded=False` hides the provenance footer."""
-    out = env.get_template("components/score_card.html").render(
+    out = env.get_template("components/discover/score_card.html").render(
         score=86,
         match_breakdown=_full_breakdown(),
     )
@@ -103,7 +103,7 @@ def test_collapsed_omits_provenance_footer(env: Environment) -> None:
 
 def test_empty_strengths_and_gaps_show_placeholder(env: Environment) -> None:
     """Empty lists render placeholder copy, not blank panels."""
-    out = env.get_template("components/score_card.html").render(
+    out = env.get_template("components/discover/score_card.html").render(
         score=72,
         match_breakdown={"per_dimension": {"ai-ml": 0.7}, "strengths": [], "gaps": []},
     )
@@ -117,7 +117,7 @@ def test_legacy_breakdown_missing_new_keys_renders_safely(env: Environment) -> N
     must NOT raise — defensive `.get()` lets the card degrade gracefully.
     """
     legacy = {"ai-ml": 0.95, "platform": 0.88}  # old flat shape, no nested keys
-    out = env.get_template("components/score_card.html").render(
+    out = env.get_template("components/discover/score_card.html").render(
         score=86,
         match_breakdown=legacy,
     )
@@ -132,7 +132,7 @@ def test_visa_concern_renders_rose_panel(env: Environment) -> None:
     bd = _full_breakdown()
     bd["visa_concern"] = True
     bd["visa_note"] = "Posting requires US citizenship — sponsorship not available."
-    out = env.get_template("components/score_card.html").render(
+    out = env.get_template("components/discover/score_card.html").render(
         score=42,
         match_breakdown=bd,
     )
@@ -146,7 +146,7 @@ def test_visa_concern_without_note_does_not_render_visa_panel(env: Environment) 
     bd = _full_breakdown()
     bd["visa_concern"] = True
     bd["visa_note"] = None
-    out = env.get_template("components/score_card.html").render(
+    out = env.get_template("components/discover/score_card.html").render(
         score=42,
         match_breakdown=bd,
     )
@@ -159,7 +159,7 @@ def test_judge_skipped_renders_layer_3_only_chip(env: Environment) -> None:
     """`judge_skipped=True` surfaces the amber `layer-3 only` chip instead of llm-judged."""
     bd = _full_breakdown()
     bd["judge_skipped"] = True
-    out = env.get_template("components/score_card.html").render(
+    out = env.get_template("components/discover/score_card.html").render(
         score=72,
         match_breakdown=bd,
     )
@@ -169,7 +169,7 @@ def test_judge_skipped_renders_layer_3_only_chip(env: Environment) -> None:
 
 def test_size_compact_uses_smaller_circle(env: Environment) -> None:
     """`size=compact` propagates to score_circle (h-10 w-10)."""
-    out = env.get_template("components/score_card.html").render(
+    out = env.get_template("components/discover/score_card.html").render(
         score=86,
         match_breakdown=_full_breakdown(),
         size="compact",
@@ -179,7 +179,7 @@ def test_size_compact_uses_smaller_circle(env: Environment) -> None:
 
 def test_size_hero_uses_larger_circle(env: Environment) -> None:
     """`size=hero` propagates to score_circle (h-24 w-24)."""
-    out = env.get_template("components/score_card.html").render(
+    out = env.get_template("components/discover/score_card.html").render(
         score=86,
         match_breakdown=_full_breakdown(),
         size="hero",
@@ -196,13 +196,17 @@ def test_score_thresholds_drive_ring_color(env: Environment) -> None:
         (45, "stroke-amber-400"),
         (20, "stroke-rose-400"),
     ]:
-        out = env.get_template("components/score_card.html").render(score=score, match_breakdown=bd)
+        out = env.get_template("components/discover/score_card.html").render(
+            score=score, match_breakdown=bd
+        )
         assert expected_ring in out, f"expected {expected_ring} for score {score}"
 
 
 def test_empty_match_breakdown_renders(env: Environment) -> None:
     """Score with no breakdown (unscored / pre-Phase 2 row) renders without crashing."""
-    out = env.get_template("components/score_card.html").render(score=0, match_breakdown={})
+    out = env.get_template("components/discover/score_card.html").render(
+        score=0, match_breakdown={}
+    )
     assert out
     assert "MATCH" in out
     assert "no per-dimension data" in out

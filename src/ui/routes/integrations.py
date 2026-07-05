@@ -44,7 +44,7 @@ async def get_integrations_email(
     ).all()
     return templates.TemplateResponse(
         request,
-        "pages/integrations_email.html",
+        "pages/settings/integrations_email.html",
         {
             "active_sidebar": "tracking",
             "accounts": list(accounts),

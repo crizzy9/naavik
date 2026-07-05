@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ job.role }} · {{ job.company }} — Naavik{% endblock %}
+
+{% block main %}
+{% with job=job %}
+  {% include "components/jobs/job_topbar.html" %}
+{% endwith %}
+
+<div class="max-w-7xl mx-auto px-6 lg:px-8 py-6 lg:py-8">
+  {% include "pages/jobs/_job_detail_body.html" %}
+</div>
+{% endblock %}

@@ -30,7 +30,7 @@ def test_settings_llm_tab_active_provider_radio_section_deleted(client: TestClie
     r = client.get("/settings/llm-provider", cookies=auth_cookies)
     assert r.status_code == 200
     body = r.text
-    # The radio surface from `components/provider_card.html` is gone.
+    # The radio surface from `components/settings/provider_card.html` is gone.
     # (Item 10 reintroduced `llm_provider` as a HIDDEN field so saving a
     # model aligns the stored provider — only the radio stays banned.)
     assert 'type="radio" name="llm_provider"' not in body

@@ -1,0 +1,64 @@
+{# Outreach right-pane detail. Args: detail dict + contacts + recommended_move + timeline_events #}
+{% set d = detail %}
+<div class="flex flex-col gap-6">
+  <header class="flex items-center gap-3 flex-wrap p-4 bg-slate-900 border border-slate-800 rounded-lg">
+    {% with kind="company", text=d.company_initial, size="md", color_override=d.company_color %}
+      {% include "components/common/avatar.html" %}
+    {% endwith %}
+    <div class="flex-1 min-w-0">
+      <div class="text-base font-medium text-slate-50 truncate">
+        {{ d.role }}{% if d.team %} · <span class="text-slate-300">{{ d.team }}</span>{% endif %}
+      </div>
+      <div class="text-xs text-slate-400 truncate">
+        {{ d.company }} · applied {{ d.applied_label }}
+        {% if d.match_score %} · <span class="font-mono text-cyan-300">match {{ "%.2f" | format(d.match_score) }}</span>{% endif %}
+      </div>
+    </div>
+    <a href="/tracking?app={{ d.application_id }}" class="text-xs text-slate-400 hover:text-slate-100">
+      Open in tracking →
+    </a>
+  </header>
+
+  {% if recommended_move %}
+    {% with application=d, contact=recommended_move.contact,
+            tone_recommendation=recommended_move.tone, last_touch_relative=recommended_move.last_touch,
+            context=recommended_move.context, draft_body=recommended_move.draft_body %}
+      {% include "components/outreach/recommended_move_card.html" %}
+    {% endwith %}
+  {% endif %}
+
+  <section class="bg-slate-900 border border-slate-800 rounded-lg p-5">
+    <header class="flex items-baseline justify-between mb-3 gap-3">
+      <h2 class="text-base font-medium text-slate-50">
+        Contacts at {{ d.company }} · <span class="font-mono text-slate-400">{{ contacts | length }}</span>
+      </h2>
+      <button type="button"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-xs"
+              hx-post="/api/v1/contacts/find"
+              hx-vals='{"company": "{{ d.company }}"}'
+              hx-target="#contacts-list"
+              hx-swap="afterend">
+        <i data-lucide="search" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        Find more
+      </button>
+    </header>
+    <div id="contacts-list" class="flex flex-col">
+      {% for c in contacts %}
+        {% with contact=c.display, state=c.state %}
+          {% include "components/outreach/contact_card.html" %}
+        {% endwith %}
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if timeline_events %}
+    <section class="bg-slate-900 border border-slate-800 rounded-lg">
+      <header class="px-5 pt-4">
+        <h2 class="text-base font-medium text-slate-50">Activity</h2>
+      </header>
+      {% with events=timeline_events %}
+        {% include "components/outreach/outreach_timeline.html" %}
+      {% endwith %}
+    </section>
+  {% endif %}
+</div>

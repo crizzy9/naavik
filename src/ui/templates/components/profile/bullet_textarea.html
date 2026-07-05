@@ -1,0 +1,19 @@
+{#
+  bullet_textarea.html — long-form bullet text input in Bullet editor modal.
+  **Single field — no oneline/detailed split.** AI trims at apply time.
+
+  Args:
+    value : current bullet text (required)
+    name  : form field name (default: "text")
+    hint  : right-aligned label hint (default: see below)
+#}
+{% set name = name | default("text") %}
+{% set hint = hint | default("write the long version — Naavik trims to fit") %}
+{% with label="BULLET", for_id="bullet-text", hint=hint %}{% include "components/common/field_label.html" %}{% endwith %}
+{% with name=name, type="textarea", value=value, id="bullet-text" %}{% include "components/common/input.html" %}{% endwith %}
+<div class="mt-3">
+  {% with tone="info", icon="sparkles", title=None,
+          body="At apply time Naavik picks the bullets that fit the JD and rewrites each one to land on a single line — keeping your numbers and verbs intact. You don't need to maintain two versions." %}
+    {% include "components/common/info_card.html" %}
+  {% endwith %}
+</div>

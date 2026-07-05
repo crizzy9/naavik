@@ -1,0 +1,44 @@
+{#
+  experience_card.html — single experience role card on Profile read-only.
+
+  Args:
+    experience : dict with company, team, title, location, dates, initial
+    bullets    : list[Bullet]
+    expanded   : bool — show all bullets vs truncate to 3
+#}
+{% set expanded = expanded | default(false) %}
+{% set _shown = bullets if expanded else bullets[:3] %}
+<article class="p-5 bg-slate-900 border border-slate-800 rounded-lg">
+  <header class="flex items-start gap-3">
+    {% with kind="company", text=experience.initial | default(experience.company[:1] | upper), size="md", color_override=experience.color | default("bg-indigo-600") %}
+      {% include "components/common/avatar.html" %}
+    {% endwith %}
+    <div class="flex-1 min-w-0">
+      <div class="text-base font-medium text-slate-50 truncate">{{ experience.title }}</div>
+      <div class="text-sm text-slate-400 truncate">
+        {{ experience.company }}{% if experience.team %} · {{ experience.team }}{% endif %}{% if experience.location %} · {{ experience.location }}{% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-1 font-mono">{{ experience.dates }}{% if experience.duration %} · {{ experience.duration }}{% endif %}</div>
+    </div>
+  </header>
+
+  {% if _shown %}
+    <ul class="mt-4 flex flex-col gap-2 list-none">
+      {% for b in _shown %}
+        <li>{% with bullet=b %}{% include "components/profile/bullet_row.html" %}{% endwith %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% if bullets and bullets | length > 3 and not expanded %}
+    <button type="button" class="mt-4 text-xs text-slate-400 hover:text-slate-200 inline-flex items-center gap-1">
+      <i data-lucide="chevron-down" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      Show all {{ bullets | length }} bullets
+    </button>
+  {% elif expanded and bullets | length > 3 %}
+    <button type="button" class="mt-4 text-xs text-slate-400 hover:text-slate-200 inline-flex items-center gap-1">
+      <i data-lucide="chevron-up" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      Collapse
+    </button>
+  {% endif %}
+</article>
