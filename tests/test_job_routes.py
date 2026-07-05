@@ -215,7 +215,8 @@ async def test_build_discover_ctx_empty_live_returns_empty_queue(monkeypatch):
     empty-state guard). This test pins the new contract; the legacy fallback path
     no longer exists.
     """
-    from services import application_service, contact_tracker, job_service
+    from services import applications as application_service
+    from services import contact_tracker, job_service
 
     async def _empty_list_jobs(*a, **kw):
         return []

@@ -15,7 +15,7 @@ from api.deps import get_owned_contact
 from db.session import get_session
 from models import Contact, User
 from models.enums import OutreachIntent, OutreachStatus
-from services import application_service, contact_tracker, outreach_service
+from services import applications, contact_tracker, outreach_service
 from services.auth import require_authed_session
 from ui import outreach_ctx as octx
 from ui.templates_setup import templates
@@ -83,7 +83,7 @@ async def fragment_outreach_draft(
     """Return a freshly-drafted message card for a contact the caller owns."""
     user_id = _effective_user_id(user)
     if application_id is not None:
-        app_row = await application_service.get_application(session, application_id)
+        app_row = await applications.get_application(session, application_id)
         if app_row is None or app_row.user_id != user_id:
             raise HTTPException(status_code=404, detail="Application not found")
     body = (
@@ -139,7 +139,7 @@ async def get_contacts(
     elif app_id:
         # Ownership-scope by the application (plan 91 Phase 1.3) — the join-only
         # accessor previously returned contacts linked to any user's app.
-        app_row = await application_service.get_application(session, app_id)
+        app_row = await applications.get_application(session, app_id)
         if app_row is None or app_row.user_id != user_id:
             raise HTTPException(status_code=404, detail="Application not found")
         items = await contact_tracker.list_contacts_for_application(session, app_id)
@@ -236,7 +236,7 @@ async def get_outreach_messages(
     if app_id:
         # Ownership-scope by the referenced app/contact (plan 91 Phase 1.3) —
         # the by-id accessors previously returned any user's messages.
-        app_row = await application_service.get_application(session, app_id)
+        app_row = await applications.get_application(session, app_id)
         if app_row is None or app_row.user_id != user_id:
             raise HTTPException(status_code=404, detail="Application not found")
         msgs = await outreach_service.list_messages_for_application(session, app_id)
@@ -269,7 +269,7 @@ async def post_outreach_draft(
     if contact is None or contact.user_id != user_id:
         raise HTTPException(status_code=404, detail="Contact not found")
     if app_id is not None:
-        app_row = await application_service.get_application(session, int(app_id))
+        app_row = await applications.get_application(session, int(app_id))
         if app_row is None or app_row.user_id != user_id:
             raise HTTPException(status_code=404, detail="Application not found")
     body = (

@@ -402,7 +402,7 @@ async def post_auto_apply_drain(
     """Plan 78 § D.4 — global drain: flip every QUEUED_FOR_AUTO_APPLY Job
     back to SAVED. Returns `{drained: N}`. CSRF + auth gated.
     """
-    from services import application_service as application_service_mod
+    from services import applications as application_service_mod
     from ui.routes.settings import _effective_user_id
 
     # Resolve per authed caller (hacker MED-2 PR #193 fix). Pattern matches

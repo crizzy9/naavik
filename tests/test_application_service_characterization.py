@@ -53,8 +53,8 @@ from models.enums import (
     VisaRestriction,
     VisaSponsorship,
 )
-from services import application_service
-from services.application_service import (
+from services import applications as application_service
+from services.applications import (
     _FORWARD_FROM,
     ApplicationServiceError,
     IllegalStateTransition,
@@ -375,7 +375,7 @@ async def test_queue_generates_docs_then_submits(session):
 
     with (
         patch("services.generation.generate_bundle", new=fake_generate),
-        patch("services.application_service.submit_draft", new=_submit_ok()),
+        patch("services.applications.submit_draft", new=_submit_ok()),
     ):
         result = await process_auto_apply_queue(session)
 
@@ -456,7 +456,7 @@ async def test_queue_score_drift_reverts_to_saved(session):
     job, _ = await _queued_draft(session, job_kw={"score": 0.6})
 
     submit = _submit_ok()
-    with patch("services.application_service.submit_draft", new=submit):
+    with patch("services.applications.submit_draft", new=submit):
         result = await process_auto_apply_queue(session)
 
     submit.assert_not_awaited()
@@ -484,7 +484,7 @@ async def test_queue_daily_cap_skips(session):
     job, _ = await _queued_draft(session)
 
     submit = _submit_ok()
-    with patch("services.application_service.submit_draft", new=submit):
+    with patch("services.applications.submit_draft", new=submit):
         result = await process_auto_apply_queue(session)
 
     submit.assert_not_awaited()
@@ -505,7 +505,7 @@ async def test_queue_visa_blocked_unqueues_and_emits(session):
     )
 
     submit = _submit_ok()
-    with patch("services.application_service.submit_draft", new=submit):
+    with patch("services.applications.submit_draft", new=submit):
         result = await process_auto_apply_queue(session)
 
     submit.assert_not_awaited()
@@ -527,7 +527,7 @@ async def test_queue_submission_failure_hands_to_user_with_message(session):
     await session.flush()
 
     submit = AsyncMock(return_value=SimpleNamespace(status=ApplicationStatus.DRAFT))
-    with patch("services.application_service.submit_draft", new=submit):
+    with patch("services.applications.submit_draft", new=submit):
         result = await process_auto_apply_queue(session)
 
     assert (result.failed, result.handed_to_user) == (1, 1)

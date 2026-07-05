@@ -8,7 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import Application
 from models.enums import AppEventKind, ApplicationStatus, RecruiterState, ReferralState
-from services import application_service, contact_tracker, email_service
+from services import applications, contact_tracker, email_service
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",
@@ -133,18 +133,18 @@ async def build_tracking_ctx(
 ) -> dict[str, object]:
     from services import email_application_inference as inference
 
-    visible_apps = await application_service.list_visible_in_tracking(session, user_id)
+    visible_apps = await applications.list_visible_in_tracking(session, user_id)
     # Item 5 — unconfirmed inferred applications stay off the board; they
     # live in the confirmation banner until the user confirms/dismisses.
     inferred_pending = [a for a in visible_apps if inference.is_unconfirmed_inferred(a)]
     visible_apps = [a for a in visible_apps if not inference.is_unconfirmed_inferred(a)]
     if show_drafts:
-        visible_apps = visible_apps + await application_service.list_drafts(session, user_id)
-    closed = await application_service.list_closed(session, user_id)
+        visible_apps = visible_apps + await applications.list_drafts(session, user_id)
+    closed = await applications.list_closed(session, user_id)
     all_apps = visible_apps + closed if show_closed else visible_apps
     columns = _columns_for_board(all_apps, show_closed=show_closed)
 
-    followup = await application_service.list_in_followup(session, user_id)
+    followup = await applications.list_in_followup(session, user_id)
     items: list[dict[str, object]] = []
     for a in followup[:4]:
         contacts = await contact_tracker.list_contacts_for_application(session, a.id)
@@ -253,7 +253,7 @@ async def build_application_detail_ctx(
 ) -> dict[str, object]:
     """Project Application + related rows into the detail slide-over (plan 53 § C.3)."""
     initial, color = _initial_color(application.company)
-    events = await application_service.list_events_for(session, application.id)
+    events = await applications.list_events_for(session, application.id)
     status_timeline = [
         {
             "from": e.payload.get("from"),
@@ -267,7 +267,7 @@ async def build_application_detail_ctx(
     ]
     status_timeline.reverse()
 
-    documents = await application_service.list_documents_for(session, application.id)
+    documents = await applications.list_documents_for(session, application.id)
     _PDF_URLS = {
         "resume": f"/api/v1/applications/{application.id}/resume.pdf",
         "cover_letter": f"/api/v1/applications/{application.id}/cover-letter.pdf",
@@ -297,7 +297,7 @@ async def build_application_detail_ctx(
             "source": s.source.value,
             "reviewed": s.reviewed_at is not None,
         }
-        for s in await application_service.list_screener_answers_for(session, application.id)
+        for s in await applications.list_screener_answers_for(session, application.id)
     ]
 
     contacts = await contact_tracker.list_contacts_for_application(session, application.id)
@@ -392,7 +392,7 @@ async def build_application_detail_ctx(
                 raw = float(job.score)
                 score = int(round(raw * 100)) if raw <= 1.0 else int(round(raw))
             if job is not None:
-                auto_apply = application_service.auto_apply_phase(application, job)
+                auto_apply = applications.auto_apply_phase(application, job)
                 # Manual-submit link: the RESOLVED apply site beats the
                 # aggregator listing the scraper found the job on.
                 job_url = getattr(job, "apply_url", None) or getattr(job, "url", None)
@@ -549,7 +549,7 @@ async def build_library_ctx(
         session, user_id=user_id, filters=filters, page=0, page_size=200
     )
 
-    apps = await application_service.list_applications(session, user_id=user_id)
+    apps = await applications.list_applications(session, user_id=user_id)
     apps_by_job: dict[int, Application] = {}
     for a in apps:
         if a.job_id is not None:
@@ -558,7 +558,7 @@ async def build_library_ctx(
     rows = []
     for j in jobs:
         app = apps_by_job.get(j.id)
-        phase = application_service.auto_apply_phase(app, j)
+        phase = applications.auto_apply_phase(app, j)
         rows.append(_job_library_row(j, app, phase))
 
     return {

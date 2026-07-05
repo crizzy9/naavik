@@ -56,7 +56,7 @@ def _stub_tracking_ctx(monkeypatch) -> None:
 def test_bulk_move_stage_happy_path(client: TestClient, monkeypatch) -> None:
     """Valid IDs + status → 200 + HX-Trigger showToast w/ success summary."""
     _stub_tracking_ctx(monkeypatch)
-    from services import application_service
+    from services import applications as application_service
 
     async def _fake_bulk(session, *, user_id, application_ids, new_status, closed_reason=None):
         return (2, [])
@@ -80,7 +80,7 @@ def test_bulk_move_stage_happy_path(client: TestClient, monkeypatch) -> None:
 def test_bulk_move_stage_partial_failure_surfaces_skipped(client: TestClient, monkeypatch) -> None:
     """Mixed success + skip → toast reports both counts."""
     _stub_tracking_ctx(monkeypatch)
-    from services import application_service
+    from services import applications as application_service
 
     async def _fake_bulk(session, *, user_id, application_ids, new_status, closed_reason=None):
         return (1, [99])
@@ -107,7 +107,7 @@ def test_bulk_move_stage_rejects_unknown_status(client: TestClient, monkeypatch)
         called.hit = True
         return (0, [])
 
-    from services import application_service
+    from services import applications as application_service
 
     monkeypatch.setattr(application_service, "bulk_update_status", _fake_bulk)
 
@@ -126,7 +126,7 @@ def test_bulk_move_stage_rejects_unknown_status(client: TestClient, monkeypatch)
 def test_bulk_move_stage_rejects_over_cap(client: TestClient, monkeypatch) -> None:
     """Service raises bulk_limit_exceeded → route returns 422."""
     _stub_tracking_ctx(monkeypatch)
-    from services import application_service
+    from services import applications as application_service
 
     async def _fake_bulk(*a, **k):
         raise application_service.ValidationError(
@@ -155,7 +155,7 @@ def test_bulk_move_stage_requires_csrf(client: TestClient, monkeypatch) -> None:
         called.hit = True
         return (0, [])
 
-    from services import application_service
+    from services import applications as application_service
 
     monkeypatch.setattr(application_service, "bulk_update_status", _fake_bulk)
 
@@ -180,7 +180,7 @@ def test_bulk_archive_happy_path(client: TestClient, monkeypatch) -> None:
         captured["user_id"] = user_id
         return (len(application_ids), [])
 
-    from services import application_service
+    from services import applications as application_service
 
     monkeypatch.setattr(application_service, "bulk_archive", _fake_archive)
 
@@ -199,7 +199,7 @@ def test_bulk_archive_happy_path(client: TestClient, monkeypatch) -> None:
 
 def test_bulk_export_csv_attachment_headers_and_columns(client: TestClient, monkeypatch) -> None:
     """GET export.csv returns text/csv attachment w/ canonical 10 columns."""
-    from services import application_service
+    from services import applications as application_service
 
     async def _fake_list(session, *, user_id, application_ids):
         return [
@@ -235,7 +235,7 @@ def test_bulk_export_csv_attachment_headers_and_columns(client: TestClient, monk
 
 def test_bulk_export_csv_filters_cross_user(client: TestClient, monkeypatch) -> None:
     """list_for_export's WHERE filter strips cross-user IDs — CSV omits them."""
-    from services import application_service
+    from services import applications as application_service
 
     async def _fake_list(session, *, user_id, application_ids):
         # Caller passes [10, 99]; only 10 belongs to user 1.

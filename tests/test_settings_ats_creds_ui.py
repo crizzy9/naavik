@@ -81,7 +81,8 @@ async def _fake_get_session():
 def _patch_route_helpers(monkeypatch):
     from db.session import get_session
     from main import app
-    from services import application_service, settings_service
+    from services import applications as application_service
+    from services import settings_service
 
     async def _fake_get_or_create(session, *, user_id):
         return _make_settings()

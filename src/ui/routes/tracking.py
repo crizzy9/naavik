@@ -19,7 +19,7 @@ from config import settings as app_settings
 from db.session import get_session
 from models import User
 from models.enums import AppEventKind, ApplicationStatus, ClosedReason, JobQueueState
-from services import application_analytics, application_service
+from services import application_analytics, applications
 from services.auth import require_authed_session
 from ui import tracking_ctx as tctx
 from ui.templates_setup import templates
@@ -169,7 +169,7 @@ async def library_row_action(
 ):
     """Row-level queue-state actions in the Jobs library.
 
-    `queue` routes through `application_service.queue_auto_apply` (creates
+    `queue` routes through `applications.queue_auto_apply` (creates
     the DRAFT + stamps queued_at + kicks background docs) so a library-queued
     job behaves exactly like a right-swipe. Returns the re-rendered library
     fragment so counts + facets stay truthful.
@@ -186,7 +186,7 @@ async def library_row_action(
         from services import generation_dispatch, settings_service
 
         settings = await settings_service.get_or_create(session, user_id=user_id)
-        draft = await application_service.queue_auto_apply(
+        draft = await applications.queue_auto_apply(
             session, user_id=user_id, job_id=job_id, settings=settings
         )
         docs_missing = draft.docs_state in {DocsState.NONE, DocsState.STALE, DocsState.FAILED}
@@ -242,12 +242,12 @@ async def _application_or_404(session: AsyncSession, application_id: int, user: 
     """Fetch an Application and enforce user_id + soft-delete boundary (IDOR → 404, never 403).
 
     Plan 86 / 0.4.5.11 — explicit `deleted_at IS NULL` gate aligns with the
-    broader soft-delete pattern in `application_service.list_applications`;
+    broader soft-delete pattern in `applications.list_applications`;
     soft-deleted rows must not be addressable even by their owner. Uses
     `getattr` to tolerate test fixtures that build minimal `SimpleNamespace`
     application stand-ins without the soft-delete column.
     """
-    a = await application_service.get_application(session, application_id)
+    a = await applications.get_application(session, application_id)
     if (
         a is None
         or a.user_id != _effective_user_id(user)
@@ -445,7 +445,7 @@ async def fragment_timeline(
     gated via `_application_or_404`.
     """
     await _application_or_404(session, application_id, user)
-    events = await application_service.list_events_for(session, application_id, limit=100)
+    events = await applications.list_events_for(session, application_id, limit=100)
 
     from ui.tracking_ctx import _relative_label  # local import — avoid cycle
 
@@ -692,12 +692,10 @@ async def post_retry_application(
 ):
     """Plan 79 / 0.4.0.11 — clear `last_failure` + re-queue stuck DRAFT."""
     try:
-        await application_service.retry_failed(
-            session, application_id, user_id=_effective_user_id(user)
-        )
-    except application_service.IllegalStateTransition as exc:
+        await applications.retry_failed(session, application_id, user_id=_effective_user_id(user))
+    except applications.IllegalStateTransition as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
-    except application_service.ApplicationServiceError:
+    except applications.ApplicationServiceError:
         raise HTTPException(status_code=404, detail="Application not found") from None
     await session.commit()
     return Response(status_code=204, headers={"HX-Trigger": "applicationRetried"})
@@ -718,7 +716,7 @@ async def post_application_manual(
     _csrf: None = Depends(require_csrf),
 ):
     """Create a manually-entered Application (plan 56 / 0.2.7.19 — CSRF-gated)."""
-    await application_service.create_manual(
+    await applications.create_manual(
         session,
         user_id=_effective_user_id(user),
         company=company,
@@ -748,11 +746,11 @@ async def get_applications(
             status_enum = ApplicationStatus(status)
         except ValueError:
             raise HTTPException(status_code=422, detail="Unknown status") from None
-        apps = await application_service.list_by_status(session, user_id, status_enum)
+        apps = await applications.list_by_status(session, user_id, status_enum)
     elif closed:
-        apps = await application_service.list_closed(session, user_id)
+        apps = await applications.list_closed(session, user_id)
     else:
-        apps = await application_service.list_visible_in_tracking(session, user_id)
+        apps = await applications.list_visible_in_tracking(session, user_id)
     return {"items": [a.model_dump(mode="json") for a in apps], "next_cursor": None}
 
 
@@ -782,12 +780,12 @@ async def get_applications_export_csv(
     user_id = _effective_user_id(user)
     ids = application_ids or []
     try:
-        rows = await application_service.list_for_export(
+        rows = await applications.list_for_export(
             session,
             user_id=user_id,
             application_ids=ids,
         )
-    except application_service.ValidationError as exc:
+    except applications.ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
 
     buf = io.StringIO()
@@ -809,7 +807,7 @@ async def get_application(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
-    a = await application_service.get_application(session, application_id)
+    a = await applications.get_application(session, application_id)
     if a is None or a.user_id != _effective_user_id(user):
         raise HTTPException(status_code=404, detail="Application not found")
     return a.model_dump(mode="json")
@@ -833,12 +831,12 @@ async def get_application_bundle(
     import zipfile
     from pathlib import Path as _Path
 
-    a = await application_service.get_application(session, application_id)
+    a = await applications.get_application(session, application_id)
     if a is None or a.user_id != _effective_user_id(user):
         raise HTTPException(status_code=404, detail="Application not found")
 
-    docs = await application_service.latest_documents(session, application_id)
-    screeners = await application_service.list_screener_answers_for(session, application_id)
+    docs = await applications.latest_documents(session, application_id)
+    screeners = await applications.list_screener_answers_for(session, application_id)
 
     if not docs:
         raise HTTPException(
@@ -932,14 +930,14 @@ async def post_bulk_move_stage(
 
     user_id = _effective_user_id(user)
     try:
-        success, failed = await application_service.bulk_update_status(
+        success, failed = await applications.bulk_update_status(
             session,
             user_id=user_id,
             application_ids=application_ids,
             new_status=status_enum,
             closed_reason=cr_enum,
         )
-    except application_service.ValidationError as exc:
+    except applications.ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     await session.commit()
 
@@ -971,12 +969,12 @@ async def post_bulk_archive(
     """Bulk archive — closes selected applications w/ USER_ARCHIVED reason."""
     user_id = _effective_user_id(user)
     try:
-        success, failed = await application_service.bulk_archive(
+        success, failed = await applications.bulk_archive(
             session,
             user_id=user_id,
             application_ids=application_ids,
         )
-    except application_service.ValidationError as exc:
+    except applications.ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     await session.commit()
 

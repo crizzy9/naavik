@@ -162,7 +162,7 @@ def _patch_services_to_sample_data(request, monkeypatch):
     from main import app
     from models.enums import ApplicationStatus, EmailClassification, JobQueueState
     from services import (
-        application_service,
+        applications,
         contact_tracker,
         email_service,
         job_service,
@@ -540,35 +540,33 @@ def _patch_services_to_sample_data(request, monkeypatch):
             ]
         )
 
-    monkeypatch.setattr(application_service, "count_applied_since", _count_applied_since)
-    monkeypatch.setattr(application_service, "get_application", _get_application)
-    monkeypatch.setattr(application_service, "get_application_for_job", _get_application_for_job)
-    monkeypatch.setattr(application_service, "stuck_drafts", _stuck_drafts)
-    monkeypatch.setattr(application_service, "list_visible_in_tracking", _list_visible_in_tracking)
-    monkeypatch.setattr(application_service, "list_by_status", _list_by_status)
-    monkeypatch.setattr(application_service, "list_in_followup", _list_in_followup)
-    monkeypatch.setattr(application_service, "list_closed", _list_closed)
-    monkeypatch.setattr(application_service, "list_drafts", _list_drafts)
-    monkeypatch.setattr(application_service, "list_applications", _list_applications)
-    monkeypatch.setattr(application_service, "list_documents_for", _list_documents_for)
+    monkeypatch.setattr(applications, "count_applied_since", _count_applied_since)
+    monkeypatch.setattr(applications, "get_application", _get_application)
+    monkeypatch.setattr(applications, "get_application_for_job", _get_application_for_job)
+    monkeypatch.setattr(applications, "stuck_drafts", _stuck_drafts)
+    monkeypatch.setattr(applications, "list_visible_in_tracking", _list_visible_in_tracking)
+    monkeypatch.setattr(applications, "list_by_status", _list_by_status)
+    monkeypatch.setattr(applications, "list_in_followup", _list_in_followup)
+    monkeypatch.setattr(applications, "list_closed", _list_closed)
+    monkeypatch.setattr(applications, "list_drafts", _list_drafts)
+    monkeypatch.setattr(applications, "list_applications", _list_applications)
+    monkeypatch.setattr(applications, "list_documents_for", _list_documents_for)
+    monkeypatch.setattr(applications, "list_screener_answers_for", _list_screener_answers_for)
+    monkeypatch.setattr(applications, "get_screener_answer", _get_screener_answer)
     monkeypatch.setattr(
-        application_service, "list_screener_answers_for", _list_screener_answers_for
-    )
-    monkeypatch.setattr(application_service, "get_screener_answer", _get_screener_answer)
-    monkeypatch.setattr(
-        application_service,
+        applications,
         "count_unreviewed_required_screeners",
         _count_unreviewed_required_screeners,
     )
-    monkeypatch.setattr(application_service, "list_events_for", _list_events_for)
-    monkeypatch.setattr(application_service, "create_manual", _create_manual)
-    monkeypatch.setattr(application_service, "get_or_create_draft", _get_or_create_draft)
-    monkeypatch.setattr(application_service, "queue_auto_apply", _queue_auto_apply)
-    monkeypatch.setattr(application_service, "record_draft_failure", _record_draft_failure)
-    monkeypatch.setattr(application_service, "update_status", _update_status)
-    monkeypatch.setattr(application_service, "record_screener_answer", _record_screener_answer)
+    monkeypatch.setattr(applications, "list_events_for", _list_events_for)
+    monkeypatch.setattr(applications, "create_manual", _create_manual)
+    monkeypatch.setattr(applications, "get_or_create_draft", _get_or_create_draft)
+    monkeypatch.setattr(applications, "queue_auto_apply", _queue_auto_apply)
+    monkeypatch.setattr(applications, "record_draft_failure", _record_draft_failure)
+    monkeypatch.setattr(applications, "update_status", _update_status)
+    monkeypatch.setattr(applications, "record_screener_answer", _record_screener_answer)
     monkeypatch.setattr(
-        application_service, "aggregate_submission_failures", _aggregate_submission_failures
+        applications, "aggregate_submission_failures", _aggregate_submission_failures
     )
 
     # ── contact_tracker ─────────────────────────────────────────────────

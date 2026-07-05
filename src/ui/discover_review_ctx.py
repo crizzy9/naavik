@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import Application, Job
-from services import application_service, contact_tracker, profile_service
+from services import applications, contact_tracker, profile_service
 from ui.discover_ctx import _initial_color, _salary_range
 from ui.jobs_ctx import apply_kind_label
 
@@ -17,7 +17,7 @@ COVER_LABELS = {
 }
 
 # Cover-letter section text is now sourced from the real generated document
-# (`application_service.get_latest_cover_sections`). The prior module-level
+# (`applications.get_latest_cover_sections`). The prior module-level
 # hardcoded Intuit/Stripe placeholder was removed — it rendered fake content
 # into every job's review workspace. `_EMPTY_COVER_SECTIONS` is the honest
 # empty state shown before generation runs.
@@ -298,7 +298,7 @@ async def build_review_ctx(
     cover_text = _EMPTY_COVER_SECTIONS
     cover_generated = False
     if application is not None:
-        fetched = await application_service.get_latest_cover_sections(session, application.id)
+        fetched = await applications.get_latest_cover_sections(session, application.id)
         if fetched:
             cover_text = {**_EMPTY_COVER_SECTIONS, **fetched}
             cover_generated = any(v.strip() for v in fetched.values())
@@ -328,7 +328,7 @@ async def build_review_ctx(
     screener_views: list[dict[str, object]] = []
     unreviewed = 0
     if application:
-        rows = await application_service.list_screener_answers_for(session, application.id)
+        rows = await applications.list_screener_answers_for(session, application.id)
         for s in rows:
             if s.required and s.reviewed_at is None:
                 unreviewed += 1
@@ -362,7 +362,7 @@ async def build_review_ctx(
     cover_pdf_url = None
     resume_page_count = None
     if application is not None:
-        docs = await application_service.latest_documents(session, application.id)
+        docs = await applications.latest_documents(session, application.id)
         for d in docs:
             kind = getattr(d, "kind", None)
             if kind and str(kind.value) == "resume":

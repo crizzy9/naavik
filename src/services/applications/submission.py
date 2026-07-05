@@ -1,6 +1,6 @@
 """Submission — validation gates, bundle assembly, ATS dispatch, failure/success recording, retry.
 
-Split out of services/application_service.py in plan 91 Phase 4.2;
+Split out of the former services/application_service.py in plan 91 Phase 4.2;
 behaviour unchanged. Internal calls to shimmed/patched seams go through
 `svc()` (the facade) so test interception keeps working.
 """
@@ -81,7 +81,7 @@ async def _enforce_sponsorship_gate(session: AsyncSession, application: Applicat
     if application.job_id is None:
         return
 
-    # Lazy import to avoid services.scorer ↔ services.application_service circular dep risk.
+    # Lazy import to avoid services.scorer ↔ services.applications circular dep risk.
     from models import Profile
     from services.scorer.visa import needs_visa_zero_out
 

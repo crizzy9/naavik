@@ -16,7 +16,7 @@ from api.auth import require_csrf
 from db.session import get_session
 from models import User
 from models.enums import EmailClassification
-from services import application_service, email_service
+from services import applications, email_service
 from services.auth import require_authed_session
 
 router = APIRouter()
@@ -139,13 +139,13 @@ async def apply_email_suggestion(
     _csrf: None = Depends(require_csrf),
 ):
     try:
-        app = await application_service.apply_email_suggestion(
+        app = await applications.apply_email_suggestion(
             session,
             application_id=app_id,
             message_id=message_id,
             user_id=_effective_user_id(user),
         )
-    except application_service.ApplicationServiceError as exc:
+    except applications.ApplicationServiceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
     return {
@@ -167,13 +167,13 @@ async def dismiss_email_suggestion(
     _csrf: None = Depends(require_csrf),
 ):
     try:
-        await application_service.dismiss_email_suggestion(
+        await applications.dismiss_email_suggestion(
             session,
             application_id=app_id,
             message_id=message_id,
             user_id=_effective_user_id(user),
         )
-    except application_service.ApplicationServiceError as exc:
+    except applications.ApplicationServiceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
     return {"status": "dismissed", "message_id": message_id}

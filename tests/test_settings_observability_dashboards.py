@@ -72,8 +72,8 @@ def _patch_route_helpers(monkeypatch):
     from db import sample_data as sd
     from db.session import get_session
     from main import app
+    from services import applications as application_service
     from services import (
-        application_service,
         job_service,
         llm_tracker,
         settings_service,
@@ -522,7 +522,7 @@ def test_submissions_helper_threads_user_id_one_under_phase_1_single_user_mode(
     Mirrors the latent IDOR captured against `_build_sources_view` in PR #149
     (`0.2.7.02`). Multi-user enforcement upgrades happen once real auth lands.
     """
-    from services import application_service
+    from services import applications as application_service
 
     captured = {"user_id": None}
 

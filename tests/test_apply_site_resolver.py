@@ -553,7 +553,7 @@ async def test_resolve_pending_stamps_and_counts():
     with (
         patch.object(resolver, "resolve_job", new=AsyncMock(return_value=resolved)),
         patch(
-            "services.application_service.resync_draft_apply_target",
+            "services.applications.resync_draft_apply_target",
             new=AsyncMock(return_value=0),
         ),
     ):
@@ -584,7 +584,7 @@ async def test_resolve_pending_survives_per_job_failure():
         patch.object(resolver, "resolve_job", new=AsyncMock(side_effect=_resolve)),
         patch.object(resolver.asyncio, "sleep", new=AsyncMock()),
         patch(
-            "services.application_service.resync_draft_apply_target",
+            "services.applications.resync_draft_apply_target",
             new=AsyncMock(return_value=0),
         ),
     ):
@@ -707,7 +707,7 @@ async def test_resolve_pending_fresh_before_due_retries():
         patch.object(resolver, "resolve_job", new=AsyncMock(side_effect=_resolve)),
         patch.object(resolver.asyncio, "sleep", new=AsyncMock()),
         patch(
-            "services.application_service.resync_draft_apply_target",
+            "services.applications.resync_draft_apply_target",
             new=AsyncMock(return_value=0),
         ),
     ):

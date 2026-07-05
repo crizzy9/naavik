@@ -311,7 +311,7 @@ async def resolve_pending(
             jd_enrichment.maybe_apply_discovered_description(job, resolved)
         # A DRAFT created before resolution snapshotted the aggregator board —
         # re-point it at the resolved target so Submit dispatches correctly.
-        from services import application_service
+        from services import applications as application_service
 
         await application_service.resync_draft_apply_target(session, job)
         session.add(job)

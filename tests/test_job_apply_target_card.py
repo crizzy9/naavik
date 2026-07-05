@@ -157,7 +157,7 @@ def test_card_renders_exhausted_state_with_paste_form(client, monkeypatch):
 
 
 def test_re_resolve_stamps_and_returns_fragment(client, monkeypatch):
-    from services import application_service
+    from services import applications as application_service
     from services import resolution as apply_site_resolver
     from services import resolution as linkedin_resolver
 
@@ -212,7 +212,7 @@ def test_re_resolve_404_for_non_owner(client, monkeypatch):
 
 
 def test_manual_paste_stamps_via_manual(client, monkeypatch):
-    from services import application_service
+    from services import applications as application_service
     from services import resolution as apply_site_resolver
 
     job = _fake_job(apply_kind="external", apply_resolved_via="exhausted", apply_resolve_attempts=5)

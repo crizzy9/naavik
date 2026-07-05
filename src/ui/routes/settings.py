@@ -22,7 +22,7 @@ from db.session import get_session
 from models import JobScrapeRunRead, JobSource, User
 from services import (
     account_service,
-    application_service,
+    applications,
     env_secrets,
     job_service,
     llm_tracker,
@@ -368,7 +368,7 @@ async def _submission_failures_view(session: AsyncSession | None, *, user_id: in
     """
     if session is None:
         return []
-    return await application_service.aggregate_submission_failures(session, user_id=user_id)
+    return await applications.aggregate_submission_failures(session, user_id=user_id)
 
 
 async def _llm_cost_cap_view(

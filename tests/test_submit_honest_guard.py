@@ -107,7 +107,7 @@ def test_easy_apply_gets_linkedin_message(client_with_user):
 def test_supported_board_still_dispatches(client_with_user):
     """Greenhouse has a real adapter — the guard must NOT intercept it."""
     client, _ = client_with_user
-    from services.application_service import ValidationError
+    from services.applications import ValidationError
 
     submit_mock = AsyncMock(side_effect=ValidationError("boom", code="x"))
     with (

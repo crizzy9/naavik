@@ -147,7 +147,7 @@ def test_submit_owner_passes_idor_then_calls_service(client_with_user):
     owned = SimpleNamespace(id=11, user_id=user.id, status="DRAFT", board=None, deleted_at=None)
     # Mock submit_draft to raise ValidationError so the request returns 409
     # (deterministic, no need to wire the full submission pipeline).
-    from services.application_service import ValidationError
+    from services.applications import ValidationError
 
     submit_mock = AsyncMock(side_effect=ValidationError("no_board", code="no_board"))
     with (

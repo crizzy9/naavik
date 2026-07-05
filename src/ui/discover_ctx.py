@@ -15,7 +15,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from models import Job as SQLJob
 from models import JobFilter, JobQueueState
 from models.enums import VisaRestriction
-from services import application_service, contact_tracker, job_service
+from services import applications, contact_tracker, job_service
 from ui.jobs_ctx import apply_kind_label
 
 _COMPANY_COLORS = {
@@ -167,7 +167,7 @@ async def stats_strip(session: AsyncSession, *, user_id: int) -> dict[str, int]:
 
     day_start = datetime.combine(datetime.now(UTC).date(), time.min, tzinfo=UTC)
     return {
-        "applied": await application_service.count_applied_since(
+        "applied": await applications.count_applied_since(
             session, user_id=user_id, since=day_start
         ),
         "saved": await job_service.count_jobs_in_queue_state(
@@ -289,7 +289,7 @@ async def build_discover_ctx(
         session, user_id=user_id, state=JobQueueState.SAVED
     )
     drafts = await job_service.auto_apply_queue(session, user_id=user_id)
-    stuck = await application_service.stuck_drafts(session, user_id=user_id)
+    stuck = await applications.stuck_drafts(session, user_id=user_id)
     # Plan 78 § D.5 (0.4.0.20) — surface the dry-run flag so the page can
     # render a warning banner above the swipe stack.
     user_settings = await settings_service.get_or_create(session, user_id=user_id)
@@ -319,10 +319,8 @@ async def build_discover_ctx(
     auto_apply_views: list[dict[str, object]] = []
     for d in drafts:
         v = up_next_dict(d)
-        d_app = await application_service.get_application_for_job(
-            session, user_id=user_id, job_id=d.id
-        )
-        v["phase"] = application_service.auto_apply_phase(d_app, d)
+        d_app = await applications.get_application_for_job(session, user_id=user_id, job_id=d.id)
+        v["phase"] = applications.auto_apply_phase(d_app, d)
         auto_apply_views.append(v)
 
     # Jobs the pipeline prepared but can't submit itself (no adapter for the
@@ -334,10 +332,8 @@ async def build_discover_ctx(
     ready_for_you: list[dict[str, object]] = []
     for rj in ready_jobs:
         v = up_next_dict(rj)
-        r_app = await application_service.get_application_for_job(
-            session, user_id=user_id, job_id=rj.id
-        )
-        v["phase"] = application_service.auto_apply_phase(r_app, rj)
+        r_app = await applications.get_application_for_job(session, user_id=user_id, job_id=rj.id)
+        v["phase"] = applications.auto_apply_phase(r_app, rj)
         v["application_id"] = r_app.id if r_app else None
         v["jd_url"] = rj.url
         ready_for_you.append(v)

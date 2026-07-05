@@ -139,7 +139,7 @@ def test_drain_queue_returns_drained_count(client, monkeypatch):
         assert reason == "settings_drain"
         return 3
 
-    from services import application_service
+    from services import applications as application_service
 
     monkeypatch.setattr(application_service, "drain_auto_apply_queue", fake_drain)
 
@@ -177,7 +177,7 @@ def test_pause_auto_apply_returns_next_card_on_success(client, monkeypatch):
     async def fake_pause(session, *, user_id, job_id):
         return SimpleNamespace(id=job_id, queue_state=JobQueueState.SAVED)
 
-    from services import application_service
+    from services import applications as application_service
 
     monkeypatch.setattr(application_service, "pause_auto_apply_for_job", fake_pause)
     r = client.post(
@@ -193,7 +193,7 @@ def test_pause_auto_apply_404_when_unknown_job(client, monkeypatch):
     async def fake_pause(session, *, user_id, job_id):
         return None
 
-    from services import application_service
+    from services import applications as application_service
 
     monkeypatch.setattr(application_service, "pause_auto_apply_for_job", fake_pause)
     r = client.post(

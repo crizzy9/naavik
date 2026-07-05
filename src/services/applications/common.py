@@ -1,10 +1,10 @@
 """Shared foundations for the applications package (plan 91 Phase 4.2).
 
-Exceptions + the AppEvent emitter + the `svc()` facade accessor. Internal
-cross-seam calls go through `svc()` — the `services.application_service`
-facade — so the ~60 conftest attribute shims and the
-`patch("services.application_service.X")` targets keep intercepting them
-(plan 91 cross-cutting rule 1).
+Exceptions + the AppEvent emitter + the `svc()` package-surface accessor.
+Internal cross-seam calls go through `svc()` — the `services.applications`
+package `__init__` — so the conftest attribute shims and the
+`patch("services.applications.X")` targets keep intercepting them
+(plan 91 cross-cutting rule 1 / plan 92 teardown).
 """
 
 from __future__ import annotations
@@ -34,10 +34,10 @@ class IllegalStateTransition(ApplicationServiceError):
 
 
 def svc():
-    """The `services.application_service` facade, resolved at call time."""
-    from services import application_service
+    """The `services.applications` package surface, resolved at call time."""
+    from services import applications
 
-    return application_service
+    return applications
 
 
 async def _emit_event(

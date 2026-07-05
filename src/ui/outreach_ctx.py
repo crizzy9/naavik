@@ -14,7 +14,7 @@ from models.enums import (
     RecruiterState,
     ReferralState,
 )
-from services import application_service, contact_tracker, outreach_service
+from services import applications, contact_tracker, outreach_service
 
 _COMPANY_COLORS = {
     "F": "bg-fuchsia-700",
@@ -129,8 +129,8 @@ async def build_outreach_ctx(
     user_id: int,
     selected_app_id: int | None = None,
 ) -> dict[str, object]:
-    visible = await application_service.list_visible_in_tracking(session, user_id)
-    followup = await application_service.list_in_followup(session, user_id)
+    visible = await applications.list_visible_in_tracking(session, user_id)
+    followup = await applications.list_in_followup(session, user_id)
     followup_ids = {a.id for a in followup}
 
     contact_counts: dict[int, int] = {}
@@ -146,7 +146,7 @@ async def build_outreach_ctx(
 
     selected_app: Application | None = None
     if selected_app_id is not None:
-        selected_app = await application_service.get_application(session, selected_app_id)
+        selected_app = await applications.get_application(session, selected_app_id)
     if selected_app is None and visible:
         selected_app = visible[0]
 
@@ -191,7 +191,7 @@ async def build_outreach_ctx(
                 ),
             }
 
-        events = await application_service.list_events_for(session, selected_app.id)
+        events = await applications.list_events_for(session, selected_app.id)
         for e in events[:8]:
             kind_map = {
                 AppEventKind.LINKEDIN_DM_SENT: "linkedin_dm",

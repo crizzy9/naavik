@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 
 async def auto_apply() -> None:
     """`applications.auto_apply` — every 5min."""
-    from services.application_service import process_auto_apply_queue
+    from services.applications import process_auto_apply_queue
     from services.notify import notify_application_submitted
 
     async with async_session() as session:
@@ -109,7 +109,7 @@ async def cleanup_stale_drafts() -> None:
     semantics (CLOSED + withdrawn_by_me + deleted_at) and emits a
     STATUS_CHANGE AppEvent with trigger=CLEANUP_STALE.
     """
-    from services.application_service import cleanup_stale_drafts as svc
+    from services.applications import cleanup_stale_drafts as svc
 
     async with async_session() as session:
         n = await svc(session)

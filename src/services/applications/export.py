@@ -1,6 +1,6 @@
 """CSV export with formula-injection defang (plan 85 / 0.4.0.23).
 
-Split out of services/application_service.py in plan 91 Phase 4.2;
+Split out of the former services/application_service.py in plan 91 Phase 4.2;
 behaviour unchanged. Internal calls to shimmed/patched seams go through
 `svc()` (the facade) so test interception keeps working.
 """

@@ -91,7 +91,7 @@ def _toggle(client, application, *, doc=_doc(), recompile_mock=None):
     recompile_mock = recompile_mock or AsyncMock()
     with (
         patch(
-            "services.application_service.get_application",
+            "services.applications.get_application",
             new=AsyncMock(return_value=application),
         ),
         patch("services.profile_service.owns_bullet", new=AsyncMock(return_value=True)),
@@ -146,7 +146,7 @@ def _recompile(client, *, result=None, side_effect=None):
     mock = AsyncMock(return_value=result, side_effect=side_effect)
     with (
         patch(
-            "services.application_service.get_application",
+            "services.applications.get_application",
             new=AsyncMock(return_value=_application()),
         ),
         patch(
@@ -207,11 +207,11 @@ def _pdf_get(client, tmp_path, url, kind):
     doc = SimpleNamespace(kind=SimpleNamespace(value=kind), path=str(pdf))
     with (
         patch(
-            "services.application_service.get_application",
+            "services.applications.get_application",
             new=AsyncMock(return_value=_application()),
         ),
         patch(
-            "services.application_service.latest_documents",
+            "services.applications.latest_documents",
             new=AsyncMock(return_value=[doc]),
         ),
     ):

@@ -17,7 +17,7 @@ from models.enums import (
     JobQueueState,
 )
 from services import (
-    application_service,
+    applications,
     contact_tracker,
     job_service,
     settings_service,
@@ -106,9 +106,9 @@ async def _ensure_draft_and_dispatch(
     settings = await settings_service.get_or_create(session, user_id=user_id)
     eager = settings.eager_review_generation
 
-    app = await application_service.get_application_for_job(session, user_id=user_id, job_id=job_id)
+    app = await applications.get_application_for_job(session, user_id=user_id, job_id=job_id)
     if app is None and eager:
-        app = await application_service.get_or_create_draft(
+        app = await applications.get_or_create_draft(
             session, user_id=user_id, job_id=job_id, settings=settings
         )
     if app is not None and eager and app.docs_state in {DocsState.NONE, DocsState.STALE}:
@@ -222,7 +222,7 @@ async def post_auto_submit(
     user_id = _effective_user_id(user)
     job = await _job_or_404(session, job_id, user_id)
     settings = await settings_service.get_or_create(session, user_id=user_id)
-    draft = await application_service.queue_auto_apply(
+    draft = await applications.queue_auto_apply(
         session, user_id=user_id, job_id=job_id, settings=settings
     )
     docs_missing = draft.docs_state in {DocsState.NONE, DocsState.STALE, DocsState.FAILED}
@@ -277,9 +277,7 @@ async def post_pause_auto_apply(
     pause, matching the skip/save UX.
     """
     user_id = _effective_user_id(user)
-    job = await application_service.pause_auto_apply_for_job(
-        session, user_id=user_id, job_id=job_id
-    )
+    job = await applications.pause_auto_apply_for_job(session, user_id=user_id, job_id=job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     await session.commit()
@@ -416,7 +414,7 @@ async def fragment_workspace(
     user_id = _effective_user_id(user)
     job = await _job_or_404(session, job_id, user_id)
     settings = await settings_service.get_or_create(session, user_id=user_id)
-    app = await application_service.get_application_for_job(session, user_id=user_id, job_id=job_id)
+    app = await applications.get_application_for_job(session, user_id=user_id, job_id=job_id)
 
     from services import generation_dispatch
 
@@ -458,7 +456,7 @@ async def fragment_tailor(
     user_id = _effective_user_id(user)
     job = await _job_or_404(session, job_id, user_id)
     settings = await settings_service.get_or_create(session, user_id=user_id)
-    app = await application_service.get_or_create_draft(
+    app = await applications.get_or_create_draft(
         session, user_id=user_id, job_id=job_id, settings=settings
     )
     await generation_dispatch.mark_generating(session, app)
@@ -796,7 +794,7 @@ async def fragment_cover_section(
 ):
     """Render one cover-letter section — text sourced from the real generated
     document (was a process-global placeholder dict)."""
-    sections = await application_service.get_latest_cover_sections(session, application_id) or {}
+    sections = await applications.get_latest_cover_sections(session, application_id) or {}
     text = sections.get(section, "")
     return templates.TemplateResponse(
         request,
@@ -840,7 +838,7 @@ async def fragment_cover_section_save(
     from services import settings_service
 
     user_id = _effective_user_id(user)
-    ok = await application_service.update_cover_section(
+    ok = await applications.update_cover_section(
         session,
         application_id=application_id,
         user_id=user_id,
@@ -852,7 +850,7 @@ async def fragment_cover_section_save(
             status_code=404,
             detail="Generate a cover letter first, then edit its sections.",
         )
-    application = await application_service.get_application(session, application_id)
+    application = await applications.get_application(session, application_id)
     user_settings = await settings_service.get_or_create(session, user_id=user_id)
     toast = {"tone": "success", "text": "Section saved — letter PDF updated."}
     compiled = True
@@ -887,7 +885,7 @@ async def fragment_cover_section_save(
 
 
 async def _application_owned_or_404(session, application_id: int, user_id: int):
-    application = await application_service.get_application(session, application_id)
+    application = await applications.get_application(session, application_id)
     if (
         application is None
         or application.user_id != user_id
@@ -1167,7 +1165,7 @@ async def put_cover_section(
     _csrf: None = Depends(require_csrf),
 ):
     text = payload.get("text", "")
-    ok = await application_service.update_cover_section(
+    ok = await applications.update_cover_section(
         session,
         application_id=application_id,
         user_id=_effective_user_id(user),
@@ -1201,7 +1199,7 @@ async def fragment_generate_bundle(
     from services import generation_dispatch
 
     user_id = _effective_user_id(user)
-    application = await application_service.get_application(session, application_id)
+    application = await applications.get_application(session, application_id)
     if (
         application is None
         or application.user_id != user_id
@@ -1245,11 +1243,11 @@ async def get_resume_pdf(
     from fastapi.responses import FileResponse
 
     user_id = _effective_user_id(user)
-    application = await application_service.get_application(session, application_id)
+    application = await applications.get_application(session, application_id)
     if application is None or application.user_id != user_id:
         raise HTTPException(status_code=404, detail="Application not found")
 
-    docs = await application_service.latest_documents(session, application_id)
+    docs = await applications.latest_documents(session, application_id)
     resume = next((d for d in docs if str(d.kind.value) == "resume"), None)
     if resume is None or not resume.path or not Path(resume.path).is_file():
         raise HTTPException(status_code=404, detail="No generated resume PDF yet")
@@ -1275,11 +1273,11 @@ async def get_cover_letter_pdf(
     from fastapi.responses import FileResponse
 
     user_id = _effective_user_id(user)
-    application = await application_service.get_application(session, application_id)
+    application = await applications.get_application(session, application_id)
     if application is None or application.user_id != user_id:
         raise HTTPException(status_code=404, detail="Application not found")
 
-    docs = await application_service.latest_documents(session, application_id)
+    docs = await applications.latest_documents(session, application_id)
     cover = next((d for d in docs if str(d.kind.value) == "cover_letter"), None)
     if cover is None or not cover.path or not Path(cover.path).is_file():
         raise HTTPException(status_code=404, detail="No generated cover letter PDF yet")
@@ -1312,7 +1310,7 @@ async def post_cover_generate(
     from services.generation import regenerate_cover_letter
 
     user_id = _effective_user_id(user)
-    application = await application_service.get_application(session, application_id)
+    application = await applications.get_application(session, application_id)
     if (
         application is None
         or application.user_id != user_id
@@ -1337,7 +1335,7 @@ async def post_cover_generate(
         await session.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    fetched = await application_service.get_latest_cover_sections(session, application_id) or {}
+    fetched = await applications.get_latest_cover_sections(session, application_id) or {}
     cover_generated = any(str(v).strip() for v in fetched.values())
     cover_sections = [
         {"id": key, "label": drctx.COVER_LABELS.get(key, key.upper()), "text": fetched.get(key, "")}
@@ -1368,7 +1366,7 @@ async def put_screener(
 ):
     answer = (payload or {}).get("answer", "")
     owner_user_id = _user.id if _user is not None else None
-    a = await application_service.record_screener_answer(
+    a = await applications.record_screener_answer(
         session, question_id, answer, owner_user_id=owner_user_id
     )
     if a is None:
@@ -1405,9 +1403,7 @@ async def fragment_screener(
     # fake-session bypass for legacy fixtures; real auth threads
     # `owner_user_id` into the service which JOINs through Application.
     owner_user_id = _user.id if _user is not None else None
-    a = await application_service.get_screener_answer(
-        session, question_id, owner_user_id=owner_user_id
-    )
+    a = await applications.get_screener_answer(session, question_id, owner_user_id=owner_user_id)
     if a is None:
         raise HTTPException(status_code=404, detail="Answer not found")
     return templates.TemplateResponse(

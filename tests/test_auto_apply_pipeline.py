@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from models import ApplicationBoard, ApplicationStatus, DocsState, JobQueueState
-from services.application_service import (
+from services.applications import (
     AutoApplyResult,
     auto_apply_phase,
     process_auto_apply_queue,
@@ -82,7 +82,7 @@ async def test_queue_generates_docs_when_missing():
     )
     with (
         patch("services.generation.generate_bundle", new=fake_generate),
-        patch("services.application_service.submit_draft", new=fake_submit),
+        patch("services.applications.submit_draft", new=fake_submit),
     ):
         result = await process_auto_apply_queue(session)
 
@@ -121,7 +121,7 @@ async def test_unsupported_board_hands_to_user_with_reason():
     session = _FakeSession()
     session.exec_queue = [_exec_all([(app_row, job_row)]), _exec_one(_settings())]
     fake_submit = AsyncMock()
-    with patch("services.application_service.submit_draft", new=fake_submit):
+    with patch("services.applications.submit_draft", new=fake_submit):
         result = await process_auto_apply_queue(session)
     fake_submit.assert_not_awaited()
     assert result.handed_to_user == 1
@@ -145,7 +145,7 @@ async def test_dry_run_hands_over_instead_of_requeueing_forever():
     # filled-form evidence; the stamp happens inside submit_draft (mocked
     # here), and the hand-off still fires afterwards.
     fake_submit = AsyncMock(return_value=app_row)
-    with patch("services.application_service.submit_draft", new=fake_submit):
+    with patch("services.applications.submit_draft", new=fake_submit):
         result = await process_auto_apply_queue(session)
     fake_submit.assert_awaited_once()
     assert fake_submit.await_args.kwargs.get("dry_run") is True
@@ -169,7 +169,7 @@ async def test_submission_failure_hands_over_with_message():
     ]
     # submit_draft returns the app still in DRAFT (failure path).
     fake_submit = AsyncMock(return_value=app_row)
-    with patch("services.application_service.submit_draft", new=fake_submit):
+    with patch("services.applications.submit_draft", new=fake_submit):
         result = await process_auto_apply_queue(session)
     assert result.failed == 1
     assert result.handed_to_user == 1

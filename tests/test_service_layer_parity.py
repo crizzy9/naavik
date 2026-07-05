@@ -74,8 +74,8 @@ from models.enums import (  # noqa: E402
     ScreenerQuestionType,
     WorkAuthorization,
 )
+from services import applications as application_service  # noqa: E402
 from services import (  # noqa: E402
-    application_service,
     contact_tracker,
     email_service,
     outreach_service,

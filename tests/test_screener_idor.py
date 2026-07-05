@@ -41,7 +41,7 @@ from models import (  # noqa: E402
     User,
 )
 from models.enums import ApplicationStatus, ScreenerAnswerSource, ScreenerQuestionType  # noqa: E402
-from services import application_service  # noqa: E402
+from services import applications as application_service  # noqa: E402
 
 
 def _strip_checks() -> list:

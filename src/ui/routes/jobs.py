@@ -218,7 +218,7 @@ async def post_job_resolve_apply(
     Returns the refreshed card fragment.
     """
     job = await _job_or_404(session, job_id, _effective_user_id(user))
-    from services import application_service, jd_enrichment, resolution
+    from services import applications, jd_enrichment, resolution
 
     auth = resolution.AuthContext(remaining=1) if resolution.auth_available() else None
     try:
@@ -230,7 +230,7 @@ async def post_job_resolve_apply(
         resolution.apply_resolution(job, resolved)
         if resolved.description_html or resolved.description_text:
             jd_enrichment.maybe_apply_discovered_description(job, resolved)
-        await application_service.resync_draft_apply_target(session, job)
+        await applications.resync_draft_apply_target(session, job)
     session.add(job)
     await session.commit()
     return await _apply_target_card_response(request, session, job)
@@ -262,7 +262,7 @@ async def post_job_apply_url(
     if not cleaned.lower().startswith(("http://", "https://")):
         raise HTTPException(status_code=422, detail="Enter a full http(s) URL")
 
-    from services import application_service, resolution
+    from services import applications, resolution
 
     final, kind = await resolution.normalize_apply_url(cleaned)
     resolved = resolution.ResolvedApply(
@@ -273,7 +273,7 @@ async def post_job_apply_url(
         original_apply_url=cleaned if final != cleaned else None,
     )
     resolution.apply_resolution(job, resolved, count_attempt=False)
-    await application_service.resync_draft_apply_target(session, job)
+    await applications.resync_draft_apply_target(session, job)
     session.add(job)
     await session.commit()
     return await _apply_target_card_response(request, session, job)

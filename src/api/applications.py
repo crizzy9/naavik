@@ -25,7 +25,7 @@ from api.auth import require_csrf
 from config import settings as app_settings
 from db.session import get_session
 from models import ApplicationStatus, ClosedReason, Settings, User
-from services import application_service as svc
+from services import applications as svc
 from services.auth import require_password_complete
 from services.generation import generate_bundle, regenerate_cover_letter
 from services.rate_limit import check_generate_bundle_rate_limit

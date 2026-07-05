@@ -13,7 +13,7 @@ import inspect
 
 import pytest
 
-from services import application_service
+from services import applications as application_service
 
 
 def test_unmarked_test_does_not_get_application_service_shim():

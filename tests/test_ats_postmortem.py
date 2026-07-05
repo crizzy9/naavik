@@ -262,7 +262,7 @@ async def test_capture_caps_at_32k_for_dict_body(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_record_failure_threads_postmortem_path(tmp_path, monkeypatch):
     """_record_failure receives raw+settings and threads postmortem_path through."""
-    from services import application_service as appsvc
+    from services import applications as appsvc
 
     monkeypatch.setattr(ats_postmortem.app_settings, "data_dir", str(tmp_path))
     monkeypatch.setattr(ats_postmortem, "get_provider", lambda s: _FakeProvider())
@@ -297,7 +297,7 @@ async def test_record_failure_threads_postmortem_path(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_record_failure_no_raw_skips_capture():
     """Backward compat — _record_failure with raw=None keeps the old shape."""
-    from services import application_service as appsvc
+    from services import applications as appsvc
 
     class _Session:
         async def flush(self):

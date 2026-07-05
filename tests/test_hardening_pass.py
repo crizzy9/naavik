@@ -207,7 +207,7 @@ async def test_delete_user_account_removes_owned_rows(factory):
 
 @pytest.mark.asyncio
 async def test_cover_section_persists_and_is_owner_scoped(factory):
-    from services import application_service
+    from services import applications as application_service
 
     async with factory() as s:
         s.add(User(id=1, email="u1@x.test", password_hash="x"))

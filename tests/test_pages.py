@@ -158,7 +158,8 @@ def test_settings_all_seven_tabs(client: TestClient, auth_cookies, monkeypatch):
     """
     from db.session import get_session
     from main import app
-    from services import application_service, job_service, llm_tracker, settings_service
+    from services import applications as application_service
+    from services import job_service, llm_tracker, settings_service
 
     class _NoopSession:
         async def commit(self):

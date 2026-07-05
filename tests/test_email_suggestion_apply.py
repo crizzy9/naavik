@@ -145,7 +145,7 @@ async def test_apply_flips_status_with_auto_from_email_trigger(session):
 
     from models import AppEvent
     from models.enums import ApplicationStatus, StatusChangeTrigger
-    from services import application_service
+    from services import applications as application_service
 
     app, msg = await _seed(session, user_id=42, status=ApplicationStatus.APPLIED)
     updated = await application_service.apply_email_suggestion(
@@ -167,7 +167,7 @@ async def test_apply_flips_status_with_auto_from_email_trigger(session):
 
 async def test_apply_idor_rejects_cross_user(session):
     from models.enums import ApplicationStatus
-    from services import application_service
+    from services import applications as application_service
 
     app, msg = await _seed(session, user_id=99, status=ApplicationStatus.APPLIED)
     with pytest.raises(application_service.ApplicationServiceError):
@@ -181,7 +181,7 @@ async def test_apply_idor_rejects_cross_user(session):
 
 async def test_apply_rejects_when_already_applied(session):
     from models.enums import ApplicationStatus
-    from services import application_service
+    from services import applications as application_service
 
     app, msg = await _seed(session, user_id=42, status=ApplicationStatus.APPLIED)
     msg.suggestion_applied_at = datetime.now(UTC)
@@ -198,7 +198,7 @@ async def test_apply_rejects_when_already_applied(session):
 
 async def test_dismiss_records_timestamp(session):
     from models.enums import ApplicationStatus
-    from services import application_service
+    from services import applications as application_service
 
     app, msg = await _seed(session, user_id=42, status=ApplicationStatus.APPLIED)
     await application_service.dismiss_email_suggestion(

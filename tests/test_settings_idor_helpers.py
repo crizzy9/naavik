@@ -97,7 +97,7 @@ def test_recent_scrape_runs_view_distinct_users_get_distinct_calls(monkeypatch):
 
 def test_submission_failures_view_threads_user_id(monkeypatch):
     """`_submission_failures_view(session, user_id=N)` passes N to application_service."""
-    from services import application_service
+    from services import applications as application_service
     from ui.routes import settings as settings_routes
 
     captured: dict[str, int] = {}
@@ -115,7 +115,7 @@ def test_submission_failures_view_threads_user_id(monkeypatch):
 
 def test_submission_failures_view_distinct_users_get_distinct_calls(monkeypatch):
     """Cross-user: user-1 + user-42 each thread their own id through."""
-    from services import application_service
+    from services import applications as application_service
     from ui.routes import settings as settings_routes
 
     seen: list[int] = []

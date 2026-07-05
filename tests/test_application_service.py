@@ -19,8 +19,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services import application_service as svc
-from services.application_service import (
+from services import applications as svc
+from services.applications import (
     IllegalStateTransition,
     ValidationError,
     _is_forward_transition,
@@ -477,7 +477,7 @@ async def test_submit_draft_success_flips_state_and_job_queue_state():
     )
     notify = AsyncMock()
 
-    with patch("services.application_service.ats_dispatch", return_value=fake_adapter):
+    with patch("services.applications.ats_dispatch", return_value=fake_adapter):
         out = await submit_draft(session, app_row.id, notify_fn=notify)
 
     assert out.status == ApplicationStatus.APPLIED
@@ -513,7 +513,7 @@ async def test_submit_draft_persistent_failure_keeps_draft_and_writes_last_failu
             )
         )
     )
-    with patch("services.application_service.ats_dispatch", return_value=fake_adapter):
+    with patch("services.applications.ats_dispatch", return_value=fake_adapter):
         out = await submit_draft(session, app_row.id)
 
     assert out.status == ApplicationStatus.DRAFT
@@ -548,7 +548,7 @@ async def test_submit_draft_rate_limit_failure_classified():
             )
         )
     )
-    with patch("services.application_service.ats_dispatch", return_value=fake_adapter):
+    with patch("services.applications.ats_dispatch", return_value=fake_adapter):
         out = await submit_draft(session, app_row.id)
     assert out.submission_artifacts["last_failure"]["kind"] == "rate_limit"
 
@@ -619,7 +619,7 @@ async def test_process_auto_apply_queue_dispatches_one_app():
     success_app = _make_app(status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
     fake_submit.return_value = success_app
 
-    with patch("services.application_service.submit_draft", new=fake_submit):
+    with patch("services.applications.submit_draft", new=fake_submit):
         result = await process_auto_apply_queue(session)
     assert result.processed == 1
     assert result.submitted == 1
@@ -1008,7 +1008,7 @@ async def test_bulk_export_csv_idor_filters():
 
 def test_defang_csv_cell_prefixes_formula_leaders():
     """Cells starting with =, +, -, @ get a single-quote prefix."""
-    from services.application_service import _defang_csv_cell
+    from services.applications import _defang_csv_cell
 
     assert _defang_csv_cell("=cmd|'/c calc'!A1") == "'=cmd|'/c calc'!A1"
     assert _defang_csv_cell("+SUM(A1:B2)") == "'+SUM(A1:B2)"
@@ -1018,7 +1018,7 @@ def test_defang_csv_cell_prefixes_formula_leaders():
 
 def test_defang_csv_cell_prefixes_whitespace_leaders():
     """Tab and CR leaders also get defanged (smuggle past naive eyeballing)."""
-    from services.application_service import _defang_csv_cell
+    from services.applications import _defang_csv_cell
 
     assert _defang_csv_cell("\t=cmd") == "'\t=cmd"
     assert _defang_csv_cell("\rmalicious") == "'\rmalicious"
@@ -1026,7 +1026,7 @@ def test_defang_csv_cell_prefixes_whitespace_leaders():
 
 def test_defang_csv_cell_leaves_safe_values_untouched():
     """Normal alphanumeric / None / numeric inputs surface verbatim (no '-prefix)."""
-    from services.application_service import _defang_csv_cell
+    from services.applications import _defang_csv_cell
 
     assert _defang_csv_cell("Stripe") == "Stripe"
     assert _defang_csv_cell("Senior Engineer") == "Senior Engineer"
@@ -1119,7 +1119,7 @@ async def test_submit_draft_default_notify_fn_fires_when_settings_configured():
     notify_application_submitted = AsyncMock()
 
     with (
-        patch("services.application_service.ats_dispatch", return_value=fake_adapter),
+        patch("services.applications.ats_dispatch", return_value=fake_adapter),
         patch("services.notify.notify_application_submitted", new=notify_application_submitted),
     ):
         out = await submit_draft(session, app_row.id)
@@ -1161,7 +1161,7 @@ async def test_submit_draft_default_notify_fn_skipped_when_no_settings():
     notify_application_submitted = AsyncMock()
 
     with (
-        patch("services.application_service.ats_dispatch", return_value=fake_adapter),
+        patch("services.applications.ats_dispatch", return_value=fake_adapter),
         patch("services.notify.notify_application_submitted", new=notify_application_submitted),
     ):
         out = await submit_draft(session, app_row.id)
@@ -1203,7 +1203,7 @@ async def test_submit_draft_explicit_notify_fn_overrides_default():
     default_notify_application_submitted = AsyncMock()
 
     with (
-        patch("services.application_service.ats_dispatch", return_value=fake_adapter),
+        patch("services.applications.ats_dispatch", return_value=fake_adapter),
         patch(
             "services.notify.notify_application_submitted",
             new=default_notify_application_submitted,
@@ -1251,7 +1251,7 @@ async def test_process_auto_apply_queue_score_threshold_pulls_below_threshold():
     ]
 
     fake_submit = AsyncMock()
-    with patch("services.application_service.submit_draft", new=fake_submit):
+    with patch("services.applications.submit_draft", new=fake_submit):
         result = await process_auto_apply_queue(session)
 
     assert result.processed == 1
@@ -1277,7 +1277,7 @@ async def test_process_auto_apply_queue_score_threshold_passes_at_or_above():
     success_app = _make_app(status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC))
     fake_submit.return_value = success_app
 
-    with patch("services.application_service.submit_draft", new=fake_submit):
+    with patch("services.applications.submit_draft", new=fake_submit):
         result = await process_auto_apply_queue(session)
 
     assert result.submitted == 1
@@ -1306,7 +1306,7 @@ async def test_process_auto_apply_queue_per_board_cap_respected():
         _exec_count(2),
     ]
     fake_submit = AsyncMock()
-    with patch("services.application_service.submit_draft", new=fake_submit):
+    with patch("services.applications.submit_draft", new=fake_submit):
         result = await process_auto_apply_queue(session)
 
     assert result.skipped_by_cap == 1
@@ -1335,7 +1335,7 @@ async def test_process_auto_apply_queue_per_board_cap_skipped_when_unset():
     fake_submit.return_value = _make_app(
         status=ApplicationStatus.APPLIED, applied_at=datetime.now(UTC)
     )
-    with patch("services.application_service.submit_draft", new=fake_submit):
+    with patch("services.applications.submit_draft", new=fake_submit):
         result = await process_auto_apply_queue(session)
     assert result.submitted == 1
 
@@ -1362,7 +1362,7 @@ async def test_process_auto_apply_queue_dry_run_calls_submit_with_dry_run_flag()
         _exec_one(None),
     ]
     fake_submit = AsyncMock(return_value=app_row)
-    with patch("services.application_service.submit_draft", new=fake_submit):
+    with patch("services.applications.submit_draft", new=fake_submit):
         result = await process_auto_apply_queue(session)
 
     fake_submit.assert_awaited_once()
@@ -1392,7 +1392,7 @@ async def test_process_auto_apply_queue_visa_blocked_dequeues_and_emits_event():
     async def _raise_visa(_session, _application):
         raise ValidationError("visa blocked", code="visa_incompatible")
 
-    with patch("services.application_service.validate_submittable", new=_raise_visa):
+    with patch("services.applications.validate_submittable", new=_raise_visa):
         result = await process_auto_apply_queue(session)
 
     assert result.processed == 1
@@ -1419,7 +1419,7 @@ async def test_process_auto_apply_queue_other_validation_error_does_not_dequeue(
     async def _raise_unready(_session, _application):
         raise ValidationError("docs not ready", code="docs_not_ready")
 
-    with patch("services.application_service.validate_submittable", new=_raise_unready):
+    with patch("services.applications.validate_submittable", new=_raise_unready):
         result = await process_auto_apply_queue(session)
 
     assert result.submitted == 0
@@ -1458,7 +1458,7 @@ async def test_submit_draft_low_confidence_keeps_draft_and_records_failure():
         )
     )
 
-    with patch("services.application_service.ats_dispatch", return_value=fake_adapter):
+    with patch("services.applications.ats_dispatch", return_value=fake_adapter):
         out = await submit_draft(session, app_row.id)
 
     assert out.status == ApplicationStatus.DRAFT
@@ -1492,7 +1492,7 @@ async def test_submit_draft_full_confidence_proceeds():
             return_value=SubmissionResult(ok=True, board_application_id="GH-1", confidence=1.0)
         )
     )
-    with patch("services.application_service.ats_dispatch", return_value=fake_adapter):
+    with patch("services.applications.ats_dispatch", return_value=fake_adapter):
         out = await submit_draft(session, app_row.id, notify_fn=AsyncMock())
 
     assert out.status == ApplicationStatus.APPLIED

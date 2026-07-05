@@ -156,14 +156,14 @@ async def test_application_or_404_rejects_soft_deleted_own_app() -> None:
 
     import ui.routes.tracking as tracking_mod
 
-    orig = tracking_mod.application_service.get_application
-    tracking_mod.application_service.get_application = _fake_get  # type: ignore[assignment]
+    orig = tracking_mod.applications.get_application
+    tracking_mod.applications.get_application = _fake_get  # type: ignore[assignment]
     try:
         with pytest.raises(HTTPException) as exc_info:
             await _application_or_404(SimpleNamespace(), 1, user)
         assert exc_info.value.status_code == 404
     finally:
-        tracking_mod.application_service.get_application = orig  # type: ignore[assignment]
+        tracking_mod.applications.get_application = orig  # type: ignore[assignment]
 
 
 @pytest.mark.asyncio
@@ -181,14 +181,14 @@ async def test_application_or_404_rejects_soft_deleted_cross_user_404() -> None:
 
     import ui.routes.tracking as tracking_mod
 
-    orig = tracking_mod.application_service.get_application
-    tracking_mod.application_service.get_application = _fake_get  # type: ignore[assignment]
+    orig = tracking_mod.applications.get_application
+    tracking_mod.applications.get_application = _fake_get  # type: ignore[assignment]
     try:
         with pytest.raises(HTTPException) as exc_info:
             await _application_or_404(SimpleNamespace(), 2, user)
         assert exc_info.value.status_code == 404
     finally:
-        tracking_mod.application_service.get_application = orig  # type: ignore[assignment]
+        tracking_mod.applications.get_application = orig  # type: ignore[assignment]
 
 
 @pytest.mark.asyncio
@@ -204,13 +204,13 @@ async def test_application_or_404_passes_alive_owner_app() -> None:
 
     import ui.routes.tracking as tracking_mod
 
-    orig = tracking_mod.application_service.get_application
-    tracking_mod.application_service.get_application = _fake_get  # type: ignore[assignment]
+    orig = tracking_mod.applications.get_application
+    tracking_mod.applications.get_application = _fake_get  # type: ignore[assignment]
     try:
         result = await _application_or_404(SimpleNamespace(), 3, user)
         assert result is a
     finally:
-        tracking_mod.application_service.get_application = orig  # type: ignore[assignment]
+        tracking_mod.applications.get_application = orig  # type: ignore[assignment]
 
 
 # ── W2.1 / 0.4.5.06 — kpis_by_role_family ──────────────────────────────

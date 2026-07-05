@@ -262,7 +262,7 @@ async def get_owned_application(
     user: User | None = Depends(require_authed_session),
 ) -> Application:
     """Fetch an application the caller owns, else 404."""
-    from services import application_service
+    from services import applications as application_service
 
     application = await application_service.get_application(session, application_id)
     if application is None or application.user_id != effective_user_id(user):

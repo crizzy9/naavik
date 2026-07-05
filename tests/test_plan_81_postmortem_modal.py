@@ -73,7 +73,7 @@ def test_postmortem_modal_idor_cross_user_returns_404(client_with_user):
     ts = "2026-05-20T10-12-51Z"
     other_app = SimpleNamespace(id=99, user_id=1)  # not our user
     with patch(
-        "services.application_service.get_application",
+        "services.applications.get_application",
         new=AsyncMock(return_value=other_app),
     ):
         r = client.get(f"/_modal/postmortem/99/{ts}")
@@ -85,7 +85,7 @@ def test_postmortem_modal_path_traversal_blocked(client_with_user):
     client, user = client_with_user
     fake_app = SimpleNamespace(id=10, user_id=user.id)
     with patch(
-        "services.application_service.get_application",
+        "services.applications.get_application",
         new=AsyncMock(return_value=fake_app),
     ):
         # `..foo..bar` is one segment but doesn't match the \d{4}-... regex
@@ -98,7 +98,7 @@ def test_postmortem_modal_malformed_ts_returns_404(client_with_user):
     client, user = client_with_user
     fake_app = SimpleNamespace(id=10, user_id=user.id)
     with patch(
-        "services.application_service.get_application",
+        "services.applications.get_application",
         new=AsyncMock(return_value=fake_app),
     ):
         r = client.get("/_modal/postmortem/10/not-a-timestamp")
@@ -110,7 +110,7 @@ def test_postmortem_modal_missing_files_returns_404(client_with_user):
     client, user = client_with_user
     fake_app = SimpleNamespace(id=10, user_id=user.id)
     with patch(
-        "services.application_service.get_application",
+        "services.applications.get_application",
         new=AsyncMock(return_value=fake_app),
     ):
         r = client.get("/_modal/postmortem/10/2026-05-20T10-12-51Z")
@@ -124,7 +124,7 @@ def test_postmortem_modal_happy_path_renders(client_with_user, tmp_path):
     _seed_postmortem(tmp_path, application_id=10, ts=ts)
     fake_app = SimpleNamespace(id=10, user_id=user.id)
     with patch(
-        "services.application_service.get_application",
+        "services.applications.get_application",
         new=AsyncMock(return_value=fake_app),
     ):
         r = client.get(f"/_modal/postmortem/10/{ts}")

@@ -27,7 +27,7 @@ os.environ.setdefault("NAAVIK_BCRYPT_COST", "4")
 
 def test_aggregate_submission_failures_filters_user_id():
     """Compiled SQL embeds `application.user_id = :u`."""
-    from services.application_service import aggregate_submission_failures
+    from services.applications import aggregate_submission_failures
 
     captured: list = []
 
@@ -46,7 +46,7 @@ def test_aggregate_submission_failures_filters_user_id():
 
 def test_aggregate_submission_failures_orders_by_count_desc():
     """ORDER BY count() DESC so the most common failure-kind sits first."""
-    from services.application_service import aggregate_submission_failures
+    from services.applications import aggregate_submission_failures
 
     captured: list = []
 
@@ -63,7 +63,7 @@ def test_aggregate_submission_failures_orders_by_count_desc():
 
 def test_aggregate_submission_failures_excludes_soft_deleted_rows():
     """`deleted_at IS NULL` predicate present in compiled SQL."""
-    from services.application_service import aggregate_submission_failures
+    from services.applications import aggregate_submission_failures
 
     captured: list = []
 
@@ -79,7 +79,7 @@ def test_aggregate_submission_failures_excludes_soft_deleted_rows():
 
 def test_aggregate_submission_failures_excludes_null_submission_artifacts():
     """`submission_artifacts IS NOT NULL` predicate avoids phantom NULL bucket."""
-    from services.application_service import aggregate_submission_failures
+    from services.applications import aggregate_submission_failures
 
     captured: list = []
 
@@ -98,7 +98,7 @@ def test_aggregate_submission_failures_unpacks_rows_to_dicts():
     from datetime import UTC, datetime
 
     from models import ApplicationBoard
-    from services.application_service import aggregate_submission_failures
+    from services.applications import aggregate_submission_failures
 
     seed_rows = [
         (
