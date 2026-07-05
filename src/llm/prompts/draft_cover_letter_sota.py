@@ -25,8 +25,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from llm.base import LLMProvider
-
 MAX_HOOK_CHARS = 400
 MAX_MATCH_CHARS = 900
 MAX_WHY_COMPANY_CHARS = 400
@@ -158,69 +156,3 @@ class CoverLetterSota(BaseModel):
     @classmethod
     def _ensure_str(cls, v: object) -> str:
         return str(v) if v is not None else ""
-
-
-async def draft_cover_letter_sota(
-    provider: LLMProvider,
-    *,
-    profile: dict,
-    job: dict,
-    matched_tags: list[str],
-    hiring_manager: dict | None = None,
-    format_override: str = "auto",
-    system: str | None = None,
-    cache_system: bool = False,
-) -> CoverLetterSota:
-    """Generate a SOTA cover letter draft.
-
-    `format_override` ∈ {"auto", "standard", "pain_letter"} (mirrors
-    `Settings.cover_letter_format`). "auto" runs the pain-point detector.
-
-    `hiring_manager` is a dict from `HiringManagerHit` — when None or
-    `confidence < 0.5`, the salutation falls back to the company's
-    Hiring Team.
-    """
-    if format_override == "pain_letter" or (
-        format_override == "auto" and detect_pain_letter_format(job.get("description", ""))
-    ):
-        prompt_template = PROMPT_PAIN_LETTER
-        chosen = "pain_letter"
-    else:
-        prompt_template = PROMPT_STANDARD
-        chosen = "standard"
-
-    hm_str = "(no specific hiring manager identified)"
-    if hiring_manager and hiring_manager.get("name"):
-        hm_str = f"{hiring_manager['name']}"
-        if hiring_manager.get("title"):
-            hm_str += f", {hiring_manager['title']}"
-
-    profile_str = (
-        f"{profile.get('full_name', '')}\n"
-        f"{profile.get('summary_short') or profile.get('summary_full', '')}\n"
-        f"Top bullets: {'; '.join(profile.get('top_bullets', []))[:1500]}"
-    )
-    job_str = (
-        f"{job.get('company', '')} — {job.get('role', '')}\n{(job.get('description') or '')[:1500]}"
-    )
-
-    kwargs = {
-        "profile": profile_str,
-        "job": job_str,
-        "hiring_manager": hm_str,
-        "matched_tags": ", ".join(matched_tags),
-        "company": job.get("company", ""),
-        "name": profile.get("full_name", ""),
-    }
-    if chosen == "pain_letter":
-        kwargs["pain_signals"] = ", ".join(_PAIN_POINT_RE.findall(job.get("description", ""))[:5])
-    rendered = prompt_template.format(**kwargs)
-
-    result = await provider.structured(
-        rendered,
-        CoverLetterSota,
-        max_tokens=2048,
-        system=system,
-        cache_system=cache_system,
-    )
-    return CoverLetterSota.model_validate(result.value)

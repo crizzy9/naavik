@@ -147,3 +147,32 @@ async def test_greenhouse_hostile_company_skipped_with_invalid_slug_error():
     assert client.fetch_calls == []
     assert any("kind=invalid_slug" in e for e in scraper._errors)
     assert any("msg=company=" in e for e in scraper._errors)
+
+
+@pytest.mark.asyncio
+async def test_greenhouse_skips_known_ids_before_detail_fetch():
+    """Plan 91 5.2 — listings already in the library never hit the detail
+    page. Indeed/LinkedIn had this guard; greenhouse re-fetched every
+    detail page on every cron run."""
+    list_url = "https://boards.greenhouse.io/embed/job_board?for=acmefake&format=json"
+    detail_url_prefix = "https://boards.greenhouse.io/acmefake/jobs/"
+    client = _make_client(
+        responses={
+            list_url: load_fixture("greenhouse_listing.json"),
+            detail_url_prefix: load_fixture("greenhouse_detail.html"),
+        }
+    )
+    scraper = GreenhouseScraper(client=client)  # type: ignore[arg-type]
+    scraper.set_known_external_ids({"5827341"})  # first fixture row
+
+    rawjobs = [j async for j in scraper.scrape(ScrapeQuery(company_filter=["acmefake"]))]
+
+    assert {j.external_id for j in rawjobs} == {
+        j.external_id for j in rawjobs if j.external_id != "5827341"
+    }
+    assert len(rawjobs) == 2  # fixture carries 3 rows; the known one skipped
+    assert scraper._skipped_known == 1
+    # The known listing's detail page was never fetched: one list fetch +
+    # one detail fetch per YIELDED job only.
+    detail_fetches = [u for u in client.fetch_calls if u.startswith(detail_url_prefix)]
+    assert len(detail_fetches) == 2

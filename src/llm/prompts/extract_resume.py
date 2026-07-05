@@ -14,8 +14,6 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from llm.base import LLMProvider
-
 # Keep in sync with `ui/templates_setup.TAG_VOCAB` + CLAUDE.md § Resume/CV
 # Data Model (the canonical 9-tag vocabulary).
 TAG_VOCAB = (
@@ -126,13 +124,3 @@ class ExtractedResume(BaseModel):
     educations: list[ExtractedEducation] = []
     projects: list[ExtractedProject] = []
     certifications: list[ExtractedCertification] = []
-
-
-async def extract_resume(
-    provider: LLMProvider,
-    *,
-    resume_text: str,
-) -> ExtractedResume:
-    rendered = PROMPT.format(resume_text=resume_text[:30_000], tag_vocab=", ".join(TAG_VOCAB))
-    result = await provider.structured(rendered, ExtractedResume, max_tokens=4096)
-    return ExtractedResume.model_validate(result.value)

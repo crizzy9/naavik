@@ -83,6 +83,12 @@ class GreenhouseScraper(_BaseSiteScraper):
             for row in (payload or {}).get("jobs", []):
                 if yielded >= query.max_listings:
                     return
+                # Plan 91 5.2 — skip listings already in the library BEFORE the
+                # per-listing detail fetch. Indeed/LinkedIn had this guard;
+                # greenhouse re-fetched every detail page on every run.
+                row_id = row.get("id")
+                if self._skip_known(str(row_id) if row_id not in (None, "") else None):
+                    continue
                 try:
                     raw_job = await self._build_raw_job(company=company, row=row)
                 except Exception as exc:  # noqa: BLE001 — per-listing tolerance

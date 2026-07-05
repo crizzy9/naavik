@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from llm.base import LLMProvider
-
 PROMPT = """Trim this bullet to one resume line of at most {target_chars} characters.
 
 Original:
@@ -24,14 +22,3 @@ filler adjectives, redundant context. Return TrimmedBullet with `trimmed`
 class TrimmedBullet(BaseModel):
     trimmed: str
     dropped_phrases: list[str] = []
-
-
-async def trim_bullet(
-    provider: LLMProvider,
-    *,
-    text: str,
-    target_chars: int = 120,
-) -> TrimmedBullet:
-    rendered = PROMPT.format(text=text, target_chars=target_chars)
-    result = await provider.structured(rendered, TrimmedBullet, max_tokens=512)
-    return TrimmedBullet.model_validate(result.value)

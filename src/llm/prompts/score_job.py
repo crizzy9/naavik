@@ -12,11 +12,8 @@ Validators drop unknown per-dimension keys and truncate strings.
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field, field_validator
 
-from llm.base import LLMProvider
 from models.enums import Tag
 
 # Module-level constants visible to the orchestrator (T6 + T9).
@@ -156,37 +153,3 @@ class JobScore(BaseModel):
     @classmethod
     def _coerce_explanation(cls, v: str | None) -> str:
         return str(v) if v is not None else ""
-
-
-async def score_job(
-    provider: LLMProvider,
-    *,
-    profile: dict[str, Any],
-    job: dict[str, Any],
-) -> JobScore:
-    """Naive end-to-end LLM call (Wave-4 era; kept for direct LLM use cases).
-
-    The layered orchestrator (`services/scorer/orchestrator.py`) is the
-    production entry point; this function remains for tests + ad-hoc
-    callers that just want the LLM grade without the layers.
-    """
-    rendered = PROMPT.format(
-        profile=(
-            f"{profile.get('full_name', '')}\n"
-            f"{profile.get('headline', '')}\n"
-            f"{profile.get('summary_short') or profile.get('summary_full', '')}"
-        ),
-        profile_tags="",
-        candidate_bullets="",
-        company=job.get("company", ""),
-        role=job.get("role", ""),
-        description=(job.get("description") or "")[:2000],
-        job_tags="",
-        skills=", ".join(job.get("skills_required", [])),
-        visa_restrictions=job.get("visa_restrictions") or "none",
-        tag_score=0.0,
-        semantic_score=0.0,
-        tag_vocabulary=", ".join(t.value for t in Tag),
-    )
-    result = await provider.structured(rendered, JobScore)
-    return JobScore.model_validate(result.value)

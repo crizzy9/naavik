@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from llm.base import LLMProvider
-
 PROMPT = """Rank ALL of the candidate's resume bullets by relevance to this job,
 most relevant first.
 
@@ -38,20 +36,3 @@ Return BulletSelection with the complete ranking in selected_ids.
 class BulletSelection(BaseModel):
     selected_ids: list[int] = Field(default_factory=list)
     rationale: str = ""
-
-
-async def select_bullets(
-    provider: LLMProvider,
-    *,
-    bullets: list[dict],
-    job: dict,
-) -> BulletSelection:
-    bullets_text = "\n".join(f"{b['id']} → {b['text']}" for b in bullets)
-    rendered = PROMPT.format(
-        bullets=bullets_text,
-        role=job.get("role", ""),
-        description=job.get("description", "")[:1500],
-        skills=", ".join(job.get("skills_required", [])),
-    )
-    result = await provider.structured(rendered, BulletSelection, max_tokens=1024)
-    return BulletSelection.model_validate(result.value)

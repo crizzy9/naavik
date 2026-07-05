@@ -4,30 +4,29 @@ Per plan 10 § B.4 + BACKEND.md § M.3. Wave 4 ships the module skeletons +
 schemas + a working `score_job` (real-but-naive). The full prompt pipelines
 (extraction, bullet selection, cover letter, etc.) wire in Wave 6.
 
-Each prompt module exposes:
-- A versioned `PROMPT` template string
-- A Pydantic schema for the structured response
-- An async `<name>(provider, ...)` callable returning the schema instance
+Each prompt module exposes a versioned `PROMPT` template string and a
+Pydantic schema for the structured response; services invoke them through
+`services.llm_tracker.tracked_call` (the bare async convenience wrappers
+were tracker-bypass traps with zero callers — deleted in plan 91 5.3/6.4).
 """
 
 from __future__ import annotations
 
-from .answer_screener import ScreenerAnswer, answer_screener
-from .auto_tag_bullets import BulletTags, auto_tag_bullets
-from .classify_email import EmailClassificationResult, classify_email
-from .draft_cover_letter import CoverLetterDraft, draft_cover_letter
+from .answer_screener import ScreenerAnswer
+from .auto_tag_bullets import BulletTags
+from .classify_email import EmailClassificationResult
+from .draft_cover_letter import CoverLetterDraft
 from .draft_cover_letter_sota import (
     CoverLetterSota,
     detect_pain_letter_format,
-    draft_cover_letter_sota,
 )
-from .draft_outreach import OutreachDraft, draft_outreach
+from .draft_outreach import OutreachDraft
 from .extract_job import PROMPT as EXTRACT_JOB_PROMPT
 from .extract_job import JobExtraction
-from .extract_resume import ExtractedResume, extract_resume
-from .score_job import JobScore, score_job
-from .select_bullets import BulletSelection, select_bullets
-from .trim_bullet import TrimmedBullet, trim_bullet
+from .extract_resume import ExtractedResume
+from .score_job import JobScore
+from .select_bullets import BulletSelection
+from .trim_bullet import TrimmedBullet
 
 __all__ = [
     "BulletSelection",
@@ -42,15 +41,5 @@ __all__ = [
     "OutreachDraft",
     "ScreenerAnswer",
     "TrimmedBullet",
-    "answer_screener",
-    "auto_tag_bullets",
-    "classify_email",
     "detect_pain_letter_format",
-    "draft_cover_letter",
-    "draft_cover_letter_sota",
-    "draft_outreach",
-    "extract_resume",
-    "score_job",
-    "select_bullets",
-    "trim_bullet",
 ]

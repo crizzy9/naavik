@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from llm.base import LLMProvider
-
 PROMPT = """Draft a cover letter for this candidate × job pair.
 
 Candidate:
@@ -34,19 +32,3 @@ class CoverLetterDraft(BaseModel):
     body: str
     why_company: str
     close: str
-
-
-async def draft_cover_letter(
-    provider: LLMProvider,
-    *,
-    profile: dict,
-    job: dict,
-    tone: str = "enthusiastic",
-) -> CoverLetterDraft:
-    rendered = PROMPT.format(
-        profile=f"{profile.get('full_name')}\n{profile.get('summary_short') or profile.get('summary_full', '')}",
-        job=f"{job.get('company')} — {job.get('role')}\n{job.get('description', '')[:1500]}",
-        tone=tone,
-    )
-    result = await provider.structured(rendered, CoverLetterDraft, max_tokens=2048)
-    return CoverLetterDraft.model_validate(result.value)
