@@ -154,7 +154,7 @@ def test_rescore_happy_path_calls_orchestrator():
         board="linkedin",
         external_id="manual-x",
         url="https://example.com/job",
-        url_type="job",
+        url_type="external",
         company="Acme",
         role="SWE",
         description="Build things",

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Index, Numeric
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, Numeric
 from sqlmodel import Field, SQLModel
 
 from ._common import utcnow
@@ -22,6 +22,10 @@ from .enums import LLMProvider
 class ApiUsage(SQLModel, table=True):
     __tablename__ = "api_usage"
     __table_args__ = (
+        CheckConstraint(
+            "method IN ('complete', 'structured', 'stream', 'embed')",
+            name="ck_api_usage_method_vocab",
+        ),
         Index("ix_api_usage_user_occurred", "user_id", "occurred_at"),
         Index(
             "ix_api_usage_user_provider_occurred",

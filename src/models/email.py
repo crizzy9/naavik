@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Index, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -23,6 +23,10 @@ class EmailThread(SQLModel, table=True):
             "user_id",
             "thread_id_external",
             name="uq_email_thread_external",
+        ),
+        CheckConstraint(
+            "provider IN ('gmail', 'outlook', 'imap')",
+            name="ck_email_thread_provider_vocab",
         ),
         Index(
             "ix_email_thread_user_class_latest",

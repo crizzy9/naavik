@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Index, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from ._common import utcnow
@@ -100,6 +100,10 @@ class ContactApplicationLink(SQLModel, table=True):
 class OutreachMessage(SQLModel, table=True):
     __tablename__ = "outreach_message"
     __table_args__ = (
+        CheckConstraint(
+            "channel IN ('linkedin_dm', 'linkedin', 'email')",
+            name="ck_outreach_message_channel_vocab",
+        ),
         Index(
             "ix_outreach_message_user_contact_sent",
             "user_id",

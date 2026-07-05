@@ -148,7 +148,7 @@ async def _seed_job(
         board=ApplicationBoard.LINKEDIN,
         external_id=eid,
         url=f"https://example.test/jobs/{eid}",
-        url_type="canonical",
+        url_type="ats",
         company="Acme",
         role="SWE",
         description="x" * 32,

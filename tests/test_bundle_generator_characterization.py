@@ -170,7 +170,7 @@ async def _seed_world(session):
             external_id="bundle-1",
             board=ApplicationBoard.MANUAL,
             url="https://example.com/job",
-            url_type="direct",
+            url_type="external",
             company="Initech",
             role="Staff Engineer",
             description="Short JD.",  # <200 chars: hiring-manager stays regex-only

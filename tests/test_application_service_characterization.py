@@ -130,7 +130,7 @@ async def _seed_job(session, **overrides) -> Job:
         "external_id": f"x-{overrides.get('company', 'acme')}",
         "board": ApplicationBoard.GREENHOUSE,
         "url": "https://example.com/job",
-        "url_type": "direct",
+        "url_type": "external",
         "company": "Acme",
         "role": "Software Engineer",
         "description": "d",

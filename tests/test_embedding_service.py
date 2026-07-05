@@ -47,7 +47,7 @@ def _job_stub(*, id_=10, role="SWE", description="Build stuff"):
         board="LINKEDIN",
         external_id=f"manual-{id_}",
         url=f"https://example.com/{id_}",
-        url_type="job",
+        url_type="external",
         company="Acme",
         role=role,
         description=description,

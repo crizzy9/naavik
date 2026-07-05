@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Index, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from ._common import utcnow
@@ -27,6 +27,10 @@ class EmailMessage(SQLModel, table=True):
             "thread_id",
             "message_id_external",
             name="uq_email_message_external",
+        ),
+        CheckConstraint(
+            "provider IN ('gmail', 'outlook', 'imap')",
+            name="ck_email_message_provider_vocab",
         ),
         Index(
             "ix_email_message_thread_received",

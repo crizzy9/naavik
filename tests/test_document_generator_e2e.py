@@ -165,7 +165,7 @@ async def _seed_world(session):
             external_id="e2e-1",
             board=ApplicationBoard.MANUAL,
             url="https://example.com/job",
-            url_type="direct",
+            url_type="external",
             company="Initech",
             role="Staff Engineer",
             description="We need someone who has built billing pipelines at scale.",

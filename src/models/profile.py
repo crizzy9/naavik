@@ -259,7 +259,10 @@ class Education(SQLModel, table=True):
 
 class Project(SQLModel, table=True):
     __tablename__ = "project"
-    __table_args__ = (Index("ix_project_tags_gin", "tags", postgresql_using="gin"),)
+    __table_args__ = (
+        Index("ix_project_tags_gin", "tags", postgresql_using="gin"),
+        CheckConstraint("kind IN ('project', 'open_source')", name="ck_project_kind_vocab"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     profile_id: int = Field(foreign_key="profile.id", ondelete="CASCADE", index=True)

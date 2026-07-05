@@ -35,6 +35,28 @@ class Job(SQLModel, table=True):
     __tablename__ = "job"
     __table_args__ = (
         CheckConstraint("score >= 0.0 AND score <= 1.0", name="ck_job_score_range"),
+        # Plan 94 slice C (plan 91 § 7.3) — closed vocabularies. Writers:
+        # scrapers/manual entry (url_type), the resolution pipeline
+        # (apply_kind = APPLY_KIND_LABELS keys + external/easy_apply/unknown;
+        # apply_resolved_via = the retry-ladder vocabulary).
+        CheckConstraint(
+            "url_type IN ('ats', 'external', 'manual', 'email_receipt')",
+            name="ck_job_url_type_vocab",
+        ),
+        CheckConstraint(
+            "apply_kind IS NULL OR apply_kind IN ("
+            "'greenhouse', 'lever', 'ashby', 'workday', 'icims', "
+            "'smartrecruiters', 'taleo', 'bamboohr', 'recruitee', 'jobvite', "
+            "'breezy', 'workable', 'external', 'easy_apply', 'unknown')",
+            name="ck_job_apply_kind_vocab",
+        ),
+        CheckConstraint(
+            "apply_resolved_via IS NULL OR apply_resolved_via IN ("
+            "'ats_discovery', 'board_trust', 'direct', 'exhausted', "
+            "'linkedin_auth', 'linkedin_guest', 'linkedin_guest_slug', "
+            "'manual', 'unresolved')",
+            name="ck_job_apply_resolved_via_vocab",
+        ),
         CheckConstraint(
             "salary_min IS NULL OR salary_max IS NULL OR salary_min <= salary_max",
             name="ck_job_salary_min_le_max",
