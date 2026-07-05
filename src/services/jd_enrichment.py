@@ -15,13 +15,13 @@ import logging
 import re
 from datetime import UTC, datetime
 
-from bs4 import BeautifulSoup
 from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import Job, JobSource
 from services import apply_site_resolver
+from services.html_text import html_to_text
 
 log = logging.getLogger(__name__)
 
@@ -31,14 +31,6 @@ THIN_JD_CHARS = 800
 _MIN_REPLACEMENT_CHARS = 400
 
 
-def html_to_text(html: str | None) -> str:
-    """Board-API description HTML → plain text (Greenhouse double-escapes)."""
-    if not html:
-        return ""
-    unescaped = html_lib.unescape(html)
-    soup = BeautifulSoup(unescaped, "html.parser")
-    text = soup.get_text(separator="\n", strip=True)
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def _apply_description(job: Job, *, text: str, html: str | None) -> None:

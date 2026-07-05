@@ -29,6 +29,7 @@ from scraper.redaction import safe_exc, safe_url
 from scraper.sites._base_site import _BaseSiteScraper
 from scraper.types import RawJob, ScrapeQuery
 from scraper.url_guard import is_safe_destination
+from services.html_text import fragment_text
 
 log = logging.getLogger(__name__)
 
@@ -130,7 +131,7 @@ class AshbyScraper(_BaseSiteScraper):
         description_html = row.get("descriptionHtml")
         description_text = None
         if isinstance(description_html, str):
-            description_text = BeautifulSoup(description_html, "html.parser").get_text("\n").strip()
+            description_text = fragment_text(description_html) or ""
         elif isinstance(row.get("descriptionPlain"), str):
             description_text = row["descriptionPlain"]
 

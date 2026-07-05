@@ -34,6 +34,7 @@ from scraper.redaction import safe_exc, safe_url
 from scraper.sites._base_site import _BaseSiteScraper
 from scraper.types import RawJob, ScrapeQuery
 from scraper.url_guard import is_safe_destination
+from services.html_text import fragment_text
 
 log = logging.getLogger(__name__)
 
@@ -187,7 +188,7 @@ class IndeedScraper(_BaseSiteScraper):
             soup = BeautifulSoup(detail_html, "html.parser")
             body = soup.select_one("#jobDescriptionText") or soup.body
             if body is not None:
-                description_text = body.get_text("\n").strip() or None
+                description_text = fragment_text(str(body))
                 description_html_clean = str(body)
         return RawJob(
             source=JobSource.INDEED,

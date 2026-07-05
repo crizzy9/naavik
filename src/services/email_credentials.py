@@ -16,23 +16,18 @@ a response body.
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import logging
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from config import settings as app_settings
 from models import EmailAccount
+from services._crypto import secret_key_fernet
 
 log = logging.getLogger(__name__)
 
 
 def _fernet() -> Fernet:
-    # Stable 32-byte key from SECRET_KEY via SHA-256 — same SECRET_KEY trust
-    # posture as JWT signing (plan 26 retrospective; not a vault revival).
-    digest = hashlib.sha256(app_settings.secret_key.encode("utf-8")).digest()
-    return Fernet(base64.urlsafe_b64encode(digest))
+    return secret_key_fernet()
 
 
 def store_imap_password(account: EmailAccount, password: str) -> None:

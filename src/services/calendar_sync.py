@@ -21,8 +21,6 @@ Event creation is a future OAuth follow-up (docs/design/EMAIL_MONITORING.md
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
@@ -33,9 +31,9 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from config import settings as app_settings
 from models import Application, ApplicationStatus, CalendarConnection, CalendarEvent, Job
 from scraper.url_guard import is_safe_destination
+from services._crypto import secret_key_fernet
 
 log = logging.getLogger(__name__)
 
@@ -51,8 +49,7 @@ _WINDOW_FUTURE_DAYS = 60
 
 
 def _fernet() -> Fernet:
-    digest = hashlib.sha256(app_settings.secret_key.encode("utf-8")).digest()
-    return Fernet(base64.urlsafe_b64encode(digest))
+    return secret_key_fernet()
 
 
 def store_ics_url(connection: CalendarConnection, url: str) -> None:
