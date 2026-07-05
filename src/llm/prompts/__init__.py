@@ -27,7 +27,6 @@ from .extract_job import JobExtraction
 from .extract_resume import ExtractedResume, extract_resume
 from .score_job import JobScore, score_job
 from .select_bullets import BulletSelection, select_bullets
-from .tailor_headline import TailoredHeadline, tailor_headline
 from .trim_bullet import TrimmedBullet, trim_bullet
 
 __all__ = [
@@ -42,7 +41,6 @@ __all__ = [
     "JobScore",
     "OutreachDraft",
     "ScreenerAnswer",
-    "TailoredHeadline",
     "TrimmedBullet",
     "answer_screener",
     "auto_tag_bullets",
@@ -54,6 +52,5 @@ __all__ = [
     "extract_resume",
     "score_job",
     "select_bullets",
-    "tailor_headline",
     "trim_bullet",
 ]
