@@ -119,7 +119,7 @@ async def test_indeed_listing_fetch_failure_yields_nothing():
 async def test_indeed_provider_none_short_circuits_extraction():
     import sys
 
-    sys.modules.pop("services.job_extractor", None)
+    sys.modules.pop("services.jobs.extractor", None)
     client = _make_client(
         responses={
             LIST_URL: load_fixture("indeed_listing.html"),
@@ -133,7 +133,7 @@ async def test_indeed_provider_none_short_circuits_extraction():
             ScrapeQuery(keywords=["python", "engineer"], location="Remote")
         )
     ]
-    assert "services.job_extractor" not in sys.modules
+    assert "services.jobs.extractor" not in sys.modules
 
 
 # ── 2026-07 volume rework: pagination + known-ID skip ───────────────────

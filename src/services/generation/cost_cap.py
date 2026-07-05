@@ -32,7 +32,7 @@ async def _today_spend(session: AsyncSession, user_id: int) -> float:
     LOCAL calendar date while labelling it UTC (wrong window for non-UTC
     operators), and `succeeded IS TRUE` excluded failed-call spend that the
     tracker counts. Kept as a delegating wrapper because three tests patch
-    `services.document_generator._today_spend` as the cost seam.
+    `services.generation._today_spend` as the cost seam.
     """
     return await svc().llm_tracker.today_cost_usd(session, user_id=user_id)
 

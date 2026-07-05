@@ -1,4 +1,4 @@
-"""Tests for `services.job_extractor.enrich_raw_job` (plan 30 / 0.2.0.08).
+"""Tests for `services.jobs.extractor.enrich_raw_job` (plan 30 / 0.2.0.08).
 
 HTML-fixture-driven. No real LLM calls, no real Chromium. The fake provider
 duck-types `LLMProvider` so we can assert tracker-wrap semantics without a

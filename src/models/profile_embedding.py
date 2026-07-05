@@ -6,8 +6,8 @@ bullet texts ordered by Experience.order_index ASC, Bullet.order_index
 ASC`.
 
 Refresh policy (OQ-6, plan 65):
-- On-edit via `services.profile_service.update_profile` /
-  `services.profile_service.update_bullet` (synchronous, opt-in via
+- On-edit via `services.profile.update_profile` /
+  `services.profile.update_bullet` (synchronous, opt-in via
   `Settings.semantic_match_enabled`).
 - Nightly idempotent batch via APScheduler
   `embeddings.embed_pending_profiles` at 02:30 UTC.

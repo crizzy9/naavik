@@ -72,7 +72,10 @@ src/
 ├── api/                 ← REST API routes (/api/v1/*)
 ├── ui/                  ← HTMX views (routes + Jinja2 templates + partials)
 ├── models/              ← SQLModel DB models + Pydantic schemas
-├── services/            ← Business logic (scraping, scoring, generation, tracking)
+├── services/            ← Business logic — domain packages (plan 92): applications/,
+│                      auth/, email/, generation/, jobs/, notify/, profile/,
+│                      resolution/, scorer/, ats/ + single-purpose flat modules;
+│                      each package __init__ is its ONE public/patch surface
 ├── llm/                 ← LLM provider abstraction (anthropic, openai, ollama)
 ├── scraper/             ← Site-specific job scrapers (linkedin, greenhouse, ...)
 ├── typst/               ← Typst templates + compilation

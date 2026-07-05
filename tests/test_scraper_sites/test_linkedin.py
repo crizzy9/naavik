@@ -132,10 +132,10 @@ async def test_linkedin_per_listing_error_continues_scraping():
 
 @pytest.mark.asyncio
 async def test_linkedin_provider_none_short_circuits_extraction():
-    """Lazy import of services.job_extractor never fires when provider is None."""
+    """Lazy import of services.jobs.extractor never fires when provider is None."""
     import sys
 
-    sys.modules.pop("services.job_extractor", None)
+    sys.modules.pop("services.jobs.extractor", None)
     client = _make_client(
         responses={
             LIST_URL: load_fixture("linkedin_listing.html"),
@@ -151,7 +151,7 @@ async def test_linkedin_provider_none_short_circuits_extraction():
             ScrapeQuery(keywords=["python", "engineer"], location="San Francisco")
         )
     ]
-    assert "services.job_extractor" not in sys.modules
+    assert "services.jobs.extractor" not in sys.modules
 
 
 @pytest.mark.asyncio

@@ -66,7 +66,7 @@ def _borda_merge(
     return selected, scores
 
 
-# Plan 75 / 0.3.3.11 — `_sync_fallback` body moved to `services._council_common`
+# Plan 75 / 0.3.3.11 — `_sync_fallback` body moved to `services.generation._council_common`
 # so the cross-module use (critique_council also calls it) is explicit. Kept as
 # a module-local alias for back-compat with any direct callers / tests pinning
 # the private name.
@@ -114,9 +114,9 @@ async def vote_on_bullet_selection(
         for persona in PERSONAS
     ]
 
-    # isinstance stays evaluated HERE (tests patch services.council.isinstance
+    # isinstance stays evaluated HERE (tests patch services.generation.council.isinstance
     # to force the branch); _persist_apiusage is passed by module-global so the
-    # services.council._persist_apiusage patch seam keeps intercepting.
+    # services.generation.council._persist_apiusage patch seam keeps intercepting.
     responses, batch_used = await run_persona_batch(
         session=session,
         user_id=user_id,

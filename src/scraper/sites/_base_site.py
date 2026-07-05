@@ -2,14 +2,14 @@
 
 Per docs/design/SCRAPER_SITES.md § D.4 (graduated from plan 33). Extends
 `ScraperBase` with the `_maybe_enrich(raw_job)` shim that calls
-`services.job_extractor.enrich_raw_job` only when the constructor was passed
+`services.jobs.extractor.enrich_raw_job` only when the constructor was passed
 a non-None `session` + `user_id` + `provider`.
 
 Why a shared helper between `ScraperBase` and the six subclasses:
 
 1. The `_maybe_enrich` body is identical for all six sites; duplicating six
    times would invite drift.
-2. `ScraperBase` (the substrate) MUST stay free of `services.job_extractor`
+2. `ScraperBase` (the substrate) MUST stay free of `services.jobs.extractor`
    knowledge — substrate tests should not transitively import the service
    layer. Putting the shim in a sites-package-internal class keeps the
    import-graph clean: `scraper.base` doesn't depend on `services.*`;
@@ -17,7 +17,7 @@ Why a shared helper between `ScraperBase` and the six subclasses:
 3. `SampleScraper` keeps inheriting `ScraperBase` directly — the substrate
    smoke tests don't need extraction wiring.
 
-The lazy import of `services.job_extractor` inside `_maybe_enrich` is what
+The lazy import of `services.jobs.extractor` inside `_maybe_enrich` is what
 lets plan 33 ship BEFORE plan 30 (per § D.4): until `0.2.0.08` lands the
 `enrich_raw_job` function, the `ImportError` is caught and the helper
 short-circuits to identity.
@@ -51,7 +51,7 @@ class _BaseSiteScraper(ScraperBase):
 
         - Any of `_provider` / `_session` / `_user_id` is None → return as-is.
           This is the pre-`0.2.0.08` default path (every test in this PR).
-        - `services.job_extractor` not importable (because `0.2.0.08` has not
+        - `services.jobs.extractor` not importable (because `0.2.0.08` has not
           yet landed) → log at DEBUG, return as-is. Lets the subclass code be
           written today against the future contract without coupling to it.
         - `enrich_raw_job` raises → append to `self._errors` (tier-1 per
@@ -65,7 +65,7 @@ class _BaseSiteScraper(ScraperBase):
             from services.jobs.extractor import enrich_raw_job  # lazy: 0.2.0.08
         except ImportError:
             log.debug(
-                "services.job_extractor unavailable (0.2.0.08 not yet shipped); "
+                "services.jobs.extractor unavailable (0.2.0.08 not yet shipped); "
                 "skipping enrichment for url=%s",
                 safe_url(raw_job.source_url),
             )

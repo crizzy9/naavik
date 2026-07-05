@@ -145,7 +145,7 @@ async def critique_bundle(
     ]
 
     # isinstance stays evaluated HERE (tests patch
-    # services.critique_council.isinstance to force the branch);
+    # services.generation.critique_council.isinstance to force the branch);
     # _persist_apiusage passes the module-global patch seam through.
     # prompt_prefix="critique" is the plan 91 5.1 bug fix: sync-fallback
     # rows were mislabelled council_* and fell out of the critique_usd

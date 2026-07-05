@@ -118,7 +118,7 @@ async def test_greenhouse_provider_none_short_circuits_extraction(monkeypatch):
     """`provider=None` → `_maybe_enrich` returns RawJob unmodified, no service import."""
     import sys
 
-    sys.modules.pop("services.job_extractor", None)
+    sys.modules.pop("services.jobs.extractor", None)
     list_url = "https://boards.greenhouse.io/embed/job_board?for=acmefake&format=json"
     client = _make_client(
         responses={
@@ -130,7 +130,7 @@ async def test_greenhouse_provider_none_short_circuits_extraction(monkeypatch):
     rawjobs = [j async for j in scraper.scrape(ScrapeQuery(company_filter=["acmefake"]))]
     assert len(rawjobs) == 3
     # Lazy import never fired because provider is None.
-    assert "services.job_extractor" not in sys.modules
+    assert "services.jobs.extractor" not in sys.modules
 
 
 # ── Plan 43 § D.5.5 — hostile company slug → no fetch ─────────────────────

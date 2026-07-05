@@ -5,7 +5,7 @@ Per BACKEND.md § M.3. Wave 4 ships the schema skeleton.
 All list fields carry fully-typed item models (no bare `dict`) — OpenAI's
 strict json_schema mode rejects free-form objects, and typed shapes give
 the extractor model an explicit contract that maps 1:1 onto the Skill /
-Education / Project rows persisted by `services.extraction._persist_profile`.
+Education / Project rows persisted by `services.profile.extraction._persist_profile`.
 """
 
 from __future__ import annotations

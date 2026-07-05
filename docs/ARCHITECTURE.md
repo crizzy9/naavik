@@ -101,22 +101,25 @@ Strict layering — each layer only depends on those below it.
 
 ### 3.5 `src/services/` — business logic
 
-The middle layer. Every business operation lives here.
+The middle layer. Every business operation lives here. Plans 91+92 finished
+the layout: domain packages whose `__init__.py` is the ONE public surface
+(conftest shims and `patch("services.<pkg>.X")` seams land there), plus
+single-purpose flat modules.
 
-**Service catalog** (post-plan-10 Wave 6):
-- `auth.py` — bcrypt + JWT + CSRF + rate-limit.
-- `profile_service.py` — CRUD + bullet ops + tag inference.
-- `extraction.py` — PDF → AI → Profile + SSE.
-- `application_service.py` — DRAFT lifecycle + state transitions + computed orthogonal states + auto-apply queue.
-- `document_generator.py` — bullet selection + AI trim + Typst compile + page-count validation + DRAFT reuse heuristic.
-- `scorer.py` — visa filter (Wave 6); LLM scoring (Phase 3).
-- `contact_tracker.py` — recruiter/employee contact management.
-- `notifications.py` — Discord embed + Telegram outbound + toast queue.
-- `portfolio_sync.py` — public CV API + debounced generic resume regen + Netlify webhook.
-- `settings_service.py` — per-tab CRUD for non-secret Settings fields. API keys / webhook URLs / bot tokens are env-loaded post plan 26 / `0.2.0.01`; this service no longer mediates secret material.
-- `ats_credentials.py` — metadata only (board, login_status, has_credential flag). Plan 26 removed `store_secret` / `resolve_secret` / `delete_secret`; Phase 2.X ATS adapter plans re-introduce a DB-side encrypted column when concrete adapters need persistent cookies.
-- `env_secrets.py` — env-presence indicators (post-vault). `llm_provider_configured(provider)` / `discord_webhook_configured()` / `telegram_bot_configured()` / `portfolio_webhook_configured()` + tab bundles for the Settings UI. Returns bools, never values.
-- `llm_tracker.py` — wraps every LLM call with `tracked_call`; persists ApiUsage.
+**Domain packages** (plan 91 splits, plan 92 facade teardown + grouping):
+- `applications/` — DRAFT lifecycle, submission, status state-machine, queries, auto-apply queue, engagement, export. Import `from services import applications`.
+- `auth/` — bcrypt + JWT cookie + CSRF + login throttle + user lookups.
+- `generation/` — resume/cover-letter/screener generation, bundle orchestrators (FREE + PREMIUM), cost cap, Typst compile seams, and the stage helpers (council, critique_council, detector_loop, tool_loop, voice_grounding, constitution, ai_tell_blocklist, burstiness_check, keyword_coverage, ethics_preflight, hiring_manager_extractor, ats_parser_ensemble/fidelity, generation_eval). Stage helpers are module-tier seams: `services.generation.<mod>.X`.
+- `email/` — IMAP sync, LLM classification, application inference, credentials, status mapping, ICS calendar sync, host guard. Thread API + sync seams on the package; the rest module-tier.
+- `jobs/` — job CRUD/queries + scrape-run bookkeeping (`service.py`), JD enrichment, raw-listing extraction, dedup. Callers alias `from services import jobs as job_service`.
+- `notify/` — Discord/Telegram transports (`channels.py`) + event vocabulary and composite emitters (`events.py`).
+- `profile/` — profile/experience/bullet/dossier CRUD (`service.py`), resume-text extraction, portfolio sync, stored application answers (`answers.py`). Callers alias `from services import profile as profile_service`.
+- `resolution/` — apply-site resolution pipeline (url_rules, board_probe, pipeline) + LinkedIn guest/auth tiers (`linkedin.py`).
+- `scorer/`, `ats/` — unchanged pre-existing packages (layered scoring; ATS submission adapters).
+
+**Flat modules that stay** (single-purpose; moving buys nothing): `account_service`, `application_analytics`, `ats_postmortem`, `contact_tracker`, `embedding_service`, `env_secrets`, `first_run`, `generation_dispatch`, `geo`, `html_text`, `jwt_rotation_service`, `llm_models`, `llm_tracker`, `outreach_service`, `overview_service`, `rate_limit`, `scoring_history`, `scraper_service`, `search_prefs`, `settings_service`, `user_service`.
+
+`tests/test_no_retired_service_paths.py` fails on any reference to a retired pre-92 dotted path (e.g. `services.application_service`, `services.job_extractor`).
 
 **Rule:** services consume `AsyncSession` via DI. Services don't import `api/` or `ui/` — they're called BY those layers, not the other way around.
 
@@ -155,7 +158,7 @@ Canonical reference: `docs/design/SCRAPER_BASE.md` (plan 29 / `0.2.0.06`).
 - `templates/onepage.typ` — NEU-style 1-page resume.
 - `templates/cover_letter.typ` — 4-section letter.
 - `compiler.py` — wraps `typst compile` CLI + `typst query` for `<naavik-meta>` page-count metadata (plan 10 § C deviation: the spec'd `--emit metadata` flag doesn't exist in 0.14; same effect via `typst query`).
-- Templates consume JSON from `services/document_generator.py`. Untrusted JD text is escaped before injection.
+- Templates consume JSON from `services/generation/`. Untrusted JD text is escaped before injection.
 
 ### 3.10 `src/scheduler/` — APScheduler jobs
 
@@ -257,7 +260,7 @@ n8n hosted the legacy job-discovery automation. Naavik replaces all of it across
 | Job Page Parser (`PQAGv5qUajzBP5wm`) | `src/scraper/*.py` | 2 |
 | DataTable "Job Applications" (`hfvivTlQThpPytkl`) | PostgreSQL `jobs` + `applications` tables | 2 (data migration: task 2.10) |
 | Google Sheets sync (`14pgCto2OAQxmb9w6ciOsReb3iQGE1V9XECU-o6E_c7M`) | Optional secondary view in Phase 4 | 4 |
-| Discord notifications | `src/services/notifications.py` | 2 |
+| Discord notifications | `src/services/notify/` | 2 |
 | OpenAI extraction | `src/llm/` (multi-provider) | 0 — already shipped |
 | Browserless | Crawl4AI + Playwright | 2 |
 | RSShub feed (`rsshub.luminolab.net`) | Naavik consumes directly | 2 — kept as a source |
@@ -303,7 +306,7 @@ When implementing a pattern that already exists in the codebase, **read the exis
 | SSE for long-running AI op | `src/ui/routes/auth.py:get_onboarding` (extraction) | 5 progress + 6 field + done + stepReady |
 | LLM structured output | `src/llm/prompts/score_job.py` + `src/llm/prompts/extract_resume.py` | Pydantic schema + per-provider mode |
 | LLM cost tracking | `src/services/llm_tracker.py:tracked_call` | Wraps every provider call |
-| DRAFT lifecycle | `src/services/application_service.py` (plan 10 § C.5) | submit / discard / auto-apply queue + reuse heuristic |
+| DRAFT lifecycle | `src/services/applications/` (plan 10 § C.5) | submit / discard / auto-apply queue + reuse heuristic |
 | ATS adapter | `src/services/ats/greenhouse.py` + `lever.py` + `ashby.py` | Factory in `services/ats/__init__.py` |
 | Per-field PUT autosave | `src/api/v1/profile.py:update_field` | Triggers `profile_updated` AppEvent |
 | Stub fragment + JSON dual endpoint | `src/db/sample_data.py` + `src/ui/routes/*` (transitional) | Plan 60 / 0.2.7.17 removed the `NAAVIK_PERSISTENCE` env gate; routes incrementally migrate to `services/*` |

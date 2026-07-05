@@ -6,7 +6,7 @@ the tailor + apply bundle; `/jobs/{id}` is the raw read of a scraped Job
 with its source / scrape-run metadata, no draft attached.
 
 IDOR contract: cross-user requests return 404 (not 403). Hidden by
-default — see `services.job_service.archive_job` for the same convention
+default — see `services.jobs.archive_job` for the same convention
 on mutating ops (plan 36 fold-in of 0.7.0.15).
 """
 

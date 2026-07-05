@@ -41,7 +41,7 @@ from services import jobs as job_service
 class _FakeSession:
     """Tracks add()/flush()/exec() calls; serves canned exec results.
 
-    Exposes a sqlite-flavored `bind.dialect` so `services.dedup` picks the
+    Exposes a sqlite-flavored `bind.dialect` so `services.jobs.dedup` picks the
     LIKE fallback branch rather than pg_trgm (plan 34 / 0.2.0.09).
     """
 

@@ -1,4 +1,4 @@
-"""`services.extraction._persist_profile` — structured parse persistence.
+"""`services.profile.extraction._persist_profile` — structured parse persistence.
 
 Pins the hardening-pass fixes:
 

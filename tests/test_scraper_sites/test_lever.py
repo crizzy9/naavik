@@ -84,12 +84,12 @@ async def test_lever_listing_fetch_failure_records_tier1_error():
 async def test_lever_provider_none_short_circuits_extraction():
     import sys
 
-    sys.modules.pop("services.job_extractor", None)
+    sys.modules.pop("services.jobs.extractor", None)
     list_url = "https://api.lever.co/v0/postings/fakecorp?mode=json"
     client = _make_client(responses={list_url: load_fixture("lever_listing.json")})
     scraper = LeverScraper(client=client)  # type: ignore[arg-type]
     [_ async for _ in scraper.scrape(ScrapeQuery(company_filter=["fakecorp"]))]
-    assert "services.job_extractor" not in sys.modules
+    assert "services.jobs.extractor" not in sys.modules
 
 
 # ── Plan 43 § D.5.4 — PR #102 path-traversal attack ───────────────────────

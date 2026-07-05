@@ -7,7 +7,7 @@ into this module — there is no raw-SQL fallback in the route layer.
 `upsert_job` is the load-bearing helper: idempotent on
 `(user_id, source, external_id)` per the partial-unique index created by
 migration 0005, plus tier-3 cross-source fuzzy dedup via
-`services.dedup.find_duplicate` (plan 34, 0.2.0.09) — when tier-1 misses
+`services.jobs.dedup.find_duplicate` (plan 34, 0.2.0.09) — when tier-1 misses
 and the incoming `(company, role)` matches a live cross-source Job
 ≥ threshold, the new row lands with `duplicate_of_id` set.
 """

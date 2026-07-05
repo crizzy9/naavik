@@ -1,7 +1,7 @@
 """Shared helpers for council.py + critique_council.py — plan 75 / 0.3.3.11.
 
-The `sync_fallback` helper was a private symbol on `services.council` and
-`services.critique_council` reached across modules via `_sync_fallback`
+The `sync_fallback` helper was a private symbol on `services.generation.council` and
+`services.generation.critique_council` reached across modules via `_sync_fallback`
 (private-API import). Per hacker PR #168 LOW-4: factor the helper into a
 deliberately-shared module so the cross-module contract is explicit.
 
@@ -42,9 +42,9 @@ async def sync_fallback(
     so the calls go in parallel inside the asyncio loop even though each
     persona is its own tracked_call invocation.
 
-    Called by both `services.council.vote_on_bullet_selection` (T3 voting
-    council) and `services.critique_council.collect_critiques` (T4 critique
-    council). Plan 75 / 0.3.3.11 — moved from `services.council` to this
+    Called by both `services.generation.council.vote_on_bullet_selection` (T3 voting
+    council) and `services.generation.critique_council.collect_critiques` (T4 critique
+    council). Plan 75 / 0.3.3.11 — moved from `services.generation.council` to this
     shared module so the cross-import is explicit.
 
     `prompt_prefix` (plan 91 5.1): usage rows are labelled

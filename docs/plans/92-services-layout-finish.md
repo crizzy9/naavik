@@ -1,7 +1,7 @@
 # Plan 92 — services/ layout finish: facade teardown + flat-module grouping
 
 - **Type:** execution
-- **Status:** DRAFT
+- **Status:** EXECUTED (2026-07-05)
 - **Predecessor:** `docs/plans/91-full-codebase-refactor-audit.md` (EXECUTED — this plan
   completes its deliberately-deferred 4.x importer flip, Phase 8 facade teardown, and
   skipped-optional 4.7 grouping)
@@ -211,4 +211,41 @@ patch strings, monkeypatch targets, and test imports; (3) re-target/remove acces
 
 ## Deviations from plan
 
-(recorded during execution)
+- **llm_support/ skipped as planned** — recorded here per the "planned skips"
+  section: `llm_tracker` + `llm_models` stay flat (largest importer fan-in,
+  CLAUDE.md-documented convention path, zero decomposition gain).
+- **Email sync/calendar seams landed module-tier, not package-tier.** The
+  plan table mapped `services.calendar_sync.{fetch_ics,validate_ics_url}` →
+  `services.email.{...}`; they landed at `services.email.calendar_sync.{...}`
+  because those names are read intra-module (`sync_ics_calendar` reads its
+  own module globals) — a package-tier patch would silently stop
+  intercepting. Same per-name logic kept `classifier`/`inference`/
+  `credentials`/`status_mapper`/`imap_host_guard` module-tier; only the
+  conftest-shimmed thread API + the route-called `sync_account` /
+  `test_imap_connection` / `sync_all_accounts` live on the package surface.
+- **`profile/service.py` needed a new `_pkg()` accessor** (not in the plan's
+  accessor table): pre-split, `update_field`/`set_raw_resume_text`/bullet +
+  dossier CRUD called sibling seams (`get_profile`, `get_bullet`, …) as
+  module globals — which WAS the patch surface. With seams moved to the
+  package `__init__`, those intra-module reads had to route through the
+  package or the conftest shims would silently stop intercepting
+  (caught by `test_profile_bulk_put` going red mid-slice).
+- **`bundle_generator.dg.*` patch strings took a two-hop migration** (A4 →
+  `services.document_generator.*`, A5 → `services.generation.*`) exactly as
+  planned; noting here that the interim hop was real (6 test files touched
+  twice).
+- **The guard test caught five vacuous scraper-site tests** — 
+  `tests/test_scraper_sites/test_{greenhouse,lever,indeed,workday,linkedin}.py`
+  pop/assert `sys.modules["services.job_extractor"]` to pin the lazy-import
+  contract; after B2 they held the stale path and asserted vacuously.
+  Re-pointed to `services.jobs.extractor` in Phase C.
+- **`ats_parser_ensemble` repo-root resolution** — `_openresume_script_path`
+  computed `parents[2]` from its old flat location; the B3 move added a
+  directory level (`parents[3]`). Caught by its own regression test.
+- **Import-flip mechanics:** multi-line parenthesized `from services import
+  (...)` blocks and trailing-comment forms escaped the first grep passes in
+  A6/B2/B4; a per-slice AST scan (ImportFrom walk) became the closing
+  verification step. Callers keep domain-name aliases where the bare package
+  name would shadow locals or stdlib (`jobs as job_service`,
+  `profile as profile_service`, `email as email_service`) — the dotted seam
+  (`services.jobs.X`) is what the design locked, not the local name.

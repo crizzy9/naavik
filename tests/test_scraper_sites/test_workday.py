@@ -93,7 +93,7 @@ async def test_workday_no_tenants_yields_nothing(monkeypatch):
 async def test_workday_provider_none_short_circuits_extraction():
     import sys
 
-    sys.modules.pop("services.job_extractor", None)
+    sys.modules.pop("services.jobs.extractor", None)
     client = _make_client(
         responses={
             LIST_URL: load_fixture("workday_listing.html"),
@@ -104,7 +104,7 @@ async def test_workday_provider_none_short_circuits_extraction():
     )
     scraper = WorkdayScraper(client=client)  # type: ignore[arg-type]
     [_ async for _ in scraper.scrape(ScrapeQuery(company_filter=["fakeco/External"]))]
-    assert "services.job_extractor" not in sys.modules
+    assert "services.jobs.extractor" not in sys.modules
 
 
 # ── Plan 43 § D.5.3 — PR #102 canonical attack ────────────────────────────

@@ -306,7 +306,13 @@ Gate; migration steps additionally get the chain-replay note (leave
   (Numeric money) shipped as 0038/0039.
 - **8 facade teardown** deferred — its precondition (importers flipped)
   was deliberately not met, see the 4.x deviation. Teardown belongs with
-  the test-path re-plumbing in the follow-up plan. The Phase-8 FINAL GATE
+  the test-path re-plumbing in the follow-up plan.
+  **[RESOLVED 2026-07-05 by plan 92]** — `docs/plans/92-services-layout-finish.md`
+  flipped the importers, re-pointed the conftest shims + patch strings to the
+  package `__init__` surfaces, deleted all six facades, and completed the
+  skipped 4.7 grouping (`services/{email,jobs,profile}/` + generation
+  absorbing the stage helpers). `tests/test_no_retired_service_paths.py`
+  now lints against the retired dotted paths. The Phase-8 FINAL GATE
   itself ran: ruff + format clean, full suite 2847 passed / 15 skipped,
   migrations 0038+0039 applied cleanly on the live dev Postgres, live
   page sweep (13 routes, 200s; anon bullet-editor 307 / owner 200) +

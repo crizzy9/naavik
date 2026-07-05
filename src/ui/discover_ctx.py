@@ -1,6 +1,6 @@
 """Project Job + Application rows into Discover swipe-card / up-next dicts.
 
-Plan 36 (`0.2.0.11`) wired `services.job_service.list_jobs` into
+Plan 36 (`0.2.0.11`) wired `services.jobs.list_jobs` into
 `build_discover_ctx`. Plan 69 (`0.3.3.12`) removed the legacy sample_data
 fallback path — every caller passes `session` + `user_id`.
 """
