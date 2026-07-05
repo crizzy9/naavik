@@ -13,6 +13,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Index,
+    Numeric,
     String,
     UniqueConstraint,
 )
@@ -147,7 +148,10 @@ class GeneratedDocument(SQLModel, table=True):
     page_count: int | None = None
     compiled_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     model: str | None = None
-    cost_usd: float | None = None
+    # Numeric(10,4) in Postgres (plan 91 7.2); float-in/float-out.
+    cost_usd: float | None = Field(
+        default=None, sa_column=Column(Numeric(10, 4, asdecimal=False), nullable=True)
+    )
     token_count: int | None = None
     error: str | None = None
 

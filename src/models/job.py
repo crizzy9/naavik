@@ -41,7 +41,6 @@ class Job(SQLModel, table=True):
         ),
         Index("ix_job_user_queue", "user_id", "queue_state"),
         Index("ix_job_score_desc", "score"),
-        Index("ix_job_found_at_desc", "found_at"),
         Index("ix_job_tags_gin", "tags", postgresql_using="gin"),
         Index(
             "ix_job_user_url_unique_alive",
@@ -65,7 +64,8 @@ class Job(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    # No single-column index: ix_job_user_queue leads with user_id (plan 91 7.1).
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE")
 
     source: JobSource
     board: ApplicationBoard
@@ -162,6 +162,7 @@ class Job(SQLModel, table=True):
         default=None,
         foreign_key="contact.id",
         ondelete="SET NULL",
+        index=True,
     )
     # FK to the JobScrapeRun row that most recently touched this Job.
     # NULL until the first scrape-run write lands (plan 27 § D.2).
@@ -169,6 +170,7 @@ class Job(SQLModel, table=True):
         default=None,
         foreign_key="job_scrape_run.id",
         ondelete="SET NULL",
+        index=True,
     )
     # Tier-3 fuzzy dedup link (plan 34 § D.3). Self-FK; ON DELETE SET NULL
     # so archiving the canonical Job re-surfaces shadowed rows in Discover.

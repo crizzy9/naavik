@@ -20,6 +20,8 @@ class Contact(SQLModel, table=True):
     __tablename__ = "contact"
     __table_args__ = (
         Index("ix_contact_user_company", "user_id", "company"),
+        # Dedup + email-inference lookups (plan 91 7.1).
+        Index("ix_contact_user_email", "user_id", "email"),
         Index(
             "ix_contact_user_linkedin_unique",
             "user_id",
@@ -35,7 +37,8 @@ class Contact(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    # No single-column index: ix_contact_user_company leads with user_id.
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE")
 
     type: ContactType
     name: str

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Index
+from sqlalchemy import Column, DateTime, Index, Numeric
 from sqlmodel import Field, SQLModel
 
 from ._common import utcnow
@@ -52,7 +52,10 @@ class ApiUsage(SQLModel, table=True):
 
     input_tokens: int
     output_tokens: int
-    cost_usd: float
+    # Numeric(10,4) in Postgres (plan 91 7.2) — float columns accumulate
+    # binary-representation error on money. asdecimal=False keeps Python
+    # reads as float so no caller changes type.
+    cost_usd: float = Field(sa_column=Column(Numeric(10, 4, asdecimal=False), nullable=False))
     latency_ms: int
 
     succeeded: bool = Field(default=True)
