@@ -178,5 +178,7 @@ class OllamaProvider(LLMProvider):
             model=_EMBEDDING_MODEL,
         )
 
-    def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
+    def estimate_cost(
+        self, *, input_tokens: int, output_tokens: int, model: str | None = None
+    ) -> float:
         return 0.0  # local = free

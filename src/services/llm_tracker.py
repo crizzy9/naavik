@@ -76,6 +76,7 @@ async def _persist_usage(
     latency_ms: int,
     succeeded: bool,
     error_kind: str | None,
+    model: str | None = None,
 ) -> None:
     if session is None:
         return  # caller didn't pass a session — tests can opt out
@@ -101,7 +102,13 @@ async def _persist_usage(
 
 
 def _classify_error(exc: Exception) -> str:
-    if isinstance(exc, LLMProviderError):
+    # Plan 91 6.1 — only trust `LLMProviderError.kind` when a provider set it
+    # deliberately. Every provider wraps raw SDK errors WITHOUT a kind
+    # (default "provider_error"), so trusting the default meant a 429/timeout
+    # never classified as retryable and the retry ladder below was dead code.
+    # For default-kind errors, fall through to message sniffing — the wrapped
+    # message embeds the SDK error text ("... failed: Error code: 429 ...").
+    if isinstance(exc, LLMProviderError) and exc.kind != "provider_error":
         return exc.kind
     msg = (str(exc) or type(exc).__name__).lower()
     if "rate limit" in msg or "429" in msg or "too many" in msg:
@@ -111,6 +118,38 @@ def _classify_error(exc: Exception) -> str:
     if "json" in msg or "schema" in msg or "validation" in msg:
         return "schema_validation"
     return "provider_error"
+
+
+async def _resolve_fallback_provider(
+    session: AsyncSession | None,
+    user_id: int,
+    primary,
+):
+    """Resolve `Settings.llm_fallback_provider` into a provider instance.
+
+    Plan 91 6.3 — the stored fallback setting had ZERO call sites wiring it
+    into `tracked_call`; this resolves it lazily, only after the primary has
+    exhausted its retries on a 500-class/timeout failure. Never raises and
+    never returns the primary's own provider type (that would just repeat
+    the same failing call); any problem degrades to None (no fallback).
+    """
+    if session is None:
+        return None
+    try:
+        from llm import get_provider
+        from models import Settings
+
+        row = (
+            await session.exec(select(Settings).where(Settings.user_id == user_id))
+        ).one_or_none()
+        if row is None or row.llm_fallback_provider is None:
+            return None
+        candidate = get_provider(row, fallback=True)
+        if candidate.provider_id == primary.provider_id:
+            return None
+        return candidate
+    except Exception:  # noqa: BLE001 — fallback resolution must never mask the primary error
+        return None
 
 
 async def tracked_call(
@@ -164,15 +203,17 @@ async def tracked_call(
                 continue
 
             # Exhausted retries on primary; try fallback if 500-class.
-            if (
-                kind in {"provider_error", "timeout"}
-                and fallback_provider is not None
-                and use_provider is provider
-            ):
-                use_provider = fallback_provider
-                fn = getattr(use_provider, method)
-                attempt = 0
-                continue
+            # Plan 91 6.3 — when the caller didn't pass one, resolve the
+            # stored `Settings.llm_fallback_provider` lazily (failure path
+            # only, so the happy path pays no extra query).
+            if kind in {"provider_error", "timeout"} and use_provider is provider:
+                if fallback_provider is None:
+                    fallback_provider = await _resolve_fallback_provider(session, user_id, provider)
+                if fallback_provider is not None:
+                    use_provider = fallback_provider
+                    fn = getattr(use_provider, method)
+                    attempt = 0
+                    continue
 
             raise LLMProviderError(
                 f"{provider.provider_id} {method} failed after retries: {exc}",
@@ -189,7 +230,14 @@ async def tracked_call(
             in_tok = 0
             out_tok = 0
 
-        cost_usd = use_provider.estimate_cost(input_tokens=in_tok, output_tokens=out_tok)
+        # Plan 91 6.5 — embeddings run a dedicated embedding model, not the
+        # provider's chat model. Persist the model the RESULT reports and
+        # price against it; pricing by the chat model overstated embedding
+        # spend ~125x and stamped the wrong model into embedding provenance.
+        result_model = result.model if isinstance(result, EmbeddingResult) else None
+        cost_usd = use_provider.estimate_cost(
+            input_tokens=in_tok, output_tokens=out_tok, model=result_model
+        )
         await _persist_usage(
             session,
             user_id=user_id,
@@ -197,6 +245,7 @@ async def tracked_call(
             method=method,
             prompt_name=prompt_name,
             application_id=application_id,
+            model=result_model,
             input_tokens=in_tok,
             output_tokens=out_tok,
             cost_usd=cost_usd,

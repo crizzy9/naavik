@@ -62,7 +62,9 @@ class LinkedInScraper(_BaseSiteScraper):
     # already in the library) steady-state runs spend most of their budget
     # on genuinely NEW postings. Operator overrides via
     # `Settings.scraper_rate_limits` still win.
-    rate_limit_per_minute = 2.0
+    # Plan 91 6.6 — was 2.0, drifted from the resolver fallback table (0.4)
+    # and this class's own docstring; 2 hits/3min trips LinkedIn's soft-block.
+    rate_limit_per_minute = 0.4
     random_delay_seconds = (3.0, 7.0)
 
     _LIST_BASE = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"

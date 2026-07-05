@@ -8,14 +8,10 @@ behaviour unchanged. Internal calls to patched seams go through `svc()`
 from __future__ import annotations
 
 import logging
-from datetime import UTC, date, datetime
 
-from sqlalchemy import func
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import (
-    ApiUsage,
     Settings,
 )
 from services.generation.common import svc
@@ -28,17 +24,17 @@ class CostCapExceededError(Exception):
 
 
 async def _today_spend(session: AsyncSession, user_id: int) -> float:
-    """Sum `ApiUsage.cost_usd` for the current UTC day for one user."""
-    today_start = datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC)
-    stmt = select(func.coalesce(func.sum(ApiUsage.cost_usd), 0.0)).where(
-        ApiUsage.user_id == user_id,
-        ApiUsage.occurred_at >= today_start,
-        ApiUsage.succeeded.is_(True),
-    )
-    result = (await session.exec(stmt)).one()
-    if isinstance(result, tuple):
-        result = result[0]
-    return float(result or 0.0)
+    """Today's spend for the cap comparison — delegates to the canonical
+    `llm_tracker.today_cost_usd`.
+
+    Plan 91 6.2: this used to be a THIRD competing spend implementation with
+    two bugs — `datetime.combine(date.today(), ...)` used the operator's
+    LOCAL calendar date while labelling it UTC (wrong window for non-UTC
+    operators), and `succeeded IS TRUE` excluded failed-call spend that the
+    tracker counts. Kept as a delegating wrapper because three tests patch
+    `services.document_generator._today_spend` as the cost seam.
+    """
+    return await svc().llm_tracker.today_cost_usd(session, user_id=user_id)
 
 
 async def is_cost_capped(session: AsyncSession, user_id: int, settings: Settings) -> bool:

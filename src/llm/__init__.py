@@ -175,7 +175,7 @@ def get_embedding_provider(
 
         return OpenAIProvider(
             api_key=app_settings.openai_api_key,
-            model=user_settings.llm_model,
+            model=None,  # embed() runs its own embedding model (plan 91 6.5)
         )
 
     if selected == "ollama":
@@ -183,7 +183,7 @@ def get_embedding_provider(
 
         return OllamaProvider(
             base_url=app_settings.ollama_base_url,
-            model=user_settings.llm_model,
+            model=None,  # embed() runs its own embedding model (plan 91 6.5)
         )
 
     # No selection — fall back to env presence.
@@ -192,14 +192,14 @@ def get_embedding_provider(
 
         return OllamaProvider(
             base_url=app_settings.ollama_base_url,
-            model=user_settings.llm_model,
+            model=None,  # embed() runs its own embedding model (plan 91 6.5)
         )
     if app_settings.openai_api_key:
         from .openai import OpenAIProvider
 
         return OpenAIProvider(
             api_key=app_settings.openai_api_key,
-            model=user_settings.llm_model,
+            model=None,  # embed() runs its own embedding model (plan 91 6.5)
         )
     return None
 

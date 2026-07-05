@@ -31,8 +31,6 @@ THIN_JD_CHARS = 800
 _MIN_REPLACEMENT_CHARS = 400
 
 
-
-
 def _apply_description(job: Job, *, text: str, html: str | None) -> None:
     job.description = text
     job.description_html = html_lib.unescape(html) if html else None

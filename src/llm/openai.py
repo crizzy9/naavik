@@ -28,6 +28,9 @@ _PRICING = {
     "gpt-4o": {"input": 2.50, "output": 10.0},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
     "_default": {"input": 2.50, "output": 10.0},
+    # Embedding models (plan 91 6.5) — priced per input token only.
+    "text-embedding-3-small": {"input": 0.02, "output": 0.0},
+    "text-embedding-3-large": {"input": 0.13, "output": 0.0},
 }
 
 # Plan 61 / 0.2.7.16 — Matryoshka-truncated to 768d via `dimensions` SDK kwarg.
@@ -236,8 +239,14 @@ class OpenAIProvider(LLMProvider):
             model=f"{_EMBEDDING_MODEL}@{_EMBEDDING_DIM}",
         )
 
-    def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
-        rates = _PRICING.get(self._model, _PRICING["_default"])
+    def estimate_cost(
+        self, *, input_tokens: int, output_tokens: int, model: str | None = None
+    ) -> float:
+        target = model or self._model
+        # Embedding results report "<model>@<dim>" — strip the dim suffix.
+        rates = (
+            _PRICING.get(target) or _PRICING.get(target.split("@", 1)[0]) or (_PRICING["_default"])
+        )
         return (input_tokens / 1_000_000) * rates["input"] + (output_tokens / 1_000_000) * rates[
             "output"
         ]

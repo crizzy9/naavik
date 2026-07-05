@@ -480,6 +480,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         aggregate_costs,
@@ -488,6 +489,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         name="admin.aggregate_costs",
         replace_existing=True,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         cleanup_stale_docs,
@@ -496,6 +498,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         name="admin.cleanup_stale_docs",
         replace_existing=True,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         cleanup_stale_drafts,
@@ -504,6 +507,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         name="admin.cleanup_stale_drafts",
         replace_existing=True,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         cleanup_revoked_jwts,
@@ -512,6 +516,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         name="admin.cleanup_revoked_jwts",
         replace_existing=True,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     # Plan 62 (0.2.7.07): nightly RETIRING → RETIRED sweep.
     scheduler.add_job(
@@ -521,6 +526,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         name="admin.expire_retiring_signing_keys",
         replace_existing=True,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         daily_db_snapshot,
@@ -529,6 +535,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         name="admin.daily_db_snapshot",
         replace_existing=True,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         refresh_oauth_tokens,
@@ -537,6 +544,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         name="admin.refresh_oauth_tokens",
         replace_existing=True,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     # Plan 61 (0.2.7.16): semantic-match nightly batch + orphan sweep.
     # Gated per-user by Settings.semantic_match_enabled; cron runs always so
@@ -549,6 +557,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         embed_orphan_sweep,
@@ -558,6 +567,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     # Plan 65 (0.3.0.03): nightly Profile embedding refresh.
     scheduler.add_job(
@@ -568,6 +578,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     # Plan 65 (0.3.0.06): score pending + recompute-stale crons.
     scheduler.add_job(
@@ -578,6 +589,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         score_recompute_stale,
@@ -587,6 +599,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     # Plan 73 (0.3.2.03) + plan 75 (0.3.3.19): daily per-role-family score
     # trend rollup. 5-minute offset from recompute-stale (03:30 UTC) avoids
@@ -600,6 +613,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
     )
 
     # Plan 90 (0.5.0.01 + 0.5.0.02): email sync + classify crons.
@@ -614,6 +628,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         classify_emails,
@@ -623,6 +638,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
         next_run_time=datetime.now(UTC) + timedelta(minutes=2),
     )
 
@@ -635,6 +651,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
     )
 
     # Apply-site resolver (2026-07): real application target per job.
@@ -646,6 +663,7 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=3600,
     )
 
     # Phase 2 plan 35 (0.2.0.10): six per-source scraping crons.

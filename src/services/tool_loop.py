@@ -410,9 +410,25 @@ async def orchestrate_refinement(
                 create_kwargs["system"] = system
 
         try:
-            response = await provider._client.messages.create(**create_kwargs)
+            # Plan 91 6.4 — through the provider surface, not provider._client.
+            response = await provider.tool_use(**create_kwargs)
         except Exception as exc:  # noqa: BLE001
             log.warning("tool_loop orchestrator call failed at iter %d: %s", iter_n, exc)
+            # Failed orchestrator calls used to vanish from ApiUsage entirely.
+            await _persist_apiusage(
+                session,
+                user_id=user_id,
+                provider=provider,
+                method="complete",
+                prompt_name=f"orchestrate_refinement_iter_{iter_n}",
+                application_id=application_id,
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                latency_ms=0,
+                succeeded=False,
+                error_kind="provider_error",
+            )
             iterations.append(IterationRecord(iter_n=iter_n, decision="provider_error"))
             return ToolLoopReport(
                 final_decision="ship_with_caveats",

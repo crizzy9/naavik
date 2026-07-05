@@ -134,6 +134,27 @@ async def run_persona_batch(
             return responses, True
         except LLMProviderError as exc:
             log.info("%s batch unavailable; falling back to sync: %s", prompt_prefix, exc)
+            # Plan 91 6.4 — a submitted batch that failed/timed out still
+            # incurs provider-side cost when it eventually completes, but
+            # left no ApiUsage trace at all. Persist one failed marker row
+            # so the spend dashboard shows the attempt.
+            try:
+                await persist_usage(
+                    session,
+                    user_id=user_id,
+                    provider=provider,
+                    method="structured",
+                    prompt_name=f"{prompt_prefix}_batch",
+                    application_id=application_id,
+                    input_tokens=0,
+                    output_tokens=0,
+                    cost_usd=0.0,
+                    latency_ms=0,
+                    succeeded=False,
+                    error_kind="batch_failed_or_timeout",
+                )
+            except Exception:  # noqa: BLE001 — observability must not block the fallback
+                log.debug("failed to persist batch-failure marker row")
     responses = await sync_fallback(
         session=session,
         user_id=user_id,

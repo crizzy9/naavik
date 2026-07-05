@@ -64,8 +64,15 @@ class LLMProvider(ABC):
         """Stream completion as text chunks."""
 
     @abstractmethod
-    def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
-        """USD cost estimate per provider's pricing sheet."""
+    def estimate_cost(
+        self, *, input_tokens: int, output_tokens: int, model: str | None = None
+    ) -> float:
+        """USD cost estimate per provider's pricing sheet.
+
+        `model` (plan 91 6.5) overrides the provider's configured chat model
+        for the lookup — embedding calls run a dedicated embedding model and
+        must be priced against it, not the chat sheet.
+        """
 
     async def embed(self, text: str) -> EmbeddingResult:
         """Dense vector embedding (plan 61 / 0.2.7.16).

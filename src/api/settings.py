@@ -212,9 +212,21 @@ async def post_llm_test(
 
     import time
 
+    from services import llm_tracker
+
     t0 = time.perf_counter()
     try:
-        result = await provider.complete("ping", max_tokens=8)
+        # Plan 91 6.4 — the test ping is a REAL provider call the operator
+        # pays for; route it through the tracker so an ApiUsage row lands.
+        result = await llm_tracker.tracked_call(
+            session=session,
+            user_id=_effective_user_id(_user),
+            provider=provider,
+            method="complete",
+            prompt_name="settings_llm_ping",
+            prompt="ping",
+            max_tokens=8,
+        )
         latency_ms = int((time.perf_counter() - t0) * 1000)
         return _respond(
             {

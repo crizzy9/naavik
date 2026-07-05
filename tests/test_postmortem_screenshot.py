@@ -64,7 +64,7 @@ class _FakeProvider:
     provider_id = "anthropic"
     model_name = "claude"
 
-    def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
+    def estimate_cost(self, *, input_tokens: int, output_tokens: int, model=None) -> float:
         return 0.0
 
 

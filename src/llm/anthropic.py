@@ -181,11 +181,28 @@ class AnthropicProvider(LLMProvider):
         except Exception as exc:  # noqa: BLE001
             raise LLMProviderError(f"anthropic stream failed: {exc}") from exc
 
-    def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
+    def estimate_cost(
+        self, *, input_tokens: int, output_tokens: int, model: str | None = None
+    ) -> float:
         rates = _PRICING.get(self._model, _PRICING["_default"])
         return (input_tokens / 1_000_000) * rates["input"] + (output_tokens / 1_000_000) * rates[
             "output"
         ]
+
+    async def tool_use(self, **create_kwargs):
+        """Raw tool-use `messages.create` passthrough (plan 91 6.4).
+
+        The tool-loop orchestrator needs the unabridged Anthropic response
+        (tool_use blocks + text blocks), which doesn't fit the
+        `complete()`/`structured()` result shapes — but reaching into
+        `provider._client` from services bypassed the provider surface
+        entirely. Raises `LLMProviderError` on failure like every other
+        method so callers get uniform error handling.
+        """
+        try:
+            return await self._client.messages.create(**create_kwargs)
+        except Exception as exc:  # noqa: BLE001
+            raise LLMProviderError(f"anthropic tool_use failed: {exc}") from exc
 
     async def batch(
         self,

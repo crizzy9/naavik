@@ -81,6 +81,13 @@ async def compile(  # noqa: A001 — `compile` is the natural verb
     PDF/A-1b conformance), passed through as ``--pdf-standard <value>``.
     Requires typst 0.13+. Falls through to default PDF (untrusted) when
     None.
+
+    CONCURRENCY (plan 91 6.7): callers pass FIXED output paths
+    (`<app_id>/resume.pdf`); two concurrent generations for the SAME
+    application race on the file and the loser's PDF wins the disk. The
+    per-app in-flight registry in `services.generation_dispatch` is the
+    current guard — do not add a second unguarded call site for the same
+    application id.
     """
     src = template_path(template_name)
     output_path = Path(output_path)
@@ -131,7 +138,16 @@ async def compile(  # noqa: A001 — `compile` is the natural verb
         "value",
         "--one",
     ]
-    rc, qstdout, qstderr = await asyncio.wait_for(_run(query_args), timeout=timeout)
+    # Plan 91 6.7 — the compile pass wraps its timeout in TypstError but this
+    # query pass leaked a raw TimeoutError past every `except TypstError`
+    # handler in the generation pipeline.
+    try:
+        rc, qstdout, qstderr = await asyncio.wait_for(_run(query_args), timeout=timeout)
+    except TimeoutError as exc:
+        raise TypstError(
+            f"typst query timed out after {timeout}s",
+            returncode=-1,
+        ) from exc
 
     if rc != 0:
         raise TypstError(

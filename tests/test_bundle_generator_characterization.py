@@ -226,7 +226,7 @@ class FakeProvider:
     def __init__(self):
         self.calls: list[str] = []
 
-    def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
+    def estimate_cost(self, *, input_tokens: int, output_tokens: int, model=None) -> float:
         return 0.001
 
     async def structured(self, *, prompt, schema, **_kw):

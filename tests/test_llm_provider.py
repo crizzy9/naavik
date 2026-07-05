@@ -296,7 +296,7 @@ class _StubProvider(LLMProvider):
 
         return gen()
 
-    def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
+    def estimate_cost(self, *, input_tokens: int, output_tokens: int, model=None) -> float:
         return (input_tokens + output_tokens) * 0.0001
 
 
