@@ -77,8 +77,19 @@
 
 /* The hidden ATTRIBUTE must always win — Tailwind display utilities
    (.inline-flex etc.) otherwise override the UA/preflight [hidden] rule,
-   which breaks JS that toggles el.hidden (data-collapse-* labels). */
+   which breaks any JS that toggles el.hidden. */
 [hidden] {
+  display: none !important;
+}
+
+/* Client-side collapse (base.js [data-collapse-toggle]).
+   ALL visibility derives from the ONE state attribute on the root —
+   JS never touches per-element hidden flags, so the "Show all" and
+   "Collapse" labels can never disagree with the row state.
+   !important beats Tailwind display utilities on the same elements. */
+[data-collapse-root][data-collapse-expanded="false"] [data-collapse-extra],
+[data-collapse-root][data-collapse-expanded="false"] [data-collapse-less],
+[data-collapse-root][data-collapse-expanded="true"] [data-collapse-more] {
   display: none !important;
 }
 

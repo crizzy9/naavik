@@ -9,7 +9,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css">
+  {# ?v= cache-buster (templates_setup._static_asset_version) — StaticFiles
+     sends no Cache-Control, so without it browsers heuristically serve
+     STALE js/css against fresh HTML after every code change. #}
+  <link rel="stylesheet" href="/static/styles.css?v={{ static_v }}">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -63,13 +66,13 @@
        legacy htmx-1.x ext file at dist/ext/; same bug class as the SSE pin above. -->
   <script src="https://unpkg.com/htmx-ext-response-targets@2.0.3/dist/response-targets.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
-  <script src="/static/keys.js"></script>
-  <script src="/static/base.js"></script>
+  <script src="/static/keys.js?v={{ static_v }}"></script>
+  <script src="/static/base.js?v={{ static_v }}"></script>
   {# Plan 57 / 0.2.7.13 — onboarding offline retry buffer. Gated server-side to
      keep IndexedDB cost off non-onboarding pages; JS-side path gate at the top
      of the script is the second line of defense (covers hx-boost SPA swaps). #}
   {% if request and request.url.path.startswith('/onboarding') %}
-    <script src="/static/offline_queue.js" defer></script>
+    <script src="/static/offline_queue.js?v={{ static_v }}" defer></script>
   {% endif %}
 </body>
 </html>

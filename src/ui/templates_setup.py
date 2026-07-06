@@ -34,6 +34,35 @@ templates = Jinja2Templates(
     context_processors=[_csrf_token_ctx],
 )
 
+
+def _static_asset_version() -> str:
+    """Cache-buster for `/static/*` URLs in base.html.
+
+    `<package version>.<max mtime of the static files>`, computed once per
+    process. Starlette's StaticFiles sends no Cache-Control, so browsers
+    heuristically cache JS/CSS — after a code change, users got new HTML
+    against STALE base.js/styles.css (the dead-collapse-button regression).
+    Dev: any static edit restarts the reloader → new mtime → new URL.
+    Nix builds: store mtimes are constant, so the package version carries
+    the bust across releases.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+    from pathlib import Path
+
+    try:
+        pkg_version = version("naavik")
+    except PackageNotFoundError:  # pragma: no cover — always installed via uv
+        pkg_version = "0"
+    static_dir = Path(__file__).parent / "static"
+    try:
+        mtime = max(
+            int(p.stat().st_mtime) for p in static_dir.iterdir() if p.suffix in {".js", ".css"}
+        )
+    except (ValueError, OSError):  # pragma: no cover — static dir always present
+        mtime = 0
+    return f"{pkg_version}.{mtime}"
+
+
 # Status pipeline color map per DESIGN.md § Status Pipeline.
 # 6 keys: DRAFT (pre-submission, hidden in Tracking) + 5 visible stages.
 STATUS_DOT_COLORS: dict[str, str] = {
@@ -64,6 +93,7 @@ TAG_VOCAB: list[str] = [
 ]
 
 templates.env.globals["STATUS_DOT_COLORS"] = STATUS_DOT_COLORS
+templates.env.globals["static_v"] = _static_asset_version()
 templates.env.globals["TAG_VOCAB"] = TAG_VOCAB
 # Plan 09a · Issue 4 — application-question dropdown options + value→label maps.
 templates.env.globals["APP_Q_OPTIONS"] = APP_Q_OPTIONS

@@ -270,10 +270,13 @@
   // expander in the app is either a native <details> or inline       //
   // hx-on, so these buttons were dead wherever the component         //
   // appeared. Contract:                                              //
-  //   [data-collapse-root]              scope container              //
-  //     [data-collapse-extra] hidden    items beyond the fold        //
+  //   [data-collapse-root data-collapse-expanded="true|false"]       //
+  //     [data-collapse-extra]           items beyond the fold        //
   //     [data-collapse-toggle]          the button                   //
   //       [data-collapse-more] / [data-collapse-less]  swap labels   //
+  // SINGLE-SOURCE STATE: JS only flips data-collapse-expanded on the //
+  // root; CSS in styles.css derives extras + label visibility from   //
+  // it, so the two labels can never disagree with the row state.     //
   // Delegated so it survives HTMX swaps; no server round-trip.       //
   // ---------------------------------------------------------------- //
   document.body.addEventListener('click', function (e) {
@@ -281,16 +284,11 @@
     if (!btn) return;
     var root = btn.closest('[data-collapse-root]');
     if (!root) return;
-    var wasExpanded = root.getAttribute('data-collapse-expanded') === 'true';
-    root.setAttribute('data-collapse-expanded', wasExpanded ? 'false' : 'true');
-    root.querySelectorAll('[data-collapse-extra]').forEach(function (el) {
-      el.hidden = wasExpanded;
+    var nowExpanded = root.getAttribute('data-collapse-expanded') !== 'true';
+    root.setAttribute('data-collapse-expanded', nowExpanded ? 'true' : 'false');
+    root.querySelectorAll('[data-collapse-toggle]').forEach(function (b) {
+      b.setAttribute('aria-expanded', nowExpanded ? 'true' : 'false');
     });
-    btn.setAttribute('aria-expanded', wasExpanded ? 'false' : 'true');
-    var more = btn.querySelector('[data-collapse-more]');
-    var less = btn.querySelector('[data-collapse-less]');
-    if (more) more.hidden = !wasExpanded;
-    if (less) less.hidden = wasExpanded;
   });
 
   // ---------------------------------------------------------------- //
