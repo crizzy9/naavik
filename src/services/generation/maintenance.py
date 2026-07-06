@@ -141,6 +141,7 @@ async def recompile_resume_from_selection(
 
     template_name, pdf_standard = _select_template(application, settings)
     out_pdf = svc()._app_documents_dir(application.id) / "resume.pdf"
+    section_plan = blob.get("section_plan")
     data = await _build_resume_data(
         snap=snap,
         selected_bullet_ids=effective,
@@ -148,6 +149,7 @@ async def recompile_resume_from_selection(
         tailored_summary=(blob.get("summary") or None),
         excluded_project_ids=excluded_projects,
         excluded_certification_ids=excluded_certs,
+        section_plan=section_plan if isinstance(section_plan, dict) else None,
     )
     result = await svc().typst_compile(template_name, data, out_pdf, pdf_standard=pdf_standard)
 

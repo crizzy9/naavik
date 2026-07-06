@@ -31,6 +31,7 @@ from services.generation.bullet_selection import (
     _ai_rank_bullets,
     _refine_one_bullet,
     _split_bullets_by_override,
+    _tailor_sections,
     _tailor_summary,
 )
 from services.generation.common import _select_template, _template_version, svc
@@ -120,6 +121,7 @@ async def _build_resume_data(
     tailored_summary: str | None = None,
     excluded_project_ids: set[int] | None = None,
     excluded_certification_ids: set[int] | None = None,
+    section_plan: dict | None = None,
 ) -> dict[str, Any]:
     """Compose the payload consumed by `onepage.typ` (cv.tex-conversion shape).
 
@@ -129,11 +131,26 @@ async def _build_resume_data(
     them). Kept bullets are ordered by selection priority (bold tailoring:
     the most JD-relevant result leads each role).
 
+    `section_plan` (tailor_sections output, JSON-safe — also persisted in
+    `bullet_selection["section_plan"]` so workspace recompiles reproduce it):
+    - `skills`: tailored subset to print (None → full inventory),
+    - `included_project_ids`: null-override project/OSS rows that earn a line
+      (owner `always_include`/`never_include` overrides still win),
+    - `projects`: per-row `{descriptor, include_description}` metadata.
+    With a plan, a project's one-line description renders only when the AI
+    opted in; without one (LLM-less fallback) the legacy full text renders.
+    Per-project links NEVER render — the header portfolio URL covers that.
+
     There is deliberately no headline field — the header is name + two
     contact lines, nothing else (cv.tex shape).
     """
     excluded_projects = excluded_project_ids or set()
     excluded_certs = excluded_certification_ids or set()
+    plan_meta: dict[str, dict] = (section_plan or {}).get("projects") or {}
+    _raw_included = (section_plan or {}).get("included_project_ids")
+    # None → the plan made no project decisions (gate nothing); an explicit
+    # empty list is a legitimate zero-projects page.
+    plan_included: set[int] | None = set(_raw_included) if _raw_included is not None else None
     selected = set(selected_bullet_ids)
     priority = {bid: i for i, bid in enumerate(selected_bullet_ids)}
     experiences_payload: list[dict] = []
@@ -174,16 +191,36 @@ async def _build_resume_data(
         for pr in rows:
             if not _section_included(pr, excluded_projects):
                 continue
-            link = getattr(pr, "link", None)
+            # AI inclusion gate applies to null-override rows only; owner
+            # `always_include` pins bypass the plan.
+            if (
+                plan_included is not None
+                and getattr(pr, "selection_override", None) is None
+                and pr.id not in plan_included
+            ):
+                continue
+            meta = plan_meta.get(str(pr.id))
+            if plan_meta:
+                # The plan made project decisions: descriptions are opt-in.
+                text = (pr.text or None) if (meta and meta.get("include_description")) else None
+            else:
+                text = pr.text or None
             out.append(
                 {
                     "title": pr.title,
+                    "descriptor": (meta or {}).get("descriptor"),
                     "date": _format_date(getattr(pr, "date", None)),
-                    "text": (pr.text or None),
-                    "link": (f"https://{_strip_scheme(link)}" if link else None),
+                    "text": text,
                 }
             )
         return out
+
+    plan_skills = (section_plan or {}).get("skills")
+    skills_payload = (
+        [{"category": g["category"], "items": list(g["items"])} for g in plan_skills]
+        if plan_skills
+        else [{"category": s.category, "items": list(s.items)} for s in snap.skills]
+    )
 
     certifications_payload = [
         {
@@ -200,7 +237,7 @@ async def _build_resume_data(
         "summary": summary if summary else None,
         "experiences": experiences_payload,
         "education": education_payload,
-        "skills": [{"category": s.category, "items": list(s.items)} for s in snap.skills],
+        "skills": skills_payload,
         "projects": _project_payload(snap.projects),
         "open_source": _project_payload(snap.open_source),
         "certifications": certifications_payload,
@@ -294,20 +331,38 @@ def _drop_lowest_priority(
     return candidate_ids, None
 
 
-def _section_drop_queue(snap: ProfileSnapshot) -> list[tuple[str, int]]:
+def _section_drop_queue(
+    snap: ProfileSnapshot, *, plan_included: set[int] | None = None
+) -> list[tuple[str, int]]:
     """Null-override section rows in drop order (least prominent first):
     Open Source tail→head, then Certifications, then Projects. Rows pinned
     `always_include` never enter the queue; `never_include` rows are already
-    filtered out of the payload."""
+    filtered out of the payload.
+
+    `plan_included` (tailor_sections) — when a section plan gates project/OSS
+    rows, only rows actually IN the payload enter the queue; the rest would
+    waste fit-loop attempts "dropping" absent rows."""
     queue: list[tuple[str, int]] = []
+
+    def _in_payload(pr: Project) -> bool:
+        return plan_included is None or pr.id in plan_included
+
     for pr in reversed(snap.open_source):
-        if getattr(pr, "selection_override", None) is None and pr.id is not None:
+        if (
+            getattr(pr, "selection_override", None) is None
+            and pr.id is not None
+            and _in_payload(pr)
+        ):
             queue.append(("project", pr.id))
     for cert in reversed(snap.certifications):
         if getattr(cert, "selection_override", None) is None and cert.id is not None:
             queue.append(("certification", cert.id))
     for pr in reversed(snap.projects):
-        if getattr(pr, "selection_override", None) is None and pr.id is not None:
+        if (
+            getattr(pr, "selection_override", None) is None
+            and pr.id is not None
+            and _in_payload(pr)
+        ):
             queue.append(("project", pr.id))
     return queue
 
@@ -400,17 +455,34 @@ async def generate_resume(
         cache_system=cache_system,
     )
 
+    # Per-job Skills + Projects selection (tailoring end-to-end, not just
+    # bullets). None (LLM failure) degrades to the untailored sections.
+    section_plan = await _tailor_sections(
+        session=session,
+        settings=settings,
+        snap=snap,
+        job=job,
+        user_id=user_id,
+        application_id=application.id,
+        system=system,
+        cache_system=cache_system,
+    )
+    _raw_plan_included = section_plan.get("included_project_ids") if section_plan else None
+    plan_included = set(_raw_plan_included) if _raw_plan_included is not None else None
+
     out_dir = svc()._app_documents_dir(application.id)
     out_pdf = out_dir / "resume.pdf"
 
     template_name, pdf_standard = _select_template(application, settings)
 
-    # Page-fit loop: pack the page, dropping the lowest-priority bullet on
-    # overflow — never emptying an experience. When bullets hit the
-    # one-per-experience floor, null-override section rows (OSS → certs →
-    # projects) become the remaining space to reclaim.
+    # Page-fit loop: work experience is the CORE of the resume — skills and
+    # projects flex to fill what remains of the page, never the other way
+    # around. On overflow, null-override section rows (OSS → certs →
+    # projects) drop FIRST; selected work bullets drop only once the flex
+    # sections are exhausted (still never emptying an experience until the
+    # floor drop is the only move left).
     dropped_for_fit: list[int] = []
-    section_queue = _section_drop_queue(snap)
+    section_queue = _section_drop_queue(snap, plan_included=plan_included)
     dropped_sections: list[dict[str, Any]] = []
     excluded_projects: set[int] = set()
     excluded_certs: set[int] = set()
@@ -429,6 +501,7 @@ async def generate_resume(
             tailored_summary=tailored_summary,
             excluded_project_ids=excluded_projects,
             excluded_certification_ids=excluded_certs,
+            section_plan=section_plan,
         )
         try:
             result = await svc().typst_compile(
@@ -458,18 +531,17 @@ async def generate_resume(
         if not overflows(result, max_pages=1):
             final_result = result
             break
-        candidate_ids, dropped = _drop_lowest_priority(
-            candidate_ids, snap, allow_floor_drop=not section_queue
-        )
-        if dropped is not None:
-            dropped_for_fit.append(dropped)
-            log.info("resume overflowed page 1; dropped bullet %d (fit loop)", dropped)
-            continue
+        # Flex sections reclaim space BEFORE any selected work bullet drops.
         if section_queue:
             kind_, sid = section_queue.pop(0)
             (excluded_projects if kind_ == "project" else excluded_certs).add(sid)
             dropped_sections.append({"kind": kind_, "id": sid})
             log.info("resume overflowed page 1; dropped %s %d (fit loop)", kind_, sid)
+            continue
+        candidate_ids, dropped = _drop_lowest_priority(candidate_ids, snap, allow_floor_drop=True)
+        if dropped is not None:
+            dropped_for_fit.append(dropped)
+            log.info("resume overflowed page 1; dropped bullet %d (fit loop)", dropped)
             continue
         final_result = result
         break
@@ -519,6 +591,7 @@ async def generate_resume(
                 tailored_summary=tailored_summary,
                 excluded_project_ids=excluded_projects,
                 excluded_certification_ids=excluded_certs,
+                section_plan=section_plan,
             )
             try:
                 result = await svc().typst_compile(
@@ -544,6 +617,7 @@ async def generate_resume(
                 tailored_summary=tailored_summary,
                 excluded_project_ids=excluded_projects,
                 excluded_certification_ids=excluded_certs,
+                section_plan=section_plan,
             )
             try:
                 final_result = await svc().typst_compile(
@@ -568,6 +642,9 @@ async def generate_resume(
         "jd_hash": _hash_jd(job.description_html or job.description),
         "template_version": _template_version(template_name),
     }
+    if section_plan is not None:
+        # Persisted so workspace recompiles reproduce the tailored sections.
+        selection_blob["section_plan"] = section_plan
     if overflow_accepted:
         selection_blob["overflow_accepted"] = True
 

@@ -205,6 +205,137 @@ async def _tailor_summary(
         return fallback
 
 
+def _sanitize_descriptor(raw: str) -> str | None:
+    """Normalize the AI's 2–3 word project tagline: collapse whitespace,
+    strip wrapping punctuation, cap at 5 words / 60 chars. None when empty."""
+    words = " ".join((raw or "").split()).strip(" .,;:—–-\"'").split(" ")
+    words = [w for w in words if w][:5]
+    out = " ".join(words)[:60].strip()
+    return out or None
+
+
+async def _tailor_sections(
+    *,
+    session: AsyncSession,
+    settings: Settings,
+    snap: ProfileSnapshot,
+    job: Job,
+    user_id: int,
+    application_id: int | None,
+    system: str | None = None,
+    cache_system: bool = False,
+) -> dict | None:
+    """Per-job Skills + Projects selection (JSON-safe section plan).
+
+    Returns
+      {"skills": [{"category", "items"}] | None,     # None → print full inventory
+       "included_project_ids": [int],                # null-override rows that earn a line
+       "projects": {str(id): {"descriptor": str|None,
+                              "include_description": bool}}}
+    or None when the LLM is unavailable/fails — callers fall back to the
+    untailored sections. Every id and skill item is validated against the
+    profile inventory; the model can only SELECT, never invent.
+    """
+    from llm.prompts.tailor_sections import PROMPT, TailoredSections
+
+    project_rows = [*snap.projects, *snap.open_source]
+    if not snap.skills and not project_rows:
+        return None
+
+    skills_inventory = (
+        "\n".join(f"- {s.category}: {', '.join(s.items or [])}" for s in snap.skills) or "(none)"
+    )
+    projects_inventory = (
+        "\n".join(
+            f"{pr.id} → {pr.title} · tags: {', '.join(getattr(pr, 'tags', None) or []) or '(none)'}"
+            f" · {(getattr(pr, 'text', None) or '(no summary)')[:200]}"
+            for pr in project_rows
+            if pr.id is not None
+        )
+        or "(none)"
+    )
+
+    try:
+        provider = svc().get_provider(settings)
+        result = await svc().llm_tracker.tracked_call(
+            session=session,
+            user_id=user_id,
+            provider=provider,
+            method="structured",
+            prompt_name="tailor_sections",
+            application_id=application_id,
+            prompt=PROMPT.format(
+                role=job.role,
+                description=(job.description or job.description_html or "")[:1500],
+                skills_required=", ".join(job.skills_required or []),
+                skills_inventory=skills_inventory,
+                projects_inventory=projects_inventory,
+            ),
+            schema=TailoredSections,
+            system=system,
+            cache_system=cache_system,
+        )
+        value = dict(result.value)
+    except LLMProviderError as exc:
+        log.warning("tailor_sections failed; using untailored skills/projects: %s", exc)
+        return None
+
+    # Validate skills — case-insensitive category + item match against the
+    # inventory; AI ordering preserved; empty result degrades to None (full list).
+    inv_by_cat = {
+        s.category.strip().lower(): (s.category, {i.strip().lower(): i for i in (s.items or [])})
+        for s in snap.skills
+    }
+    skills_out: list[dict] = []
+    for group in value.get("skills") or []:
+        cat_key = str(group.get("category") or "").strip().lower()
+        hit = inv_by_cat.get(cat_key)
+        if hit is None:
+            continue
+        real_cat, item_map = hit
+        seen: set[str] = set()
+        items = []
+        for item in group.get("items") or []:
+            real = item_map.get(str(item).strip().lower())
+            if real is not None and real not in seen:
+                seen.add(real)
+                items.append(real)
+        if items:
+            skills_out.append({"category": real_cat, "items": items})
+
+    # Validate projects — unknown ids dropped; only null-override rows are
+    # selectable here (always/never overrides stay owner-controlled).
+    valid_ids = {pr.id for pr in project_rows if pr.id is not None}
+    included: list[int] = []
+    meta: dict[str, dict] = {}
+    for pick in value.get("projects") or []:
+        pid = pick.get("id")
+        if pid not in valid_ids:
+            continue
+        descriptor = _sanitize_descriptor(str(pick.get("descriptor") or ""))
+        meta[str(pid)] = {
+            "descriptor": descriptor,
+            "include_description": bool(pick.get("include_description")),
+        }
+        if pick.get("include", True):
+            included.append(pid)
+
+    if not skills_out and not meta:
+        # Degenerate/empty response — silence is NOT a decision to drop
+        # everything; fall back to the untailored sections.
+        log.warning("tailor_sections returned nothing usable; keeping untailored sections")
+        return None
+
+    return {
+        "skills": skills_out or None,
+        # None → the model made no project decisions; don't gate rows on
+        # silence. An explicit empty list ("every pick include:false") is a
+        # legitimate zero-projects page.
+        "included_project_ids": included if meta else None,
+        "projects": meta,
+    }
+
+
 # One printed line in `onepage.typ` (10pt New Computer Modern, 0.3in
 # margins, ∘ + 0.15in list indent, justified) holds ~125+ characters — the
 # cv.tex reference's longest bullet (127 chars) fits on one line. The

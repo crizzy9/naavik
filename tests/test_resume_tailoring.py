@@ -141,22 +141,74 @@ async def test_build_resume_data_normalizes_pasted_profile_urls():
 
 
 @pytest.mark.asyncio
-async def test_build_resume_data_projects_carry_dates_and_links():
+async def test_build_resume_data_projects_carry_dates_never_links():
+    """Per-project links NEVER reach the payload — the header portfolio URL
+    is the canonical pointer (2026-07 tailoring-scope expansion)."""
     snap = _snap({1: [_bullet(1, 1)]})
     snap.projects = [
         SimpleNamespace(
+            id=11,
             title="Naavik",
             date=datetime(2026, 2, 1, tzinfo=UTC),
             text="Career automation platform",
             tags=[],
             link="github.com/crizzy9/naavik",
+            selection_override=None,
             order_index=0,
         )
     ]
     data = await dg._build_resume_data(snap=snap, selected_bullet_ids=[1], trimmed={})
     p = data["projects"][0]
     assert p["date"] == "Feb 2026"
-    assert p["link"] == "https://github.com/crizzy9/naavik"
+    assert "link" not in p
+    # No section plan → legacy behavior: text renders, descriptor absent.
+    assert p["text"] == "Career automation platform"
+    assert p["descriptor"] is None
+
+
+@pytest.mark.asyncio
+async def test_build_resume_data_honors_section_plan():
+    """tailor_sections plan: gates null-override projects, applies the 2-3
+    word descriptor, suppresses descriptions unless opted in, and swaps the
+    skills payload for the tailored subset."""
+    snap = _snap({1: [_bullet(1, 1)]})
+    snap.skills = [
+        SimpleNamespace(category="Languages", items=["Python", "Go", "Perl"], order_index=0),
+    ]
+    snap.projects = [
+        SimpleNamespace(
+            id=11,
+            title="Naavik",
+            date=None,
+            text="Career automation platform end-to-end",
+            tags=[],
+            selection_override=None,
+            order_index=0,
+        ),
+        SimpleNamespace(
+            id=12,
+            title="Dotfiles",
+            date=None,
+            text="Personal configs",
+            tags=[],
+            selection_override=None,
+            order_index=1,
+        ),
+    ]
+    plan = {
+        "skills": [{"category": "Languages", "items": ["Python", "Go"]}],
+        "included_project_ids": [11],
+        "projects": {
+            "11": {"descriptor": "career automation platform", "include_description": False}
+        },
+    }
+    data = await dg._build_resume_data(
+        snap=snap, selected_bullet_ids=[1], trimmed={}, section_plan=plan
+    )
+    assert data["skills"] == [{"category": "Languages", "items": ["Python", "Go"]}]
+    assert [p["title"] for p in data["projects"]] == ["Naavik"]
+    assert data["projects"][0]["descriptor"] == "career automation platform"
+    assert data["projects"][0]["text"] is None
 
 
 def test_extract_resume_schema_carries_profile_links():

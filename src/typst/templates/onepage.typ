@@ -21,14 +21,16 @@
 //     "education": [{"institution": str, "school": str | null,
 //                    "location": str, "dates": str,
 //                    "degree": str, "gpa": str | null}],
-//     "skills": [{"category": str, "items": [str]}],
-//     "projects": [{"title": str, "date": str | null, "text": str | null,
-//                   "link": str | null}],
+//     "skills": [{"category": str, "items": [str]}],   // per-job tailored subset
+//     "projects": [{"title": str, "descriptor": str | null,
+//                   "date": str | null, "text": str | null}],
 //     "certifications": [{"title": str, "date": str | null,
 //                         "text": str | null}],
-//     "open_source": [{"title": str, "date": str | null, "text": str | null,
-//                      "link": str | null}],
+//     "open_source": [{"title": str, "descriptor": str | null,
+//                      "date": str | null, "text": str | null}],
 //   }
+// Projects render as bold title + "— descriptor" (2-3 words, AI-chosen);
+// per-project links are NEVER rendered — the header portfolio URL covers it.
 // There is deliberately NO headline field — header is name + contacts only.
 
 #let data = json(bytes(sys.inputs.data))
@@ -140,11 +142,13 @@
 }
 
 // \projectentry{title}{date}: {#1} \hfill \textbf{#2}
-#let projectentry(title, date, url) = {
+// Bold title, optional "— descriptor" tagline (2-3 words), bold date right.
+// No links here, ever — the header portfolio URL is the canonical pointer.
+#let projectentry(title, descriptor, date) = {
   grid(
     columns: (1fr, auto),
     column-gutter: 8pt,
-    [#if url != none [#link(url, text(fill: linkcolor, title))] else [#title]],
+    [#text(weight: "bold", title)#if descriptor != none and descriptor != "" [ — #descriptor]],
     text(weight: "bold", if date != none { date } else { "" }),
   )
 }
@@ -231,7 +235,7 @@
 #if data.projects.len() > 0 [
   #sectitle("Projects")
   #for p in data.projects [
-    #projectentry(p.title, p.date, p.link)
+    #projectentry(p.title, p.at("descriptor", default: none), p.date)
     #if p.text != none and p.text != "" [
       #bullet_items((p.text,))
     ]
@@ -243,7 +247,7 @@
 #if data.at("certifications", default: ()).len() > 0 [
   #sectitle("Certifications")
   #for c in data.certifications [
-    #projectentry(c.title, c.date, none)
+    #projectentry(c.title, none, c.date)
     #if c.at("text", default: none) != none and c.text != "" [
       #bullet_items((c.text,))
     ]
@@ -255,7 +259,7 @@
 #if data.at("open_source", default: ()).len() > 0 [
   #sectitle("Open Source Contributions")
   #for p in data.open_source [
-    #projectentry(p.title, p.date, p.link)
+    #projectentry(p.title, p.at("descriptor", default: none), p.date)
     #if p.text != none and p.text != "" [
       #bullet_items((p.text,))
     ]

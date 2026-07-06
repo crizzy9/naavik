@@ -42,6 +42,9 @@ from services.generation.bullet_selection import (
     _split_bullets_by_override as _split_bullets_by_override,
 )
 from services.generation.bullet_selection import (
+    _tailor_sections as _tailor_sections,
+)
+from services.generation.bullet_selection import (
     _tailor_summary as _tailor_summary,
 )
 from services.generation.bundle import (
