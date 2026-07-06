@@ -24,7 +24,7 @@ from models import (
 )
 from services.generation.common import svc
 from services.generation.cost_cap import CostCapExceededError
-from services.generation.snapshot import _bullet_inventory
+from services.generation.snapshot import _bullet_inventory, _latest_resume
 from typst.compiler import TypstError
 
 log = logging.getLogger(__name__)
@@ -78,11 +78,32 @@ async def generate_cover_letter(
         format_chosen = "pain_letter" if detect_pain_letter_format(job_description) else "standard"
 
     provider = svc().get_provider(settings)
-    top_bullets = [b.text for b in _bullet_inventory(snap)[:10]]
+    # Voice-first raw material: the letter must be built from the OWNER's
+    # words, ordered by JD relevance — not the first 10 bullets in profile
+    # order. The resume pass (which runs first in the bundle) already ranked
+    # the full inventory against this JD; reuse that ranking on the ORIGINAL
+    # bullet texts (originals carry the owner's voice; trimmed lines are
+    # JD-mirrored rewrites).
+    inventory = _bullet_inventory(snap)
+    ranked_ids: list[int] = []
+    try:
+        latest_resume = await _latest_resume(session, application.id)
+        selection = getattr(latest_resume, "bullet_selection", None)
+        if isinstance(selection, dict):
+            raw_ranked = selection.get("ranked_ids") or []
+            ranked_ids = [i for i in raw_ranked if isinstance(i, int)]
+    except Exception:  # noqa: BLE001 — ranking is a nice-to-have, never fatal
+        ranked_ids = []
+    by_id = {b.id: b for b in inventory}
+    ordered = [by_id[i] for i in ranked_ids if i in by_id]
+    ranked_set = set(ranked_ids)
+    ordered += [b for b in inventory if b.id not in ranked_set]
+    top_bullets = [b.text for b in ordered[:10]]
     profile_payload = {
         "full_name": snap.profile.full_name,
-        "summary_short": snap.profile.summary_short or snap.profile.summary_full or "",
-        "summary_full": snap.profile.summary_full or "",
+        # summary_full is the owner-written master — the strongest voice
+        # sample we have. summary_short is an AI condensation; last resort.
+        "summary": snap.profile.summary_full or snap.profile.summary_short or "",
         "top_bullets": top_bullets,
     }
     job_payload = {
@@ -120,10 +141,10 @@ async def generate_cover_letter(
     except LLMProviderError as exc:
         log.warning("cover letter draft failed; using template: %s", exc)
         letter_dict = {
-            "intro": f"I'm excited to apply for the {job.role} role at {job.company}.",
-            "body": snap.profile.summary_short or "",
-            "why_company": f"{job.company} is on the trajectory I want to be a part of.",
-            "close": "I would love the opportunity to contribute.",
+            "intro": f"I'm applying for the {job.role} role at {job.company}.",
+            "body": snap.profile.summary_full or snap.profile.summary_short or "",
+            "why_company": "The work described in this posting is the kind I want to do next.",
+            "close": "I'd like to talk about how I can help.",
         }
 
     out_dir = svc()._app_documents_dir(application.id)
@@ -233,10 +254,12 @@ def _render_cover_letter_sota_prompt(
             hm_str += f", {hiring_manager['title']}"
 
     top_bullets = profile.get("top_bullets") or []
+    bullet_lines = "\n".join(f"- {t}" for t in top_bullets)[:1800]
     profile_str = (
-        f"{profile.get('full_name', '')}\n"
-        f"{profile.get('summary_short') or profile.get('summary_full', '')}\n"
-        f"Top bullets: {'; '.join(top_bullets)[:1500]}"
+        f"{profile.get('full_name', '')}\n\n"
+        f"In their own words — verbatim writing samples; reuse this phrasing:\n"
+        f"Summary: {profile.get('summary') or profile.get('summary_short') or profile.get('summary_full') or '(none)'}\n"
+        f"Bullets (most relevant to this JD first):\n{bullet_lines}"
     )
     job_str = (
         f"{job.get('company', '')} — {job.get('role', '')}\n{(job.get('description') or '')[:1500]}"

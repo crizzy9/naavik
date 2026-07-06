@@ -56,13 +56,26 @@ def detect_pain_letter_format(job_description: str) -> bool:
 
 
 _VOICE_RULES = """Voice rules (non-negotiable):
-- Write in the FIRST PERSON: "I built…", "I led…", "I'm excited about…".
-  NEVER refer to the candidate by name or in the third person inside the
+- This letter is FROM the candidate, in THEIR words. Write in the first
+  person, the way they actually write — their corpus is in the system
+  context and their verbatim writing samples are in the Candidate block
+  below. Reuse THEIR nouns, verbs, and phrasing; do not translate their
+  work into cover-letter vocabulary.
+- Plain, spoken register. Contractions are fine. Short sentences are fine.
+  The letter should read like a sharp, direct note from a real engineer —
+  not a formal letter someone ghost-wrote FOR them.
+- NEVER refer to the candidate by name or in the third person inside the
   letter body — no "{name}'s experience", no "the candidate".
-- Confident and specific; zero filler ("I believe", "passionate",
-  "perfect fit", "testament to"). Every claim must trace to the
-  candidate's actual bullets — quote their words verbatim where natural
-  and list those phrases in `verbatim_phrases`.
+- BANNED — generic cover-letter register (and anything in its family):
+  "I am writing to apply", "I'd welcome the chance/opportunity",
+  "excited to apply", "proven track record", "passionate", "perfect fit",
+  "leverage", "aligns with", "resonates", "I believe", "testament to",
+  "ready to go deeper", "hit the ground running", "make an impact".
+  If a sentence could appear in anyone's letter, cut it.
+- Any internal category tags provided (e.g. "backend", "ai-ml") are for
+  orientation ONLY — NEVER print them in the letter.
+- Every claim must trace to the candidate's actual bullets — quote their
+  words verbatim where natural and list those phrases in `verbatim_phrases`.
 - Address {company} and THIS role concretely; a letter that could be sent
   to any company is a failure."""
 
@@ -80,23 +93,27 @@ Hiring manager (weave naturally when present; the greeting is handled
 separately):
 {hiring_manager}
 
-Match these JD keywords verbatim when they apply: {matched_tags}
+Overlap themes (INTERNAL tags — orientation only, never print them):
+{matched_tags}
 
 """
     + _VOICE_RULES
     + """
 
-Structure (each section is ONE tight paragraph):
-- HOOK (2-3 sentences, ≤400 chars): why me × this exact role — open with
-  the single most relevant thing I've done, tied to what this team is
-  building. No "I am writing to apply…" boilerplate.
-- MATCH (3-5 sentences, ≤900 chars): map my 2-3 strongest, numbers-backed
-  wins onto the JD's stated needs. "They need X — I did X at Y with Z
-  result."
-- WHY_COMPANY (2-3 sentences, ≤400 chars): why THIS company specifically —
-  reference their product/mission/tech from the JD, and what I want to
-  build there. Not flattery; a concrete reason.
-- CLOSE (1-2 sentences, ≤300 chars): confident ask for the conversation.
+Structure (each section is ONE tight paragraph; the labels are internal —
+never write "hook" or headers into the letter):
+- HOOK (2-3 sentences, ≤400 chars): open with the single most relevant
+  thing the candidate has actually done, tied to what this team is
+  building — stated the way THEY would state it.
+- MATCH (3-5 sentences, ≤900 chars): connect their 2-3 strongest,
+  numbers-backed wins to what the JD actually asks for. No formula — write
+  it the way they'd explain their own work to another engineer, keeping
+  their original phrasing wherever it fits.
+- WHY_COMPANY (2-3 sentences, ≤400 chars): one concrete reason THIS
+  company/product/tech is interesting to them, grounded in the JD. Plain
+  words; no flattery, no mission-statement echo.
+- CLOSE (1-2 sentences, ≤300 chars): ask for the conversation like a
+  person, not a salesman.
 
 Return a CoverLetterSota with format_chosen="standard".
 """
@@ -119,20 +136,23 @@ separately):
 
 Pain-point signals detected in the JD: {pain_signals}
 
-Match these JD keywords verbatim when they apply: {matched_tags}
+Overlap themes (INTERNAL tags — orientation only, never print them):
+{matched_tags}
 
 """
     + _VOICE_RULES
     + """
 
-Structure (each section is ONE tight paragraph):
+Structure (each section is ONE tight paragraph; the labels are internal —
+never write "hook" or headers into the letter):
 - HOOK (2-3 sentences, ≤400 chars): name the pain the company described;
-  show I understand it from having lived it.
-- MATCH (3-5 sentences, ≤900 chars): cite my actual experience addressing
-  that exact pain, with numbers.
-- WHY_COMPANY (2-3 sentences, ≤400 chars): why I want to solve this at
-  THIS company specifically.
-- CLOSE (1-2 sentences, ≤300 chars): confident, specific ask.
+  show the candidate understands it from having lived it — in their words.
+- MATCH (3-5 sentences, ≤900 chars): cite their actual experience
+  addressing that exact pain, with numbers, keeping their original
+  phrasing wherever it fits.
+- WHY_COMPANY (2-3 sentences, ≤400 chars): why solving this at THIS
+  company specifically is interesting to them. Plain words.
+- CLOSE (1-2 sentences, ≤300 chars): a plain, specific ask.
 
 Return a CoverLetterSota with format_chosen="pain_letter".
 """
