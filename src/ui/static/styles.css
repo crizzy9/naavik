@@ -75,6 +75,13 @@
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4);
 }
 
+/* The hidden ATTRIBUTE must always win — Tailwind display utilities
+   (.inline-flex etc.) otherwise override the UA/preflight [hidden] rule,
+   which breaks JS that toggles el.hidden (data-collapse-* labels). */
+[hidden] {
+  display: none !important;
+}
+
 /* ------------------------------------------------------------------ */
 /* 3. HTMX loading utilities                                          */
 /* HTMX adds .htmx-request to the triggering element during requests. */

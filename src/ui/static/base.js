@@ -262,6 +262,36 @@
   document.body.addEventListener('htmx:afterSwap', syncSidebarAria);
 
   // ---------------------------------------------------------------- //
+  // Generic client-side collapse ([data-collapse-toggle]).           //
+  // The component library shipped "Show all N / Collapse" buttons as //
+  // pure presentation with no behavior layer — every working         //
+  // expander in the app is either a native <details> or inline       //
+  // hx-on, so these buttons were dead wherever the component         //
+  // appeared. Contract:                                              //
+  //   [data-collapse-root]              scope container              //
+  //     [data-collapse-extra] hidden    items beyond the fold        //
+  //     [data-collapse-toggle]          the button                   //
+  //       [data-collapse-more] / [data-collapse-less]  swap labels   //
+  // Delegated so it survives HTMX swaps; no server round-trip.       //
+  // ---------------------------------------------------------------- //
+  document.body.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-collapse-toggle]');
+    if (!btn) return;
+    var root = btn.closest('[data-collapse-root]');
+    if (!root) return;
+    var wasExpanded = root.getAttribute('data-collapse-expanded') === 'true';
+    root.setAttribute('data-collapse-expanded', wasExpanded ? 'false' : 'true');
+    root.querySelectorAll('[data-collapse-extra]').forEach(function (el) {
+      el.hidden = wasExpanded;
+    });
+    btn.setAttribute('aria-expanded', wasExpanded ? 'false' : 'true');
+    var more = btn.querySelector('[data-collapse-more]');
+    var less = btn.querySelector('[data-collapse-less]');
+    if (more) more.hidden = !wasExpanded;
+    if (less) less.hidden = wasExpanded;
+  });
+
+  // ---------------------------------------------------------------- //
   // showToast helper — used by rollback handler. Kept tiny.          //
   // ---------------------------------------------------------------- //
   function showToast(tone, message) {
