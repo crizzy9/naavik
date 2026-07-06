@@ -28,7 +28,8 @@
   hx-target="{{ target }}"
   hx-swap="innerHTML"
   hx-trigger="change from:#{{ input_id }}"
-  hx-indicator="#{{ progress_id }}">
+  hx-indicator="#{{ progress_id }}"
+  hx-disabled-elt="find input[type='file']">
 
   <label for="{{ input_id }}"
          class="dropzone-target h-96 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center gap-4 hover:border-indigo-500/50 transition cursor-pointer focus-within:ring-2 focus-within:ring-indigo-500/40"
@@ -50,9 +51,20 @@
     Parsed locally · never sent to third parties
   </div>
 
-  <progress
-    id="{{ progress_id }}"
-    class="htmx-indicator htmx-progress mt-4 hidden htmx-show-loading"
-    value="0"
-    max="100"></progress>
+  {# Loading feedback while the upload + AI parse runs (~30s with a cloud
+     provider). Uses htmx's built-in `.htmx-indicator` opacity toggle — the
+     previous <progress class="hidden htmx-show-loading"> could never show:
+     htmx puts `htmx-request` on the indicator element ITSELF, but the CSS
+     only had the descendant form, and Tailwind's `hidden` overrode it
+     anyway. The inner <progress> value is driven by base.js § 6 via
+     [data-upload-progress]. #}
+  <div id="{{ progress_id }}"
+       class="htmx-indicator mt-4 flex flex-col items-center gap-2"
+       aria-live="polite">
+    <span class="inline-flex items-center gap-2 text-xs text-indigo-300">
+      <span class="h-3.5 w-3.5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+      Uploading + parsing your resume — extracting text, then structuring it with AI. Can take ~30s…
+    </span>
+    <progress class="htmx-progress" value="0" max="100" data-upload-progress></progress>
+  </div>
 </form>

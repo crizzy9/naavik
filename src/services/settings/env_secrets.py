@@ -104,6 +104,36 @@ def resolve_active_llm_provider(settings: AppSettings | None = None) -> str | No
     return None
 
 
+async def resolve_usable_llm_provider(settings: AppSettings | None = None) -> str | None:
+    """Like `resolve_active_llm_provider`, but Ollama only counts when the
+    daemon actually answers.
+
+    `ollama_base_url` has a baked-in localhost default, so the plain resolver
+    never returns None in practice — which turned every "no provider
+    configured" graceful-degrade branch into a doomed call against a dead
+    endpoint (onboarding resume parse being the user-facing one: raw
+    connection-refused error instead of the friendly "configure a provider"
+    message). Cheap 2s GET /api/tags probe; any failure means "not usable".
+    """
+    s = settings if settings is not None else app_settings
+    active = resolve_active_llm_provider(s)
+    if active != "ollama":
+        return active
+
+    import httpx
+
+    base = (s.ollama_base_url or "").rstrip("/")
+    if not base:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            resp = await client.get(f"{base}/api/tags")
+            resp.raise_for_status()
+    except httpx.HTTPError:
+        return None
+    return active
+
+
 def env_indicators_for_notifications_tab() -> dict[str, bool]:
     return {
         "discord": discord_webhook_configured(),

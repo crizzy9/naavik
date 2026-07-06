@@ -65,15 +65,27 @@
     <p class="mt-3 text-xs text-slate-500 leading-relaxed">
       We auto-filled any empty name / email / phone fields from your resume, and saved the full
       extracted text to your profile under "Raw resume text (parsed source)".
-      {% if parse_error %}
-        <span class="block mt-1.5 text-rose-300/90">
-          Structured parsing failed: <span class="font-mono">{{ parse_error }}</span>
-        </span>
-      {% else %}
-        To auto-structure experiences and bullets, configure an LLM provider in Settings —
-        otherwise fill in the rest manually on the next page.
-      {% endif %}
     </p>
+    {% if parse_error %}
+      <div class="mt-3 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3 text-xs text-rose-200 leading-relaxed"
+           data-testid="parse-error">
+        <span class="font-medium">AI parsing failed</span> — your text is saved, but experiences and
+        bullets weren't auto-structured.
+        <span class="block mt-1 font-mono text-rose-300/80">{{ parse_error }}</span>
+      </div>
+    {% elif llm_missing | default(false) %}
+      <div class="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-amber-200 leading-relaxed"
+           data-testid="llm-missing-notice">
+        <i data-lucide="alert-triangle" class="h-3.5 w-3.5 shrink-0 mt-0.5" stroke-width="1.5"></i>
+        <span>
+          No AI provider is configured, so experiences and bullets were <span class="font-medium">not</span>
+          auto-structured. Set <span class="font-mono">ANTHROPIC_API_KEY</span>,
+          <span class="font-mono">OPENAI_API_KEY</span>, or a reachable
+          <span class="font-mono">OLLAMA_BASE_URL</span> in your environment, then re-upload —
+          or fill in the profile manually on the next page.
+        </span>
+      </div>
+    {% endif %}
   {% endif %}
 
   <div class="mt-6 flex items-center justify-end gap-3">

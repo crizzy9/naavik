@@ -14,6 +14,7 @@ text via `pdfplumber`, and returns a confirmation partial that links to
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
@@ -211,12 +212,20 @@ async def post_extraction_upload(
     experiences_added = 0
     parsed_summary: dict | None = None
     parse_error: str | None = None
+    llm_missing = False
     try:
+        from llm import LLMProviderError
         from services import settings as settings_service
         from services.profile import extraction
 
         user_settings = await settings_service.get_or_create(session, user_id=user_id)
-        if env_secrets.resolve_active_llm_provider() is not None:
+        # `resolve_usable_llm_provider` (not the plain resolver): Ollama's
+        # baked-in localhost default otherwise makes "no provider configured"
+        # unreachable, and the parse dies against a dead endpoint with a raw
+        # connection error instead of the friendly guidance below.
+        if await env_secrets.resolve_usable_llm_provider() is None:
+            llm_missing = True
+        else:
             await extraction.extract_to_profile(
                 session,
                 user_id=user_id,
@@ -227,6 +236,13 @@ async def post_extraction_upload(
             structured_ok = True
             parsed_summary = await _parsed_profile_summary(session, user_id)
             experiences_added = len(parsed_summary["experiences"])
+    except LLMProviderError as exc:
+        log.warning("structured resume parse LLM failure user=%s: %s", user_id, exc)
+        await session.rollback()
+        if exc.kind == "auth_required":
+            llm_missing = True
+        else:
+            parse_error = str(exc)
     except extraction.ExtractionError as exc:
         log.warning("structured resume parse failed user=%s: %s", user_id, exc)
         await session.rollback()
@@ -268,6 +284,29 @@ async def post_extraction_upload(
         experiences_added,
     )
 
+    # Explicit completion feedback (P5 universal-feedback convention): the
+    # parse can take 30s+, so the swap alone is easy to miss — every outcome
+    # also fires a toast via HX-Trigger (wired in base.js).
+    if structured_ok:
+        toast = {
+            "text": f"Resume parsed — {experiences_added} experience"
+            f"{'' if experiences_added == 1 else 's'} with bullets added to your profile.",
+            "tone": "success",
+        }
+    elif llm_missing:
+        toast = {
+            "text": "Resume text saved, but no AI provider is reachable — "
+            "configure one in Settings to auto-structure your profile.",
+            "tone": "warning",
+        }
+    elif parse_error:
+        toast = {
+            "text": "Resume uploaded, but AI parsing failed — details on screen.",
+            "tone": "warning",
+        }
+    else:
+        toast = {"text": "Resume uploaded.", "tone": "success"}
+
     return templates.TemplateResponse(
         request,
         "pages/auth/_onboarding_step_uploaded.html",
@@ -278,7 +317,9 @@ async def post_extraction_upload(
             "experiences_added": experiences_added,
             "parsed": parsed_summary,
             "parse_error": parse_error,
+            "llm_missing": llm_missing,
         },
+        headers={"HX-Trigger": json.dumps({"showToast": toast})},
     )
 
 

@@ -154,12 +154,14 @@
 
   // ---------------------------------------------------------------- //
   // 6. Upload progress                                               //
+  // Drives [data-upload-progress] bars (dropzone.html). The old       //
+  // #upload-progress id existed in no template — dead wiring.         //
   // ---------------------------------------------------------------- //
   document.body.addEventListener('htmx:xhr:progress', function (e) {
-    var bar = document.getElementById('upload-progress');
-    if (bar && e.detail && e.detail.lengthComputable) {
+    if (!e.detail || !e.detail.lengthComputable) return;
+    document.querySelectorAll('progress[data-upload-progress]').forEach(function (bar) {
       bar.value = (e.detail.loaded / e.detail.total) * 100;
-    }
+    });
   });
 
   // ---------------------------------------------------------------- //
