@@ -32,10 +32,11 @@
       {% with kind="company", text=a.company_initial | default(a.company[:1] | upper), size="sm", color_override=a.company_color | default("bg-slate-700") %}
         {% include "components/common/avatar.html" %}
       {% endwith %}
-      <span class="text-sm text-slate-100 truncate">{{ a.company }}</span>
+      {# Identity inversion (item 2): company carries the visual weight. #}
+      <span class="text-sm font-medium text-slate-100 truncate">{{ a.company }}</span>
     </div>
   </td>
-  <td class="px-4 py-3 align-middle text-sm text-slate-200">{{ a.role }}{% if a.team %} <span class="text-slate-500">· {{ a.team }}</span>{% endif %}</td>
+  <td class="px-4 py-3 align-middle text-sm text-slate-400">{{ a.role }}{% if a.team %} <span class="text-slate-500">· {{ a.team }}</span>{% endif %}</td>
   <td class="px-4 py-3 align-middle">
     {% with status=a.status %}{% include "components/common/status_badge.html" %}{% endwith %}
   </td>

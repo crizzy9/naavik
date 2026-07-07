@@ -25,9 +25,10 @@
       {% with kind="company", text=r.company_initial, size="sm", color_override=r.company_color %}
         {% include "components/common/avatar.html" %}
       {% endwith %}
+      {# Identity inversion (item 2): company bold on top, role beneath. #}
       <span class="min-w-0">
-        <span class="block text-slate-100 truncate group-hover:text-indigo-200 transition">{{ r.role }}</span>
-        <span class="block text-xs text-slate-500 truncate">{{ r.company }}{% if r.location %} · {{ r.location }}{% endif %}</span>
+        <span class="block font-medium text-slate-100 truncate group-hover:text-indigo-200 transition">{{ r.company }}</span>
+        <span class="block text-xs text-slate-500 truncate">{{ r.role }}{% if r.location %} · {{ r.location }}{% endif %}</span>
       </span>
     </a>
   </td>

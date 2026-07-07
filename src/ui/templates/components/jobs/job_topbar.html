@@ -22,10 +22,11 @@
     {% with kind="company", text=j.company_initial, size="sm", color_override="bg-slate-700" %}
       {% include "components/common/avatar.html" %}
     {% endwith %}
+    {# Identity inversion (item 2): company leads everywhere the pair renders. #}
     <div class="text-sm text-slate-100 truncate">
-      <span class="font-medium">{{ j.role }}</span>
+      <span class="font-medium">{{ j.company }}</span>
+      <span class="text-slate-500"> / {{ j.role }}</span>
       {% if j.team %} · <span class="text-slate-300">{{ j.team }}</span>{% endif %}
-      <span class="text-slate-500"> / {{ j.company }}</span>
       {% if j.location %} · <span class="text-slate-400">{{ j.location }}</span>{% endif %}
       {% if j.salary_range %} · <span class="font-mono text-slate-400">{{ j.salary_range }}</span>{% endif %}
     </div>

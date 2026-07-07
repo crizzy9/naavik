@@ -28,10 +28,11 @@
     {% with kind="company", text=a.company_initial, size="lg", color_override=a.company_color %}
       {% include "components/common/avatar.html" %}
     {% endwith %}
+    {# Identity inversion (item 2): company bold on top, role beneath. #}
     <div class="flex-1 min-w-0">
-      <h2 id="application-detail-title" class="text-base font-semibold text-slate-50 truncate">{{ a.role }}</h2>
+      <h2 id="application-detail-title" class="text-base font-semibold text-slate-50 truncate">{{ a.company }}</h2>
       <p class="text-sm text-slate-400 truncate">
-        {% if a.team %}{{ a.team }} · {% endif %}{{ a.company }}
+        {{ a.role }}{% if a.team %} · {{ a.team }}{% endif %}
       </p>
       <div class="mt-2 flex items-center gap-2 flex-wrap">
         {% with status=a.status, label_override=a.status_label %}

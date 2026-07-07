@@ -19,10 +19,11 @@
     {% with kind="company", text=a.company_initial | default(a.company[:1] | upper), size="sm", color_override=a.company_color | default("bg-slate-700") %}
       {% include "components/common/avatar.html" %}
     {% endwith %}
+    {# Identity inversion (item 2): company bold on top, role beneath. #}
     <div class="flex-1 min-w-0">
-      <div class="text-sm text-slate-100 truncate">{{ a.role }}</div>
+      <div class="text-sm font-medium text-slate-100 truncate">{{ a.company }}</div>
       <div class="text-xs text-slate-400 truncate">
-        {% if a.team %}{{ a.team }} · {% endif %}{{ a.company }}
+        {{ a.role }}{% if a.team %} · {{ a.team }}{% endif %}
       </div>
     </div>
     <button type="button"
