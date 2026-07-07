@@ -375,6 +375,9 @@ async def sync_account(
             if existing is not None:
                 continue
 
+            # Plan 95 § 3.9.1 — UID always (on-demand body fetch); a stored
+            # 2,000-char excerpt only with the per-account opt-in.
+            body_excerpt = _extract_snippet(msg, limit=2000) if account.store_body_excerpt else None
             row = EmailMessage(
                 user_id=account.user_id,
                 thread_id=thread.id,
@@ -386,6 +389,8 @@ async def sync_account(
                 sender_name=sender_name,
                 subject=subject,
                 snippet=snippet,
+                imap_uid=uid[:20],
+                body_excerpt=body_excerpt or None,
                 received_at=received_at,
             )
             session.add(row)
@@ -430,6 +435,67 @@ async def sync_all_accounts(
         if res.errors:
             agg.failed += 1
     return agg
+
+
+def _fetch_body_by_uid(
+    client: _IMAPClient,
+    *,
+    username: str,
+    password: str,
+    uid: str,
+) -> bytes | None:
+    """Synchronous single-message PEEK — runs inside `asyncio.to_thread`."""
+    client.login(username, password)
+    client.select("INBOX", readonly=True)
+    typ, fetched = client.uid("FETCH", uid, "(BODY.PEEK[])")
+    raw: bytes | None = None
+    if typ == "OK" and fetched:
+        for part in fetched:
+            if isinstance(part, tuple) and len(part) >= 2 and isinstance(part[1], bytes):
+                raw = part[1]
+                break
+    client.logout()
+    return raw
+
+
+async def fetch_message_body(
+    account: EmailAccount,
+    *,
+    uid: str,
+    client_factory=_default_client_factory,
+    limit: int = 20000,
+) -> str | None:
+    """On-demand full-body read (plan 95 § 3.9.1 option B).
+
+    IMAP `BODY.PEEK` by stored UID — the body transits memory only and is
+    NEVER persisted; the at-rest posture stays snippet-only. Same host
+    guard + credential seam as sync. None = not fetchable (auth, guard,
+    UID gone).
+    """
+    password = email_credentials.load_imap_password(account)
+    if password is None:
+        return None
+
+    def _runner() -> bytes | None:
+        ensure_imap_host_allowed(account.imap_host, account.imap_port)
+        client = client_factory(account.imap_host, account.imap_port)
+        return _fetch_body_by_uid(
+            client, username=account.imap_username, password=password, uid=uid
+        )
+
+    try:
+        raw = await asyncio.to_thread(_runner)
+    except Exception as exc:  # noqa: BLE001 — reading is best-effort
+        log.warning("on-demand body fetch failed account=%s uid=%s: %s", account.id, uid, exc)
+        return None
+    if raw is None:
+        return None
+    try:
+        msg = _parse_message(raw)
+        return _extract_snippet(msg, limit=limit) or None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("on-demand body parse failed uid=%s: %s", uid, exc)
+        return None
 
 
 async def test_imap_connection(

@@ -45,6 +45,20 @@
       </span>
     {% endif %}
 
+    {# Plan 95 § 3.9.1 — per-account opt-in: 2k body excerpt at rest. #}
+    <label class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-950 border border-slate-800 text-xs text-slate-400 cursor-pointer hover:text-slate-200"
+           title="Store a 2,000-char plaintext excerpt of new mail (better classification + instant reading). Default off: snippet-only.">
+      <input type="checkbox"
+             class="accent-indigo-500"
+             {% if account.store_body_excerpt %}checked{% endif %}
+             hx-post="/api/v1/integrations/email/{{ account.id }}/body-excerpt"
+             hx-vals='js:{"enabled": event.target.checked ? 1 : 0}'
+             hx-headers='{"X-CSRF-Token": "{{ csrf_token|default('') }}"}'
+             hx-swap="none"
+             data-testid="body-excerpt-toggle-{{ account.id }}">
+      Store body excerpts
+    </label>
+
     <button type="button"
             hx-post="/api/v1/integrations/email/{{ account.id }}/sync-now"
             hx-headers='{"X-CSRF-Token": "{{ csrf_token|default('') }}"}'

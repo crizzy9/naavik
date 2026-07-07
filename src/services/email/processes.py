@@ -183,7 +183,8 @@ async def _rejection_shaped_strays(
     ).all()
     out: dict[str, EmailMessage] = {}
     for msg in rows:
-        if REJECTION_SHAPE_RE.search(f"{msg.subject}\n{msg.snippet}"):
+        text_seen = f"{msg.subject}\n{msg.body_excerpt or msg.snippet}"
+        if REJECTION_SHAPE_RE.search(text_seen):
             out[_norm_company(msg.extracted_company or "", aliases)] = msg
     return out
 

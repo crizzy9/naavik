@@ -67,6 +67,14 @@ class EmailMessage(SQLModel, table=True):
     sender_name: str | None = None
     subject: str
     snippet: str = Field(max_length=240)
+    # Plan 95 § 3.9.1 — the message's IMAP UID, persisted so the on-demand
+    # body route can BODY.PEEK the full text without storing it. NULL for
+    # pre-95l rows (the chain falls back to the provider deep-link).
+    imap_uid: str | None = Field(default=None, max_length=20)
+    # Opt-in stored plaintext excerpt (per-account toggle, default OFF):
+    # 2,000 chars — the classifier's context lever and the chain's instant
+    # reading surface. The at-rest privacy default stays snippet-only.
+    body_excerpt: str | None = Field(default=None, max_length=2000)
     received_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False, index=True),
     )

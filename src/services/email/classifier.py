@@ -350,10 +350,12 @@ async def classify_unprocessed(
         # Cap untrusted fields before they reach the prompt (PR #214 hacker M1).
         # New rows are capped at persist; this also bounds any pre-existing
         # uncapped row's prompt-injection budget.
+        # Plan 95 § 3.9.1 — the opt-in stored excerpt is the classifier's
+        # single biggest context lever (8× the snippet); snippet otherwise.
         rendered = CLASSIFY_PROMPT.format(
             sender=msg.sender_email[:_MAX_SENDER_EMAIL_LEN],
             subject=msg.subject[:_MAX_SUBJECT_LEN],
-            body=msg.snippet,
+            body=msg.body_excerpt or msg.snippet,
             owner_corrections=corrections_block,
         )
         try:
@@ -412,7 +414,8 @@ async def classify_unprocessed(
             sender_type = None
         msg.extracted_sender_type = sender_type
         end_client = _clip(parsed.end_client)
-        if end_client and end_client.lower() not in f"{msg.subject}\n{msg.snippet}".lower():
+        seen_text = f"{msg.subject}\n{msg.body_excerpt or msg.snippet}".lower()
+        if end_client and end_client.lower() not in seen_text:
             end_client = None
         msg.extracted_end_client = end_client
 

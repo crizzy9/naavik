@@ -274,6 +274,10 @@ async def build_conversation_ctx(
                     "sender_email": m.sender_email,
                     "subject": m.subject,
                     "snippet": m.snippet,
+                    # Plan 95 § 3.9.1 — stored excerpt (opt-in) renders
+                    # instantly; a UID enables the live full-body fetch.
+                    "body_excerpt": m.body_excerpt,
+                    "can_fetch_body": bool(m.imap_uid and m.account_id),
                     "received_label": _relative_label(m.received_at),
                     "classification": m.classification.value if m.classification else None,
                     "classification_tone": _CLASSIFICATION_TONES.get(

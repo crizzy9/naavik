@@ -79,6 +79,30 @@
                     </details>
                   </div>
                   <p class="mt-1 text-xs text-slate-400 leading-relaxed">{{ m.snippet }}</p>
+                  {# Plan 95 § 3.9.1 — full text: stored excerpt expands
+                     instantly; otherwise a live IMAP PEEK by UID (never
+                     persisted); pre-95l mail falls back to the provider
+                     deep-link below. #}
+                  {% if m.body_excerpt %}
+                    <details class="mt-1">
+                      <summary class="text-[11px] text-slate-500 cursor-pointer hover:text-slate-300 list-none">Show more ▸</summary>
+                      <div class="mt-1 max-h-64 overflow-y-auto rounded-md bg-slate-950/70 px-2.5 py-2 text-xs text-slate-300 leading-relaxed whitespace-pre-wrap"
+                           data-testid="message-excerpt-{{ m.id }}">{{ m.body_excerpt }}</div>
+                    </details>
+                  {% elif m.can_fetch_body %}
+                    <div id="message-body-slot-{{ m.id }}">
+                      <button type="button"
+                              class="mt-1 text-[11px] text-slate-500 hover:text-slate-300"
+                              hx-post="/api/v1/email/messages/{{ m.id }}/body"
+                              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                              hx-target="#message-body-slot-{{ m.id }}"
+                              hx-swap="innerHTML"
+                              hx-disabled-elt="this"
+                              data-testid="load-body-{{ m.id }}">
+                        Load full text (fetched live, never stored) ▸
+                      </button>
+                    </div>
+                  {% endif %}
                   {% if m.suggestion and m.suggestion.pending %}
                     <div class="mt-1.5 flex items-center gap-2 flex-wrap" data-testid="suggestion-actions-{{ m.id }}">
                       <span class="text-xs text-amber-200">Suggests → {{ m.suggestion.status_label }}</span>

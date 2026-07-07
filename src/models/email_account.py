@@ -61,6 +61,11 @@ class EmailAccount(SQLModel, table=True):
     last_synced_uid: str | None = None
     connection_failure_count: int = Field(default=0)
     last_error_message: str | None = None
+    # Plan 95 § 3.9.1 — per-account opt-in (default OFF): sync persists a
+    # 2,000-char plaintext body excerpt on new mail and the classifier uses
+    # it instead of the 240-char snippet. Explicitly widens the at-rest
+    # privacy surface; the owner flips it in Settings → Email.
+    store_body_excerpt: bool = Field(default=False)
 
     created_at: datetime = Field(
         default_factory=utcnow,

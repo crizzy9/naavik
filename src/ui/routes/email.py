@@ -188,6 +188,89 @@ async def post_email_thread_unlink(
     return response
 
 
+# ── On-demand full body (plan 95 § 3.9.1 B) ─────────────────────────────
+
+
+@router.post("/api/v1/email/messages/{message_id}/body", name="email_message_body")
+async def post_email_message_body(
+    message_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Fetch one message's full body live over IMAP (BODY.PEEK by stored
+    UID). The body transits memory only — NEVER persisted; the at-rest
+    posture stays snippet-only. Returns an HTML fragment for the chain's
+    expand slot."""
+    from fastapi.responses import HTMLResponse
+    from markupsafe import escape
+
+    from models import EmailAccount, EmailMessage
+    from services.email import sync as email_sync
+
+    msg = await session.get(EmailMessage, message_id)
+    if msg is None or msg.user_id != _effective_user_id(user):
+        raise HTTPException(status_code=404, detail="No such email message")
+    fallback = (
+        '<p class="text-xs text-slate-500" data-testid="body-unavailable">'
+        "Full text isn't fetchable for this message — use the provider link above.</p>"
+    )
+    if not msg.imap_uid or msg.account_id is None:
+        return HTMLResponse(fallback)
+    account = await session.get(EmailAccount, msg.account_id)
+    if account is None or account.user_id != msg.user_id:
+        return HTMLResponse(fallback)
+
+    body = await email_sync.fetch_message_body(account, uid=msg.imap_uid)
+    if not body:
+        return HTMLResponse(fallback)
+    return HTMLResponse(
+        '<div class="mt-1 max-h-64 overflow-y-auto rounded-md bg-slate-950/70 px-2.5 py-2 '
+        'text-xs text-slate-300 leading-relaxed whitespace-pre-wrap" '
+        f'data-testid="message-body-{message_id}">{escape(body)}</div>'
+    )
+
+
+@router.post(
+    "/api/v1/integrations/email/{account_id}/body-excerpt",
+    name="email_account_body_excerpt_toggle",
+)
+async def post_email_account_body_excerpt(
+    account_id: int,
+    enabled: Annotated[int, Form()] = 0,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Per-account § 3.9.1 opt-in toggle (default OFF). Applies to newly
+    synced mail only — already-synced messages keep snippet-only."""
+    from datetime import UTC, datetime
+
+    from models import EmailAccount
+
+    account = await session.get(EmailAccount, account_id)
+    if account is None or account.user_id != _effective_user_id(user):
+        raise HTTPException(status_code=404, detail="No such account")
+    account.store_body_excerpt = bool(enabled)
+    account.updated_at = datetime.now(UTC)
+    session.add(account)
+    await session.commit()
+    response = Response(status_code=204)
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "showToast": {
+                "tone": "info",
+                "text": (
+                    "Storing 2,000-char body excerpts for new mail."
+                    if account.store_body_excerpt
+                    else "Back to snippet-only storage."
+                ),
+            }
+        }
+    )
+    return response
+
+
 # ── Sender flags (plan 95 § 3.3) ────────────────────────────────────────
 
 
