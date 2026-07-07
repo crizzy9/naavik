@@ -244,14 +244,30 @@ def match_requirements(
     criteria: list[str],
     strengths: list[str],
     matched_tags: list[str],
+    requirements_coverage: dict | None = None,
 ) -> list[dict[str, object]]:
-    """Link JD requirements to scorer strengths for the match panel.
+    """Link JD requirements to profile coverage for the match panel.
 
-    A requirement counts as covered when it shares ≥2 significant tokens
-    with any single strength line, or ≥1 token with the scorer's
-    matched_tags. Heuristic on purpose — it drives a ✓/○ marker, not a
-    decision.
+    Preferred source: the persisted `match_breakdown.requirements_coverage`
+    (LLM per-requirement audit from `scorer.match_analysis`, keyed by a
+    criteria hash so a re-extracted JD invalidates it). Fallback: the
+    token-overlap heuristic against strengths/matched_tags — kept for
+    no-LLM installs and jobs opened before their analysis ran.
     """
+    if isinstance(requirements_coverage, dict):
+        from services.scorer.match_analysis import criteria_hash as _chash
+
+        covered_list = requirements_coverage.get("covered")
+        if (
+            requirements_coverage.get("criteria_hash") == _chash(criteria)
+            and isinstance(covered_list, list)
+            and len(covered_list) == len(criteria)
+        ):
+            return [
+                {"text": req, "matched": bool(cov)}
+                for req, cov in zip(criteria, covered_list, strict=True)
+            ]
+
     strength_tokens = [_significant_tokens(s) for s in strengths]
     tag_tokens = _significant_tokens(" ".join(matched_tags))
     out: list[dict[str, object]] = []
@@ -377,11 +393,20 @@ async def build_review_ctx(
     rationale_index = _rationale_index_from_trace(application)
     docs_generated = bool(rationale_index) or resume_pdf_url is not None
 
+    # Lazy per-job analysis (2026-07): first review-open runs one small LLM
+    # call that (a) audits each requirement for real coverage marks and
+    # (b) rewrites strengths/gaps as glance-view keywords, persisted into
+    # match_breakdown. No-op when fresh / no provider / recently failed.
+    from services.scorer.match_analysis import CRITERIA_LIMIT, ensure_match_analysis
+
+    await ensure_match_analysis(session, job=job, user_id=user_id)
+
     breakdown = job.match_breakdown or {}
     requirements = match_requirements(
-        list(job.criteria or [])[:8],
+        [c for c in (job.criteria or []) if c][:CRITERIA_LIMIT],
         list(breakdown.get("strengths") or []),
         list(breakdown.get("matched_tags") or []),
+        requirements_coverage=breakdown.get("requirements_coverage"),
     )
 
     return {

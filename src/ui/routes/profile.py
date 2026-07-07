@@ -28,6 +28,26 @@ def _effective_user_id(user: User | None) -> int:
     return user.id if user is not None else 1
 
 
+def _score_history_stale(score_history: dict | None) -> bool:
+    """True when the sparkline blob needs a re-aggregation on read:
+    never written, or last aggregated before today's UTC midnight."""
+    from datetime import UTC, datetime
+
+    if not score_history:
+        return True
+    raw = score_history.get("last_aggregated_at")
+    if not isinstance(raw, str) or not raw:
+        return True
+    try:
+        aggregated = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if aggregated.tzinfo is None:
+        aggregated = aggregated.replace(tzinfo=UTC)
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    return aggregated < today_start
+
+
 async def _build_profile_ctx(session: AsyncSession, user_id: int) -> dict[str, object]:
     profile = await profile_service.get_profile(session, user_id)
     if profile is None:
@@ -46,7 +66,28 @@ async def _build_profile_ctx(session: AsyncSession, user_id: int) -> dict[str, o
     # Plan 73 (0.3.2.03): sparkline strip in the Profile hero.
     # `profile.score_history` is the JSONB column (default {}); `score_trend`
     # is the top-3 families projection consumed by `profile_hero.html`.
+    # Lazy refresh (2026-07): the blob's SOLE writer was the daily 03:35 UTC
+    # cron — a dev/self-host server that isn't running at that hour never
+    # writes it, so the strip stayed empty despite scored jobs. Re-aggregate
+    # on read when the blob is missing or older than today's UTC midnight
+    # (cheap: one pass over the user's jobs); the cron remains for keeping
+    # it warm.
     score_history = await profile_service.get_score_history(session, user_id)
+    if _score_history_stale(score_history):
+        try:
+            from services.scorer.history import update_profile_score_history
+
+            blob = await update_profile_score_history(session, user_id)
+            await session.commit()
+            if blob is not None:
+                score_history = blob
+        except Exception:  # noqa: BLE001 — trend is decoration, never 500 the page
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "lazy score-history refresh failed for user %s", user_id, exc_info=True
+            )
+            await session.rollback()
     all_projects = pctx.project_dicts(await profile_service.list_projects(session, user_id))
     return {
         "profile": profile,

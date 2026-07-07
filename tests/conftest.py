@@ -90,6 +90,24 @@ def _disable_background_generation():
 
 
 @pytest.fixture(autouse=True)
+def _disable_lazy_match_analysis(monkeypatch):
+    """`build_review_ctx` lazily runs the match_analysis LLM call on first
+    review-open (2026-07). conftest does not scrub API keys from `.env`, so
+    without this guard any review-page test could fire a REAL provider call.
+    Off for every test; match_analysis unit tests hold a direct reference to
+    the real function (module-level import), which this attr-patch doesn't
+    touch."""
+
+    async def _noop(session, *, job, user_id):
+        return False
+
+    from services.scorer import match_analysis as _ma
+
+    monkeypatch.setattr(_ma, "ensure_match_analysis", _noop)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _restore_sample_data(request):
     """Snapshot/restore the mutable `sample_data` collections around each
     shim-tier test (plan 91 Phase 0.4).

@@ -89,6 +89,31 @@ def _render_bullets_with_ids(bullets: list[Bullet]) -> str:
     )
 
 
+async def _render_skills_inventory(session: AsyncSession, profile: Profile) -> str:
+    """Full skills inventory by category — authoritative in the prompt.
+
+    Without it the judge invented proficiency gaps for skills the profile
+    literally lists (2026-07: "Cypress not shown" while Cypress sat in
+    Testing / Ops).
+    """
+    from sqlmodel import select
+
+    from models import Skill
+
+    profile_id = getattr(profile, "id", None)
+    if profile_id is None:
+        return "(none listed)"
+    try:
+        rows = (
+            await session.exec(
+                select(Skill).where(Skill.profile_id == profile_id).order_by(Skill.order_index)
+            )
+        ).all()
+    except Exception:  # noqa: BLE001 — prompt garnish; never fail the judge on it
+        return "(none listed)"
+    return "\n".join(f"- {s.category}: {', '.join(s.items or [])}" for s in rows) or "(none listed)"
+
+
 async def _llm_judge_score(
     session: AsyncSession,
     *,
@@ -117,6 +142,7 @@ async def _llm_judge_score(
 
     rendered = PROMPT.format(
         profile=_compose_profile_summary(profile),
+        skills_inventory=await _render_skills_inventory(session, profile),
         profile_tags=_render_profile_tags(profile, candidate_bullets),
         candidate_bullets=_render_bullets_with_ids(candidate_bullets),
         company=job.company or "",

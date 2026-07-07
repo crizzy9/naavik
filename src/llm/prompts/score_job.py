@@ -61,6 +61,11 @@ PROMPT = """You are an expert technical recruiter scoring how well a candidate m
 Candidate profile:
 {profile}
 
+Candidate skills inventory — AUTHORITATIVE: the candidate is proficient in
+every item listed (the app tracks no proficiency levels); an item on this
+list is NEVER a gap and never needs a fluency qualifier:
+{skills_inventory}
+
 Profile tags (skills the candidate has demonstrated): {profile_tags}
 
 Top relevant bullets (with IDs in brackets — reference by ID in suggested_bullets):
@@ -90,19 +95,20 @@ Return a JobScore object matching the schema with:
 - `visa_concern`: true iff the job requires citizenship/GC and the candidate needs sponsorship
 - `visa_note`: short string explaining the visa concern, or null
 
-Rules for `strengths` and `gaps` — these render side by side as the match
-analysis the candidate reads before applying, so they must be sharp:
-- Every entry must PAIR something specific from the job description with
-  the candidate's record: "JD wants X — candidate shipped Y" (strength) or
-  "JD requires X — nothing in the profile shows it" (gap). Name the actual
-  technology / responsibility from the JD, not a category.
-- No filler ("strong engineering background", "good culture fit"), no
-  restating the JD without a verdict, no résumé keywords the JD never asks
-  for.
-- Deduplicate: one entry per distinct theme. If two JD lines want the same
-  skill, cover them once.
-- An item may appear in strengths OR gaps, never both; when partially
-  covered, pick the side the evidence favors and say "partial:" in the text.
+Rules for `strengths` and `gaps` — these render as a GLANCE VIEW the
+candidate scans in seconds, so they are keywords, not prose:
+- Each entry is a bare noun phrase of at most 6 words naming the specific
+  skill/technology/theme from the JD: "distributed systems",
+  "Cypress E2E testing", "campaign platform architecture".
+- NO sentences. NO verbs like built/led/shipped. NO "JD"/"candidate"
+  phrasing, no verdict text, no trailing periods.
+- A strength names a JD theme the candidate's record clearly covers; a gap
+  names a JD ask with NO evidence anywhere in the profile.
+- The skills inventory above is authoritative — never list an inventory
+  item as a gap and never qualify anything with proficiency/fluency
+  wording.
+- Deduplicate: one entry per distinct theme; an item appears in strengths
+  OR gaps, never both.
 - Fewer, sharper entries beat five vague ones. Zero gaps is acceptable for
   a genuinely dead-on match; zero strengths for a genuinely bad one.
 
