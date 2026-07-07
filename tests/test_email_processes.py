@@ -40,6 +40,7 @@ def _tables():
     from models import (
         AppEvent,
         Application,
+        CompanyAlias,
         EmailAccount,
         EmailMessage,
         EmailThread,
@@ -55,6 +56,7 @@ def _tables():
         EmailThread.__table__,
         EmailAccount.__table__,
         EmailMessage.__table__,
+        CompanyAlias.__table__,
     ]
     for table in tables:
         for c in list(table.constraints):
@@ -356,6 +358,42 @@ async def test_track_process_creates_application_at_inferred_stage(session, user
         ApplicationStatus.APPLIED.value,
         ApplicationStatus.ONSITE_LOOP.value,
     ]
+
+
+async def test_track_process_honors_status_override(session, user):
+    """§ 3.4 "Wrong stage?" — the human's pick replaces the derived stage,
+    and the trail's second hop is recorded as a MANUAL move."""
+    from sqlmodel import select
+
+    from models import AppEvent
+    from models.enums import AppEventKind, ApplicationStatus, EmailClassification
+    from services.email import processes
+
+    await _seed_signal(
+        session,
+        user_id=user.id,
+        company="Anthuria",
+        classification=EmailClassification.INTERVIEW_REQUEST,
+        stage="interview",
+        offset_days=2,
+    )
+
+    application = await processes.track_process(
+        session,
+        user_id=user.id,
+        company="Anthuria",
+        status_override=ApplicationStatus.RECRUITER_SCREEN,
+    )
+    assert application is not None
+    assert application.status == ApplicationStatus.RECRUITER_SCREEN
+
+    events = (await session.exec(select(AppEvent))).all()
+    status_events = [e for e in events if e.kind == AppEventKind.STATUS_CHANGE]
+    assert [e.payload["to"] for e in status_events] == [
+        ApplicationStatus.APPLIED.value,
+        ApplicationStatus.RECRUITER_SCREEN.value,
+    ]
+    assert status_events[-1].payload["trigger"] == "manual"
 
 
 async def test_dismiss_process_stamps_messages(session, user):

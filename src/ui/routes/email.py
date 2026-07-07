@@ -7,9 +7,10 @@ keeps the email surfaces co-located.
 
 from __future__ import annotations
 
+import json
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Response
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
@@ -123,6 +124,68 @@ async def post_email_thread_draft_reply(
         "model": getattr(provider, "model", None) or getattr(provider, "model_name", None),
         "llm_configured": True,
     }
+
+
+# ── Correction affordances (plan 95 § 3.4) ──────────────────────────────
+
+
+@router.post("/api/v1/email/messages/{message_id}/reclassify", name="email_message_reclassify")
+async def post_email_message_reclassify(
+    message_id: int,
+    classification: Annotated[str, Form(min_length=1, max_length=40)],
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    try:
+        target = EmailClassification(classification.strip().lower())
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Unknown classification") from None
+    from services.email import corrections
+
+    try:
+        await corrections.reclassify_message(
+            session,
+            user_id=_effective_user_id(user),
+            message_id=message_id,
+            to_classification=target,
+        )
+    except corrections.CorrectionError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    # Full refresh: the relabel can move a group's derived stage, close
+    # suggestions, or relink — the board state change IS the feedback.
+    response = Response(status_code=204)
+    response.headers["HX-Refresh"] = "true"
+    return response
+
+
+@router.post("/api/v1/email/threads/{thread_id}/unlink", name="email_thread_unlink")
+async def post_email_thread_unlink(
+    thread_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    from services.email import corrections
+
+    try:
+        n = await corrections.unlink_thread(
+            session, user_id=_effective_user_id(user), thread_id=thread_id
+        )
+    except corrections.CorrectionError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    response = Response(status_code=204)
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "showToast": {
+                "tone": "info",
+                "text": f"Unlinked {n} email{'s' if n != 1 else ''} from this application.",
+            }
+        }
+    )
+    return response
 
 
 # ── Email-suggestion apply/dismiss seam (plan 90 / 0.5.0.03) ────────────

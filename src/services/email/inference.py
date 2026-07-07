@@ -250,13 +250,17 @@ _KEY_TAILS = ("labs", "app", "hq", "ai")
 _KEY_TAIL_MIN_REMAINDER = 3
 
 
-def canonical_company_key(name: str | None) -> str:
+def canonical_company_key(name: str | None, *, aliases: dict[str, str] | None = None) -> str:
     """Canonical grouping/matching key for a company name (plan 95 § 3.0).
 
     Collapses the variants the inbox actually produces — "Brico"/"Brico.ai",
     "Mosaic"/"mosaicapp.com", "ONO AI"/"Onoai" — into one key. Keys only ever
     GROUP; over-merges ("Stripe"/"Stripe Press") are corrected explicitly via
     the alias/track-confirm affordances, so consistency beats precision here.
+
+    `aliases` is the user's `CompanyAlias` map (plan 95 § 3.4 "Merge into…"):
+    after the deterministic key is computed, a human-declared alias overrides
+    it — corrections outrank heuristics, one hop, forever.
     """
     text = (name or "").strip().lower()
     if not text:
@@ -282,11 +286,22 @@ def canonical_company_key(name: str | None) -> str:
                 key = key[: -len(tail)]
                 stripped = True
                 break
+    if aliases:
+        key = aliases.get(key, key)
     return key
 
 
-def _company_matches(candidate: str, target: str) -> bool:
-    a, b = canonical_company_key(candidate), canonical_company_key(target)
+async def load_company_alias_map(session: AsyncSession, *, user_id: int) -> dict[str, str]:
+    """The user's "Merge into…" corrections as an alias_key → canonical_key map."""
+    from models import CompanyAlias
+
+    rows = (await session.exec(select(CompanyAlias).where(CompanyAlias.user_id == user_id))).all()
+    return {r.alias_key: r.canonical_key for r in rows}
+
+
+def _company_matches(candidate: str, target: str, *, aliases: dict[str, str] | None = None) -> bool:
+    a = canonical_company_key(candidate, aliases=aliases)
+    b = canonical_company_key(target, aliases=aliases)
     if not a or not b:
         return False
     # Containment keeps the pre-canonicalization behavior ("Mosaic" matches
@@ -319,6 +334,7 @@ async def find_application_for_company(
 async def _find_existing_application(
     session: AsyncSession, *, user_id: int, company: str, role: str | None = None
 ) -> Application | None:
+    aliases = await load_company_alias_map(session, user_id=user_id)
     rows = (
         await session.exec(
             select(Application)
@@ -330,7 +346,7 @@ async def _find_existing_application(
             .order_by(Application.updated_at.desc())
         )
     ).all()
-    matches = [a for a in rows if _company_matches(company, a.company)]
+    matches = [a for a in rows if _company_matches(company, a.company, aliases=aliases)]
     if not matches:
         return None
     if role and len(matches) > 1:
@@ -349,6 +365,7 @@ async def _find_existing_application(
 async def _find_library_job(
     session: AsyncSession, *, user_id: int, company: str, role: str | None
 ) -> Job | None:
+    aliases = await load_company_alias_map(session, user_id=user_id)
     rows = (
         await session.exec(
             select(Job)
@@ -357,7 +374,9 @@ async def _find_library_job(
         )
     ).all()
     for job in rows:
-        if _company_matches(company, job.company) and _role_overlaps(role, job.role):
+        if _company_matches(company, job.company, aliases=aliases) and _role_overlaps(
+            role, job.role
+        ):
             return job
     return None
 

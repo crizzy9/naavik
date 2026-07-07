@@ -609,26 +609,77 @@ async def post_inferred_dismiss(
 # ─────────────────────────────────────────────────────────────────────────
 
 
+_TRACK_STATUS_OVERRIDES = {
+    ApplicationStatus.APPLIED,
+    ApplicationStatus.RECRUITER_SCREEN,
+    ApplicationStatus.ONSITE_LOOP,
+    ApplicationStatus.OFFER,
+}
+
+
 @router.post(
     "/api/v1/tracking/processes/track",
     name="api_process_track",
 )
 async def post_process_track(
     company: Annotated[str, Form(min_length=1, max_length=160)],
+    status: Annotated[str, Form(max_length=40)] = "",
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
     from services.email import processes
 
+    # § 3.4 "Wrong stage?" — the human's pick replaces the derived stage.
+    status_override: ApplicationStatus | None = None
+    if status:
+        try:
+            status_override = ApplicationStatus(status)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Unknown status") from None
+        if status_override not in _TRACK_STATUS_OVERRIDES:
+            raise HTTPException(status_code=422, detail="Status not trackable")
+
     application = await processes.track_process(
-        session, user_id=_effective_user_id(user), company=company
+        session,
+        user_id=_effective_user_id(user),
+        company=company,
+        status_override=status_override,
     )
     if application is None:
         raise HTTPException(status_code=404, detail="No detected process for that company")
     await session.commit()
     # Full refresh: the process card leaves AND the application appears on
     # the board at its inferred stage — that state change IS the feedback.
+    response = Response(status_code=204)
+    response.headers["HX-Refresh"] = "true"
+    return response
+
+
+@router.post(
+    "/api/v1/tracking/processes/merge",
+    name="api_process_merge",
+)
+async def post_process_merge(
+    company: Annotated[str, Form(min_length=1, max_length=160)],
+    target: Annotated[str, Form(min_length=1, max_length=160)],
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """§ 3.4 "Merge into…" — alias this detected group to another company."""
+    from services.email import corrections
+
+    try:
+        await corrections.merge_company(
+            session,
+            user_id=_effective_user_id(user),
+            from_company=company,
+            to_company=target,
+        )
+    except corrections.CorrectionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
     response = Response(status_code=204)
     response.headers["HX-Refresh"] = "true"
     return response

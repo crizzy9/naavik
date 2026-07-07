@@ -124,6 +124,7 @@ def _tables():
     from models import (
         AppEvent,
         Application,
+        CompanyAlias,
         EmailAccount,
         EmailMessage,
         EmailThread,
@@ -139,6 +140,7 @@ def _tables():
         EmailAccount.__table__,
         EmailThread.__table__,
         EmailMessage.__table__,
+        CompanyAlias.__table__,
     ]
     for t in tables:
         bad = [

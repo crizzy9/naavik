@@ -59,6 +59,7 @@ def _email_test_tables():
 
     from models import (
         CalendarConnection,
+        CompanyAlias,
         EmailAccount,
         EmailMessage,
         EmailThread,
@@ -70,6 +71,7 @@ def _email_test_tables():
         EmailThread.__table__,
         EmailAccount.__table__,
         EmailMessage.__table__,
+        CompanyAlias.__table__,
         # The Integrations page ctx reads the calendar connection (item 11).
         CalendarConnection.__table__,
     ]

@@ -22,6 +22,7 @@ Deterministic + read-mostly; the LLM work happened at classification time.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -42,7 +43,12 @@ from models import (
 )
 from models.enums import EmailClassification
 from services.email import status_mapper
-from services.email.inference import _company_matches, _find_library_job, canonical_company_key
+from services.email.inference import (
+    _company_matches,
+    _find_library_job,
+    canonical_company_key,
+    load_company_alias_map,
+)
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +59,17 @@ _PROCESS_SIGNALS = (
     EmailClassification.ASSESSMENT,
     EmailClassification.OFFER,
     EmailClassification.REJECTION,
+)
+
+# Rejection-shaped phrasing (plan 95 § 3.4.4, regex approved by owner).
+# A tiebreaker prompt to the HUMAN only — a match flags "possible rejection —
+# confirm?" on the group; it never flips state itself.
+REJECTION_SHAPE_RE = re.compile(
+    r"not moving forward|moving forward with other|other candidates"
+    r"|position has been filled|role has been filled|unable to move forward"
+    r"|decided not to proceed|not to move forward|no longer under consideration"
+    r"|pursue other applicants|will not be progressing|decided to go (?:in )?another direction",
+    re.I,
 )
 
 
@@ -67,12 +84,21 @@ class DetectedProcess:
     last_seen: datetime
     latest_subject: str
     message_ids: list[int] = field(default_factory=list)
+    # § 3.4.4 rejection guard: a later FOLLOW_UP/OTHER email of this company
+    # matches the rejection regex — surface a confirm chip, change nothing.
+    possible_rejection_message_id: int | None = None
 
 
-def _norm_company(name: str) -> str:
+def _norm_company(name: str, aliases: dict[str, str] | None = None) -> str:
     # Canonical key so company variants ("Brico"/"Brico.ai") land in ONE
     # group; the display name still comes from the raw extracted value.
-    return canonical_company_key(name)
+    return canonical_company_key(name, aliases=aliases)
+
+
+def _aware(dt: datetime) -> datetime:
+    # The sqlite test substrate round-trips DateTime(timezone=True) as naive;
+    # normalize before comparing across separately-loaded rows.
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 async def _unlinked_signal_messages(session: AsyncSession, *, user_id: int) -> list[EmailMessage]:
@@ -92,19 +118,58 @@ async def _unlinked_signal_messages(session: AsyncSession, *, user_id: int) -> l
     return list(rows)
 
 
+async def _rejection_shaped_strays(
+    session: AsyncSession, *, user_id: int
+) -> dict[str, EmailMessage]:
+    """FOLLOW_UP/OTHER messages whose text matches the rejection regex,
+    keyed by canonical company — candidates for the § 3.4.4 confirm chip
+    (misfiled rejections group outside the signal query above)."""
+    aliases = await load_company_alias_map(session, user_id=user_id)
+    rows = (
+        await session.exec(
+            select(EmailMessage)
+            .where(
+                EmailMessage.user_id == user_id,
+                EmailMessage.application_id.is_(None),
+                EmailMessage.process_dismissed_at.is_(None),
+                EmailMessage.extracted_company.is_not(None),
+                EmailMessage.classification.in_(  # type: ignore[union-attr]
+                    (EmailClassification.FOLLOW_UP, EmailClassification.OTHER)
+                ),
+            )
+            .order_by(EmailMessage.received_at.asc())
+        )
+    ).all()
+    out: dict[str, EmailMessage] = {}
+    for msg in rows:
+        if REJECTION_SHAPE_RE.search(f"{msg.subject}\n{msg.snippet}"):
+            out[_norm_company(msg.extracted_company or "", aliases)] = msg
+    return out
+
+
 async def list_detected_processes(session: AsyncSession, *, user_id: int) -> list[DetectedProcess]:
     """Group unlinked interview-signal messages into per-company processes."""
+    aliases = await load_company_alias_map(session, user_id=user_id)
     messages = await _unlinked_signal_messages(session, user_id=user_id)
     groups: dict[str, list[EmailMessage]] = {}
     for msg in messages:
-        groups.setdefault(_norm_company(msg.extracted_company or ""), []).append(msg)
+        groups.setdefault(_norm_company(msg.extracted_company or "", aliases), []).append(msg)
+    strays = await _rejection_shaped_strays(session, user_id=user_id)
 
     out: list[DetectedProcess] = []
-    for _key, msgs in groups.items():
+    for key, msgs in groups.items():
         timeline = [(m.classification, _stage_hint(m)) for m in msgs if m.classification]
         status, closed_reason = status_mapper.status_for_email_timeline(timeline)
         roles = [m.extracted_role for m in msgs if m.extracted_role]
         display_company = msgs[-1].extracted_company or ""
+        stray = strays.get(key)
+        possible_rejection = (
+            stray.id
+            if stray is not None
+            and status != ApplicationStatus.CLOSED
+            and _aware(stray.received_at) > _aware(msgs[0].received_at)
+            else None
+        )
         out.append(
             DetectedProcess(
                 company=display_company,
@@ -116,6 +181,7 @@ async def list_detected_processes(session: AsyncSession, *, user_id: int) -> lis
                 last_seen=msgs[-1].received_at,
                 latest_subject=msgs[-1].subject,
                 message_ids=[m.id for m in msgs if m.id is not None],
+                possible_rejection_message_id=possible_rejection,
             )
         )
     out.sort(key=lambda p: p.last_seen, reverse=True)
@@ -127,24 +193,37 @@ def _stage_hint(msg: EmailMessage) -> str | None:
     return msg.extracted_stage
 
 
-async def track_process(session: AsyncSession, *, user_id: int, company: str) -> Application | None:
+async def track_process(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    company: str,
+    status_override: ApplicationStatus | None = None,
+) -> Application | None:
     """User clicked "Track it" — pull the detected process into the pipeline.
 
     Creates (or reuses) the library Job, creates the Application at the stage
     the email timeline implies, links every message/thread of the company,
     and writes the STATUS_CHANGE AppEvent trail so the Tracking timeline
     reflects how the process actually unfolded.
+
+    `status_override` is the § 3.4 "Wrong stage?" affordance: the human's
+    stage pick replaces the derived one at track time.
     """
+    aliases = await load_company_alias_map(session, user_id=user_id)
     messages = [
         m
         for m in await _unlinked_signal_messages(session, user_id=user_id)
-        if _company_matches(company, m.extracted_company or "")
+        if _company_matches(company, m.extracted_company or "", aliases=aliases)
     ]
     if not messages:
         return None
 
     timeline = [(m.classification, _stage_hint(m)) for m in messages if m.classification]
     status, closed_reason = status_mapper.status_for_email_timeline(timeline)
+    overridden = status_override is not None and status_override != status
+    if overridden and status_override is not None:
+        status, closed_reason = status_override, None
     roles = [m.extracted_role for m in messages if m.extracted_role]
     role = roles[-1] if roles else None
     display_company = messages[-1].extracted_company or company
@@ -217,9 +296,17 @@ async def track_process(session: AsyncSession, *, user_id: int, company: str) ->
                 payload={
                     "from": ApplicationStatus.APPLIED.value,
                     "to": status.value,
-                    "trigger": StatusChangeTrigger.AUTO_FROM_EMAIL.value,
+                    "trigger": (
+                        StatusChangeTrigger.MANUAL.value
+                        if overridden
+                        else StatusChangeTrigger.AUTO_FROM_EMAIL.value
+                    ),
                     "is_forward": status != ApplicationStatus.CLOSED,
-                    "notes": "Stage derived from the email timeline",
+                    "notes": (
+                        "Stage set by you at track time"
+                        if overridden
+                        else "Stage derived from the email timeline"
+                    ),
                 },
                 actor="email_process_tracker",
             )
@@ -248,10 +335,11 @@ async def track_process(session: AsyncSession, *, user_id: int, company: str) ->
 
 async def dismiss_process(session: AsyncSession, *, user_id: int, company: str) -> int:
     """User clicked "Not mine" — hide this company's current group."""
+    aliases = await load_company_alias_map(session, user_id=user_id)
     messages = [
         m
         for m in await _unlinked_signal_messages(session, user_id=user_id)
-        if _company_matches(company, m.extracted_company or "")
+        if _company_matches(company, m.extracted_company or "", aliases=aliases)
     ]
     now = datetime.now(UTC)
     for msg in messages:

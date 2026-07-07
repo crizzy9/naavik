@@ -219,6 +219,21 @@ async def build_tracking_ctx(
     # that map to no tracked application (applied outside Naavik).
     detected = await processes.list_detected_processes(session, user_id=user_id)
 
+    # Plan 95 § 3.4 "Merge into…" targets: live application companies plus
+    # the OTHER detected groups (template filters out the row's own company).
+    merge_targets = sorted(
+        {a.company for a in visible_apps if a.company} | {p.company for p in detected if p.company}
+    )
+    track_stage_options = [
+        {"value": s.value, "label": application_status_label(s)}
+        for s in (
+            ApplicationStatus.APPLIED,
+            ApplicationStatus.RECRUITER_SCREEN,
+            ApplicationStatus.ONSITE_LOOP,
+            ApplicationStatus.OFFER,
+        )
+    ]
+
     return {
         "detected_processes": [
             {
@@ -229,11 +244,14 @@ async def build_tracking_ctx(
                 "message_count": p.message_count,
                 "last_seen_label": _relative_label(p.last_seen),
                 "latest_subject": p.latest_subject,
+                "possible_rejection_message_id": p.possible_rejection_message_id,
                 "dom_id": "detected-process-"
                 + (re.sub(r"[^a-z0-9]+", "-", p.company.lower()).strip("-") or "unknown"),
             }
             for p in detected
         ],
+        "process_merge_targets": merge_targets,
+        "track_stage_options": track_stage_options,
         # Item 5 — proposed applications inferred from inbox receipts.
         "inferred_pending": [
             {

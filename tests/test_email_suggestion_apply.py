@@ -37,6 +37,7 @@ def _email_test_tables():
     from models import (
         AppEvent,
         Application,
+        CompanyAlias,
         EmailAccount,
         EmailMessage,
         EmailThread,
@@ -50,6 +51,7 @@ def _email_test_tables():
         EmailThread.__table__,
         EmailAccount.__table__,
         EmailMessage.__table__,
+        CompanyAlias.__table__,
     ]
     for table in tables:
         for c in list(table.constraints):

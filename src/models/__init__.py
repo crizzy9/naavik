@@ -25,6 +25,7 @@ from .calendar_event import CalendarConnection, CalendarEvent
 from .contact import Contact, ContactApplicationLink, OutreachMessage
 from .email import EmailThread
 from .email_account import EmailAccount
+from .email_corrections import ClassificationCorrection, CompanyAlias, SenderRule
 from .email_message import EmailMessage
 from .enums import (
     AppEventKind,
@@ -106,6 +107,9 @@ __all__ = [
     "CalendarEvent",
     "EmailAccount",
     "EmailMessage",
+    "ClassificationCorrection",
+    "CompanyAlias",
+    "SenderRule",
     "AppEvent",
     "ApiUsage",
     "RevokedJwt",

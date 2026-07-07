@@ -144,10 +144,13 @@ async def _post_classify_dispatch(
     *,
     settings: Settings | None,
     stage: str | None,
+    emit_received: bool = True,
 ) -> None:
     """Run the side-effects of a successful classification.
 
-    - Emit EMAIL_RECEIVED AppEvent (matches plan 10 timeline contract).
+    - Emit EMAIL_RECEIVED AppEvent (matches plan 10 timeline contract) —
+      skipped on human-reclassify re-runs (`emit_received=False`), which
+      would otherwise duplicate the timeline entry (plan 95 § 3.4).
     - Link to an Application by extracted company when the thread didn't
       already carry one.
     - Feed the shared status pipeline: forward transitions auto-apply
@@ -162,22 +165,23 @@ async def _post_classify_dispatch(
     await _link_by_company(session, msg)
     await _promote_thread_classification(session, msg)
 
-    await _emit_event(
-        session,
-        user_id=msg.user_id,
-        application_id=msg.application_id,
-        kind=AppEventKind.EMAIL_RECEIVED,
-        payload={
-            "thread_id": msg.thread_id,
-            "message_id_external": msg.message_id_external,
-            "sender": msg.sender_email,
-            "subject_preview": msg.subject[:120],
-            "classification": classification.value,
-            "urgent": msg.urgency == "high",
-            "auto_classified": msg.auto_classified,
-            "company": msg.extracted_company,
-        },
-    )
+    if emit_received:
+        await _emit_event(
+            session,
+            user_id=msg.user_id,
+            application_id=msg.application_id,
+            kind=AppEventKind.EMAIL_RECEIVED,
+            payload={
+                "thread_id": msg.thread_id,
+                "message_id_external": msg.message_id_external,
+                "sender": msg.sender_email,
+                "subject_preview": msg.subject[:120],
+                "classification": classification.value,
+                "urgent": msg.urgency == "high",
+                "auto_classified": msg.auto_classified,
+                "company": msg.extracted_company,
+            },
+        )
 
     if msg.application_id is None:
         return
