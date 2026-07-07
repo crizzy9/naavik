@@ -241,7 +241,11 @@ def _company_matches(candidate: str, target: str) -> bool:
     a, b = _norm(candidate), _norm(target)
     if not a or not b:
         return False
-    return a == b or a in b or b in a
+    if a == b or a in b or b in a:
+        return True
+    # Space-insensitive fallback — "Ono AI" (email) ↔ "Onoai" (application).
+    a2, b2 = a.replace(" ", ""), b.replace(" ", "")
+    return a2 == b2 or a2 in b2 or b2 in a2
 
 
 def _role_overlaps(candidate: str | None, target: str | None) -> bool:
