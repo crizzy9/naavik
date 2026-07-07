@@ -16,7 +16,7 @@ From: {sender}
 Subject: {subject}
 Body (truncated):
 {body}
-
+{owner_corrections}
 Classify the email as exactly ONE of:
 - interview_request: interview invitations, scheduling / rescheduling /
   availability requests, interview confirmations and reminders, interview

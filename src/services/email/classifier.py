@@ -322,6 +322,22 @@ async def classify_unprocessed(
                 continue
             raise
 
+        # Plan 95 § 3.4.2 — owner-correction precedents (K≤5, PII-scrubbed,
+        # domain-only senders). Best-effort: an exemplar failure must never
+        # block classification.
+        from services.email import few_shot
+
+        try:
+            corrections_block = await few_shot.build_few_shot_block(
+                session,
+                user_id=msg.user_id,
+                sender_email=msg.sender_email,
+                subject=msg.subject,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("few-shot block build failed for message %s: %s", msg.id, exc)
+            corrections_block = ""
+
         # Cap untrusted fields before they reach the prompt (PR #214 hacker M1).
         # New rows are capped at persist; this also bounds any pre-existing
         # uncapped row's prompt-injection budget.
@@ -329,6 +345,7 @@ async def classify_unprocessed(
             sender=msg.sender_email[:_MAX_SENDER_EMAIL_LEN],
             subject=msg.subject[:_MAX_SUBJECT_LEN],
             body=msg.snippet,
+            owner_corrections=corrections_block,
         )
         try:
             result = await llm_tracker.tracked_call(
