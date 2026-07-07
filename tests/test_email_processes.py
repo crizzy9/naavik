@@ -177,6 +177,73 @@ async def test_detects_processes_grouped_by_company(session, user):
     assert by_company["brico"].status == ApplicationStatus.RECRUITER_SCREEN
 
 
+async def test_company_variants_group_as_one_process(session, user):
+    """Canonicalization (plan 95 § 3.0): legal suffixes, TLD tails, and
+    spacing variants of one company must land in ONE detected process."""
+    from models.enums import EmailClassification
+    from services.email import processes
+
+    await _seed_signal(
+        session,
+        user_id=user.id,
+        company="Brico",
+        classification=EmailClassification.INTERVIEW_REQUEST,
+        offset_days=3,
+    )
+    await _seed_signal(
+        session,
+        user_id=user.id,
+        company="Brico.ai",
+        classification=EmailClassification.ASSESSMENT,
+        offset_days=2,
+    )
+    await _seed_signal(
+        session,
+        user_id=user.id,
+        company="Mosaic",
+        classification=EmailClassification.INTERVIEW_REQUEST,
+        offset_days=4,
+    )
+    await _seed_signal(
+        session,
+        user_id=user.id,
+        company="mosaicapp.com",
+        classification=EmailClassification.INTERVIEW_REQUEST,
+        offset_days=1,
+    )
+    await _seed_signal(
+        session,
+        user_id=user.id,
+        company="ONO AI",
+        classification=EmailClassification.INTERVIEW_REQUEST,
+        offset_days=5,
+    )
+    await _seed_signal(
+        session,
+        user_id=user.id,
+        company="Onoai",
+        classification=EmailClassification.INTERVIEW_REQUEST,
+        offset_days=1,
+    )
+
+    detected = await processes.list_detected_processes(session, user_id=user.id)
+    assert len(detected) == 3
+    counts = {p.message_count for p in detected}
+    assert counts == {2}
+
+
+def test_canonical_company_key_variants():
+    from services.email.inference import canonical_company_key
+
+    assert canonical_company_key("Brico.ai") == canonical_company_key("Brico")
+    assert canonical_company_key("mosaicapp.com") == canonical_company_key("Mosaic")
+    assert canonical_company_key("ONO AI") == canonical_company_key("Onoai")
+    assert canonical_company_key("Stripe, Inc.") == canonical_company_key("Stripe")
+    assert canonical_company_key("Ripple") != canonical_company_key("Brico")
+    # Short names survive the tail strip untouched.
+    assert canonical_company_key("Chime") == "chime"
+
+
 async def test_linked_and_dismissed_messages_excluded(session, user):
     from models import Application
     from models.enums import ApplicationStatus, EmailClassification

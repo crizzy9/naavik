@@ -42,7 +42,7 @@ from models import (
 )
 from models.enums import EmailClassification
 from services.email import status_mapper
-from services.email.inference import _company_matches, _find_library_job
+from services.email.inference import _company_matches, _find_library_job, canonical_company_key
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +70,9 @@ class DetectedProcess:
 
 
 def _norm_company(name: str) -> str:
-    return " ".join(name.lower().split())
+    # Canonical key so company variants ("Brico"/"Brico.ai") land in ONE
+    # group; the display name still comes from the raw extracted value.
+    return canonical_company_key(name)
 
 
 async def _unlinked_signal_messages(session: AsyncSession, *, user_id: int) -> list[EmailMessage]:

@@ -113,7 +113,7 @@ async def _link_by_company(session: AsyncSession, msg: EmailMessage) -> None:
     from services.email.inference import find_application_for_company
 
     application = await find_application_for_company(
-        session, user_id=msg.user_id, company=msg.extracted_company
+        session, user_id=msg.user_id, company=msg.extracted_company, role=msg.extracted_role
     )
     if application is None:
         return

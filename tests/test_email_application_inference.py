@@ -312,6 +312,60 @@ async def test_receipt_links_existing_application_without_new_rows(session):
     assert len(apps) == 1
 
 
+async def test_role_disambiguates_between_two_live_applications(session):
+    """One company, two live applications: the email's role tokens pick the
+    right one instead of newest-wins (plan 95 § 3.0)."""
+    from models import Application
+    from models.enums import ApplicationStatus
+
+    job_swe = _make_job(
+        company="Ripple",
+        role="Senior Software Engineer",
+        external_id="rip-swe",
+        url="https://example.com/ripple/swe",
+    )
+    job_pm = _make_job(
+        company="Ripple",
+        role="Staff Product Manager",
+        external_id="rip-pm",
+        url="https://example.com/ripple/pm",
+    )
+    session.add(job_swe)
+    session.add(job_pm)
+    await session.flush()
+    swe = Application(
+        user_id=1,
+        job_id=job_swe.id,
+        company="Ripple",
+        role="Senior Software Engineer",
+        status=ApplicationStatus.APPLIED,
+        applied_at=datetime(2026, 6, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+    # The PM application is newer — newest-wins would mislink SWE mail here.
+    pm = Application(
+        user_id=1,
+        job_id=job_pm.id,
+        company="Ripple",
+        role="Staff Product Manager",
+        status=ApplicationStatus.APPLIED,
+        applied_at=datetime(2026, 6, 20, tzinfo=UTC),
+        updated_at=datetime(2026, 6, 20, tzinfo=UTC),
+    )
+    session.add(swe)
+    session.add(pm)
+    await session.flush()
+
+    found = await inference.find_application_for_company(
+        session, user_id=1, company="Ripple", role="Software Engineer"
+    )
+    assert found is not None and found.id == swe.id
+
+    # No role → newest still wins (unchanged behavior).
+    found = await inference.find_application_for_company(session, user_id=1, company="Ripple")
+    assert found is not None and found.id == pm.id
+
+
 async def test_confirm_and_dismiss_seam(session):
     msg, _ = await _seed_message(
         session,

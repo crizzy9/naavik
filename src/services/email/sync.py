@@ -73,7 +73,7 @@ class _IMAPClient(Protocol):
     """
 
     def login(self, user: str, password: str) -> Any: ...
-    def select(self, mailbox: str) -> Any: ...
+    def select(self, mailbox: str, readonly: bool = False) -> Any: ...
     def uid(self, command: str, *args: str) -> Any: ...
     def logout(self) -> Any: ...
 
@@ -227,7 +227,11 @@ def _fetch_imap_messages(
     to `EmailAccountStatus`.
     """
     client.login(username, password)
-    client.select("INBOX")
+    # readonly=True → IMAP EXAMINE: the server rejects ALL flag mutations for
+    # this session. Belt to BODY.PEEK's suspenders below — a plain RFC822
+    # fetch sets \Seen (RFC 3501 §6.4.5), and every sync since plan 90 was
+    # silently marking the owner's unread mail as read (plan 95 § 3.6).
+    client.select("INBOX", readonly=True)
 
     if last_synced_uid:
         criterion = f"UID {int(last_synced_uid) + 1}:*"
@@ -242,7 +246,9 @@ def _fetch_imap_messages(
 
     out: list[tuple[str, bytes]] = []
     for uid in reversed(uids):
-        typ, fetched = client.uid("FETCH", uid, "(RFC822)")
+        # BODY.PEEK[] never sets \Seen even if a future code path opens the
+        # mailbox read-write — RFC822 does (plan 95 § 3.6).
+        typ, fetched = client.uid("FETCH", uid, "(BODY.PEEK[])")
         if typ != "OK" or not fetched:
             continue
         for part in fetched:
@@ -445,7 +451,7 @@ async def test_imap_connection(
         ensure_imap_host_allowed(host, port)
         client = client_factory(host, port)
         client.login(username, password)
-        client.select("INBOX")
+        client.select("INBOX", readonly=True)
         client.logout()
 
     try:

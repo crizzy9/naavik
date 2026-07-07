@@ -121,12 +121,15 @@ class _FakeIMAP:
         self.raws = raws
         self.login_called = False
         self.logout_called = False
+        self.select_readonly: bool | None = None
+        self.fetch_commands: list[str] = []
 
     def login(self, user, password):
         self.login_called = True
         return "OK", [b"Logged in"]
 
-    def select(self, mailbox):
+    def select(self, mailbox, readonly=False):
+        self.select_readonly = readonly
         return "OK", [b"INBOX selected"]
 
     def uid(self, command, *args):
@@ -135,8 +138,9 @@ class _FakeIMAP:
             return "OK", [uids]
         if command == "FETCH":
             uid = args[0]
+            self.fetch_commands.append(" ".join(str(a) for a in args[1:]))
             raw = self.raws[int(uid) - 1]
-            return "OK", [(b"1 (RFC822 {%d}" % len(raw), raw)]
+            return "OK", [(b"1 (BODY[] {%d}" % len(raw), raw)]
         return "NO", []
 
     def logout(self):
@@ -193,6 +197,49 @@ async def test_sync_account_persists_messages(session):
     assert all(m.user_id == user.id for m in msgs)
     assert all("body-" in m.snippet for m in msgs)
     assert all(m.classification is None for m in msgs)
+
+
+async def test_sync_never_marks_mail_as_read(session):
+    """Fetch must be BODY.PEEK[] and the select readonly (plan 95 § 3.6).
+
+    A plain RFC822 fetch sets \\Seen on the owner's real mailbox — invisible
+    here because fakes don't track flags, so this test pins the COMMANDS the
+    client sends instead: `readonly=True` select (EXAMINE — server rejects
+    all flag mutations) and `BODY.PEEK[]` (side-effect-free even read-write).
+    """
+    from models import EmailAccount, User
+    from models.enums import EmailAccountProvider
+    from services.email import credentials as email_credentials
+    from services.email import sync as email_sync
+
+    user = User(email="peek@example.com", password_hash="x", is_active=True)
+    session.add(user)
+    await session.flush()
+
+    account = EmailAccount(
+        user_id=user.id,
+        provider=EmailAccountProvider.IMAP,
+        account_email="peek@example.com",
+        imap_host="imap.example.com",
+        imap_username="peek@example.com",
+        imap_password="",
+    )
+    email_credentials.store_imap_password(account, "p@ssw0rd")
+    session.add(account)
+    await session.flush()
+
+    fake_client = _FakeIMAP([_make_rfc822()])
+    result = await email_sync.sync_account(
+        session, account, client_factory=lambda h, p: fake_client
+    )
+    await session.commit()
+
+    assert result.new == 1
+    assert fake_client.select_readonly is True
+    assert fake_client.fetch_commands, "no FETCH issued"
+    for command in fake_client.fetch_commands:
+        assert "BODY.PEEK" in command
+        assert "RFC822" not in command
 
 
 async def test_sync_account_auth_failure_flips_status(session):

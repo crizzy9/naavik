@@ -237,15 +237,61 @@ def _norm(text: str | None) -> str:
     return re.sub(r"[^a-z0-9 ]", " ", (text or "").lower()).strip()
 
 
+# Trailing legal-form tokens dropped from company names ("Brico Inc" → "Brico").
+_LEGAL_SUFFIX_TOKENS = frozenset(
+    {"inc", "llc", "ltd", "limited", "corp", "corporation", "gmbh", "incorporated", "co"}
+)
+# Dot-separated TLD tails dropped from domain-shaped names ("brico.ai" → "brico").
+_TLD_TAILS = ("com", "io", "ai", "app", "dev", "co", "net", "org", "xyz", "hq", "gg")
+# Marketing tails stripped off the collapsed key ("mosaicapp" → "mosaic",
+# "onoai" → "ono") — applied uniformly so every variant of a name maps to the
+# SAME key; a remainder guard keeps short names intact.
+_KEY_TAILS = ("labs", "app", "hq", "ai")
+_KEY_TAIL_MIN_REMAINDER = 3
+
+
+def canonical_company_key(name: str | None) -> str:
+    """Canonical grouping/matching key for a company name (plan 95 § 3.0).
+
+    Collapses the variants the inbox actually produces — "Brico"/"Brico.ai",
+    "Mosaic"/"mosaicapp.com", "ONO AI"/"Onoai" — into one key. Keys only ever
+    GROUP; over-merges ("Stripe"/"Stripe Press") are corrected explicitly via
+    the alias/track-confirm affordances, so consistency beats precision here.
+    """
+    text = (name or "").strip().lower()
+    if not text:
+        return ""
+    # Domain-shaped input: peel dot-separated TLD tails ("mosaicapp.com.au").
+    stripped = True
+    while stripped:
+        stripped = False
+        for tld in _TLD_TAILS:
+            if text.endswith("." + tld) and len(text) > len(tld) + 1:
+                text = text[: -(len(tld) + 1)]
+                stripped = True
+                break
+    tokens = re.sub(r"[^a-z0-9]+", " ", text).split()
+    while len(tokens) > 1 and tokens[-1] in _LEGAL_SUFFIX_TOKENS:
+        tokens.pop()
+    key = "".join(tokens)
+    stripped = True
+    while stripped:
+        stripped = False
+        for tail in _KEY_TAILS:
+            if key.endswith(tail) and len(key) - len(tail) >= _KEY_TAIL_MIN_REMAINDER:
+                key = key[: -len(tail)]
+                stripped = True
+                break
+    return key
+
+
 def _company_matches(candidate: str, target: str) -> bool:
-    a, b = _norm(candidate), _norm(target)
+    a, b = canonical_company_key(candidate), canonical_company_key(target)
     if not a or not b:
         return False
-    if a == b or a in b or b in a:
-        return True
-    # Space-insensitive fallback — "Ono AI" (email) ↔ "Onoai" (application).
-    a2, b2 = a.replace(" ", ""), b.replace(" ", "")
-    return a2 == b2 or a2 in b2 or b2 in a2
+    # Containment keeps the pre-canonicalization behavior ("Mosaic" matches
+    # "Mosaic Building Group"); keys are spaceless so it is space-insensitive.
+    return a == b or a in b or b in a
 
 
 def _role_overlaps(candidate: str | None, target: str | None) -> bool:
@@ -257,18 +303,21 @@ def _role_overlaps(candidate: str | None, target: str | None) -> bool:
 
 
 async def find_application_for_company(
-    session: AsyncSession, *, user_id: int, company: str
+    session: AsyncSession, *, user_id: int, company: str, role: str | None = None
 ) -> Application | None:
     """Fuzzy company-name match against the user's live applications.
 
     Shared by the receipt detector below and the classifier's company→
-    application linker (2026-07 tracking redesign).
+    application linker (2026-07 tracking redesign). When the company has 2+
+    live applications and the email carries a role, the row whose role tokens
+    overlap wins — newest-wins alone silently mislinks parallel processes at
+    one company (plan 95 § 3.0).
     """
-    return await _find_existing_application(session, user_id=user_id, company=company)
+    return await _find_existing_application(session, user_id=user_id, company=company, role=role)
 
 
 async def _find_existing_application(
-    session: AsyncSession, *, user_id: int, company: str
+    session: AsyncSession, *, user_id: int, company: str, role: str | None = None
 ) -> Application | None:
     rows = (
         await session.exec(
@@ -281,10 +330,20 @@ async def _find_existing_application(
             .order_by(Application.updated_at.desc())
         )
     ).all()
-    for application in rows:
-        if _company_matches(company, application.company):
-            return application
-    return None
+    matches = [a for a in rows if _company_matches(company, a.company)]
+    if not matches:
+        return None
+    if role and len(matches) > 1:
+        role_tokens = set(_norm(role).split()) - {"the", "a", "an", "of"}
+        for application in matches:
+            app_tokens = set(_norm(application.role).split()) - {"the", "a", "an", "of"}
+            if (
+                role_tokens
+                and app_tokens
+                and len(role_tokens & app_tokens) >= min(2, len(role_tokens), len(app_tokens))
+            ):
+                return application
+    return matches[0]
 
 
 async def _find_library_job(
