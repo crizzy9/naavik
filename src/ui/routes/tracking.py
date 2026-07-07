@@ -716,6 +716,34 @@ async def post_process_dismiss(
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# Plan 95 § 3.8 — status pin: "Resume auto-tracking"
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/api/v1/applications/{application_id}/unpin",
+    name="api_application_unpin",
+)
+async def post_application_unpin(
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Clear the § 3.8 status pin — email auto-tracking resumes."""
+    try:
+        await applications.clear_pin(
+            session, user_id=_effective_user_id(user), application_id=application_id
+        )
+    except applications.PinError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    response = Response(status_code=204)
+    response.headers["HX-Refresh"] = "true"
+    return response
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Plan 95 § 3.2 — going-quiet strip: mark ghosted / snooze
 # ─────────────────────────────────────────────────────────────────────────
 

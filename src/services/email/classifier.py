@@ -238,10 +238,16 @@ async def _post_classify_dispatch(
         stage=stage,
     )
     if transition is not None:
+        from services.applications.pins import auto_transition_allowed, get_status_pin
+
         now = datetime.now(UTC)
         msg.suggested_status = transition.suggested_status
         msg.suggested_at = now
-        auto_applied = transition.suggested_status != ApplicationStatus.CLOSED
+        # Terminal moves stay human-confirm (asymmetric autonomy); the § 3.8
+        # pin policy additionally downgrades transitions the human already
+        # objected to (and anything on a closed application) to suggestions.
+        pin_allows = auto_transition_allowed(application, transition.suggested_status)
+        auto_applied = transition.suggested_status != ApplicationStatus.CLOSED and pin_allows
         if auto_applied:
             from services import applications as applications_service
 
@@ -267,6 +273,9 @@ async def _post_classify_dispatch(
                 "reason": transition.reason_text,
                 "applied": auto_applied,
                 "dismissed": False,
+                # Rule 5 — a pin-suppressed transition is recorded, never
+                # silently swallowed.
+                "suppressed_by_pin": (not pin_allows and get_status_pin(application) is not None),
             },
         )
     if settings is not None:

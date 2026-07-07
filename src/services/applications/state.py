@@ -94,6 +94,16 @@ async def update_status(
             code="closed_reason_missing",
         )
 
+    # Plan 95 § 3.8 — manual moves manage the status pin: a backward drag
+    # pins the reverted status against email re-application; advancing to or
+    # past the pin clears it (the objection is moot).
+    if trigger == StatusChangeTrigger.MANUAL:
+        from services.applications.pins import stamp_pin_on_manual_move
+
+        stamp_pin_on_manual_move(
+            application, from_status=current, to_status=new_status, is_forward=is_forward
+        )
+
     now = datetime.now(UTC)
     application.status = new_status
     if new_status == ApplicationStatus.CLOSED:

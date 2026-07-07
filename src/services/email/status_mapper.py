@@ -76,7 +76,20 @@ def suggest_status(
 
     if classification == EmailClassification.INTERVIEW_REQUEST:
         if current == ApplicationStatus.CLOSED:
-            return None
+            # Plan 95 § 3.8 rule 4/5 — a closed application never moves
+            # automatically, but the signal must not be swallowed: surface
+            # the would-be stage as a human-confirm suggestion (reopening
+            # is a human act).
+            target = (
+                ApplicationStatus.ONSITE_LOOP
+                if stage == "interview"
+                else ApplicationStatus.RECRUITER_SCREEN
+            )
+            return SuggestedTransition(
+                current_status=current,
+                suggested_status=target,
+                reason_text="Interview signal on a closed application — reopen?",
+            )
         if stage == "screen":
             return _forward(
                 current, ApplicationStatus.RECRUITER_SCREEN, "Recruiter screen scheduled"
@@ -102,8 +115,14 @@ def suggest_status(
         )
 
     if classification == EmailClassification.OFFER:
-        if current in {ApplicationStatus.OFFER, ApplicationStatus.CLOSED}:
+        if current == ApplicationStatus.OFFER:
             return None
+        if current == ApplicationStatus.CLOSED:
+            return SuggestedTransition(
+                current_status=current,
+                suggested_status=ApplicationStatus.OFFER,
+                reason_text="Offer signal on a closed application — reopen?",
+            )
         return SuggestedTransition(
             current_status=current,
             suggested_status=ApplicationStatus.OFFER,

@@ -61,6 +61,12 @@ from services.applications.export import _defang_csv_cell as _defang_csv_cell
 from services.applications.export import (
     list_for_export,
 )
+from services.applications.pins import (
+    PinError,
+    auto_transition_allowed,
+    clear_pin,
+    get_status_pin,
+)
 from services.applications.queries import (
     aggregate_submission_failures,
     count_applied_since,
@@ -144,6 +150,10 @@ __all__ = [
     "bulk_archive",
     "bulk_update_status",
     "RoundError",
+    "PinError",
+    "auto_transition_allowed",
+    "clear_pin",
+    "get_status_pin",
     "QuietApplication",
     "StalenessError",
     "list_going_quiet",

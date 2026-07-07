@@ -124,6 +124,26 @@
       </section>
     {% endif %}
 
+    {# Plan 95 § 3.8.6 — visible pin state with a one-click unpin. #}
+    {% if status_pin %}
+      <section data-testid="detail-status-pin"
+               class="flex items-center gap-2.5 rounded-md bg-slate-900 border border-slate-700 px-3 py-2">
+        <i data-lucide="pause-circle" class="h-4 w-4 text-slate-400 shrink-0" stroke-width="1.5"></i>
+        <div class="flex-1 min-w-0 text-xs text-slate-400">
+          Auto-tracking paused for <span class="text-slate-200">{{ status_pin.rejected_label }}</span> — you moved this card back, so email signal won't re-apply that stage.
+        </div>
+        <button type="button"
+                data-testid="resume-auto-tracking"
+                hx-post="/api/v1/applications/{{ a.id }}/unpin"
+                hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                hx-swap="none"
+                hx-disabled-elt="this"
+                class="shrink-0 px-2 py-1 rounded text-xs text-indigo-200 bg-indigo-500/20 hover:bg-indigo-500/30">
+          Resume auto-tracking
+        </button>
+      </section>
+    {% endif %}
+
     {# Plan 95 § 3.1 — interview rounds checklist (email/notes/calendar). #}
     {% include "components/tracking/_rounds_section.html" %}
 

@@ -234,6 +234,7 @@ async def post_email_sender_flag(
 async def apply_email_suggestion(
     app_id: int,
     message_id: int,
+    resume: Annotated[int, Query()] = 0,
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
@@ -245,6 +246,13 @@ async def apply_email_suggestion(
             message_id=message_id,
             user_id=_effective_user_id(user),
         )
+        # Plan 95 § 3.8.6 — "Apply & resume auto-tracking": accepting the
+        # machine's next call is the natural signal the earlier objection
+        # no longer applies; one click does both.
+        if resume:
+            await applications.clear_pin(
+                session, user_id=_effective_user_id(user), application_id=app_id
+            )
     except applications.ApplicationServiceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()

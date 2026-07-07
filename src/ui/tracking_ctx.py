@@ -86,6 +86,7 @@ def application_to_card(
 ) -> dict[str, object]:
     initial, color = _initial_color(a.company)
     chip, tone = _context_chip(a)
+    pin = applications.get_status_pin(a)
     return {
         "id": a.id,
         "company": a.company,
@@ -99,6 +100,8 @@ def application_to_card(
         "status_label": application_status_label(a.status).lower(),
         "context_chip": chip,
         "context_chip_tone": tone,
+        # Plan 95 § 3.8.6 — visible pin state ("auto-tracking paused").
+        "pin_chip": "auto-paused" if pin else None,
         # Plan 95 § 3.1 — compact `2/5 · system design` chip when rounds exist.
         "round_chip": round_chip,
         # Plan 95 § 3.2 — amber "no signal for N d" chip on quiet cards.
@@ -608,6 +611,16 @@ async def build_application_detail_ctx(
                     }
                 )
 
+    # Plan 95 § 3.8 — visible status pin ("auto-tracking paused for X").
+    pin = applications.get_status_pin(application)
+    status_pin = None
+    if pin is not None:
+        try:
+            rejected = ApplicationStatus(pin.get("rejected"))
+            status_pin = {"rejected_label": application_status_label(rejected)}
+        except (ValueError, TypeError):
+            status_pin = None
+
     # Plan 95 § 3.1 — interview rounds checklist for the slide-over.
     rounds_ctx = await build_rounds_ctx(session, application)
 
@@ -649,6 +662,8 @@ async def build_application_detail_ctx(
         "status_timeline": status_timeline,
         # Plan 95 § 3.1
         "rounds": rounds_ctx["rounds"],
+        # Plan 95 § 3.8
+        "status_pin": status_pin,
         "documents": docs,
         "screener_answers": screener_rows,
         "contacts": contact_rows,
