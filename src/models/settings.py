@@ -70,6 +70,12 @@ class Settings(SQLModel, table=True):
     eager_review_generation: bool = Field(default=True)
     daily_llm_cost_cap_usd: float | None = None
 
+    # Plan 95 § 3.2 — staleness. Flat threshold for every stage (owner
+    # decision 2026-07-07); auto-close is strictly opt-in (None = off),
+    # mirroring the auto-apply consent pattern.
+    staleness_stale_days: int = Field(default=30)
+    auto_close_ghosted_after_days: int | None = None
+
     # Notifications
     notify_threshold: float = Field(default=0.80)
     notify_on_errors: bool = Field(default=True)

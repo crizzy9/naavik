@@ -66,6 +66,7 @@ async def _emit_event(
     application_id: int | None,
     kind: AppEventKind,
     payload: dict[str, Any] | None = None,
+    occurred_at: datetime | None = None,
 ) -> None:
     from models import AppEvent
 
@@ -74,7 +75,7 @@ async def _emit_event(
         application_id=application_id,
         kind=kind,
         payload=payload or {},
-        occurred_at=datetime.now(UTC),
+        occurred_at=occurred_at or datetime.now(UTC),
     )
     session.add(ev)
     await session.flush()
@@ -178,11 +179,16 @@ async def _post_classify_dispatch(
     await _promote_thread_classification(session, msg)
 
     if emit_received:
+        # occurred_at = the mail's receipt time, not classify time — the
+        # staleness derivation (plan 95 § 3.2) reads this as "when the
+        # company last spoke"; a classify-time stamp would reset the quiet
+        # clock on every backfill re-run.
         await _emit_event(
             session,
             user_id=msg.user_id,
             application_id=msg.application_id,
             kind=AppEventKind.EMAIL_RECEIVED,
+            occurred_at=msg.received_at,
             payload={
                 "thread_id": msg.thread_id,
                 "message_id_external": msg.message_id_external,

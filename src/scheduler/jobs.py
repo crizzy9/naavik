@@ -408,6 +408,25 @@ async def sync_calendars() -> None:
     )
 
 
+async def staleness_sweep() -> None:
+    """`tracking.staleness_sweep` — weekly (plan 95 § 3.2).
+
+    Flags active applications with no signal for `staleness_stale_days`;
+    auto-closes ONLY when `auto_close_ghosted_after_days` is explicitly set
+    (default off — nothing closes without a click).
+    """
+    from services import applications as applications_service
+
+    async with async_session() as session:
+        stats = await applications_service.staleness_sweep(session)
+        await session.commit()
+    log.info(
+        "staleness_sweep flagged=%d auto_closed=%d",
+        stats.get("flagged", 0),
+        stats.get("auto_closed", 0),
+    )
+
+
 async def resolve_apply_sites() -> None:
     """`jobs.resolve_apply_sites` — every 20min (apply-site resolver, 2026-07).
 
@@ -649,6 +668,18 @@ def register_all(scheduler: AsyncIOScheduler) -> None:
         IntervalTrigger(minutes=45),
         id="tracking.sync_calendars",
         name="tracking.sync_calendars",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+
+    # Plan 95 § 3.2: weekly silence sweep (auto-close strictly opt-in).
+    scheduler.add_job(
+        staleness_sweep,
+        CronTrigger(day_of_week="mon", hour=8, minute=0, timezone="UTC"),
+        id="tracking.staleness_sweep",
+        name="tracking.staleness_sweep",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

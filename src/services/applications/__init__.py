@@ -92,6 +92,14 @@ from services.applications.rounds import (
     set_round_state,
     upsert_round,
 )
+from services.applications.staleness import (
+    QuietApplication,
+    StalenessError,
+    list_going_quiet,
+    mark_ghosted,
+)
+from services.applications.staleness import snooze as snooze_staleness
+from services.applications.staleness import sweep as staleness_sweep
 from services.applications.state import _FORWARD_FROM as _FORWARD_FROM
 from services.applications.state import (
     BULK_MAX_IDS,
@@ -136,6 +144,12 @@ __all__ = [
     "bulk_archive",
     "bulk_update_status",
     "RoundError",
+    "QuietApplication",
+    "StalenessError",
+    "list_going_quiet",
+    "mark_ghosted",
+    "snooze_staleness",
+    "staleness_sweep",
     "create_planned_rounds",
     "derive_stage_from_rounds",
     "list_rounds",

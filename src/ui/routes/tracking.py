@@ -716,6 +716,60 @@ async def post_process_dismiss(
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# Plan 95 § 3.2 — going-quiet strip: mark ghosted / snooze
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/api/v1/tracking/staleness/{application_id}/ghost",
+    name="api_staleness_ghost",
+)
+async def post_staleness_ghost(
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    try:
+        await applications.mark_ghosted(
+            session, user_id=_effective_user_id(user), application_id=application_id
+        )
+    except applications.StalenessError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    # Full refresh: the card leaves the board + the strip row disappears.
+    response = Response(status_code=204)
+    response.headers["HX-Refresh"] = "true"
+    return response
+
+
+@router.post(
+    "/api/v1/tracking/staleness/{application_id}/snooze",
+    name="api_staleness_snooze",
+)
+async def post_staleness_snooze(
+    application_id: int,
+    dom_id: Annotated[str, Form(max_length=200)] = "",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    try:
+        await applications.snooze_staleness(
+            session, user_id=_effective_user_id(user), application_id=application_id
+        )
+    except applications.StalenessError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    triggers: dict[str, object] = {"showToast": {"tone": "info", "text": "Snoozed for 2 weeks."}}
+    if dom_id and re.fullmatch(r"[a-z0-9-]+", dom_id):
+        triggers["removeElement"] = {"selector": f"#{dom_id}"}
+    response = Response(status_code=204)
+    response.headers["HX-Trigger"] = json.dumps(triggers)
+    return response
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Plan 95 § 3.1 — interview rounds: parse plan / save plan / round state
 # ─────────────────────────────────────────────────────────────────────────
 

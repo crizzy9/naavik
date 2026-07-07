@@ -71,6 +71,8 @@ FUNC_REF_ALLOWLIST: frozenset[str] = frozenset(
         "scheduler.jobs:classify_emails",
         "scheduler.jobs:sync_calendars",
         "scheduler.jobs:resolve_apply_sites",
+        # Plan 95 § 3.2 (95e): weekly silence sweep (auto-close opt-in only).
+        "scheduler.jobs:staleness_sweep",
         # src/scheduler/scraping.py
         "scheduler.scraping:scrape_linkedin",
         "scheduler.scraping:scrape_workday",

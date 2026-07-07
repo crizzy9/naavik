@@ -78,7 +78,12 @@ def _context_chip(a: Application) -> tuple[str | None, str]:
     return (None, "slate")
 
 
-def application_to_card(a: Application, *, round_chip: str | None = None) -> dict[str, object]:
+def application_to_card(
+    a: Application,
+    *,
+    round_chip: str | None = None,
+    quiet_chip: str | None = None,
+) -> dict[str, object]:
     initial, color = _initial_color(a.company)
     chip, tone = _context_chip(a)
     return {
@@ -96,6 +101,8 @@ def application_to_card(a: Application, *, round_chip: str | None = None) -> dic
         "context_chip_tone": tone,
         # Plan 95 § 3.1 — compact `2/5 · system design` chip when rounds exist.
         "round_chip": round_chip,
+        # Plan 95 § 3.2 — amber "no signal for N d" chip on quiet cards.
+        "quiet_chip": quiet_chip,
         "sub_state_pills": [],
     }
 
@@ -123,6 +130,7 @@ def _columns_for_board(
     *,
     show_closed: bool,
     round_chips: dict[int, str] | None = None,
+    quiet_chips: dict[int, str] | None = None,
 ) -> list[dict[str, object]]:
     visible = [
         ApplicationStatus.APPLIED,
@@ -133,10 +141,13 @@ def _columns_for_board(
     if show_closed:
         visible.append(ApplicationStatus.CLOSED)
     chips = round_chips or {}
+    q_chips = quiet_chips or {}
     out = []
     for status in visible:
         cards = [
-            application_to_card(a, round_chip=chips.get(a.id or 0))
+            application_to_card(
+                a, round_chip=chips.get(a.id or 0), quiet_chip=q_chips.get(a.id or 0)
+            )
             for a in apps
             if a.status == status
         ]
@@ -236,7 +247,28 @@ async def build_tracking_ctx(
     closed = await applications.list_closed(session, user_id)
     all_apps = visible_apps + closed if show_closed else visible_apps
     round_chips = await _round_chips_for(session, all_apps)
-    columns = _columns_for_board(all_apps, show_closed=show_closed, round_chips=round_chips)
+
+    # Plan 95 § 3.2 — silence as a signal. Threshold from Settings (flat
+    # for every stage); flagging is computed live, closes only on click.
+    from sqlmodel import select as _select
+
+    from models import Settings as _Settings
+
+    settings_row = (
+        await session.exec(_select(_Settings).where(_Settings.user_id == user_id))
+    ).one_or_none()
+    stale_days = int(getattr(settings_row, "staleness_stale_days", 30) or 30)
+    going_quiet = await applications.list_going_quiet(
+        session, user_id=user_id, stale_days=stale_days
+    )
+    quiet_chips = {
+        q.application.id: f"no signal {q.days_quiet}d"
+        for q in going_quiet
+        if q.application.id is not None
+    }
+    columns = _columns_for_board(
+        all_apps, show_closed=show_closed, round_chips=round_chips, quiet_chips=quiet_chips
+    )
 
     followup = await applications.list_in_followup(session, user_id)
     items: list[dict[str, object]] = []
@@ -354,6 +386,17 @@ async def build_tracking_ctx(
         ],
         "process_merge_targets": merge_targets,
         "track_stage_options": track_stage_options,
+        "going_quiet": [
+            {
+                "id": q.application.id,
+                "company": q.application.company,
+                "role": q.application.role,
+                "status_label": application_status_label(q.application.status),
+                "days_quiet": q.days_quiet,
+                "dom_id": f"going-quiet-{q.application.id}",
+            }
+            for q in going_quiet
+        ],
         # Item 5 — proposed applications inferred from inbox receipts.
         "inferred_pending": [
             {

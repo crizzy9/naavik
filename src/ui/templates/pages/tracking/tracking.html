@@ -302,6 +302,55 @@
   </section>
   {% endif %}
 
+  {# Plan 95 § 3.2 — going-quiet strip: active applications with no signal
+     for the staleness threshold. Nothing closes without a click. #}
+  {% if going_quiet %}
+  <section class="rounded-lg bg-amber-500/5 border border-amber-500/30 px-4 py-3 flex flex-col gap-2" data-testid="going-quiet-strip">
+    <div class="flex items-center gap-2 text-sm text-amber-100">
+      <i data-lucide="moon" class="h-4 w-4 text-amber-300" stroke-width="1.5"></i>
+      {{ going_quiet | length }} application{{ "s" if going_quiet | length != 1 }} going quiet — no signal in a while.
+    </div>
+    <ul class="flex flex-col gap-1.5">
+      {% for q in going_quiet %}
+        <li id="{{ q.dom_id }}" class="flex items-center gap-3 rounded-md bg-slate-950/50 px-3 py-2" data-testid="{{ q.dom_id }}">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-slate-100 truncate">
+              <span class="font-medium">{{ q.company }}</span>{% if q.role %} · {{ q.role }}{% endif %}
+              <span class="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide bg-amber-500/15 text-amber-200">{{ q.status_label }}</span>
+            </div>
+            <div class="text-xs text-slate-500">no signal for {{ q.days_quiet }} days</div>
+          </div>
+          <button type="button"
+                  class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-rose-200 bg-rose-500/20 hover:bg-rose-500/30"
+                  hx-post="/api/v1/tracking/staleness/{{ q.id }}/ghost"
+                  hx-confirm="Close {{ q.company }} as ghosted? You can reopen it later."
+                  hx-swap="none"
+                  hx-disabled-elt="this"
+                  data-testid="{{ q.dom_id }}-ghost">
+            <i data-lucide="ghost" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+            Mark ghosted
+          </button>
+          <a href="/outreach?application={{ q.id }}"
+             class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-indigo-200 bg-indigo-500/20 hover:bg-indigo-500/30"
+             data-testid="{{ q.dom_id }}-nudge">
+            <i data-lucide="send" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+            Nudge
+          </a>
+          <button type="button"
+                  class="shrink-0 px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  hx-post="/api/v1/tracking/staleness/{{ q.id }}/snooze"
+                  hx-vals='{"dom_id": "{{ q.dom_id }}"}'
+                  hx-swap="none"
+                  hx-disabled-elt="this"
+                  data-testid="{{ q.dom_id }}-snooze">
+            Snooze 2w
+          </button>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   {# Needs followup banner #}
   {% if followup_count > 0 %}
     {% with count=followup_count, items=followup_items %}
