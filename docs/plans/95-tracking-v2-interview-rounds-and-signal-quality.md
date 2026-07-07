@@ -1,7 +1,7 @@
-`Status:` AWAITING REVIEW
+`Status:` APPROVED — implementation-ready (kickoff prompt: `docs/prompts/95-tracking-v2.md`)
 `Type:` design
 `Authored:` 2026-07-07
-`Last updated:` 2026-07-07 (rev 3 — owner review folded in: 7 of 8 open questions resolved; rounds vocab extensible + clubbed onsite loops, flat 30d staleness, silent agencies, PII-scrubbed few-shot, To-review default, unpin affordances, full-body opt-in folded in as § 3.9.1 / slice 95l)
+`Last updated:` 2026-07-07 (rev 4 — all 8 open questions resolved (rejection guard: regex approved); § 6 implementation guide added; status → APPROVED)
 `Depends on:` plan 90 (email monitoring), 2026-07 tracking redesign (`docs/design/TRACKING_PIPELINE.md`, migration 0041)
 
 # Plan 95 — Tracking v2: interview rounds, signal quality, and the correction loop
@@ -304,13 +304,13 @@ corrected_at`. Small, append-only. This is the system's labeled dataset;
    prompt and reports accuracy — run before merging any prompt change, so
    prompt "improvements" can't silently regress on exactly the emails the
    owner already had to fix once.
-4. **Rejection guard for groups**: when a group/application contains BOTH
-   interview signals and a later rejection-shaped email that classified
-   `follow_up`/`other`, flag the group with a "possible rejection — confirm?"
-   chip instead of trusting either label. Cheap heuristic (regex on
-   "not moving forward", "other candidates", "position has been filled")
-   applied _only_ as a tiebreaker prompt to the human — it never flips state
-   itself.
+4. **Rejection guard for groups** (approved as regex, owner 2026-07-07): when
+   a group/application contains BOTH interview signals and a later
+   rejection-shaped email that classified `follow_up`/`other`, flag the group
+   with a "possible rejection — confirm?" chip instead of trusting either
+   label. Cheap heuristic (regex on "not moving forward", "other candidates",
+   "position has been filled") applied _only_ as a tiebreaker prompt to the
+   human — it never flips state itself.
 
 ---
 
@@ -455,7 +455,7 @@ auto-applies no matter what the human last did; the owner's requirement:
      that the human's earlier objection no longer applies, so one click does
      both;
    - a pin also clears automatically when the human themselves later moves
-     the card *past* the pinned status (the objection is moot once they've
+     the card _past_ the pinned status (the objection is moot once they've
      advanced beyond it).
 
 This is the same asymmetric-autonomy principle already in the pipeline,
@@ -498,14 +498,14 @@ The owner wants the full-body opt-in revisited now: a 240-char snippet is
 often too little to read a conversation in-app, and it also caps classifier
 context. Options:
 
-| Option | Reading UX | Classifier benefit | Privacy surface | Cost |
-|---|---|---|---|---|
-| A. Snippet-only + deep-link out (status quo) | Weak — leaves the app | none | Minimal (240 chars at rest) | — |
-| B. **On-demand body fetch, never stored** (recommended default) | Full body on expand (~0.5–2s IMAP `BODY.PEEK` round-trip by stored UID) | none (classify runs before any human expands) | Unchanged at rest; body transits memory only | Low — needs per-message UID persisted (small `imap_uid` column, backfillable for new mail only) |
-| C. **Opt-in stored `body_excerpt` (~2,000 chars plaintext)** (recommended as the actual opt-in) | Instant expand for recent mail | Real — classifier/extractors see 8× context; fewer "unclear company/stage" cases | 2k chars at rest per job-related email; gated by per-account Settings toggle, default OFF; delete-account cascades | Low-medium (column + sync change + retroactive backfill impossible for already-synced mail) |
-| D. Full RFC822 blobs at rest | Complete archive | Marginal over C | Large; attachments, quoted chains, tracking pixels — worst surface for no extra signal | Medium |
+| Option                                                                                          | Reading UX                                                              | Classifier benefit                                                               | Privacy surface                                                                                                    | Cost                                                                                            |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| A. Snippet-only + deep-link out (status quo)                                                    | Weak — leaves the app                                                   | none                                                                             | Minimal (240 chars at rest)                                                                                        | —                                                                                               |
+| B. **On-demand body fetch, never stored** (recommended default)                                 | Full body on expand (~0.5–2s IMAP `BODY.PEEK` round-trip by stored UID) | none (classify runs before any human expands)                                    | Unchanged at rest; body transits memory only                                                                       | Low — needs per-message UID persisted (small `imap_uid` column, backfillable for new mail only) |
+| C. **Opt-in stored `body_excerpt` (~2,000 chars plaintext)** (recommended as the actual opt-in) | Instant expand for recent mail                                          | Real — classifier/extractors see 8× context; fewer "unclear company/stage" cases | 2k chars at rest per job-related email; gated by per-account Settings toggle, default OFF; delete-account cascades | Low-medium (column + sync change + retroactive backfill impossible for already-synced mail)     |
+| D. Full RFC822 blobs at rest                                                                    | Complete archive                                                        | Marginal over C                                                                  | Large; attachments, quoted chains, tracking pixels — worst surface for no extra signal                             | Medium                                                                                          |
 
-**Recommendation: B + C together, D rejected.** B gives full-body *reading*
+**Recommendation: B + C together, D rejected.** B gives full-body _reading_
 with zero change to the at-rest posture and works for all mail, old and new.
 C is the actual 0.5.0.05a toggle (`email_store_body_excerpt`, per account,
 default off): when the owner enables it, sync persists a 2,000-char plaintext
@@ -595,7 +595,7 @@ toggle — folded into the same `0042_tracking_v2` migration.
 | 95i   | Email chain on the card (§ 3.9)                                                                                             | S–M                              |
 | 95j   | URL-first manual tracking + initial-state selection (§ 3.7)                                                                 | M                                |
 | 95k   | Enrichment merge on cross-source dedup (§ 3.10)                                                                             | M                                |
-| 95l   | Full-body: on-demand fetch (`imap_uid`) + opt-in stored excerpt + classifier uses excerpt (§ 3.9.1)                          | M                                |
+| 95l   | Full-body: on-demand fetch (`imap_uid`) + opt-in stored excerpt + classifier uses excerpt (§ 3.9.1)                         | M                                |
 
 Ordering rationale: 95a unblocks correct grouping for everything; 95b creates
 the corrections substrate that 95c/95f consume; rounds (95d) is the biggest
@@ -609,55 +609,99 @@ lever (most residual misclassifications trace to the 240-char snippet cap).
 
 ### 3.13 Risks
 
-| Risk                                                                                                    | Mitigation                                                                                                                             |
-| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Round upsert duplicates rounds from reworded reminder emails                                            | Upsert key includes kind + date; `round_no` display-only; merge affordance on the rounds list                                          |
-| Canonicalization over-merges distinct companies ("Stripe" / "Stripe Press")                             | Canonical keys only _group_; Track-it confirm screen shows the member emails; alias table lets the user split/merge explicitly         |
-| Few-shot block bloats the classify prompt                                                               | Cap K=5, snippet-truncate exemplars, count tokens in eval harness                                                                      |
-| Staleness sweep nags about genuinely slow processes                                                     | Snooze affordance + per-user thresholds; auto-close strictly opt-in                                                                    |
-| Agency end-client extraction invents clients                                                            | `end_client` requires the name to appear verbatim in subject/snippet (deterministic post-check before use)                             |
-| readonly EXAMINE breaks providers that need SELECT                                                      | Feature-flag fallback to SELECT + PEEK (PEEK alone already prevents the flag write)                                                    |
-| Add-by-URL scrape fails on walled postings (LinkedIn auth, Workday JS)                                  | Preview step surfaces the failure; typed-fields fallback tab always available; never persist a half-extracted row without confirm      |
-| Status pin logic confuses "why didn't it advance?"                                                      | Suppressed transitions always render as suggestion chips + timeline entries — the system explains itself instead of going quiet        |
-| Enrichment merge overwrites human-typed manual descriptions                                             | Stub-marker check: only machine-written receipt/process descriptions are replaceable; manual text is never touched                     |
-| Mid-stage manual creation skews funnel KPIs (application "reaches" a stage the pipeline never observed) | Back-dated AppEvent trail is written exactly as `track_process` does, so KPI queries see the same shape; characterization test pins it |
-| Few-shot exemplar leaks an email address / sensitive string to a cloud provider | Deterministic PII scrubber (unit-tested pure function) + eval-harness assertion that no raw address survives in any rendered prompt |
-| Opt-in `body_excerpt` widens the at-rest privacy surface | Per-account toggle, default OFF; 2,000-char plaintext cap (no HTML/attachments); cascade-deleted with the account; `TRACKING_PIPELINE.md` contract amended explicitly |
-| `imap_uid` missing for pre-95l mail breaks on-demand fetch | Expand affordance falls back to the provider deep-link when no UID is stored; new mail always carries it |
+| Risk                                                                                                    | Mitigation                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Round upsert duplicates rounds from reworded reminder emails                                            | Upsert key includes kind + date; `round_no` display-only; merge affordance on the rounds list                                                                         |
+| Canonicalization over-merges distinct companies ("Stripe" / "Stripe Press")                             | Canonical keys only _group_; Track-it confirm screen shows the member emails; alias table lets the user split/merge explicitly                                        |
+| Few-shot block bloats the classify prompt                                                               | Cap K=5, snippet-truncate exemplars, count tokens in eval harness                                                                                                     |
+| Staleness sweep nags about genuinely slow processes                                                     | Snooze affordance + per-user thresholds; auto-close strictly opt-in                                                                                                   |
+| Agency end-client extraction invents clients                                                            | `end_client` requires the name to appear verbatim in subject/snippet (deterministic post-check before use)                                                            |
+| readonly EXAMINE breaks providers that need SELECT                                                      | Feature-flag fallback to SELECT + PEEK (PEEK alone already prevents the flag write)                                                                                   |
+| Add-by-URL scrape fails on walled postings (LinkedIn auth, Workday JS)                                  | Preview step surfaces the failure; typed-fields fallback tab always available; never persist a half-extracted row without confirm                                     |
+| Status pin logic confuses "why didn't it advance?"                                                      | Suppressed transitions always render as suggestion chips + timeline entries — the system explains itself instead of going quiet                                       |
+| Enrichment merge overwrites human-typed manual descriptions                                             | Stub-marker check: only machine-written receipt/process descriptions are replaceable; manual text is never touched                                                    |
+| Mid-stage manual creation skews funnel KPIs (application "reaches" a stage the pipeline never observed) | Back-dated AppEvent trail is written exactly as `track_process` does, so KPI queries see the same shape; characterization test pins it                                |
+| Few-shot exemplar leaks an email address / sensitive string to a cloud provider                         | Deterministic PII scrubber (unit-tested pure function) + eval-harness assertion that no raw address survives in any rendered prompt                                   |
+| Opt-in `body_excerpt` widens the at-rest privacy surface                                                | Per-account toggle, default OFF; 2,000-char plaintext cap (no HTML/attachments); cascade-deleted with the account; `TRACKING_PIPELINE.md` contract amended explicitly |
+| `imap_uid` missing for pre-95l mail breaks on-demand fetch                                              | Expand affordance falls back to the provider deep-link when no UID is stored; new mail always carries it                                                              |
 
 ## 4. Decisions & open questions
 
 ### Resolved (owner review, 2026-07-07)
 
-| # | Question | Decision | Folded into |
-|---|---|---|---|
-| 1 | Staleness thresholds | Flat **30d for all stages**; no quiet tier, no stage-sensitivity for now | § 3.2 |
-| 2 | Rounds vocabulary | Extensible CHECK-vocab (not a frozen enum); start with 10 kinds incl. **builder_interview** and **onsite_loop**; clubbed onsites = one round with itemized `sessions` | § 3.1 |
-| 3 | Agency notifications | **Fully silent**; owner won't track agencies; richer handling deferred until needed | § 3.3 |
-| 5 | Few-shot snippets to cloud providers | OK **provided no email addresses / sensitive data leak** → deterministic PII scrubber + eval assertion | § 3.4.2 |
-| 6 | Manual-add default state | **To review** stays default — owner takes the generated resume/cover letter and applies manually; Applied is one click for back-fills | § 3.7 |
-| 7 | Status pin scope | Per-decision pin accepted, **with a visible unpin path** ("Resume auto-tracking" chip, "Apply & resume" on suggestions, auto-clear when the human advances past the pin) so late-stage email tracking can always resume | § 3.8.6 |
-| 8 | Full email bodies | **Revisit now** — 0.5.0.05a folded into this plan: on-demand body fetch for reading + per-account opt-in 2k excerpt at rest (also the classifier-quality lever) | § 3.9.1, slice 95l |
+| #   | Question                             | Decision                                                                                                                                                                                                                | Folded into        |
+| --- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| 1   | Staleness thresholds                 | Flat **30d for all stages**; no quiet tier, no stage-sensitivity for now                                                                                                                                                | § 3.2              |
+| 2   | Rounds vocabulary                    | Extensible CHECK-vocab (not a frozen enum); start with 10 kinds incl. **builder_interview** and **onsite_loop**; clubbed onsites = one round with itemized `sessions`                                                   | § 3.1              |
+| 3   | Agency notifications                 | **Fully silent**; owner won't track agencies; richer handling deferred until needed                                                                                                                                     | § 3.3              |
+| 5   | Few-shot snippets to cloud providers | OK **provided no email addresses / sensitive data leak** → deterministic PII scrubber + eval assertion                                                                                                                  | § 3.4.2            |
+| 6   | Manual-add default state             | **To review** stays default — owner takes the generated resume/cover letter and applies manually; Applied is one click for back-fills                                                                                   | § 3.7              |
+| 7   | Status pin scope                     | Per-decision pin accepted, **with a visible unpin path** ("Resume auto-tracking" chip, "Apply & resume" on suggestions, auto-clear when the human advances past the pin) so late-stage email tracking can always resume | § 3.8.6            |
+| 8   | Full email bodies                    | **Revisit now** — 0.5.0.05a folded into this plan: on-demand body fetch for reading + per-account opt-in 2k excerpt at rest (also the classifier-quality lever)                                                         | § 3.9.1, slice 95l |
+| 4   | Rejection guard mechanism            | **Regex approved** — human-facing tiebreaker chip only; never flips state itself                                                                                                                                        | § 3.4.4            |
 
-### Still open
-
-1. § 3.4's rejection guard: comfortable with regex heuristics flagging
-   "possible rejection", or LLM-only? (Recommendation stands: regex as a
-   human-facing tiebreaker chip only — it never flips state itself, so the
-   cost of a false positive is one glance.)
+No open questions remain.
 
 ## 5. Approval checklist
 
-- [ ] § 3.0 immediate fixes (canonicalization, role-aware match, PEEK/readonly) approved to build now
-- [ ] `InterviewRound` model + three producers (email / notes-parse / calendar), extensible kind vocab + clubbed-loop `sessions` — approach approved
-- [ ] Staleness: flat 30d, confirm-first nudge (auto-close opt-in only) — approved
-- [ ] Agency handling: end-client-or-park rule + `SenderRule` user flags, fully silent — approved
-- [ ] Corrections loop: correction table + affordances + PII-scrubbed few-shot + eval harness — approved
-- [ ] ML stance: no custom model; embedding cascade deferred — agreed
-- [ ] Manual tracking: URL-first modal + initial-state selection (default To review, back-dated event trail) — approved
-- [ ] Manual-over-email precedence contract (§ 3.8: pin on backward moves, forward news still flows, manual CLOSED absolute, visible unpin path) — approved
-- [ ] Email chain section on the application card — approved
-- [ ] Full-body handling: on-demand fetch + opt-in stored 2k excerpt (§ 3.9.1) — approved
-- [ ] Cross-source dedup: enrichment merge into the tracked canonical row — approved
-- [ ] Rejection-guard mechanism (last open question): regex tiebreaker chip / LLM-only / drop it — pick one
-- [ ] Build sequence 95a→95l (95g deferred) — agreed
+All items approved by the owner on 2026-07-07 (open-question review + "make
+the plan implementation ready" direction):
+
+- [x] § 3.0 immediate fixes (canonicalization, role-aware match, PEEK/readonly) approved to build now
+- [x] `InterviewRound` model + three producers (email / notes-parse / calendar), extensible kind vocab + clubbed-loop `sessions` — approach approved
+- [x] Staleness: flat 30d, confirm-first nudge (auto-close opt-in only) — approved
+- [x] Agency handling: end-client-or-park rule + `SenderRule` user flags, fully silent — approved
+- [x] Corrections loop: correction table + affordances + PII-scrubbed few-shot + eval harness — approved
+- [x] ML stance: no custom model; embedding cascade deferred — agreed
+- [x] Manual tracking: URL-first modal + initial-state selection (default To review, back-dated event trail) — approved
+- [x] Manual-over-email precedence contract (§ 3.8: pin on backward moves, forward news still flows, manual CLOSED absolute, visible unpin path) — approved
+- [x] Email chain section on the application card — approved
+- [x] Full-body handling: on-demand fetch + opt-in stored 2k excerpt (§ 3.9.1) — approved
+- [x] Cross-source dedup: enrichment merge into the tracked canonical row — approved
+- [x] Rejection-guard mechanism: regex tiebreaker chip — approved
+- [x] Build sequence 95a→95l (95g deferred) — agreed
+
+## 6. Implementation guide (per slice — files, tests, acceptance)
+
+Cross-slice rules:
+
+- **Gates per slice:** `ruff check . && ruff format --check .` + `uv run
+  pytest` green + browser QA (Playwright) for any UI-touching slice, before
+  the slice's commit. Commit locally on `main`, one commit per slice,
+  message prefixed `feat(tracking-v2/95X):` (or `fix(...)` for 95a).
+- **Migrations:** contrary to § 3.11's "one migration" sketch, number them
+  as slices land (each additive, each reversible): `0042` in 95b
+  (corrections/alias/sender-rule tables), `0043` in 95d (interview_round),
+  `0044` in 95e (settings staleness fields if not JSONB), `0045` in 95l
+  (imap_uid, body_excerpt, settings toggle). Never edit a migration after
+  it has been applied to the dev DB.
+- **Conventions:** service logic in the domain packages (package `__init__`
+  is the patch surface), LLM calls only through `llm_tracker.tracked_call`,
+  fragments match their `hx-target` granularity, every state-changing
+  control gets loading + toast feedback, Lucide stroke 1.5.
+- **Sample-data shims:** new service calls made by ctx-builders return empty
+  under `_NoopSession` automatically; only add conftest shims when a test
+  needs non-empty data.
+
+| Slice | Touch | Tests | Acceptance |
+|---|---|---|---|
+| **95a** | `sync.py` (`readonly=True` select, `BODY.PEEK[]`); new `canonical_company_key()` in `services/email/inference.py` used by `_company_matches` + `processes._norm_company`; `find_application_for_company(role=…)` role-token preference | extend `test_email_sync.py` (assert PEEK + readonly on the fake client, with a comment explaining fakes don't track flags), `test_email_processes.py` (Brico/Brico.ai group as one), `test_email_application_inference.py` (role disambiguation) | Sync never sets `\Seen`; the dev DB's split groups (Mosaic/mosaicapp.com, Brico/Brico.ai) merge on next page load |
+| **95b** | migration 0042; `services/email/corrections.py` (record + reclassify + unlink + merge-company); `CompanyAlias` consulted by `canonical_company_key`; routes (`/api/v1/email/messages/{id}/reclassify`, `/api/v1/tracking/processes/merge`, unlink); UI actions on detected-panel rows + thread view | new `test_email_corrections.py`: reclassify re-runs dispatch, correction row persisted, alias survives regroup, IDOR/CSRF pins | Owner can fix a mislabeled email in ≤2 clicks and the fix sticks + is recorded |
+| **95c** | prompt/schema `sender_type` + `end_client` (+ verbatim-in-text post-check); `extracted_*` columns (0042); `SenderRule` checks before LLM result applied; seeds; collapsed "Agencies & platforms" group in the panel; "Flag sender…" action | classifier tests (agency parked, end-client promoted), sender-rule precedence test, panel render test | G2i/RiseSmart mail never surfaces as a detected process; a named end-client does; zero notifications from parked mail |
+| **95d** | migration 0043 (`interview_round`, CHECK vocab, `sessions` JSONB); prompt `round_kind`; round upsert in classifier dispatch (key: application+kind+date; `onsite_loop` upserts `sessions`); `llm/prompts/parse_interview_plan.py` + "Parse interview plan" button (explicit, preview-before-save); calendar producer in `calendar_sync`; Rounds section on slide-over + `2/5 · system design` card chip | new `test_interview_rounds.py`: upsert idempotence (3 reminders → 1 round), clubbed-loop sessions, notes-parse preview, stage derivation from completed rounds | Camber-style two-round process renders as two checklist entries under one application; reminder spam never duplicates rounds |
+| **95e** | Settings `staleness_stale_days` (default 30) + optional `auto_close_ghosted_after_days`; `tracking.staleness_sweep` weekly job; `last_signal_at` derived query in `services/applications`; "Going quiet" strip (Mark ghosted / Nudge / Snooze 2w) | sweep unit tests (signal derivation, snooze honored, opt-in auto-close), strip render test | A 30d-silent application shows the chip + strip row; nothing closes without a click unless the auto-close setting is on |
+| **95f** | `services/email/pii_scrub.py` (pure fn); few-shot block builder in classifier (K≤5, domain-only sender); `NAAVIK_EVAL_LLM=1` eval test replaying corrections | scrubber unit tests (addresses/phones/tokened URLs); assertion no raw `@`-address in rendered prompt; eval harness smoke | A corrected sender-domain classifies correctly on the next similar email; no PII in any prompt |
+| **95h** | pin policy in the email-transition path (reads latest STATUS_CHANGE trigger + `submission_artifacts.status_pin`); pin written on backward manual moves in `update_status` route layer; unpin: chip + "Apply & resume" on suggestion + auto-clear on human advance; manual CLOSED absolute | contract tests, one per § 3.8 rule 1–6 | Dragging a card back stops the pipeline re-advancing it; an OFFER email still lands; unpin is one click |
+| **95i** | "Conversation" section in `_application_detail.html` via `email.list_threads_for_application`; inline suggestion state; reclassify mount (needs 95b) | slide-over render test (threads listed, suggestion buttons present), fragment-granularity guard | Opening a card shows the mail that drove its status without leaving the app |
+| **95j** | extract `_scrape_posting_url` into `services/jobs/add_by_url.py`; `POST /api/v1/jobs/manual/parse` (SSRF-guarded, preview response); URL-first modal w/ editable preview + typed-fields fallback tab; "Where does this stand?" control; mid-stage creation writes the back-dated trail via a shared helper with `processes.track_process` | route tests (parse happy path w/ mocked fetch, walled-URL fallback, mid-stage trail shape = track_process's), modal render test | Paste URL → preview → confirm at "Interview stage" yields a scored job + application with an honest timeline |
+| **95k** | `jobs/dedup.enrich_canonical(canonical, shadow)` + wiring in the upsert dedup path and nightly backfill; field rules per § 3.10 table; NOTE_ADDED merge event; score/embedding re-queue | merge tests: stub replaced, human text preserved, idempotent re-run, two-roles-same-company never merges | A scraper re-find upgrades the tracked stub in place; the application never re-points |
+| **95l** | migration 0045 (`imap_uid`, `body_excerpt`, `email_store_body_excerpt`); sync stores UID always + excerpt when opted; on-demand body route (IMAP PEEK by UID, host-guard + auth + CSRF, never persisted); chain expand UI; classifier prefers `body_excerpt` when present; amend `TRACKING_PIPELINE.md` privacy contract | sync tests (uid stored, excerpt only when opted), on-demand route tests (auth, guard, no persistence), classifier-input test | Expanding an email shows the full body; opting in measurably improves classification context; default posture unchanged |
+
+Slice 95g (embedding cascade) stays deferred — do not build it in this pass.
+
+**Done criteria for the whole plan:** all slices merged with green gates;
+`docs/design/TRACKING_PIPELINE.md` updated (rounds, pin contract, sender
+rules, staleness, body posture); this plan's Status flipped to EXECUTED and
+the file moved to `docs/plans/archive/`; kickoff prompt archived to
+`docs/prompts/archive/`; a `## Deviations from plan` section appended here
+(it will not be empty — real implementations always deviate somewhere).
