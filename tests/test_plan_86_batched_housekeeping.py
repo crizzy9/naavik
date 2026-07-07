@@ -916,7 +916,7 @@ def test_kpis_by_role_family_partial_renders_table() -> None:
     assert "by_role_family" in template
     # Response/Onsite/Offer column headers present.
     assert "Response" in template
-    assert "Onsite" in template
+    assert "Interview" in template
     assert "Offer" in template
 
 
@@ -926,5 +926,5 @@ def test_kpis_by_tag_partial_renders_table() -> None:
     assert 'data-testid="analytics-tag-table"' in template
     assert "by_tag" in template
     assert "Response" in template
-    assert "Onsite" in template
+    assert "Interview" in template
     assert "Offer" in template

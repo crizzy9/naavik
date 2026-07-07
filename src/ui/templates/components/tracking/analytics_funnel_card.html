@@ -2,7 +2,7 @@
   analytics_funnel_card.html — horizontal funnel chart rendered via uplot.
   Plan 81 § D.4 — locked Option A per audit memo § E.
 
-  Renders 4 stages (Applied / Recruiter / Onsite / Offer) with counts +
+  Renders 4 stages (Applied / Recruiter / Interview / Offer) with counts +
   derived percentage (relative to Applied). The actual chart is uplot;
   CSS fallback bars are listed in <noscript> so the data is still legible
   when JS is disabled.
@@ -15,7 +15,7 @@
 {% set _bars = [
     {'label': 'Applied', 'value': funnel.applied, 'tone': 'bg-indigo-500/70'},
     {'label': 'Recruiter', 'value': funnel.recruiter, 'tone': 'bg-cyan-500/70'},
-    {'label': 'Onsite', 'value': funnel.onsite, 'tone': 'bg-amber-500/70'},
+    {'label': 'Interview', 'value': funnel.onsite, 'tone': 'bg-amber-500/70'},
     {'label': 'Offer', 'value': funnel.offer, 'tone': 'bg-emerald-500/70'},
 ] %}
 <section data-testid="analytics-funnel-card"

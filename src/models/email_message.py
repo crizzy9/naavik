@@ -74,6 +74,20 @@ class EmailMessage(SQLModel, table=True):
     classification: EmailClassification | None = None
     auto_classified: bool = Field(default=True)
     classification_model: str | None = None
+    # 2026-07 tracking redesign: employer/role the classifier extracted from
+    # the email text. Powers company→application matching and the "detected
+    # interview processes" panel for out-of-Naavik applications.
+    extracted_company: str | None = Field(default=None, max_length=160)
+    extracted_role: str | None = Field(default=None, max_length=160)
+    # Interview stage hint ("screen" | "interview") for interview_request
+    # emails — drives stage-aware status mapping + process-stage derivation.
+    extracted_stage: str | None = Field(default=None, max_length=20)
+    # Stamped when the user dismisses the detected-process group this message
+    # belongs to ("not mine / stop suggesting").
+    process_dismissed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
     classification_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),

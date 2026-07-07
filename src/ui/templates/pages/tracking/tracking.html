@@ -108,6 +108,51 @@
   </section>
   {% endif %}
 
+  {# Detected interview processes (2026-07 tracking redesign) — interview /
+     assessment / offer emails whose company matches no tracked application.
+     The user opts in per company: Track pulls the whole email timeline into
+     the pipeline at the inferred stage; Not mine hides the group. #}
+  {% if detected_processes %}
+  <section class="rounded-lg bg-amber-500/5 border border-amber-500/30 px-4 py-3 flex flex-col gap-2" data-testid="detected-processes-panel">
+    <div class="flex items-center gap-2 text-sm text-amber-100">
+      <i data-lucide="radar" class="h-4 w-4 text-amber-300" stroke-width="1.5"></i>
+      Your inbox shows {{ detected_processes | length }} interview process{{ "es" if detected_processes | length != 1 }} Naavik isn't tracking.
+    </div>
+    <ul class="flex flex-col gap-1.5">
+      {% for p in detected_processes %}
+        <li id="{{ p.dom_id }}" class="flex items-center gap-3 rounded-md bg-slate-950/50 px-3 py-2" data-testid="{{ p.dom_id }}">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-slate-100 truncate">
+              <span class="font-medium">{{ p.company }}</span>{% if p.role %} · {{ p.role }}{% endif %}
+              <span class="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide bg-amber-500/15 text-amber-200">{{ p.status_label }}</span>
+            </div>
+            <div class="text-xs text-slate-500 truncate">{{ p.message_count }} email{{ "s" if p.message_count != 1 }} · latest {{ p.last_seen_label }} · “{{ p.latest_subject }}”</div>
+          </div>
+          <button type="button"
+                  class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-medium"
+                  hx-post="/api/v1/tracking/processes/track"
+                  hx-vals='{"company": {{ p.company | tojson }}}'
+                  hx-swap="none"
+                  hx-disabled-elt="this"
+                  data-testid="{{ p.dom_id }}-track">
+            <i data-lucide="check" class="h-3.5 w-3.5" stroke-width="2"></i>
+            Track it
+          </button>
+          <button type="button"
+                  class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  hx-post="/api/v1/tracking/processes/dismiss"
+                  hx-vals='{"company": {{ p.company | tojson }}, "dom_id": "{{ p.dom_id }}"}'
+                  hx-swap="none"
+                  hx-disabled-elt="this"
+                  data-testid="{{ p.dom_id }}-dismiss">
+            Not mine
+          </button>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   {# Upcoming calendar events (item 11) — renders only when the calendar is
      connected AND events exist in the next 14 days; honest absence otherwise. #}
   {% if upcoming_events %}

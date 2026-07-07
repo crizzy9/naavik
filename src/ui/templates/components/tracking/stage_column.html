@@ -7,7 +7,7 @@
     cards      : list[Application]
     column_id  : DOM id (required)
 #}
-{% set _label = (status or '') | replace('_', ' ') %}
+{% set _label = STATUS_LABELS.get(status, (status or '') | replace('_', ' ')) %}
 <div class="flex flex-col gap-2 lg:min-h-[400px] w-full lg:w-72 lg:shrink-0 p-3 bg-slate-900 border border-slate-800 rounded-lg">
   <header class="flex items-center gap-1.5 px-1 mb-2 text-xs uppercase tracking-wide font-medium text-slate-400">
     {{ status_dot(status) }}

@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import Application
-from models.enums import AppEventKind, ApplicationStatus, RecruiterState, ReferralState
+from models.enums import (
+    AppEventKind,
+    ApplicationStatus,
+    RecruiterState,
+    ReferralState,
+    application_status_label,
+)
 from services import applications
 from services import email as email_service
 from services import outreach as contact_tracker
@@ -84,7 +91,7 @@ def application_to_card(a: Application) -> dict[str, object]:
         "score": 80,  # placeholder; jobs carry score
         "salary_range": _salary_range(a),
         "status": a.status.value,
-        "status_label": a.status.value.replace("_", " ").lower(),
+        "status_label": application_status_label(a.status).lower(),
         "context_chip": chip,
         "context_chip_tone": tone,
         "sub_state_pills": [],
@@ -101,7 +108,7 @@ def application_to_list_row(a: Application) -> dict[str, object]:
         "role": a.role,
         "team": a.team,
         "status": a.status.value,
-        "status_label": a.status.value.replace("_", " "),
+        "status_label": application_status_label(a.status),
         "score": None,
         "salary_range": _salary_range(a),
         "last_activity": _relative_label(a.updated_at),
@@ -133,7 +140,7 @@ async def build_tracking_ctx(
     show_closed: bool = False,
     show_drafts: bool = False,
 ) -> dict[str, object]:
-    from services.email import inference
+    from services.email import inference, processes
 
     visible_apps = await applications.list_visible_in_tracking(session, user_id)
     # Item 5 — unconfirmed inferred applications stay off the board; they
@@ -208,7 +215,25 @@ async def build_tracking_ctx(
         },
     ]
 
+    # 2026-07 tracking redesign — interview processes detected in the inbox
+    # that map to no tracked application (applied outside Naavik).
+    detected = await processes.list_detected_processes(session, user_id=user_id)
+
     return {
+        "detected_processes": [
+            {
+                "company": p.company,
+                "role": p.role,
+                "status": p.status.value,
+                "status_label": application_status_label(p.status),
+                "message_count": p.message_count,
+                "last_seen_label": _relative_label(p.last_seen),
+                "latest_subject": p.latest_subject,
+                "dom_id": "detected-process-"
+                + (re.sub(r"[^a-z0-9]+", "-", p.company.lower()).strip("-") or "unknown"),
+            }
+            for p in detected
+        ],
         # Item 5 — proposed applications inferred from inbox receipts.
         "inferred_pending": [
             {
@@ -446,7 +471,7 @@ async def build_application_detail_ctx(
             "location": application.location,
             "salary_range": _salary_range(application),
             "status": application.status.value,
-            "status_label": application.status.value.replace("_", " "),
+            "status_label": application_status_label(application.status),
             "board": application.board.value if application.board else None,
             "external_url": application.external_url,
             "notes": application.notes or "",
@@ -485,8 +510,17 @@ LIBRARY_FACETS: list[tuple[str, str]] = [
 ]
 
 
+def _http_url(url: str | None) -> str | None:
+    """Only real links are clickable — email-inferred jobs carry manual:// stubs."""
+    if isinstance(url, str) and url.startswith(("http://", "https://")):
+        return url
+    return None
+
+
 def _job_library_row(job, application, phase) -> dict[str, object]:
     initial, color = _initial_color(job.company)
+    source_url = _http_url(getattr(job, "url", None))
+    board_url = _http_url(getattr(job, "apply_url", None))
     return {
         "id": job.id,
         "company": job.company,
@@ -496,7 +530,11 @@ def _job_library_row(job, application, phase) -> dict[str, object]:
         "location": getattr(job, "location", None),
         "score": int(round(float(getattr(job, "score", 0.0) or 0.0) * 100)),
         "board_label": (job.board.value if getattr(job, "board", None) else "manual"),
+        # Where you actually apply: resolved apply target, else the posting.
+        "board_url": board_url or source_url,
         "source_label": (job.source.value if getattr(job, "source", None) else "manual"),
+        # Where the job was found: the original posting the scraper saw.
+        "source_url": source_url,
         "state": job.queue_state.value,
         "state_label": job.queue_state.value.replace("_", " "),
         "phase": phase,

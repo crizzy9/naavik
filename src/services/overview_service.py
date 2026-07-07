@@ -218,7 +218,7 @@ async def compose_priority_actions(
             actions.append(
                 {
                     "kind": "interview",
-                    "title": f"Prep for {a.company} onsite",
+                    "title": f"Prep for {a.company} interview",
                     "subtitle": f"{a.role}{team_suffix} · final round in 3 days",
                     "urgency": "tomorrow",
                     "urgency_label": "3D",

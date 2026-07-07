@@ -4,8 +4,9 @@
 
   Args:
     r : dict from tracking_ctx._job_library_row — id, company, company_initial,
-        company_color, role, location, score, board_label, state, state_label,
-        phase, found_label, url, application_id, application_status
+        company_color, role, location, score, source_label, source_url,
+        board_label, board_url, state, state_label, phase, found_label, url,
+        application_id, application_status
     library_state, library_q, library_score_min : current filter context so
         row actions re-render the fragment with the same filters.
 #}
@@ -31,7 +32,26 @@
     </a>
   </td>
   <td class="px-3 py-2.5">{{ score_circle(score=r.score, size="compact") }}</td>
-  <td class="px-3 py-2.5"><span class="font-mono text-xs text-slate-400">{{ r.board_label }}</span></td>
+  <td class="px-3 py-2.5">
+    {% if r.source_url %}
+      <a href="{{ r.source_url }}" target="_blank" rel="noopener" hx-boost="false"
+         class="font-mono text-xs text-slate-400 hover:text-indigo-200 underline decoration-slate-700 underline-offset-2 hover:decoration-indigo-400 transition"
+         title="Open original posting"
+         data-testid="library-source-link-{{ r.id }}">{{ r.source_label }}</a>
+    {% else %}
+      <span class="font-mono text-xs text-slate-500">{{ r.source_label }}</span>
+    {% endif %}
+  </td>
+  <td class="px-3 py-2.5">
+    {% if r.board_url %}
+      <a href="{{ r.board_url }}" target="_blank" rel="noopener" hx-boost="false"
+         class="font-mono text-xs text-slate-400 hover:text-indigo-200 underline decoration-slate-700 underline-offset-2 hover:decoration-indigo-400 transition"
+         title="Open application page"
+         data-testid="library-board-link-{{ r.id }}">{{ r.board_label }}</a>
+    {% else %}
+      <span class="font-mono text-xs text-slate-500">{{ r.board_label }}</span>
+    {% endif %}
+  </td>
   <td class="px-3 py-2.5">
     <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide {{ _state_tone.get(r.state, 'text-slate-300 bg-slate-800') }}"
           {% if r.phase and r.phase.reason %}title="{{ r.phase.reason }}"{% endif %}>
@@ -47,13 +67,7 @@
       <a href="/discover/{{ r.id }}"
          class="px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800"
          title="Open review workspace">Open</a>
-      {% if r.url %}
-        <a href="{{ r.url }}" target="_blank" rel="noopener" hx-boost="false"
-           class="px-1.5 py-1 rounded text-xs text-slate-500 hover:text-slate-200 hover:bg-slate-800"
-           title="Open original posting">
-          <i data-lucide="external-link" class="h-3.5 w-3.5" stroke-width="1.5"></i>
-        </a>
-      {% endif %}
+      {# Original-posting link now lives in the Source / Board cells. #}
       {% if r.state in ("unswiped", "saved", "ready_to_submit") %}
         <button type="button"
                 hx-post="/_fragments/tracking/library/{{ r.id }}/queue?{{ _qs }}"

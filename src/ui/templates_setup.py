@@ -12,6 +12,7 @@ Every UI router imports `templates` from here so:
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
+from models.enums import APPLICATION_STATUS_LABELS
 from services.auth import CSRF_COOKIE
 from ui.template_helpers import APP_Q_LABEL_MAPS, APP_Q_OPTIONS, app_q_label, format_jd
 
@@ -93,6 +94,8 @@ TAG_VOCAB: list[str] = [
 ]
 
 templates.env.globals["STATUS_DOT_COLORS"] = STATUS_DOT_COLORS
+# User-facing stage names (2026-07: ONSITE_LOOP renders as "Interview Stage").
+templates.env.globals["STATUS_LABELS"] = APPLICATION_STATUS_LABELS
 templates.env.globals["static_v"] = _static_asset_version()
 templates.env.globals["TAG_VOCAB"] = TAG_VOCAB
 # Plan 09a · Issue 4 — application-question dropdown options + value→label maps.

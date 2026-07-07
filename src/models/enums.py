@@ -19,6 +19,24 @@ class ApplicationStatus(StrEnum):
     CLOSED = "CLOSED"
 
 
+# User-facing stage names. The enum values above are stable DB contracts;
+# display goes through this map so wording can evolve without a migration
+# (2026-07: "Onsite Loop" → "Interview Stage").
+APPLICATION_STATUS_LABELS: dict[str, str] = {
+    ApplicationStatus.DRAFT.value: "Draft",
+    ApplicationStatus.APPLIED.value: "Applied",
+    ApplicationStatus.RECRUITER_SCREEN.value: "Recruiter Screen",
+    ApplicationStatus.ONSITE_LOOP.value: "Interview Stage",
+    ApplicationStatus.OFFER.value: "Offer",
+    ApplicationStatus.CLOSED.value: "Closed",
+}
+
+
+def application_status_label(status: ApplicationStatus | str | None) -> str:
+    value = status.value if isinstance(status, ApplicationStatus) else (status or "")
+    return APPLICATION_STATUS_LABELS.get(value, value.replace("_", " ").title())
+
+
 class ClosedReason(StrEnum):
     REJECTED_BY_THEM = "rejected_by_them"
     WITHDRAWN_BY_ME = "withdrawn_by_me"

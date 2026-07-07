@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import email
+import email.header
 import email.utils
 import imaplib
 import logging
@@ -102,7 +103,23 @@ def _parse_message(raw: bytes) -> Message:
     return email.message_from_bytes(raw)
 
 
-def _extract_snippet(msg: Message, *, limit: int = 200) -> str:
+def _decode_header(raw: str | None) -> str:
+    """Decode RFC 2047 encoded-words + fold whitespace.
+
+    Gmail et al. send `=?UTF-8?Q?...?=` subjects and multi-line folded
+    headers; storing them raw fed mojibake to the classifier and the UI
+    (2026-07 tracking redesign fix).
+    """
+    if not raw:
+        return ""
+    try:
+        decoded = str(email.header.make_header(email.header.decode_header(raw)))
+    except Exception:  # noqa: BLE001 — malformed encoded-word: keep the raw text
+        decoded = raw
+    return " ".join(decoded.split())
+
+
+def _extract_snippet(msg: Message, *, limit: int = 240) -> str:
     """Return the first 200 chars of the plaintext body, normalized."""
     body_parts: list[str] = []
     if msg.is_multipart():
@@ -123,7 +140,7 @@ def _extract_snippet(msg: Message, *, limit: int = 200) -> str:
 def _extract_sender(msg: Message) -> tuple[str, str | None]:
     raw = msg.get("From") or ""
     name, addr = email.utils.parseaddr(raw)
-    return addr or raw, (name or None)
+    return addr or raw, (_decode_header(name) or None)
 
 
 def _extract_received_at(msg: Message) -> datetime:
@@ -313,6 +330,12 @@ async def sync_account(
 
     result.fetched = len(rows)
     highest_uid = account.last_synced_uid
+    for uid, _raw in rows:
+        # Advance the cursor over EVERY fetched UID (dedup'd and malformed
+        # included) — the old new-rows-only advance re-fetched the same tail
+        # of the mailbox on every tick once it contained only known messages.
+        if highest_uid is None or int(uid) > int(highest_uid):
+            highest_uid = uid
     for uid, raw in rows:
         try:
             msg = _parse_message(raw)
@@ -320,7 +343,7 @@ async def sync_account(
             sender_email = sender_email[:_MAX_SENDER_EMAIL_LEN]
             if sender_name is not None:
                 sender_name = sender_name[:_MAX_SENDER_NAME_LEN]
-            subject = (msg.get("Subject") or "").strip()[:_MAX_SUBJECT_LEN]
+            subject = _decode_header(msg.get("Subject")).strip()[:_MAX_SUBJECT_LEN]
             received_at = _extract_received_at(msg)
             thread_key = _extract_thread_key(msg)
             message_id_external = (msg.get("Message-ID") or f"uid-{uid}").strip()
@@ -361,8 +384,6 @@ async def sync_account(
             )
             session.add(row)
             result.new += 1
-            if highest_uid is None or int(uid) > int(highest_uid):
-                highest_uid = uid
         except Exception as exc:  # noqa: BLE001
             log.warning("email_sync: skipping malformed message uid=%s err=%s", uid, exc)
             result.errors.append(f"parse-uid-{uid}: {exc}")

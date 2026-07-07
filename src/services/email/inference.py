@@ -252,6 +252,17 @@ def _role_overlaps(candidate: str | None, target: str | None) -> bool:
     return len(a & b) >= min(2, len(a), len(b))
 
 
+async def find_application_for_company(
+    session: AsyncSession, *, user_id: int, company: str
+) -> Application | None:
+    """Fuzzy company-name match against the user's live applications.
+
+    Shared by the receipt detector below and the classifier's company→
+    application linker (2026-07 tracking redesign).
+    """
+    return await _find_existing_application(session, user_id=user_id, company=company)
+
+
 async def _find_existing_application(
     session: AsyncSession, *, user_id: int, company: str
 ) -> Application | None:

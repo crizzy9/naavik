@@ -15,7 +15,7 @@ import re
 import pytest
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
-from ui.templates_setup import STATUS_DOT_COLORS, TAG_VOCAB
+from ui.templates_setup import APPLICATION_STATUS_LABELS, STATUS_DOT_COLORS, TAG_VOCAB
 
 pytestmark = pytest.mark.uses_sample_data_shims
 
@@ -33,6 +33,7 @@ def env() -> Environment:
         undefined=ChainableUndefined,
     )
     e.globals["STATUS_DOT_COLORS"] = STATUS_DOT_COLORS
+    e.globals["STATUS_LABELS"] = APPLICATION_STATUS_LABELS
     e.globals["TAG_VOCAB"] = TAG_VOCAB
     return e
 

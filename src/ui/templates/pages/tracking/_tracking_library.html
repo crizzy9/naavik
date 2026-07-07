@@ -47,15 +47,19 @@
   {# ── Table ───────────────────────────────────────────────────────── #}
   {% if library_rows %}
   <div class="overflow-x-auto rounded-lg border border-slate-800">
-    <table class="w-full text-sm">
+    {# table-fixed + explicit widths keep Company/Role bounded (it truncates
+       instead of pushing the other columns off-screen); min-w keeps every
+       column usable on small screens via the overflow-x scroll above. #}
+    <table class="w-full min-w-[920px] table-fixed text-sm">
       <thead>
         <tr class="bg-slate-900/80 text-left text-[10px] uppercase tracking-wide text-slate-500">
-          <th class="px-3 py-2 font-medium">Company / Role</th>
-          <th class="px-3 py-2 font-medium">Score</th>
-          <th class="px-3 py-2 font-medium">Board</th>
-          <th class="px-3 py-2 font-medium">State</th>
-          <th class="px-3 py-2 font-medium">Found</th>
-          <th class="px-3 py-2 font-medium text-right">Actions</th>
+          <th class="w-[28%] px-3 py-2 font-medium">Company / Role</th>
+          <th class="w-[7%] px-3 py-2 font-medium">Score</th>
+          <th class="w-[10%] px-3 py-2 font-medium">Source</th>
+          <th class="w-[10%] px-3 py-2 font-medium">Board</th>
+          <th class="w-[13%] px-3 py-2 font-medium">State</th>
+          <th class="w-[8%] px-3 py-2 font-medium">Found</th>
+          <th class="w-[24%] px-3 py-2 font-medium text-right">Actions</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-800/80 bg-slate-950/40">

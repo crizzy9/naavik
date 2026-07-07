@@ -13,6 +13,7 @@ from models.enums import (
     OutreachStatus,
     RecruiterState,
     ReferralState,
+    application_status_label,
 )
 from services import applications
 from services import outreach as contact_tracker
@@ -82,7 +83,7 @@ def _row_view(a: Application, contact_count: int) -> dict[str, object]:
         "contacts_count": contact_count,
         "last_touch": _relative_label(a.updated_at),
         "status": a.status.value,
-        "status_label": a.status.value.replace("_", " ").lower(),
+        "status_label": application_status_label(a.status).lower(),
         "outreach_engagement": _engagement(a, contact_count),
     }
 

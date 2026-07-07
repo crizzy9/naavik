@@ -261,6 +261,181 @@ async def test_classifier_caps_subject_and_sender_in_prompt(session, monkeypatch
     assert "a" * 255 not in captured["prompt"]
 
 
+async def test_classifier_handles_dict_structured_value(session, monkeypatch):
+    """REGRESSION (2026-07): real providers return `StructuredResult.value`
+    as a plain dict. The old `getattr(value, "classification", "other")`
+    silently classified EVERY email as OTHER — 537/537 rows in the owner's
+    dev DB. Dict values must classify correctly."""
+    from types import SimpleNamespace
+
+    from models import User
+    from models.enums import EmailClassification
+    from services.email import classifier as email_classifier
+
+    user = User(email="dict@example.com", password_hash="x", is_active=True)
+    session.add(user)
+    await session.flush()
+    msg = await _seed_message(session, user_id=user.id)
+
+    class _FakeProvider:
+        model = "stub"
+
+    class _FakeStructured:
+        def __init__(self, value):
+            self.value = value  # dict — the production shape
+
+    async def _fake_get_settings(_session, *, user_id):
+        return SimpleNamespace(user_id=user_id)
+
+    async def _fake_tracked_call(**kwargs):
+        return _FakeStructured(
+            {
+                "classification": "interview_request",
+                "urgency": "high",
+                "company": "Anthuria",
+                "role": "Senior Full Stack Engineer",
+                "stage": "interview",
+            }
+        )
+
+    monkeypatch.setattr(email_classifier, "_get_settings", _fake_get_settings)
+    monkeypatch.setattr(email_classifier, "get_provider", lambda _s: _FakeProvider())
+    monkeypatch.setattr(email_classifier.llm_tracker, "tracked_call", _fake_tracked_call)
+
+    processed = await email_classifier.classify_unprocessed(session)
+    await session.commit()
+
+    assert processed == 1
+    assert msg.classification == EmailClassification.INTERVIEW_REQUEST
+    assert msg.extracted_company == "Anthuria"
+    assert msg.extracted_role == "Senior Full Stack Engineer"
+    assert msg.extracted_stage == "interview"
+
+
+async def test_classifier_links_by_company_and_auto_applies(session, monkeypatch):
+    """Unlinked message + extracted company matching a live application →
+    message/thread link + forward status transition applied automatically
+    (trigger=AUTO_FROM_EMAIL)."""
+    from types import SimpleNamespace
+
+    from models import Application, User
+    from models.enums import ApplicationStatus, EmailClassification
+    from services.email import classifier as email_classifier
+
+    user = User(email="link@example.com", password_hash="x", is_active=True)
+    session.add(user)
+    await session.flush()
+    application = Application(
+        user_id=user.id,
+        company="Chime",
+        role="Senior Software Engineer",
+        status=ApplicationStatus.APPLIED,
+    )
+    session.add(application)
+    await session.flush()
+    msg = await _seed_message(session, user_id=user.id)
+
+    class _FakeProvider:
+        model = "stub"
+
+    class _FakeStructured:
+        def __init__(self, value):
+            self.value = value
+
+    async def _fake_get_settings(_session, *, user_id):
+        return SimpleNamespace(user_id=user_id)
+
+    async def _fake_tracked_call(**kwargs):
+        return _FakeStructured(
+            {
+                "classification": "interview_request",
+                "urgency": "high",
+                "company": "Chime",
+                "stage": "interview",
+            }
+        )
+
+    monkeypatch.setattr(email_classifier, "_get_settings", _fake_get_settings)
+    monkeypatch.setattr(email_classifier, "get_provider", lambda _s: _FakeProvider())
+    monkeypatch.setattr(email_classifier.llm_tracker, "tracked_call", _fake_tracked_call)
+
+    async def _no_notify(**kwargs):
+        return None
+
+    monkeypatch.setattr(email_classifier.notify, "notify_priority_email", _no_notify)
+
+    processed = await email_classifier.classify_unprocessed(session)
+    await session.commit()
+
+    assert processed == 1
+    assert msg.application_id == application.id
+    assert application.status == ApplicationStatus.ONSITE_LOOP
+    assert msg.suggested_status == ApplicationStatus.ONSITE_LOOP
+    assert msg.suggestion_applied_at is not None
+    assert msg.classification == EmailClassification.INTERVIEW_REQUEST
+
+    # The thread inherited the link + classification promotion.
+    from models import EmailThread
+
+    thread = await session.get(EmailThread, msg.thread_id)
+    assert thread.application_id == application.id
+    assert thread.classification == EmailClassification.INTERVIEW_REQUEST
+
+
+async def test_classifier_rejection_stays_suggestion_only(session, monkeypatch):
+    """REJECTION → CLOSED must never auto-apply — one misclassified email
+    can't kill a live application. It stays a human-confirm suggestion."""
+    from types import SimpleNamespace
+
+    from models import Application, User
+    from models.enums import ApplicationStatus
+    from services.email import classifier as email_classifier
+
+    user = User(email="reject@example.com", password_hash="x", is_active=True)
+    session.add(user)
+    await session.flush()
+    application = Application(
+        user_id=user.id,
+        company="Chime",
+        role="Senior Software Engineer",
+        status=ApplicationStatus.ONSITE_LOOP,
+    )
+    session.add(application)
+    await session.flush()
+    msg = await _seed_message(session, user_id=user.id, app_id=application.id)
+
+    class _FakeProvider:
+        model = "stub"
+
+    class _FakeStructured:
+        def __init__(self, value):
+            self.value = value
+
+    async def _fake_get_settings(_session, *, user_id):
+        return SimpleNamespace(user_id=user_id)
+
+    async def _fake_tracked_call(**kwargs):
+        return _FakeStructured(
+            {"classification": "rejection", "urgency": "medium", "company": "Chime"}
+        )
+
+    monkeypatch.setattr(email_classifier, "_get_settings", _fake_get_settings)
+    monkeypatch.setattr(email_classifier, "get_provider", lambda _s: _FakeProvider())
+    monkeypatch.setattr(email_classifier.llm_tracker, "tracked_call", _fake_tracked_call)
+
+    async def _no_notify(**kwargs):
+        return None
+
+    monkeypatch.setattr(email_classifier.notify, "notify_priority_email", _no_notify)
+
+    await email_classifier.classify_unprocessed(session)
+    await session.commit()
+
+    assert application.status == ApplicationStatus.ONSITE_LOOP  # unchanged
+    assert msg.suggested_status == ApplicationStatus.CLOSED  # pending suggestion
+    assert msg.suggestion_applied_at is None
+
+
 async def test_classifier_llm_failure_marks_llm_failed(session, monkeypatch):
     from types import SimpleNamespace
 

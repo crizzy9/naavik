@@ -605,6 +605,63 @@ async def post_inferred_dismiss(
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# 2026-07 tracking redesign — detected interview processes track / dismiss
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/api/v1/tracking/processes/track",
+    name="api_process_track",
+)
+async def post_process_track(
+    company: Annotated[str, Form(min_length=1, max_length=160)],
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    from services.email import processes
+
+    application = await processes.track_process(
+        session, user_id=_effective_user_id(user), company=company
+    )
+    if application is None:
+        raise HTTPException(status_code=404, detail="No detected process for that company")
+    await session.commit()
+    # Full refresh: the process card leaves AND the application appears on
+    # the board at its inferred stage — that state change IS the feedback.
+    response = Response(status_code=204)
+    response.headers["HX-Refresh"] = "true"
+    return response
+
+
+@router.post(
+    "/api/v1/tracking/processes/dismiss",
+    name="api_process_dismiss",
+)
+async def post_process_dismiss(
+    company: Annotated[str, Form(min_length=1, max_length=160)],
+    dom_id: Annotated[str, Form(max_length=200)] = "",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    from services.email import processes
+
+    n = await processes.dismiss_process(session, user_id=_effective_user_id(user), company=company)
+    if n == 0:
+        raise HTTPException(status_code=404, detail="No detected process for that company")
+    await session.commit()
+    triggers: dict[str, object] = {
+        "showToast": {"tone": "info", "text": "Dismissed — those emails stay in the inbox log."}
+    }
+    if dom_id and re.fullmatch(r"[a-z0-9-]+", dom_id):
+        triggers["removeElement"] = {"selector": f"#{dom_id}"}
+    response = Response(status_code=204)
+    response.headers["HX-Trigger"] = json.dumps(triggers)
+    return response
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Plan 86 § W3.2 / 0.4.5.08 — per-application bullet override toggle
 # ─────────────────────────────────────────────────────────────────────────
 

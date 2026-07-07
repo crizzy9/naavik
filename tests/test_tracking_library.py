@@ -67,3 +67,24 @@ def test_library_unknown_action_404(client, cookies):
         headers={"X-CSRF-Token": "t" * 40},
     )
     assert r.status_code == 404
+
+
+def test_library_source_and_board_columns_with_embedded_links(client, cookies):
+    """2026-07 redesign: Source + Board are separate columns whose cell text
+    carries the link; the icon-only external-link left the Actions column."""
+    r = client.get("/_fragments/tracking/library", cookies=cookies)
+    assert r.status_code == 200
+    assert ">Source</th>" in r.text
+    assert ">Board</th>" in r.text
+    assert 'data-testid="library-source-link-' in r.text
+    # The old Actions-column icon is gone.
+    assert 'data-lucide="external-link"' not in r.text
+
+
+def test_library_table_constrains_company_column(client, cookies):
+    """table-fixed + explicit widths keep Company/Role from swallowing the
+    viewport; min-w keeps the right-side columns reachable via scroll."""
+    r = client.get("/_fragments/tracking/library", cookies=cookies)
+    assert r.status_code == 200
+    assert "table-fixed" in r.text
+    assert "min-w-[920px]" in r.text
