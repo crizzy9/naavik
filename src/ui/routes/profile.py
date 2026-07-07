@@ -72,6 +72,13 @@ async def _build_profile_ctx(session: AsyncSession, user_id: int) -> dict[str, o
     # on read when the blob is missing or older than today's UTC midnight
     # (cheap: one pass over the user's jobs); the cron remains for keeping
     # it warm.
+    # Total years of experience — hero chip (2026-07). Same computation the
+    # scoring prompts consume (merged experience intervals, no double-count).
+    years = profile_service.total_years_experience([e["model"] for e in exp_view])
+    hero = pctx.hero_dict(profile)
+    if years is not None:
+        hero["years_label"] = f"{int(years)}+ yrs experience" if years >= 1 else "<1 yr experience"
+
     score_history = await profile_service.get_score_history(session, user_id)
     if _score_history_stale(score_history):
         try:
@@ -91,7 +98,7 @@ async def _build_profile_ctx(session: AsyncSession, user_id: int) -> dict[str, o
     all_projects = pctx.project_dicts(await profile_service.list_projects(session, user_id))
     return {
         "profile": profile,
-        "hero": pctx.hero_dict(profile),
+        "hero": hero,
         "score_trend": pctx.score_trend_strip(score_history),
         "experiences": exp_view,
         "skills": pctx.skill_dicts(await profile_service.list_skills(session, user_id)),

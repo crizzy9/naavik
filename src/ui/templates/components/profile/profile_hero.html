@@ -26,6 +26,11 @@
           {{ p.title }}{% if p.company %} · {{ p.company }}{% endif %}
         </p>
         <div class="mt-2 flex items-center gap-3 flex-wrap text-xs text-slate-400">
+          {% if p.years_label %}
+            <span class="inline-flex items-center gap-1" data-testid="hero-years-experience">
+              <i data-lucide="briefcase-business" class="h-3.5 w-3.5" stroke-width="1.5"></i>{{ p.years_label }}
+            </span>
+          {% endif %}
           {% if p.location %}
             <span class="inline-flex items-center gap-1">
               <i data-lucide="map-pin" class="h-3.5 w-3.5" stroke-width="1.5"></i>{{ p.location }}

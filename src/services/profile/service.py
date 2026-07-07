@@ -187,6 +187,49 @@ async def list_experiences(session: AsyncSession, user_id: int) -> list[Experien
     return list(rows)
 
 
+def total_years_experience(experiences: list[Experience] | None) -> float | None:
+    """Total professional experience in years from Experience date ranges.
+
+    Union of `[start_date, end_date-or-now)` intervals — overlapping /
+    concurrent roles never double-count, gaps between roles don't count.
+    None when no experience carries a usable start date.
+
+    Single source of truth for the number: the profile hero chip, the
+    score_job judge prompt, and the match_analysis coverage prompt all
+    consume this (2026-07 — JD "N+ years" asks were previously judged only
+    off whatever the free-text summary happened to say).
+    """
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
+    intervals: list[tuple[datetime, datetime]] = []
+    for e in experiences or []:
+        start = getattr(e, "start_date", None)
+        if start is None:
+            continue
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=UTC)
+        end = getattr(e, "end_date", None) or now
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=UTC)
+        if end <= start:
+            continue
+        intervals.append((start, end))
+    if not intervals:
+        return None
+    intervals.sort()
+    total_days = 0.0
+    cur_start, cur_end = intervals[0]
+    for s, e in intervals[1:]:
+        if s <= cur_end:
+            cur_end = max(cur_end, e)
+        else:
+            total_days += (cur_end - cur_start).days
+            cur_start, cur_end = s, e
+    total_days += (cur_end - cur_start).days
+    return total_days / 365.25
+
+
 async def list_all_bullets(session: AsyncSession, user_id: int) -> list[Bullet]:
     """All live bullets for the user across all experiences."""
     stmt = (

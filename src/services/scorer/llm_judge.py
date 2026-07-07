@@ -114,6 +114,36 @@ async def _render_skills_inventory(session: AsyncSession, profile: Profile) -> s
     return "\n".join(f"- {s.category}: {', '.join(s.items or [])}" for s in rows) or "(none listed)"
 
 
+async def _render_years_experience(session: AsyncSession, profile: Profile) -> str:
+    """Computed total experience for the prompt, e.g. "~8.6 years".
+
+    "unknown" when experiences carry no usable dates (or on any query
+    failure — prompt garnish, never fatal). Before this (2026-07) the
+    judge evaluated JD "N+ years" asks off whatever the free-text summary
+    happened to mention.
+    """
+    from sqlmodel import select
+
+    from models import Experience
+    from services.profile import total_years_experience
+
+    profile_id = getattr(profile, "id", None)
+    if profile_id is None:
+        return "unknown"
+    try:
+        rows = (
+            await session.exec(
+                select(Experience).where(
+                    Experience.profile_id == profile_id, Experience.deleted_at.is_(None)
+                )
+            )
+        ).all()
+        years = total_years_experience(list(rows))
+    except Exception:  # noqa: BLE001
+        return "unknown"
+    return f"~{years:.1f} years" if years is not None else "unknown"
+
+
 async def _llm_judge_score(
     session: AsyncSession,
     *,
@@ -142,6 +172,7 @@ async def _llm_judge_score(
 
     rendered = PROMPT.format(
         profile=_compose_profile_summary(profile),
+        years_experience=await _render_years_experience(session, profile),
         skills_inventory=await _render_skills_inventory(session, profile),
         profile_tags=_render_profile_tags(profile, candidate_bullets),
         candidate_bullets=_render_bullets_with_ids(candidate_bullets),

@@ -61,6 +61,10 @@ PROMPT = """You are an expert technical recruiter scoring how well a candidate m
 Candidate profile:
 {profile}
 
+Total professional experience: {years_experience} (computed from employment
+dates — use THIS number for any "N+ years" ask in the JD, not guesses from
+the summary text).
+
 Candidate skills inventory — AUTHORITATIVE: the candidate is proficient in
 every item listed (the app tracks no proficiency levels); an item on this
 list is NEVER a gap and never needs a fluency qualifier:
@@ -107,6 +111,8 @@ candidate scans in seconds, so they are keywords, not prose:
 - The skills inventory above is authoritative — never list an inventory
   item as a gap and never qualify anything with proficiency/fluency
   wording.
+- Years-of-experience asks: compare against the computed total above; a
+  gap ONLY when the JD demands more years than the candidate has.
 - Deduplicate: one entry per distinct theme; an item appears in strengths
   OR gaps, never both.
 - Fewer, sharper entries beat five vague ones. Zero gaps is acceptable for

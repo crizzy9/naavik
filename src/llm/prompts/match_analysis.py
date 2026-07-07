@@ -38,6 +38,9 @@ every item listed; an item on this list is NEVER missing and NEVER a gap:
 
 Candidate titles held (most recent first): {titles}
 
+Total professional experience: {years_experience} (computed from employment
+dates — use THIS number for any "N+ years" ask, not guesses from prose).
+
 Candidate summary:
 {summary}
 
@@ -49,9 +52,10 @@ Return MatchAnalysis with:
 1. `requirements` — one entry per requirement index, with `covered`:
    - covered=true when the skills inventory, bullets, summary, or titles
      evidence it — directly or via a clear equivalent.
-   - Seniority asks ("senior experience", "N+ years") are covered when the
-     titles/history show that level — a Senior title covers "senior
-     software engineering experience".
+   - Seniority asks ("senior experience") are covered when the titles/
+     history show that level — a Senior title covers "senior software
+     engineering experience". "N+ years" asks are covered when the
+     computed total experience above is ≥ N.
    - Generic engineering-practice asks (testing, code review, CI/CD,
      mentoring, cross-functional work) are covered when any bullet or skill
      shows them in practice; do not demand the exact JD wording.

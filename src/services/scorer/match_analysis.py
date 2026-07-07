@@ -118,6 +118,9 @@ async def ensure_match_analysis(session: AsyncSession, *, job: Job, user_id: int
         if len(bullets) >= _MAX_BULLETS:
             break
 
+    from services.profile import total_years_experience
+
+    years = total_years_experience(list(experiences))
     prompt = PROMPT.format(
         company=job.company or "",
         role=job.role or "",
@@ -126,6 +129,7 @@ async def ensure_match_analysis(session: AsyncSession, *, job: Job, user_id: int
         skills_inventory="\n".join(f"- {s.category}: {', '.join(s.items or [])}" for s in skills)
         or "(none listed)",
         titles=", ".join(e.title for e in experiences if e.title) or "(none)",
+        years_experience=f"~{years:.1f} years" if years is not None else "unknown",
         summary=(profile.summary_full or profile.summary_short or "(none)")[:800],
         bullets="\n".join(f"- {b}" for b in bullets[:_MAX_BULLETS]) or "(none)",
         max_keywords=MAX_KEYWORDS,
