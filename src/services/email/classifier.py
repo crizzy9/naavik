@@ -203,6 +203,28 @@ async def _post_classify_dispatch(
     if application is None:
         return
 
+    # Plan 95 § 3.1 producer 1 — an interview/assessment email naming a
+    # round upserts it on the linked application. Same application, next
+    # round: never a second application, never a second detected process;
+    # reminder spam collapses into the existing row (idempotent upsert).
+    if msg.extracted_round_kind and classification in (
+        EmailClassification.INTERVIEW_REQUEST,
+        EmailClassification.ASSESSMENT,
+    ):
+        from services import applications as applications_service
+
+        try:
+            await applications_service.upsert_round(
+                session,
+                application=application,
+                kind=msg.extracted_round_kind,
+                source="email",
+                state="scheduled",
+                email_message_id=msg.id,
+            )
+        except Exception as exc:  # noqa: BLE001 — rounds must not sink classify
+            log.warning("round upsert failed for message %s: %s", msg.id, exc)
+
     transition = email_status_mapper.suggest_status(
         application,
         classification,
@@ -340,6 +362,14 @@ async def classify_unprocessed(
         if stage not in ("screen", "interview"):
             stage = None
         msg.extracted_stage = stage
+
+        # Plan 95 § 3.1 — the specific round the email names.
+        from models.interview_round import ROUND_KINDS
+
+        round_kind = (parsed.round_kind or "").strip().lower() or None
+        if round_kind not in ROUND_KINDS:
+            round_kind = None
+        msg.extracted_round_kind = round_kind
 
         # Plan 95 § 3.3 — who is talking. sender_type outside the vocabulary
         # degrades to None (LLM guess only; rules below still apply);

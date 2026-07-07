@@ -241,6 +241,36 @@ async def _match_events_to_applications(
                 break
 
 
+async def _upsert_rounds_from_events(session: AsyncSession, *, events: list[CalendarEvent]) -> None:
+    """Plan 95 § 3.1 producer 3 — a matched event whose title looks like an
+    interview round upserts `state=scheduled` with the event link. Idempotent
+    via the round upsert key; failures never sink the calendar sync."""
+    from services import applications as applications_service
+
+    for event in events:
+        if event.matched_application_id is None or event.starts_at is None:
+            continue
+        kind = applications_service.round_kind_from_title(event.title)
+        if kind is None:
+            continue
+        application = await session.get(Application, event.matched_application_id)
+        if application is None:
+            continue
+        try:
+            await applications_service.upsert_round(
+                session,
+                application=application,
+                kind=kind,
+                source="calendar",
+                state="scheduled",
+                title=event.title,
+                scheduled_at=event.starts_at,
+                calendar_event_id=event.id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("calendar round upsert failed for event %s: %s", event.id, exc)
+
+
 async def sync_connection(session: AsyncSession, connection: CalendarConnection) -> tuple[int, int]:
     """Fetch + upsert the window of events. Returns (parsed_in_window, new)."""
     url = load_ics_url(connection)
@@ -305,6 +335,7 @@ async def sync_connection(session: AsyncSession, connection: CalendarConnection)
             await session.delete(row)
 
     await _match_events_to_applications(session, user_id=connection.user_id, events=touched)
+    await _upsert_rounds_from_events(session, events=touched)
 
     connection.status = "ok"
     connection.last_error = None

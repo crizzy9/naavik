@@ -51,6 +51,12 @@ Also extract:
 - urgency: "high" when action is needed within ~48 hours (upcoming scheduled
   interview, imminent deadline), "medium" for action without a tight
   deadline, "low" for FYI-only.
+- round_kind: only for interview_request / assessment emails — the specific
+  round the email is about, one of: "recruiter_screen", "technical_screen",
+  "take_home", "system_design", "hiring_manager", "builder_interview",
+  "team_match", "panel", "onsite_loop" (a bundled block of several
+  back-to-back interviews delivered as one invite), or "other" for a named
+  round that fits none of these. null when the email names no specific round.
 - sender_type: who is talking — "employer" (the hiring company itself, or a
   recruiter employed BY the hiring company), "ats" (applicant-tracking or
   scheduling vendor sending on an employer's behalf: Greenhouse, Lever,
@@ -77,5 +83,6 @@ class EmailClassificationResult(BaseModel):
     company: str | None = None
     role: str | None = None
     stage: str | None = None
+    round_kind: str | None = None
     sender_type: str | None = None
     end_client: str | None = None

@@ -1,0 +1,125 @@
+{# _rounds_section.html — interview rounds checklist (plan 95 § 3.1).
+
+   Args:
+     application  : dict — id (company optional)
+     rounds       : list — round_to_row dicts (id, kind, kind_label, title,
+                    state, state_icon, outcome, scheduled_label, source,
+                    sessions)
+     plan_preview : optional list — parsed rounds awaiting confirm
+                    ({kind, title, sessions})
+     plan_preview_json : optional str — JSON payload for the save route
+     plan_error   : optional str — parse failure/degrade message
+
+   Swap unit for the parse-plan / save-plan / round-state routes
+   (hx-target="#detail-rounds", outerHTML).
+#}
+<section id="detail-rounds" data-testid="detail-rounds">
+  <div class="flex items-baseline justify-between mb-2 gap-3">
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">Rounds</div>
+    {# Explicit parse — never auto-runs on notes save (notes may contain anything). #}
+    <button type="button"
+            data-testid="parse-interview-plan"
+            hx-post="/api/v1/applications/{{ application.id }}/rounds/parse-plan"
+            hx-target="#detail-rounds"
+            hx-swap="outerHTML"
+            hx-disabled-elt="this"
+            hx-indicator="#rounds-parse-indicator"
+            class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-indigo-200 bg-indigo-500/20 hover:bg-indigo-500/30 transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+      <i data-lucide="list-tree" class="h-3 w-3" stroke-width="1.5"></i>
+      Parse interview plan
+      <span id="rounds-parse-indicator" class="htmx-indicator">
+        <i data-lucide="loader-2" class="h-3 w-3 animate-spin" stroke-width="1.5"></i>
+      </span>
+    </button>
+  </div>
+
+  {% if plan_error %}
+    <p class="mb-2 text-xs text-amber-300/90 leading-relaxed" data-testid="rounds-plan-error">{{ plan_error }}</p>
+  {% endif %}
+
+  {% if plan_preview is defined and plan_preview %}
+    <div class="mb-3 rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-3" data-testid="rounds-plan-preview">
+      <div class="text-xs text-indigo-200 mb-2">Parsed from your notes — save to add as planned rounds:</div>
+      <ol class="flex flex-col gap-1 mb-2">
+        {% for r in plan_preview %}
+          <li class="text-sm text-slate-200">
+            <span class="font-medium">{{ r.title or r.kind | replace("_", " ") }}</span>
+            <span class="text-[10px] font-mono uppercase tracking-wide text-slate-500 ml-1">{{ r.kind | replace("_", " ") }}</span>
+            {% if r.sessions %}
+              <div class="text-xs text-slate-400 ml-3">{{ r.sessions | join(" · ") }}</div>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+      <div class="flex items-center gap-2">
+        <form hx-post="/api/v1/applications/{{ application.id }}/rounds/save-plan"
+              hx-target="#detail-rounds"
+              hx-swap="outerHTML"
+              hx-disabled-elt="find button">
+          <input type="hidden" name="rounds_json" value="{{ plan_preview_json }}">
+          <button type="submit"
+                  data-testid="rounds-plan-save"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-medium">
+            <i data-lucide="check" class="h-3 w-3" stroke-width="2"></i>
+            Save plan
+          </button>
+        </form>
+        <button type="button"
+                data-testid="rounds-plan-cancel"
+                hx-get="/_fragments/tracking/rounds/{{ application.id }}"
+                hx-target="#detail-rounds"
+                hx-swap="outerHTML"
+                class="px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800">
+          Cancel
+        </button>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if rounds %}
+    <ol class="flex flex-col gap-1.5" data-testid="rounds-list">
+      {% for r in rounds %}
+        <li class="flex items-start gap-2.5 text-sm rounded-md px-2 py-1.5 {{ 'bg-emerald-500/5' if r.state == 'completed' else 'bg-slate-900/60' }}"
+            data-testid="round-row-{{ r.id }}">
+          <i data-lucide="{{ r.state_icon }}"
+             class="h-4 w-4 shrink-0 mt-0.5 {{ 'text-emerald-400' if r.state == 'completed' else ('text-sky-400' if r.state == 'scheduled' else ('text-slate-600' if r.state == 'cancelled' else 'text-slate-500')) }}"
+             stroke-width="1.5"></i>
+          <div class="flex-1 min-w-0">
+            <div class="text-slate-200 {{ 'line-through text-slate-500' if r.state == 'cancelled' }}">
+              {{ r.title or r.kind_label }}
+            </div>
+            <div class="text-xs text-slate-500">
+              {{ r.kind_label }}{% if r.scheduled_label %} · {{ r.scheduled_label }}{% endif %} · via {{ r.source }}{% if r.outcome and r.outcome != 'pending' %} · {{ r.outcome }}{% endif %}
+            </div>
+            {% if r.sessions %}
+              <details class="mt-0.5">
+                <summary class="text-xs text-slate-500 cursor-pointer hover:text-slate-300 list-none">
+                  {{ r.sessions | length }} session{{ "s" if r.sessions | length != 1 }} ▸
+                </summary>
+                <ul class="mt-1 ml-3 flex flex-col gap-0.5">
+                  {% for s in r.sessions %}
+                    <li class="text-xs text-slate-400">· {{ s }}</li>
+                  {% endfor %}
+                </ul>
+              </details>
+            {% endif %}
+          </div>
+          {% if r.state in ("planned", "scheduled") %}
+            <button type="button"
+                    data-testid="round-mark-done-{{ r.id }}"
+                    hx-post="/api/v1/applications/{{ application.id }}/rounds/{{ r.id }}/state"
+                    hx-vals='{"state": "completed"}'
+                    hx-target="#detail-rounds"
+                    hx-swap="outerHTML"
+                    hx-disabled-elt="this"
+                    class="shrink-0 px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide text-slate-400 bg-slate-800 hover:bg-slate-700 hover:text-slate-200 transition">
+              mark done
+            </button>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  {% elif not plan_preview %}
+    <p class="text-sm text-slate-500">No rounds yet — they appear from interview emails and calendar invites, or parse your notes above.</p>
+  {% endif %}
+</section>

@@ -82,6 +82,9 @@ class EmailMessage(SQLModel, table=True):
     # Interview stage hint ("screen" | "interview") for interview_request
     # emails — drives stage-aware status mapping + process-stage derivation.
     extracted_stage: str | None = Field(default=None, max_length=20)
+    # Plan 95 § 3.1 — the specific interview round the email names
+    # (InterviewRound.kind vocabulary); drives the round upsert.
+    extracted_round_kind: str | None = Field(default=None, max_length=30)
     # Plan 95 § 3.3 — who is talking: employer | ats | agency_recruiter |
     # platform | outplacement | other. Agency mail with no end-client parks
     # in a collapsed group instead of becoming a detected process.

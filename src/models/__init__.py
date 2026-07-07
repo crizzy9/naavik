@@ -68,6 +68,7 @@ from .enums import (
     WorkAuthorization,
 )
 from .event import AppEvent
+from .interview_round import InterviewRound
 from .job import Job, JobCreate, JobFilter, JobRead, JobUpdate
 from .job_embedding import EMBEDDING_DIM, JobEmbedding
 from .job_scrape_run import JobScrapeRun, JobScrapeRunRead
@@ -110,6 +111,7 @@ __all__ = [
     "ClassificationCorrection",
     "CompanyAlias",
     "SenderRule",
+    "InterviewRound",
     "AppEvent",
     "ApiUsage",
     "RevokedJwt",

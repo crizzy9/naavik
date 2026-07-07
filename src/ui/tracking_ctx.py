@@ -78,7 +78,7 @@ def _context_chip(a: Application) -> tuple[str | None, str]:
     return (None, "slate")
 
 
-def application_to_card(a: Application) -> dict[str, object]:
+def application_to_card(a: Application, *, round_chip: str | None = None) -> dict[str, object]:
     initial, color = _initial_color(a.company)
     chip, tone = _context_chip(a)
     return {
@@ -94,6 +94,8 @@ def application_to_card(a: Application) -> dict[str, object]:
         "status_label": application_status_label(a.status).lower(),
         "context_chip": chip,
         "context_chip_tone": tone,
+        # Plan 95 § 3.1 — compact `2/5 · system design` chip when rounds exist.
+        "round_chip": round_chip,
         "sub_state_pills": [],
     }
 
@@ -116,7 +118,12 @@ def application_to_list_row(a: Application) -> dict[str, object]:
     }
 
 
-def _columns_for_board(apps: list[Application], *, show_closed: bool) -> list[dict[str, object]]:
+def _columns_for_board(
+    apps: list[Application],
+    *,
+    show_closed: bool,
+    round_chips: dict[int, str] | None = None,
+) -> list[dict[str, object]]:
     visible = [
         ApplicationStatus.APPLIED,
         ApplicationStatus.RECRUITER_SCREEN,
@@ -125,11 +132,88 @@ def _columns_for_board(apps: list[Application], *, show_closed: bool) -> list[di
     ]
     if show_closed:
         visible.append(ApplicationStatus.CLOSED)
+    chips = round_chips or {}
     out = []
     for status in visible:
-        cards = [application_to_card(a) for a in apps if a.status == status]
+        cards = [
+            application_to_card(a, round_chip=chips.get(a.id or 0))
+            for a in apps
+            if a.status == status
+        ]
         out.append({"status": status.value, "cards": cards})
     return out
+
+
+async def _round_chips_for(session: AsyncSession, apps: list[Application]) -> dict[int, str]:
+    """Batch `2/5 · system design` chips for the board (plan 95 § 3.1)."""
+    ids = [a.id for a in apps if a.id is not None]
+    if not ids:
+        return {}
+    from sqlmodel import select
+
+    from models import InterviewRound
+
+    rows = (
+        await session.exec(
+            select(InterviewRound)
+            .where(InterviewRound.application_id.in_(ids))  # type: ignore[union-attr]
+            .order_by(InterviewRound.round_no.asc(), InterviewRound.id.asc())
+        )
+    ).all()
+    grouped: dict[int, list] = {}
+    for r in rows:
+        grouped.setdefault(r.application_id, []).append(r)
+    out: dict[int, str] = {}
+    for app_id, rounds in grouped.items():
+        chip = applications.round_chip(rounds)
+        if chip:
+            out[app_id] = chip
+    return out
+
+
+_ROUND_STATE_ICONS = {
+    "completed": "check-circle-2",
+    "scheduled": "calendar-clock",
+    "planned": "circle-dashed",
+    "cancelled": "x-circle",
+}
+
+
+def round_to_row(r) -> dict[str, object]:
+    scheduled_label = None
+    if r.scheduled_at is not None:
+        when = _aware(r.scheduled_at)
+        scheduled_label = when.strftime("%b %d") + (
+            when.strftime(" · %H:%M") if (when.hour or when.minute) else ""
+        )
+    sessions = [
+        str(s.get("title", "")).strip()
+        for s in (r.sessions or [])
+        if isinstance(s, dict) and str(s.get("title", "")).strip()
+    ]
+    return {
+        "id": r.id,
+        "round_no": r.round_no,
+        "kind": r.kind,
+        "kind_label": r.kind.replace("_", " "),
+        "title": r.title,
+        "state": r.state,
+        "state_icon": _ROUND_STATE_ICONS.get(r.state, "circle-dashed"),
+        "outcome": r.outcome,
+        "scheduled_label": scheduled_label,
+        "source": r.source,
+        "sessions": sessions,
+    }
+
+
+async def build_rounds_ctx(session: AsyncSession, application: Application) -> dict[str, object]:
+    """Ctx for `_rounds_section.html` — shared by the slide-over include and
+    the parse/save/state fragment routes."""
+    rounds = await applications.list_rounds(session, application_id=application.id or 0)
+    return {
+        "application": {"id": application.id, "company": application.company},
+        "rounds": [round_to_row(r) for r in rounds],
+    }
 
 
 async def build_tracking_ctx(
@@ -151,7 +235,8 @@ async def build_tracking_ctx(
         visible_apps = visible_apps + await applications.list_drafts(session, user_id)
     closed = await applications.list_closed(session, user_id)
     all_apps = visible_apps + closed if show_closed else visible_apps
-    columns = _columns_for_board(all_apps, show_closed=show_closed)
+    round_chips = await _round_chips_for(session, all_apps)
+    columns = _columns_for_board(all_apps, show_closed=show_closed, round_chips=round_chips)
 
     followup = await applications.list_in_followup(session, user_id)
     items: list[dict[str, object]] = []
@@ -480,6 +565,9 @@ async def build_application_detail_ctx(
                     }
                 )
 
+    # Plan 95 § 3.1 — interview rounds checklist for the slide-over.
+    rounds_ctx = await build_rounds_ctx(session, application)
+
     # Item 11 — calendar events fuzzy-matched to this application.
     from services.email import calendar_sync
 
@@ -516,6 +604,8 @@ async def build_application_detail_ctx(
             "score": score,
         },
         "status_timeline": status_timeline,
+        # Plan 95 § 3.1
+        "rounds": rounds_ctx["rounds"],
         "documents": docs,
         "screener_answers": screener_rows,
         "contacts": contact_rows,

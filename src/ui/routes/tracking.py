@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Annotated, Literal
@@ -28,6 +29,8 @@ from ui.templates_setup import templates
 # Mirrors `api.applications._POSTMORTEM_TS_RE` (plan 52). Strict UTC-stamp
 # regex blocks path-traversal payloads at the routing layer.
 _POSTMORTEM_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -710,6 +713,203 @@ async def post_process_dismiss(
     response = Response(status_code=204)
     response.headers["HX-Trigger"] = json.dumps(triggers)
     return response
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Plan 95 § 3.1 — interview rounds: parse plan / save plan / round state
+# ─────────────────────────────────────────────────────────────────────────
+
+_MAX_PLAN_ROUNDS = 12
+
+
+def _rounds_response(request: Request, ctx: dict) -> HTMLResponse:
+    return templates.TemplateResponse(request, "components/tracking/_rounds_section.html", ctx)
+
+
+@router.get(
+    "/_fragments/tracking/rounds/{application_id}",
+    response_class=HTMLResponse,
+    name="fragment_rounds_section",
+)
+async def get_rounds_fragment(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    application = await _application_or_404(session, application_id, user)
+    ctx = await tctx.build_rounds_ctx(session, application)
+    return _rounds_response(request, ctx)
+
+
+@router.post(
+    "/api/v1/applications/{application_id}/rounds/parse-plan",
+    response_class=HTMLResponse,
+    name="api_rounds_parse_plan",
+)
+async def post_rounds_parse_plan(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Explicit notes → expected-rounds projection (plan 95 § 3.1 producer 2).
+
+    Never auto-runs on notes save; renders a preview the owner confirms.
+    Degrades in-fragment (no LLM / empty notes → message, never a 500).
+    """
+    from sqlmodel import select as _select
+
+    from llm import LLMProviderError, get_provider
+    from llm.prompts.parse_interview_plan import PROMPT as PLAN_PROMPT
+    from llm.prompts.parse_interview_plan import InterviewPlanResult
+    from models import Settings
+    from models.interview_round import ROUND_KINDS
+    from services import llm_tracker
+
+    application = await _application_or_404(session, application_id, user)
+    ctx = await tctx.build_rounds_ctx(session, application)
+
+    notes = (application.notes or "").strip()
+    if not notes:
+        ctx["plan_error"] = "No notes to parse — paste your recruiter notes below first."
+        return _rounds_response(request, ctx)
+
+    settings = (
+        await session.exec(_select(Settings).where(Settings.user_id == _effective_user_id(user)))
+    ).one_or_none()
+    provider = None
+    if settings is not None:
+        try:
+            provider = get_provider(settings)
+        except LLMProviderError as exc:
+            if exc.kind != "auth_required":
+                raise
+    if provider is None:
+        ctx["plan_error"] = "Connect an LLM provider in Settings to parse notes into rounds."
+        return _rounds_response(request, ctx)
+
+    rendered = PLAN_PROMPT.format(company=application.company, notes=notes[:2000])
+    try:
+        result = await llm_tracker.tracked_call(
+            session=session,
+            user_id=_effective_user_id(user),
+            provider=provider,
+            method="structured",
+            prompt_name="parse_interview_plan",
+            prompt=rendered,
+            schema=InterviewPlanResult,
+        )
+        # `StructuredResult.value` is a dict — validate through the schema,
+        # never getattr (the exact bug that killed classification once).
+        value = getattr(result, "value", result)
+        parsed = (
+            value
+            if isinstance(value, InterviewPlanResult)
+            else InterviewPlanResult.model_validate(value)
+        )
+    except Exception as exc:  # noqa: BLE001 — degrade in-fragment
+        log.warning("parse_interview_plan failed for app %s: %s", application_id, exc)
+        ctx["plan_error"] = (
+            "Could not parse the notes — try again or add rounds via email/calendar."
+        )
+        return _rounds_response(request, ctx)
+
+    preview = []
+    for item in parsed.rounds[:_MAX_PLAN_ROUNDS]:
+        kind = (item.kind or "other").strip().lower()
+        if kind not in ROUND_KINDS:
+            kind = "other"
+        preview.append(
+            {
+                "kind": kind,
+                "title": (item.title or "").strip()[:200] or None,
+                "sessions": [s.strip()[:120] for s in item.sessions if s.strip()][:10],
+            }
+        )
+    if not preview:
+        ctx["plan_error"] = "The notes don't describe an interview process."
+        return _rounds_response(request, ctx)
+    ctx["plan_preview"] = preview
+    ctx["plan_preview_json"] = json.dumps(preview)
+    await session.commit()  # persist the ApiUsage row from tracked_call
+    return _rounds_response(request, ctx)
+
+
+@router.post(
+    "/api/v1/applications/{application_id}/rounds/save-plan",
+    response_class=HTMLResponse,
+    name="api_rounds_save_plan",
+)
+async def post_rounds_save_plan(
+    request: Request,
+    application_id: int,
+    rounds_json: Annotated[str, Form(max_length=8000)],
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    from models.interview_round import ROUND_KINDS
+
+    application = await _application_or_404(session, application_id, user)
+    try:
+        raw = json.loads(rounds_json)
+        assert isinstance(raw, list)
+    except (json.JSONDecodeError, AssertionError):
+        raise HTTPException(status_code=422, detail="Bad rounds payload") from None
+
+    parsed_rounds = []
+    for item in raw[:_MAX_PLAN_ROUNDS]:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("kind", "other")).strip().lower()
+        parsed_rounds.append(
+            {
+                "kind": kind if kind in ROUND_KINDS else "other",
+                "title": str(item.get("title") or "").strip()[:200] or None,
+                "sessions": [
+                    str(s).strip()[:120] for s in (item.get("sessions") or []) if str(s).strip()
+                ][:10],
+            }
+        )
+    if not parsed_rounds:
+        raise HTTPException(status_code=422, detail="No rounds to save")
+
+    await applications.create_planned_rounds(
+        session, application=application, parsed_rounds=parsed_rounds
+    )
+    await session.commit()
+    ctx = await tctx.build_rounds_ctx(session, application)
+    return _rounds_response(request, ctx)
+
+
+@router.post(
+    "/api/v1/applications/{application_id}/rounds/{round_id}/state",
+    response_class=HTMLResponse,
+    name="api_rounds_set_state",
+)
+async def post_round_state(
+    request: Request,
+    application_id: int,
+    round_id: int,
+    state: Annotated[str, Form(min_length=1, max_length=20)],
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    application = await _application_or_404(session, application_id, user)
+    try:
+        row = await applications.set_round_state(
+            session, user_id=_effective_user_id(user), round_id=round_id, state=state
+        )
+    except applications.RoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if row.application_id != application.id:
+        raise HTTPException(status_code=404, detail="Round not on this application")
+    await session.commit()
+    ctx = await tctx.build_rounds_ctx(session, application)
+    return _rounds_response(request, ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────

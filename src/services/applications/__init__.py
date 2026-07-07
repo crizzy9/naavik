@@ -82,6 +82,16 @@ from services.applications.queries import (
     stuck_drafts,
     update_cover_section,
 )
+from services.applications.rounds import (
+    RoundError,
+    create_planned_rounds,
+    derive_stage_from_rounds,
+    list_rounds,
+    round_chip,
+    round_kind_from_title,
+    set_round_state,
+    upsert_round,
+)
 from services.applications.state import _FORWARD_FROM as _FORWARD_FROM
 from services.applications.state import (
     BULK_MAX_IDS,
@@ -125,6 +135,14 @@ __all__ = [
     "auto_apply_phase",
     "bulk_archive",
     "bulk_update_status",
+    "RoundError",
+    "create_planned_rounds",
+    "derive_stage_from_rounds",
+    "list_rounds",
+    "round_chip",
+    "round_kind_from_title",
+    "set_round_state",
+    "upsert_round",
     "cleanup_stale_drafts",
     "compute_outreach_engagement",
     "count_applied_since",

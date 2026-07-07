@@ -45,6 +45,7 @@
       {{ status_dot(a.status) }}
       <span>{{ a.status_label | default((a.status or '') | replace('_', ' ')) }}</span>
     </span>
+    {% if a.round_chip %}{{ chip(a.round_chip, tone="indigo") }}{% endif %}
     {% if a.context_chip %}{{ chip(a.context_chip, tone=a.context_chip_tone | default("slate")) }}{% endif %}
     {% for p in a.sub_state_pills or [] %}
       {{ chip(p.label, tone=p.tone | default("slate")) }}
