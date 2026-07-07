@@ -1,4 +1,4 @@
-`Status:` APPROVED — implementation-ready (kickoff prompt: `docs/prompts/95-tracking-v2.md`)
+`Status:` EXECUTED — all slices landed 2026-07-07 (95g deferred); see `## Deviations from plan`
 `Type:` design
 `Authored:` 2026-07-07
 `Last updated:` 2026-07-07 (rev 4 — all 8 open questions resolved (rejection guard: regex approved); § 6 implementation guide added; status → APPROVED)
@@ -705,3 +705,60 @@ rules, staleness, body posture); this plan's Status flipped to EXECUTED and
 the file moved to `docs/plans/archive/`; kickoff prompt archived to
 `docs/prompts/archive/`; a `## Deviations from plan` section appended here
 (it will not be empty — real implementations always deviate somewhere).
+
+## Deviations from plan
+
+Logged during execution (2026-07-07, slices 95a→95f, 95h→95l; 95g deferred
+as planned). All slices landed with green gates (`ruff` + full pytest +
+Playwright QA against the dev stack per UI slice), one commit per slice.
+
+1. **`ClassificationCorrection` gained a `kind` column**
+   (`reclassify | unlink | merge_company | flag_sender`, CHECK vocab) beyond
+   the § 3.4 sketch — the labeled dataset must stay interpretable per
+   affordance (few-shot consumes only `kind='reclassify'` rows). Impact:
+   additive column in 0042; no consumer breaks.
+2. **Reclassify UI mounts with 95i, not 95b.** No message-level UI existed
+   at 95b time; the plan itself anticipated this ("reclassify mount (needs
+   95b)" under 95i). The 95b routes/service landed on schedule; the
+   detected panel got the Merge / stage-override / rejection-chip mounts.
+3. **§ 3.4.4 rejection-guard chip shipped in 95b** (group-level, detected
+   panel + card conversation via reclassify) — § 3.12 never assigned it a
+   slice. "Wrong stage?" shipped as a stage select beside "Track it"
+   (`track_process(status_override=…)`, MANUAL trail hop) rather than a
+   separate inline picker.
+4. **Sender-rule seeds are a code-level domain table** below user rules
+   (§ 3.3 sketched deletable DB seed rows). Same precedence contract
+   (user rule > seed > LLM); deleting a seed is expressed as an explicit
+   "Actually an employer" rule, avoiding reseed-on-delete ambiguity.
+   Additionally, parking consults rules/seeds at READ time so pre-95c
+   mail parks retroactively (acceptance: G2i/RiseSmart never surface).
+5. **Email-borne itemized `sessions` deferred** — a 240-char snippet cannot
+   itemize a clubbed onsite; sessions populate from notes-parse + calendar.
+   Revisit once 95l excerpts accumulate. `extracted_round_kind` landed in
+   0043 (with the table) rather than 0042.
+6. **EMAIL_RECEIVED events now stamp `occurred_at = received_at`** (was
+   classify time). Surfaced by 95e live QA: the redesign's backfill re-run
+   had stamped every application "fresh this week", which would have made
+   staleness structurally blind after every backfill. `last_signal_at`
+   also deliberately excludes `updated_at` (housekeeping writes are not
+   signal).
+7. **The status mapper now surfaces interview/offer signal on CLOSED
+   applications as reopen suggestions** (was: silently returns None).
+   Required by § 3.8 rules 4+5 ("only suggestions" / "nothing silently
+   swallowed").
+8. **Enrichment-merge URL rule is a swap**, not a one-way replace: the
+   shadow keeps a `manual://merged/<id>` stub so the tier-2 `(user_id,
+   url)` unique index holds and future scrapes of the posting URL tier-2
+   hit the canonical. `tags` added to the fill-if-empty set (scorer's tag
+   floor needs it).
+9. **The § 3.9.1 toggle lives on `EmailAccount.store_body_excerpt`**
+   (per-account, as § 3.9.1 specifies) rather than a `Settings` row field
+   despite § 3.11's `email_store_body_excerpt` naming; the toggle renders
+   on the account card in Settings → Email.
+10. **Migrations 0042–0045 numbered per slice** as § 6 directed (vs
+    § 3.11's earlier single-migration sketch) — 0042 also carries the 95c
+    extraction columns so 95c shipped without its own migration.
+11. **"Where does this stand?" also landed on the typed-fields fallback**
+    (§ 3.7 scoped it to the URL-confirm step) — the friction complaint
+    (item 7) applies to both entry paths equally; both share
+    `create_tracked_application`.

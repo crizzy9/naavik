@@ -1,8 +1,8 @@
 ---
-Status: ACTIVE
+Status: ARCHIVED — executed 2026-07-07
 Type: prompt
 Authored: 2026-07-07
-Plan: docs/plans/95-tracking-v2-interview-rounds-and-signal-quality.md
+Plan: docs/plans/archive/95-tracking-v2-interview-rounds-and-signal-quality.md
 ---
 
 # Kickoff — Plan 95: Tracking v2 (interview rounds, signal quality, correction loop)
