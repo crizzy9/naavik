@@ -1,7 +1,7 @@
 `Status:` AWAITING REVIEW
 `Type:` design
 `Authored:` 2026-07-07
-`Last updated:` 2026-07-07
+`Last updated:` 2026-07-07 (rev 2 — added §§ 3.7–3.10: manual add-by-URL, manual-override precedence, email chain on the card, cross-source job dedup)
 `Depends on:` plan 90 (email monitoring), 2026-07 tracking redesign (`docs/design/TRACKING_PIPELINE.md`, migration 0041)
 
 # Plan 95 — Tracking v2: interview rounds, signal quality, and the correction loop
@@ -41,6 +41,20 @@ by the owner:
    sync **marks the owner's unread mail as read**. (Confirmed in
    `src/services/email/sync.py:_fetch_imap_messages`; RFC 3501 §6.4.5 — only
    `BODY.PEEK[...]` is side-effect-free.)
+7. Manual tracking is high-friction: the "Add manually" modal requires
+   company/role/description typed by hand — its URL field is stored but never
+   scraped, even though a headless add-by-URL pipeline already exists (used
+   by email inference). And a manually added job can't declare where it
+   already stands (applied? interviewing?), so it enters the pipeline wrong.
+8. Manual status changes vs email signal: both write to the same status, but
+   there is no precedence rule. The owner's requirement is explicit —
+   **manual overrides email**.
+9. Opening a tracking card shows the status timeline but not the email
+   conversation that produced it — the evidence is invisible.
+10. A job tracked from email or manual entry can later be re-found by the
+    scrapers as a "new" job — today that produces a second library row (the
+    tier-3 dedup shadows one side, but the tracked stub never gets the
+    scraped enrichment).
 
 ### Design principles carried forward (see `docs/design/TRACKING_PIPELINE.md`)
 
@@ -305,7 +319,161 @@ No design alternatives worth a matrix here; PEEK is the standard answer.
 
 ---
 
-### 3.7 Data-model & migration summary (if the whole plan is approved)
+### 3.7 Manual tracking by URL — "paste a link, get the whole process"
+
+**Problem.** The manual-entry modal treats the URL as an optional metadata
+field and makes the human do the machine's job (typing company, role, and a
+description that the scoring pipeline then reads). Meanwhile
+`inference._scrape_posting_url` already implements exactly the desired flow —
+SSRF-guarded fetch → Crawl4AI → LLM `extract_job` enrichment → `upsert_job` —
+but only email receipts can reach it. And a manually tracked job has no way
+to say "I already applied three weeks ago and I'm mid-interview", so it
+enters the pipeline as a raw library row instead of where it actually stands.
+
+**Options for the parse path.**
+
+| Option | Capability | Cost | Risk | Maintenance |
+|---|---|---|---|---|
+| A. Keep manual typing, add "fetch" button that only fills the form | Low — human still curates every field | Low | Low | Low |
+| B. **URL-first modal: paste → full add-by-URL pipeline → editable preview → confirm** (recommended) | High — same extraction quality as Discover; human corrects instead of transcribes | Medium (one route + modal rework; pipeline exists) | Low — preview step catches bad extractions before anything persists | Low |
+| C. Fire-and-forget: paste → job appears when scrape finishes | High + zero friction | Medium | Medium — silent failures (JS-walled postings, logins) leave ghosts; no correction point | Medium |
+
+**Recommendation: B.** Modal becomes URL-first: paste → the existing headless
+pipeline runs (spinner via hx-indicator; typical 3–8s) → an editable preview
+renders (company, role, location, description, salary, board — all
+LLM-extracted, all correctable) → confirm. The typed-fields path stays as the
+fallback tab for postings that can't be fetched (auth walls, PDFs). Scoring
+and JD enrichment run exactly as for scraped jobs — "it does our whole
+process" falls out of reusing `upsert_job` + the existing score-pending cron.
+
+**Initial state selection (the "applied / not applied / todo / interview"
+ask).** The confirm step gains one control — "Where does this stand?":
+
+| Choice | Effect (all through existing seams) |
+|---|---|
+| **To review** (default) | `queue_state=unswiped` — lands in Discover like any scraped job |
+| **Todo / saved** | `queue_state=saved` |
+| **Applied** | Application created (`status=APPLIED`, `applied_at` date picker defaulting today), job `queue_state=applied` — mirrors `_create_inferred_application` |
+| **Recruiter screen / Interview stage / Offer** | Application created at that status with the back-dated APPLIED → stage AppEvent trail, exactly like `processes.track_process` derives it — so KPIs and the timeline stay honest |
+
+That last row reuses the trail-writing pattern from `track_process` (§ plan
+context) rather than inventing a second way to create mid-stage applications.
+Email linking then works automatically: the company now exists in the DB, so
+the classifier's company-match links future (and re-classified past) mail.
+
+### 3.8 Manual status updates vs email signal — precedence contract
+
+**Problem.** Two writers, one field. Today an email-driven forward transition
+auto-applies no matter what the human last did; the owner's requirement:
+**manual should override**.
+
+**Options.**
+
+| Option | Capability | Cost | Risk | Maintenance |
+|---|---|---|---|---|
+| A. Last-writer-wins (status quo) | — | — | Email can silently undo a deliberate human decision minutes after it was made | — |
+| B. Hard lock: any manual change permanently disables email transitions for that application | Simple mental model | Low | Tracking goes half-dead exactly on the applications the owner touches most; the pipeline's core value (auto-advance) silently evaporates | Low |
+| C. **Provenance-aware precedence** (recommended): manual moves *pin* the status; email may still *suggest*, and may auto-apply only strictly-forward moves that don't contradict the pin | Keeps automation where it helps, human always wins conflicts | Medium | Low — worst case is one extra confirmation click | Low |
+
+**Recommendation: C, with a precise contract:**
+
+1. Every status write already records its `trigger` in the AppEvent payload —
+   provenance exists; no new column needed for detection. Policy reads "was
+   the latest STATUS_CHANGE manual?"
+2. **Backward manual moves pin.** If the owner drags a card backward (e.g.
+   email auto-advanced to Interview Stage, owner says "no, still recruiter
+   screen"), that pair (application, rejected-status) is remembered — the
+   email pipeline will not re-apply a transition *to the same status* the
+   human just reverted; it downgrades to a banner suggestion. Stored as
+   `submission_artifacts["status_pin"] = {rejected: "ONSITE_LOOP", at: …}` —
+   JSONB slot, no migration.
+3. **Forward manual moves don't block better news.** Owner sets Recruiter
+   Screen manually → an OFFER email still auto-applies (it's strictly
+   forward and uncontradicted). This is why B is wrong: overriding must mean
+   "my correction sticks", not "automation off".
+4. **CLOSED set manually is absolute** — any application the human closed
+   never receives auto transitions again, only suggestions (reopening is a
+   human act; this also covers "I withdrew").
+5. Every suppressed auto-transition still emits `EMAIL_STATUS_SUGGESTED`
+   (`applied: false`), so nothing is silently swallowed — the card shows the
+   pending suggestion chip and the timeline records that the email arrived.
+
+This is the same asymmetric-autonomy principle already in the pipeline,
+extended with one more asymmetry: **human intent outranks machine inference,
+in both directions, forever-per-decision rather than forever-per-application.**
+
+### 3.9 Email chain on the tracking card
+
+**Problem.** The application slide-over shows the status timeline but not the
+correspondence that produced it; verifying "why is this at Interview Stage?"
+means leaving the app for Gmail.
+
+**Proposal (no options matrix — this is a straightforward read-surface):**
+a "Conversation" section on `_application_detail.html`, fed by the existing
+`email.list_threads_for_application` seam (already IDOR-safe, already
+shimmed in tests):
+
+- Threads render newest-first: sender, decoded subject, classification chip
+  (colored by the existing vocabulary), relative date, 240-char snippet on
+  expand — snippet-only by design; the privacy contract (no bodies at rest)
+  is unchanged, and the row deep-links to the provider via the message id
+  when the owner needs the full text.
+- Suggestion state renders inline: an email whose transition auto-applied
+  shows "→ Interview Stage · auto"; a pending rejection suggestion shows the
+  Apply/Dismiss pair (same buttons the banner uses — one component, two
+  mounts).
+- Reclassify affordance from § 3.4 mounts here too — the chain is the natural
+  place to spot "that rejection got tagged follow-up".
+- Interleaving option: rather than a separate section, thread events can
+  merge into the existing status timeline (they're both AppEvent-backed).
+  Recommended: keep **separate sections** — the timeline answers "what
+  changed", the conversation answers "what did they say"; interleaving buries
+  status flips under reminder emails. Revisit if the card feels fragmented.
+
+### 3.10 Cross-source identity: scraper re-finds a tracked job
+
+**Problem.** A job tracked from email (stub row: `source=email`,
+`url=manual://…`, one-sentence description) or manual entry can reappear via
+LinkedIn/Greenhouse scraping as a *different* Job row. Tier-3 dedup
+(`services/jobs/dedup.py`) already catches the pair cross-source (trigram
+company 0.6 + role 0.4, threshold 88) — but it only *shadows* the new row
+(`duplicate_of_id`), so the canonical tracked row keeps its stub data and the
+fresh JD/salary/URL sit hidden in the shadow.
+
+**Options.**
+
+| Option | Capability | Cost | Risk | Maintenance |
+|---|---|---|---|---|
+| A. Status quo (shadow only) | Dedup'd in lists, but tracked row stays a stub; scoring/tailoring read the stub description | — | Docs generated from a one-line description | — |
+| B. Repoint: delete stub, move Application FK to the scraped row | Clean single row | Medium | **High** — breaks evidence links (email_message.application_id fine, but round/message links reference the old job via application; job_id churn ripples into events, embeddings, generated docs) | Medium |
+| C. **Enrichment merge into the canonical row** (recommended): keep the tracked row's identity, copy the scraped row's substance onto it, shadow the scraped row | Tracked row becomes fully scored/tailorable; every FK stays stable | Medium (one merge function + tests) | Low — field-level merge is append/upgrade-only | Low |
+
+**Recommendation: C.** Identity is the row the human's history hangs off;
+substance is whatever the freshest source saw. Merge contract
+(`jobs.dedup.enrich_canonical(canonical, shadow)`), applied whenever
+`find_duplicate` shadows a row whose canonical is `source ∈ {email, manual}`
+(and by the nightly backfill sweep for pairs that already exist):
+
+| Field | Rule |
+|---|---|
+| `url`, `url_type` | Replace when canonical's is a `manual://` stub; keep otherwise |
+| `description` / `description_html` | Replace when canonical's is the receipt/process stub text; keep human-typed manual descriptions (marker: stub descriptions are machine-written with a known prefix) |
+| `salary_min/max`, `posted_at`, `location`, `board`, `criteria`, `skills_required`, `visa_restrictions` | Fill-if-empty |
+| `apply_url` + resolution fields | Take scraped row's if canonical unresolved |
+| `score`, embeddings | Cleared → re-queued (`score.recompute` picks it up) since the description changed materially |
+| `source`, `external_id`, timestamps, `queue_state`, Application links | **Never touched** — identity + human state |
+
+An `AppEvent` (`kind=NOTE_ADDED`, actor `job_dedup_merge`) records the merge
+on the linked application so the timeline explains why docs went stale. The
+merge is idempotent (re-running with the same shadow is a no-op) and one-hop
+(shadows are never merge sources twice), matching the existing dedup-graph
+invariant.
+
+Edge case worth pinning in tests: two live applications at the same company
+for *different roles* must not merge (role weight 0.4 + threshold 88 already
+guards this; add a characterization test with "Senior SWE" vs "Staff PM").
+
+### 3.11 Data-model & migration summary (if the whole plan is approved)
 
 New tables: `interview_round`, `sender_rule`, `classification_correction`,
 `company_alias` — all small, all FK'd to user + evidence rows, all additive
@@ -316,7 +484,12 @@ company/role/stage; new facts land in the same pattern:
 `extracted_round_kind`, `extracted_sender_type`, `extracted_end_client` on
 `email_message`).
 
-### 3.8 Suggested build sequence
+§§ 3.7–3.10 deliberately require **no schema changes**: the manual-URL flow
+reuses `upsert_job` + Application creation, the status pin lives in the
+`submission_artifacts` JSONB slot, the email chain is a read surface over
+existing tables, and the enrichment merge writes existing Job columns.
+
+### 3.12 Suggested build sequence
 
 | Slice | Contents | Size |
 |---|---|---|
@@ -327,13 +500,20 @@ company/role/stage; new facts land in the same pattern:
 | 95e | Staleness sweep + going-quiet strip (§ 3.2) | S–M |
 | 95f | Few-shot injection + eval harness (§ 3.4 items 2–3) | M |
 | 95g | (deferred) embedding cascade (§ 3.5-C) | M — only if volume/cost warrants |
+| 95h | Manual precedence contract + status pin (§ 3.8) — small, high-trust win | S |
+| 95i | Email chain on the card (§ 3.9) | S–M |
+| 95j | URL-first manual tracking + initial-state selection (§ 3.7) | M |
+| 95k | Enrichment merge on cross-source dedup (§ 3.10) | M |
 
 Ordering rationale: 95a unblocks correct grouping for everything; 95b creates
 the corrections substrate that 95c/95f consume; rounds (95d) is the biggest
 UX win but depends on nothing except 95a, so it can be pulled forward if the
-owner prefers.
+owner prefers. 95h should ride early (it's the trust contract that makes the
+rest of the automation acceptable); 95i pairs naturally with 95b since the
+chain is where reclassify affordances mount; 95k depends only on 95a's
+canonicalization.
 
-### 3.9 Risks
+### 3.13 Risks
 
 | Risk | Mitigation |
 |---|---|
@@ -343,6 +523,10 @@ owner prefers.
 | Staleness sweep nags about genuinely slow processes | Snooze affordance + per-user thresholds; auto-close strictly opt-in |
 | Agency end-client extraction invents clients | `end_client` requires the name to appear verbatim in subject/snippet (deterministic post-check before use) |
 | readonly EXAMINE breaks providers that need SELECT | Feature-flag fallback to SELECT + PEEK (PEEK alone already prevents the flag write) |
+| Add-by-URL scrape fails on walled postings (LinkedIn auth, Workday JS) | Preview step surfaces the failure; typed-fields fallback tab always available; never persist a half-extracted row without confirm |
+| Status pin logic confuses "why didn't it advance?" | Suppressed transitions always render as suggestion chips + timeline entries — the system explains itself instead of going quiet |
+| Enrichment merge overwrites human-typed manual descriptions | Stub-marker check: only machine-written receipt/process descriptions are replaceable; manual text is never touched |
+| Mid-stage manual creation skews funnel KPIs (application "reaches" a stage the pipeline never observed) | Back-dated AppEvent trail is written exactly as `track_process` does, so KPI queries see the same shape; characterization test pins it |
 
 ## 4. Open questions
 
@@ -356,6 +540,15 @@ owner prefers.
    "possible rejection", or LLM-only?
 5. Few-shot corrections include email snippets in future prompts — fine for
    cloud providers, or gate that feature to local/Ollama sessions?
+6. Manual add-by-URL: should "Applied" be the default initial state instead
+   of "To review"? (You mostly add jobs you already applied to — but
+   defaulting to Applied would mis-file pasted jobs you're merely eyeing.)
+7. Status pin scope: is per-decision pinning (§ 3.8.2 — remembers the exact
+   rejected status) right, or do you want a visible per-application
+   "automation off" toggle as well?
+8. Email chain: snippet-only rendering (privacy contract) with a deep-link
+   out to Gmail — sufficient, or is this the moment to revisit the
+   full-body-opt-in follow-up (0.5.0.05a)?
 
 ## 5. Approval checklist
 
@@ -365,4 +558,8 @@ owner prefers.
 - [ ] Agency handling: end-client-or-park rule + `SenderRule` user flags — approved
 - [ ] Corrections loop: correction table + affordances + few-shot + eval harness — approved
 - [ ] ML stance: no custom model; embedding cascade deferred — agreed
-- [ ] Build sequence 95a→95f (95g deferred) — agreed
+- [ ] Manual tracking: URL-first modal + initial-state selection (with back-dated event trail) — approved
+- [ ] Manual-over-email precedence contract (§ 3.8: pin on backward moves, forward news still flows, manual CLOSED absolute) — approved
+- [ ] Email chain section on the application card (snippet-only) — approved
+- [ ] Cross-source dedup: enrichment merge into the tracked canonical row — approved
+- [ ] Build sequence 95a→95k (95g deferred) — agreed
