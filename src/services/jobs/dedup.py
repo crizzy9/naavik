@@ -97,6 +97,175 @@ async def find_duplicate(
     return best[1] if best else None
 
 
+# ── Enrichment merge (plan 95 § 3.10, slice 95k) ────────────────────────
+
+# Machine-written stub descriptions (email receipt / detected process) are
+# replaceable; human-typed manual descriptions are NEVER touched.
+_STUB_DESCRIPTION_PREFIXES = (
+    "Inferred from the application-confirmation email",
+    "Tracked from the interview email",
+)
+_MERGE_SOURCES_KEY = "enriched_from_shadow_ids"
+
+# Fill-if-empty columns per the § 3.10 field table (`tags` added — the
+# scorer's tag floor needs it and it is strictly additive).
+_FILL_IF_EMPTY_FIELDS = (
+    "salary_min",
+    "salary_max",
+    "posted_at",
+    "location",
+    "board",
+    "criteria",
+    "skills_required",
+    "tags",
+)
+
+
+def _is_stub_url(url: str | None) -> bool:
+    return (url or "").startswith("manual://")
+
+
+def _is_stub_description(text: str | None) -> bool:
+    return (text or "").startswith(_STUB_DESCRIPTION_PREFIXES)
+
+
+def _empty(value) -> bool:
+    return value is None or value == [] or value == {} or value == ""
+
+
+async def enrich_canonical(session: AsyncSession, *, canonical: Job, shadow: Job) -> bool:
+    """Copy the shadow's substance onto the tracked canonical row (§ 3.10 C).
+
+    Identity is the row the human's history hangs off; substance is whatever
+    the freshest source saw. Field-level merge is append/upgrade-only:
+    `source`, `external_id`, timestamps, `queue_state`, and Application
+    links are NEVER touched — the application never re-points.
+
+    Idempotent (a shadow is recorded in `raw_meta` and never merged twice)
+    and one-hop (a row that is itself shadowed never acts as a source).
+    Returns True when anything changed.
+    """
+    from datetime import UTC, datetime
+
+    if canonical.id is None or shadow.id is None or canonical.id == shadow.id:
+        return False
+    if shadow.duplicate_of_id not in (None, canonical.id):
+        return False  # one-hop invariant: not our shadow
+    meta = dict(canonical.raw_meta or {})
+    merged_ids = [int(i) for i in (meta.get(_MERGE_SOURCES_KEY) or [])]
+    if shadow.id in merged_ids:
+        return False  # idempotent re-run
+
+    changed = False
+    description_changed = False
+
+    # url/url_type — replace only a manual:// stub. The shadow hands its URL
+    # to the canonical and keeps a merged-stub pointer: the tier-2
+    # `(user_id, url)` unique index must hold, and future scrapes of the
+    # posting URL should tier-2-hit the CANONICAL row from now on. The
+    # shadow moves first (own flush) so no statement transiently collides.
+    if _is_stub_url(canonical.url) and shadow.url and not _is_stub_url(shadow.url):
+        incoming_url, incoming_url_type = shadow.url, shadow.url_type
+        shadow.url = f"manual://merged/{shadow.id}"
+        shadow.url_type = "manual"
+        session.add(shadow)
+        await session.flush()
+        canonical.url = incoming_url
+        canonical.url_type = incoming_url_type
+        changed = True
+
+    # description — replace only the machine-written receipt/process stub.
+    if (
+        _is_stub_description(canonical.description)
+        and shadow.description
+        and not _is_stub_description(shadow.description)
+    ):
+        canonical.description = shadow.description
+        if shadow.description_html:
+            canonical.description_html = shadow.description_html
+        changed = True
+        description_changed = True
+
+    for field_name in _FILL_IF_EMPTY_FIELDS:
+        current = getattr(canonical, field_name, None)
+        incoming = getattr(shadow, field_name, None)
+        if _empty(current) and not _empty(incoming):
+            setattr(canonical, field_name, incoming)
+            changed = True
+    # visa_restrictions' "empty" is the NOT_MENTIONED default, not None.
+    from models.enums import VisaRestriction
+
+    if (
+        canonical.visa_restrictions == VisaRestriction.NOT_MENTIONED
+        and shadow.visa_restrictions != VisaRestriction.NOT_MENTIONED
+    ):
+        canonical.visa_restrictions = shadow.visa_restrictions
+        changed = True
+
+    # apply-target resolution — take the shadow's when canonical unresolved.
+    if not canonical.apply_url and shadow.apply_url:
+        canonical.apply_url = shadow.apply_url
+        canonical.apply_kind = shadow.apply_kind
+        canonical.apply_resolved_at = shadow.apply_resolved_at
+        canonical.apply_resolved_via = shadow.apply_resolved_via
+        changed = True
+
+    # Record the merge source even on a no-op pass so re-runs short-circuit.
+    merged_ids.append(shadow.id)
+    meta[_MERGE_SOURCES_KEY] = merged_ids
+    canonical.raw_meta = meta
+    now = datetime.now(UTC)
+    canonical.updated_at = now
+    session.add(canonical)
+
+    if description_changed:
+        # The substance changed materially → clear score/embedding; the
+        # score-pending + embed crons re-queue on score==0 / missing row.
+        canonical.score = 0.0
+        breakdown = dict(canonical.match_breakdown or {})
+        breakdown.pop("scored_at", None)
+        canonical.match_breakdown = breakdown
+        from models import JobEmbedding
+
+        embedding = await session.get(JobEmbedding, canonical.id)
+        if embedding is not None:
+            await session.delete(embedding)
+
+        # Timeline note on the linked application: why the docs went stale.
+        from models import Application
+        from services.applications.common import _emit_event
+
+        applications = (
+            await session.exec(
+                select(Application).where(
+                    Application.job_id == canonical.id,
+                    Application.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        from models.enums import AppEventKind
+
+        for application in applications:
+            await _emit_event(
+                session,
+                user_id=application.user_id,
+                application_id=application.id,
+                kind=AppEventKind.NOTE_ADDED,
+                actor="job_dedup_merge",
+                payload={
+                    "note": (
+                        "Job details enriched from a scraper re-find "
+                        f"({shadow.source.value}) — description/salary/URL updated; "
+                        "generated docs may be stale."
+                    ),
+                    "shadow_job_id": shadow.id,
+                },
+            )
+
+    await session.flush()
+    return changed
+
+
 async def dedup_recent_jobs(
     session: AsyncSession,
     *,
@@ -139,6 +308,10 @@ async def dedup_recent_jobs(
             row.duplicate_of_id = match.id
             session.add(row)
             linked += 1
+            # Plan 95 § 3.10 — a tracked stub (email/manual canonical) gets
+            # the scraped row's substance, not just a shadow pointer.
+            if match.source in (JobSource.EMAIL, JobSource.MANUAL):
+                await enrich_canonical(session, canonical=match, shadow=row)
 
     if linked:
         await session.flush()

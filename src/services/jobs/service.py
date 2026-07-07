@@ -253,6 +253,7 @@ async def upsert_job(
         company = raw.get("company")
         role = raw.get("role")
         duplicate_of_id: int | None = None
+        match = None
         if company and role:
             match = await dedup.find_duplicate(
                 session,
@@ -278,6 +279,11 @@ async def upsert_job(
             job.last_scrape_run_id = scrape_run_id
         session.add(job)
         await session.flush()
+        # Plan 95 § 3.10 — when the canonical is a tracked stub (email /
+        # manual), the fresh scrape's substance merges INTO it (identity
+        # stays; the Application never re-points).
+        if match is not None and match.source in (JobSource.EMAIL, JobSource.MANUAL):
+            await dedup.enrich_canonical(session, canonical=match, shadow=job)
         return job, True
 
     # Existing — refresh extraction metadata, merge raw_meta, bump last_scrape_run_id.
