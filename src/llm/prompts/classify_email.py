@@ -51,6 +51,21 @@ Also extract:
 - urgency: "high" when action is needed within ~48 hours (upcoming scheduled
   interview, imminent deadline), "medium" for action without a tight
   deadline, "low" for FYI-only.
+- sender_type: who is talking — "employer" (the hiring company itself, or a
+  recruiter employed BY the hiring company), "ats" (applicant-tracking or
+  scheduling vendor sending on an employer's behalf: Greenhouse, Lever,
+  Ashby, Workday, GoodTime, Calendly), "agency_recruiter" (a staffing /
+  recruiting agency hiring for OTHER companies), "platform" (a job
+  marketplace like Hired or Wellfound reaching out about its own matching),
+  "outplacement" (career-transition services), "other" when none fits.
+- end_client: ONLY for agency_recruiter / platform / outplacement senders —
+  the company the agency is hiring FOR, when one is explicitly NAMED in the
+  subject or body ("Camo People coordinating your Ripple interview" →
+  "Ripple"). null when no end company is named. For employer/ats senders
+  always null (company already carries the employer).
+
+For agency_recruiter / platform / outplacement senders, `company` is the
+agency/platform organization itself, NOT a guess at who they might represent.
 
 Return an EmailClassificationResult JSON object.
 """
@@ -62,3 +77,5 @@ class EmailClassificationResult(BaseModel):
     company: str | None = None
     role: str | None = None
     stage: str | None = None
+    sender_type: str | None = None
+    end_client: str | None = None

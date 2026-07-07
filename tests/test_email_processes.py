@@ -45,6 +45,7 @@ def _tables():
         EmailMessage,
         EmailThread,
         Job,
+        SenderRule,
         User,
     )
 
@@ -57,6 +58,7 @@ def _tables():
         EmailAccount.__table__,
         EmailMessage.__table__,
         CompanyAlias.__table__,
+        SenderRule.__table__,
     ]
     for table in tables:
         for c in list(table.constraints):

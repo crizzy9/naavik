@@ -40,6 +40,7 @@ def _email_test_tables():
         EmailAccount,
         EmailMessage,
         EmailThread,
+        SenderRule,
         User,
     )
 
@@ -51,6 +52,7 @@ def _email_test_tables():
         EmailAccount.__table__,
         EmailMessage.__table__,
         CompanyAlias.__table__,
+        SenderRule.__table__,
     ]
     for table in tables:
         for c in list(table.constraints):

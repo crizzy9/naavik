@@ -74,6 +74,19 @@ REJECTION_SHAPE_RE = re.compile(
 
 
 @dataclass(slots=True)
+class ParkedSenderGroup:
+    """Agency/platform/outplacement mail with no named end-client — parked
+    in a collapsed panel section, never a process, never notified (§ 3.3)."""
+
+    sender_domain: str
+    company: str
+    message_count: int
+    last_seen: datetime
+    latest_subject: str
+    latest_message_id: int | None
+
+
+@dataclass(slots=True)
 class DetectedProcess:
     company: str
     role: str | None
@@ -87,6 +100,8 @@ class DetectedProcess:
     # § 3.4.4 rejection guard: a later FOLLOW_UP/OTHER email of this company
     # matches the rejection regex — surface a confirm chip, change nothing.
     possible_rejection_message_id: int | None = None
+    # Latest message's sender domain — the "Flag sender…" unit (§ 3.3).
+    sender_domain: str = ""
 
 
 def _norm_company(name: str, aliases: dict[str, str] | None = None) -> str:
@@ -95,10 +110,41 @@ def _norm_company(name: str, aliases: dict[str, str] | None = None) -> str:
     return canonical_company_key(name, aliases=aliases)
 
 
+def _group_company(msg: EmailMessage) -> str:
+    """The company a message evidences a process AT: the named end-client
+    for agency mail, the extracted employer otherwise (plan 95 § 3.3)."""
+    return msg.extracted_end_client or msg.extracted_company or ""
+
+
+def _is_parked(msg: EmailMessage, rules: list | None = None) -> bool:
+    """Parked = intermediary sender with no named end-client.
+
+    Checks the persisted sender_type AND the rule/seed layers at read time —
+    mail classified before the sender_type column existed (or before a rule
+    landed) must park retroactively, not linger as a detected process.
+    """
+    from services.email import sender_rules
+
+    if msg.extracted_end_client:
+        return False
+    if msg.extracted_sender_type in sender_rules.PARKED_SENDER_TYPES:
+        return True
+    treatment = sender_rules.treatment_for(
+        rules or [], sender_email=msg.sender_email, company=msg.extracted_company
+    )
+    return treatment == "agency"
+
+
 def _aware(dt: datetime) -> datetime:
     # The sqlite test substrate round-trips DateTime(timezone=True) as naive;
     # normalize before comparing across separately-loaded rows.
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
+def _sender_domain(sender_email: str) -> str:
+    from services.email.sender_rules import sender_domain
+
+    return sender_domain(sender_email)
 
 
 async def _unlinked_signal_messages(session: AsyncSession, *, user_id: int) -> list[EmailMessage]:
@@ -148,12 +194,22 @@ async def _rejection_shaped_strays(
 
 
 async def list_detected_processes(session: AsyncSession, *, user_id: int) -> list[DetectedProcess]:
-    """Group unlinked interview-signal messages into per-company processes."""
+    """Group unlinked interview-signal messages into per-company processes.
+
+    Parked mail (agency/platform/outplacement with no named end-client) is
+    excluded — it lives in `list_parked_sender_groups` instead. Agency mail
+    WITH an end-client groups under the end-client (§ 3.3).
+    """
+    from services.email import sender_rules
+
     aliases = await load_company_alias_map(session, user_id=user_id)
+    rules = await sender_rules.load_rules(session, user_id=user_id)
     messages = await _unlinked_signal_messages(session, user_id=user_id)
     groups: dict[str, list[EmailMessage]] = {}
     for msg in messages:
-        groups.setdefault(_norm_company(msg.extracted_company or "", aliases), []).append(msg)
+        if _is_parked(msg, rules):
+            continue
+        groups.setdefault(_norm_company(_group_company(msg), aliases), []).append(msg)
     strays = await _rejection_shaped_strays(session, user_id=user_id)
 
     out: list[DetectedProcess] = []
@@ -161,7 +217,7 @@ async def list_detected_processes(session: AsyncSession, *, user_id: int) -> lis
         timeline = [(m.classification, _stage_hint(m)) for m in msgs if m.classification]
         status, closed_reason = status_mapper.status_for_email_timeline(timeline)
         roles = [m.extracted_role for m in msgs if m.extracted_role]
-        display_company = msgs[-1].extracted_company or ""
+        display_company = _group_company(msgs[-1])
         stray = strays.get(key)
         possible_rejection = (
             stray.id
@@ -182,6 +238,7 @@ async def list_detected_processes(session: AsyncSession, *, user_id: int) -> lis
                 latest_subject=msgs[-1].subject,
                 message_ids=[m.id for m in msgs if m.id is not None],
                 possible_rejection_message_id=possible_rejection,
+                sender_domain=_sender_domain(msgs[-1].sender_email),
             )
         )
     out.sort(key=lambda p: p.last_seen, reverse=True)
@@ -191,6 +248,36 @@ async def list_detected_processes(session: AsyncSession, *, user_id: int) -> lis
 def _stage_hint(msg: EmailMessage) -> str | None:
     """Interview-stage hint for timeline derivation (persisted at classify)."""
     return msg.extracted_stage
+
+
+async def list_parked_sender_groups(
+    session: AsyncSession, *, user_id: int
+) -> list[ParkedSenderGroup]:
+    """The collapsed "Agencies & platforms" section (§ 3.3): parked so
+    nothing is irrecoverably dropped, fully silent otherwise."""
+    from services.email import sender_rules
+    from services.email.sender_rules import sender_domain
+
+    rules = await sender_rules.load_rules(session, user_id=user_id)
+    messages = await _unlinked_signal_messages(session, user_id=user_id)
+    groups: dict[str, list[EmailMessage]] = {}
+    for msg in messages:
+        if _is_parked(msg, rules):
+            groups.setdefault(sender_domain(msg.sender_email), []).append(msg)
+
+    out = [
+        ParkedSenderGroup(
+            sender_domain=domain,
+            company=msgs[-1].extracted_company or domain,
+            message_count=len(msgs),
+            last_seen=msgs[-1].received_at,
+            latest_subject=msgs[-1].subject,
+            latest_message_id=msgs[-1].id,
+        )
+        for domain, msgs in groups.items()
+    ]
+    out.sort(key=lambda g: g.last_seen, reverse=True)
+    return out
 
 
 async def track_process(
@@ -210,11 +297,15 @@ async def track_process(
     `status_override` is the § 3.4 "Wrong stage?" affordance: the human's
     stage pick replaces the derived one at track time.
     """
+    from services.email import sender_rules
+
     aliases = await load_company_alias_map(session, user_id=user_id)
+    rules = await sender_rules.load_rules(session, user_id=user_id)
     messages = [
         m
         for m in await _unlinked_signal_messages(session, user_id=user_id)
-        if _company_matches(company, m.extracted_company or "", aliases=aliases)
+        if not _is_parked(m, rules)
+        and _company_matches(company, _group_company(m), aliases=aliases)
     ]
     if not messages:
         return None
@@ -339,7 +430,7 @@ async def dismiss_process(session: AsyncSession, *, user_id: int, company: str) 
     messages = [
         m
         for m in await _unlinked_signal_messages(session, user_id=user_id)
-        if _company_matches(company, m.extracted_company or "", aliases=aliases)
+        if _company_matches(company, _group_company(m), aliases=aliases)
     ]
     now = datetime.now(UTC)
     for msg in messages:

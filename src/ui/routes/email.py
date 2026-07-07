@@ -188,6 +188,42 @@ async def post_email_thread_unlink(
     return response
 
 
+# ── Sender flags (plan 95 § 3.3) ────────────────────────────────────────
+
+
+@router.post("/api/v1/email/senders/flag", name="email_sender_flag")
+async def post_email_sender_flag(
+    domain: Annotated[str, Form(min_length=3, max_length=254)],
+    treatment: Annotated[str, Form(min_length=1, max_length=20)],
+    from_message_id: Annotated[int | None, Form()] = None,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """ "Flag sender…" — Agency / Not job-related / Actually an employer.
+
+    Persists the `SenderRule` (user rule > seed > LLM forever after) and
+    retroactively re-treats the domain's already-classified mail.
+    """
+    from services.email import sender_rules
+
+    try:
+        await sender_rules.flag_sender(
+            session,
+            user_id=_effective_user_id(user),
+            domain=domain,
+            treatment=treatment,
+            from_message_id=from_message_id,
+        )
+    except sender_rules.SenderRuleError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    # Full refresh: flagged groups leave the panel / move sections.
+    response = Response(status_code=204)
+    response.headers["HX-Refresh"] = "true"
+    return response
+
+
 # ── Email-suggestion apply/dismiss seam (plan 90 / 0.5.0.03) ────────────
 
 

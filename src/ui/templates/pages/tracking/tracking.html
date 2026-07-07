@@ -202,10 +202,79 @@
                   data-testid="{{ p.dom_id }}-dismiss">
             Not mine
           </button>
+          {# Plan 95 § 3.3 "Flag sender…" — persist a SenderRule that
+             permanently overrides model judgment for this domain. #}
+          {% if p.sender_domain %}
+          <details class="relative shrink-0">
+            <summary class="list-none cursor-pointer inline-flex items-center px-1.5 py-1 rounded-lg text-xs text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                     title="Flag sender {{ p.sender_domain }}"
+                     data-testid="{{ p.dom_id }}-flag-toggle">
+              <i data-lucide="flag" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+            </summary>
+            <div class="absolute right-0 z-20 mt-1 w-52 rounded-lg border border-slate-700 bg-slate-900 p-1 flex flex-col shadow-xl">
+              <div class="px-2 py-1 text-[10px] uppercase tracking-wide font-mono text-slate-500 truncate">{{ p.sender_domain }}</div>
+              {% for opt in [("agency", "Agency / staffing"), ("ignore", "Not job-related"), ("employer", "Actually an employer")] %}
+              <button type="button"
+                      class="text-left px-2 py-1.5 rounded text-xs text-slate-300 hover:bg-slate-800"
+                      hx-post="/api/v1/email/senders/flag"
+                      hx-vals='{"domain": {{ p.sender_domain | tojson }}, "treatment": "{{ opt[0] }}"}'
+                      hx-swap="none"
+                      hx-disabled-elt="this"
+                      data-testid="{{ p.dom_id }}-flag-{{ opt[0] }}">
+                {{ opt[1] }}
+              </button>
+              {% endfor %}
+            </div>
+          </details>
+          {% endif %}
         </li>
       {% endfor %}
     </ul>
   </section>
+  {% endif %}
+
+  {# Plan 95 § 3.3 — agency / platform / outplacement mail with no named
+     end-client: parked in a collapsed group. Fully silent by design — no
+     notifications, no badges; visible only when the owner opens it. #}
+  {% if parked_sender_groups %}
+  <details class="rounded-lg bg-slate-900/60 border border-slate-800 px-4 py-2.5" data-testid="parked-senders-panel">
+    <summary class="list-none cursor-pointer flex items-center gap-2 text-xs text-slate-500 hover:text-slate-300">
+      <i data-lucide="building-2" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      Agencies &amp; platforms ({{ parked_sender_groups | length }}) — parked, not tracked
+      <i data-lucide="chevron-down" class="h-3.5 w-3.5 ml-auto" stroke-width="1.5"></i>
+    </summary>
+    <ul class="flex flex-col gap-1.5 mt-2">
+      {% for g in parked_sender_groups %}
+        <li id="{{ g.dom_id }}" class="flex items-center gap-3 rounded-md bg-slate-950/50 px-3 py-2" data-testid="{{ g.dom_id }}">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-slate-300 truncate">
+              <span class="font-medium">{{ g.company }}</span>
+              <span class="ml-1.5 font-mono text-[10px] text-slate-500">{{ g.sender_domain }}</span>
+            </div>
+            <div class="text-xs text-slate-600 truncate">{{ g.message_count }} email{{ "s" if g.message_count != 1 }} · latest {{ g.last_seen_label }} · “{{ g.latest_subject }}”</div>
+          </div>
+          <button type="button"
+                  class="shrink-0 px-2.5 py-1 rounded-lg text-xs text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                  hx-post="/api/v1/email/senders/flag"
+                  hx-vals='{"domain": {{ g.sender_domain | tojson }}, "treatment": "ignore"{% if g.latest_message_id %}, "from_message_id": {{ g.latest_message_id }}{% endif %}}'
+                  hx-swap="none"
+                  hx-disabled-elt="this"
+                  data-testid="{{ g.dom_id }}-ignore">
+            Not job-related
+          </button>
+          <button type="button"
+                  class="shrink-0 px-2.5 py-1 rounded-lg text-xs text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                  hx-post="/api/v1/email/senders/flag"
+                  hx-vals='{"domain": {{ g.sender_domain | tojson }}, "treatment": "employer"{% if g.latest_message_id %}, "from_message_id": {{ g.latest_message_id }}{% endif %}}'
+                  hx-swap="none"
+                  hx-disabled-elt="this"
+                  data-testid="{{ g.dom_id }}-employer">
+            Actually an employer
+          </button>
+        </li>
+      {% endfor %}
+    </ul>
+  </details>
   {% endif %}
 
   {# Upcoming calendar events (item 11) — renders only when the calendar is

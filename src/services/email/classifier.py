@@ -107,13 +107,25 @@ def _clip(text: str | None) -> str | None:
 
 
 async def _link_by_company(session: AsyncSession, msg: EmailMessage) -> None:
-    """Map an unlinked message to an Application via the extracted employer."""
-    if msg.application_id is not None or not msg.extracted_company:
-        return
+    """Map an unlinked message to an Application via the extracted employer.
+
+    Agency/platform/outplacement mail links via its named END-CLIENT only —
+    the agency name is an intermediary, never the process (plan 95 § 3.3).
+    """
     from services.email.inference import find_application_for_company
+    from services.email.sender_rules import PARKED_SENDER_TYPES
+
+    if msg.application_id is not None:
+        return
+    if msg.extracted_sender_type in PARKED_SENDER_TYPES:
+        company = msg.extracted_end_client
+    else:
+        company = msg.extracted_company
+    if not company:
+        return
 
     application = await find_application_for_company(
-        session, user_id=msg.user_id, company=msg.extracted_company, role=msg.extracted_role
+        session, user_id=msg.user_id, company=company, role=msg.extracted_role
     )
     if application is None:
         return
@@ -252,6 +264,8 @@ async def classify_unprocessed(
     NO_PROVIDER_CONFIGURED graceful-degrade path both count as "processed";
     transient LLM failures leave `classification=None` for the next tick).
     """
+    from services.email import sender_rules
+
     pending = (
         await session.exec(
             select(EmailMessage)
@@ -261,6 +275,7 @@ async def classify_unprocessed(
         )
     ).all()
     processed = 0
+    rules_cache: dict[int, list] = {}
     for msg in pending:
         settings = await _get_settings(session, user_id=msg.user_id)
         if settings is None:
@@ -325,6 +340,30 @@ async def classify_unprocessed(
         if stage not in ("screen", "interview"):
             stage = None
         msg.extracted_stage = stage
+
+        # Plan 95 § 3.3 — who is talking. sender_type outside the vocabulary
+        # degrades to None (LLM guess only; rules below still apply);
+        # end_client must appear VERBATIM in the text the model saw, or an
+        # agency email would invent clients (deterministic post-check).
+        sender_type = (parsed.sender_type or "").strip().lower() or None
+        if sender_type not in sender_rules.SENDER_TYPE_VOCAB:
+            sender_type = None
+        msg.extracted_sender_type = sender_type
+        end_client = _clip(parsed.end_client)
+        if end_client and end_client.lower() not in f"{msg.subject}\n{msg.snippet}".lower():
+            end_client = None
+        msg.extracted_end_client = end_client
+
+        # User rule > deterministic seed > the LLM guess above.
+        if msg.user_id not in rules_cache:
+            rules_cache[msg.user_id] = await sender_rules.load_rules(session, user_id=msg.user_id)
+        treatment = sender_rules.treatment_for(
+            rules_cache[msg.user_id],
+            sender_email=msg.sender_email,
+            company=msg.extracted_company,
+        )
+        sender_rules.apply_treatment(msg, treatment)
+
         msg.classification_model = getattr(provider, "model", None) or getattr(
             provider, "model_name", None
         )

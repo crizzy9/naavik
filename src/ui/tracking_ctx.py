@@ -218,6 +218,9 @@ async def build_tracking_ctx(
     # 2026-07 tracking redesign — interview processes detected in the inbox
     # that map to no tracked application (applied outside Naavik).
     detected = await processes.list_detected_processes(session, user_id=user_id)
+    # Plan 95 § 3.3 — agency/platform mail with no named end-client: parked,
+    # collapsed, silent.
+    parked = await processes.list_parked_sender_groups(session, user_id=user_id)
 
     # Plan 95 § 3.4 "Merge into…" targets: live application companies plus
     # the OTHER detected groups (template filters out the row's own company).
@@ -245,10 +248,24 @@ async def build_tracking_ctx(
                 "last_seen_label": _relative_label(p.last_seen),
                 "latest_subject": p.latest_subject,
                 "possible_rejection_message_id": p.possible_rejection_message_id,
+                "sender_domain": p.sender_domain,
                 "dom_id": "detected-process-"
                 + (re.sub(r"[^a-z0-9]+", "-", p.company.lower()).strip("-") or "unknown"),
             }
             for p in detected
+        ],
+        "parked_sender_groups": [
+            {
+                "sender_domain": g.sender_domain,
+                "company": g.company,
+                "message_count": g.message_count,
+                "last_seen_label": _relative_label(g.last_seen),
+                "latest_subject": g.latest_subject,
+                "latest_message_id": g.latest_message_id,
+                "dom_id": "parked-sender-"
+                + (re.sub(r"[^a-z0-9]+", "-", g.sender_domain.lower()).strip("-") or "unknown"),
+            }
+            for g in parked
         ],
         "process_merge_targets": merge_targets,
         "track_stage_options": track_stage_options,
