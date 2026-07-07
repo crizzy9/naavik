@@ -147,6 +147,9 @@
     {# Plan 95 § 3.1 — interview rounds checklist (email/notes/calendar). #}
     {% include "components/tracking/_rounds_section.html" %}
 
+    {# Plan 95 § 3.9 — the email chain that produced the status. #}
+    {% include "components/tracking/_conversation_section.html" %}
+
     {% if status_timeline %}
       <section data-testid="detail-status-timeline">
         <div class="flex items-baseline justify-between mb-2 gap-3">

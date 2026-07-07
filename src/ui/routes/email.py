@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Request, Response
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.auth import require_csrf
@@ -232,6 +232,7 @@ async def post_email_sender_flag(
     name="application_apply_email_suggestion",
 )
 async def apply_email_suggestion(
+    request: Request,
     app_id: int,
     message_id: int,
     resume: Annotated[int, Query()] = 0,
@@ -256,6 +257,12 @@ async def apply_email_suggestion(
     except applications.ApplicationServiceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
+    if request.headers.get("HX-Request"):
+        # Plan 95 § 3.9 — mounted inline on the conversation section; the
+        # board position + timeline change, so refresh IS the feedback.
+        response = Response(status_code=204)
+        response.headers["HX-Refresh"] = "true"
+        return response
     return {
         "application_id": app.id,
         "status": app.status.value,
@@ -268,6 +275,7 @@ async def apply_email_suggestion(
     name="application_dismiss_email_suggestion",
 )
 async def dismiss_email_suggestion(
+    request: Request,
     app_id: int,
     message_id: int,
     session: AsyncSession = Depends(get_session),
@@ -284,4 +292,10 @@ async def dismiss_email_suggestion(
     except applications.ApplicationServiceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
+    if request.headers.get("HX-Request"):
+        response = Response(status_code=204)
+        response.headers["HX-Trigger"] = json.dumps(
+            {"showToast": {"tone": "info", "text": "Suggestion dismissed."}}
+        )
+        return response
     return {"status": "dismissed", "message_id": message_id}

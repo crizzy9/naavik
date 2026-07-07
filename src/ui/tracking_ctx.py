@@ -220,6 +220,90 @@ def round_to_row(r) -> dict[str, object]:
     }
 
 
+_CLASSIFICATION_TONES = {
+    "interview_request": "indigo",
+    "assessment": "cyan",
+    "offer": "emerald",
+    "rejection": "rose",
+    "follow_up": "slate",
+    "other": "slate",
+}
+
+
+async def build_conversation_ctx(
+    session: AsyncSession, application: Application
+) -> list[dict[str, object]]:
+    """Threads + messages linked to this application — the § 3.9 evidence
+    surface ("why is this at Interview Stage?"). Snippet-only by design;
+    rows deep-link to the provider for the full text."""
+    from sqlmodel import select
+
+    from models import EmailMessage
+
+    threads = await email_service.list_threads_for_application(session, application.id or 0)
+    messages = (
+        await session.exec(
+            select(EmailMessage)
+            .where(EmailMessage.application_id == application.id)
+            .order_by(EmailMessage.received_at.desc())
+        )
+    ).all()
+    by_thread: dict[int, list] = {}
+    for m in messages:
+        by_thread.setdefault(m.thread_id, []).append(m)
+
+    out: list[dict[str, object]] = []
+    for t in threads:
+        msgs = by_thread.get(t.id or 0, [])
+        rows = []
+        for m in msgs:
+            suggestion = None
+            if m.suggested_status is not None:
+                suggestion = {
+                    "status_label": application_status_label(m.suggested_status),
+                    "applied": m.suggestion_applied_at is not None,
+                    "dismissed": m.suggestion_dismissed_at is not None,
+                    "pending": (
+                        m.suggestion_applied_at is None and m.suggestion_dismissed_at is None
+                    ),
+                }
+            rows.append(
+                {
+                    "id": m.id,
+                    "sender": m.sender_name or m.sender_email,
+                    "sender_email": m.sender_email,
+                    "subject": m.subject,
+                    "snippet": m.snippet,
+                    "received_label": _relative_label(m.received_at),
+                    "classification": m.classification.value if m.classification else None,
+                    "classification_tone": _CLASSIFICATION_TONES.get(
+                        m.classification.value if m.classification else "", "slate"
+                    ),
+                    "suggestion": suggestion,
+                    # Gmail rfc822msgid search — the deep link out for full text.
+                    "provider_link": (
+                        "https://mail.google.com/mail/u/0/#search/rfc822msgid:"
+                        + (m.message_id_external or "").strip("<>")
+                        if m.message_id_external
+                        else None
+                    ),
+                }
+            )
+        classification = t.classification.value if t.classification else None
+        out.append(
+            {
+                "id": t.id,
+                "subject": t.subject or "(no subject)",
+                "classification": classification,
+                "classification_tone": _CLASSIFICATION_TONES.get(classification or "", "slate"),
+                "latest_label": _relative_label(t.latest_message_at),
+                "message_count": len(msgs) or (t.message_count or 0),
+                "messages": rows,
+            }
+        )
+    return out
+
+
 async def build_rounds_ctx(session: AsyncSession, application: Application) -> dict[str, object]:
     """Ctx for `_rounds_section.html` — shared by the slide-over include and
     the parse/save/state fragment routes."""
@@ -624,6 +708,9 @@ async def build_application_detail_ctx(
     # Plan 95 § 3.1 — interview rounds checklist for the slide-over.
     rounds_ctx = await build_rounds_ctx(session, application)
 
+    # Plan 95 § 3.9 — the conversation that produced the status.
+    conversation_threads = await build_conversation_ctx(session, application)
+
     # Item 11 — calendar events fuzzy-matched to this application.
     from services.email import calendar_sync
 
@@ -664,6 +751,8 @@ async def build_application_detail_ctx(
         "rounds": rounds_ctx["rounds"],
         # Plan 95 § 3.8
         "status_pin": status_pin,
+        # Plan 95 § 3.9
+        "conversation_threads": conversation_threads,
         "documents": docs,
         "screener_answers": screener_rows,
         "contacts": contact_rows,

@@ -1,0 +1,134 @@
+{# _conversation_section.html — the email chain behind the card (plan 95 § 3.9).
+
+   Args:
+     application          : dict — id (a.* from the slide-over ctx)
+     conversation_threads : list — build_conversation_ctx dicts
+     status_pin           : optional dict — § 3.8 pin (enables "Apply & resume")
+     csrf_token           : str
+
+   Snippet-only by design (privacy: no bodies at rest); rows deep-link to
+   the provider for the full text. Suggestion state renders inline; the
+   § 3.4 reclassify + unlink affordances mount here.
+#}
+{% from "components/common/_macros.html" import chip %}
+<section data-testid="detail-conversation">
+  <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">
+    Conversation{% if conversation_threads %} · <span class="font-mono">{{ conversation_threads | length }}</span>{% endif %}
+  </div>
+  {% if conversation_threads %}
+    <ul class="flex flex-col gap-2">
+      {% for t in conversation_threads %}
+        <li class="rounded-md bg-slate-900/60 border border-slate-800" data-testid="conversation-thread-{{ t.id }}">
+          <details>
+            <summary class="list-none cursor-pointer px-3 py-2 flex items-center gap-2 hover:bg-slate-900 rounded-md">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-slate-200 truncate">{{ t.subject }}</div>
+                <div class="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  {% if t.classification %}{{ chip(t.classification | replace("_", " "), tone=t.classification_tone) }}{% endif %}
+                  <span class="text-xs text-slate-500">{{ t.message_count }} message{{ "s" if t.message_count != 1 }} · {{ t.latest_label }}</span>
+                </div>
+              </div>
+              <button type="button"
+                      class="shrink-0 px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                      title="This conversation is not about this application"
+                      hx-post="/api/v1/email/threads/{{ t.id }}/unlink"
+                      hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                      hx-confirm="Unlink this conversation from {{ a.company }}?"
+                      hx-swap="none"
+                      hx-on::after-request="if(event.detail.successful) closest('li').remove()"
+                      data-testid="conversation-unlink-{{ t.id }}">
+                unlink
+              </button>
+              <i data-lucide="chevron-down" class="h-3.5 w-3.5 text-slate-600 shrink-0" stroke-width="1.5"></i>
+            </summary>
+            <ul class="px-3 pb-2 flex flex-col gap-2">
+              {% for m in t.messages %}
+                <li class="border-t border-slate-800/70 pt-2 text-sm" data-testid="conversation-message-{{ m.id }}">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-slate-300 truncate">{{ m.sender }}</span>
+                    <span class="text-xs text-slate-500">{{ m.received_label }}</span>
+                    {% if m.classification %}{{ chip(m.classification | replace("_", " "), tone=m.classification_tone) }}{% endif %}
+                    {# § 3.9 — inline suggestion state. #}
+                    {% if m.suggestion %}
+                      {% if m.suggestion.applied %}
+                        {{ chip("→ " ~ m.suggestion.status_label ~ " · auto", tone="indigo") }}
+                      {% elif m.suggestion.dismissed %}
+                        {{ chip("suggestion dismissed", tone="slate") }}
+                      {% endif %}
+                    {% endif %}
+                    {# § 3.4 — reclassify (six labels), the correction mount. #}
+                    <details class="relative ml-auto shrink-0">
+                      <summary class="list-none cursor-pointer px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                               data-testid="reclassify-toggle-{{ m.id }}">
+                        reclassify…
+                      </summary>
+                      <div class="absolute right-0 z-20 mt-1 w-44 rounded-lg border border-slate-700 bg-slate-900 p-1 flex flex-col shadow-xl">
+                        {% for label in ["interview_request", "assessment", "offer", "rejection", "follow_up", "other"] %}
+                          <button type="button"
+                                  class="text-left px-2 py-1 rounded text-xs text-slate-300 hover:bg-slate-800 {{ 'opacity-40' if m.classification == label }}"
+                                  hx-post="/api/v1/email/messages/{{ m.id }}/reclassify"
+                                  hx-vals='{"classification": "{{ label }}"}'
+                                  hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                                  hx-swap="none"
+                                  hx-disabled-elt="this"
+                                  data-testid="reclassify-{{ m.id }}-{{ label }}">
+                            {{ label | replace("_", " ") }}
+                          </button>
+                        {% endfor %}
+                      </div>
+                    </details>
+                  </div>
+                  <p class="mt-1 text-xs text-slate-400 leading-relaxed">{{ m.snippet }}</p>
+                  {% if m.suggestion and m.suggestion.pending %}
+                    <div class="mt-1.5 flex items-center gap-2 flex-wrap" data-testid="suggestion-actions-{{ m.id }}">
+                      <span class="text-xs text-amber-200">Suggests → {{ m.suggestion.status_label }}</span>
+                      <button type="button"
+                              class="px-2 py-0.5 rounded text-xs text-slate-950 bg-amber-400 hover:bg-amber-300 font-medium"
+                              hx-post="/api/v1/applications/{{ a.id }}/email-suggestion/{{ m.id }}/apply"
+                              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                              hx-swap="none"
+                              hx-disabled-elt="this"
+                              data-testid="suggestion-apply-{{ m.id }}">
+                        Apply
+                      </button>
+                      {% if status_pin %}
+                        {# § 3.8.6 — accepting the machine's next call lifts the pin too. #}
+                        <button type="button"
+                                class="px-2 py-0.5 rounded text-xs text-indigo-100 bg-indigo-500/40 hover:bg-indigo-500/60 font-medium"
+                                hx-post="/api/v1/applications/{{ a.id }}/email-suggestion/{{ m.id }}/apply?resume=1"
+                                hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                                hx-swap="none"
+                                hx-disabled-elt="this"
+                                data-testid="suggestion-apply-resume-{{ m.id }}">
+                          Apply &amp; resume auto-tracking
+                        </button>
+                      {% endif %}
+                      <button type="button"
+                              class="px-2 py-0.5 rounded text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                              hx-post="/api/v1/applications/{{ a.id }}/email-suggestion/{{ m.id }}/dismiss"
+                              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                              hx-swap="none"
+                              hx-disabled-elt="this"
+                              data-testid="suggestion-dismiss-{{ m.id }}">
+                        Dismiss
+                      </button>
+                    </div>
+                  {% endif %}
+                  {% if m.provider_link %}
+                    <a href="{{ m.provider_link }}" target="_blank" rel="noopener" hx-boost="false"
+                       class="mt-1 inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300">
+                      <i data-lucide="external-link" class="h-3 w-3" stroke-width="1.5"></i>
+                      Open in mail
+                    </a>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          </details>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-sm text-slate-500">No linked email yet — messages attach automatically as the classifier maps them here.</p>
+  {% endif %}
+</section>
