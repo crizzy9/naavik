@@ -30,15 +30,10 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import (
-    AppEvent,
-    AppEventKind,
     Application,
     ApplicationStatus,
-    DocsState,
     EmailMessage,
     EmailThread,
-    RecruiterState,
-    ReferralState,
     StatusChangeTrigger,
 )
 from models.enums import EmailClassification
@@ -329,21 +324,17 @@ async def track_process(
             msg=messages[-1],
         )
 
+    from services import applications as applications_service
+
     now = datetime.now(UTC)
-    application = Application(
+    # Plan 95 § 3.7 — one shared trail-writing path for mid-stage creation
+    # (this flow and the manual "Where does this stand?" control).
+    application = await applications_service.create_tracked_application(
+        session,
         user_id=user_id,
-        job_id=job.id,
-        company=job.company,
-        role=job.role,
-        team=job.team,
-        location=job.location,
-        board=job.board,
-        external_url=job.url if not job.url.startswith("manual://") else None,
+        job=job,
         status=status,
         closed_reason=closed_reason,
-        docs_state=DocsState.NONE,
-        referral_state=ReferralState.NONE,
-        recruiter_state=RecruiterState.NONE,
         applied_at=messages[0].received_at,
         submission_artifacts={
             "inferred": {
@@ -354,54 +345,18 @@ async def track_process(
                 "via": "detected_process",
             }
         },
-        created_at=now,
-        updated_at=now,
+        actor="email_process_tracker",
+        first_note="Tracked from inbox (detected interview process)",
+        stage_note=(
+            "Stage set by you at track time"
+            if overridden
+            else "Stage derived from the email timeline"
+        ),
+        stage_occurred_at=messages[-1].received_at,
+        stage_trigger=(
+            StatusChangeTrigger.MANUAL if overridden else StatusChangeTrigger.AUTO_FROM_EMAIL
+        ),
     )
-    session.add(application)
-    await session.flush()
-
-    # Timeline trail: APPLIED at first-email date, then the derived stage.
-    session.add(
-        AppEvent(
-            user_id=user_id,
-            application_id=application.id,
-            kind=AppEventKind.STATUS_CHANGE,
-            occurred_at=messages[0].received_at,
-            payload={
-                "from": None,
-                "to": ApplicationStatus.APPLIED.value,
-                "trigger": StatusChangeTrigger.AUTO_FROM_EMAIL.value,
-                "is_forward": True,
-                "notes": "Tracked from inbox (detected interview process)",
-            },
-            actor="email_process_tracker",
-        )
-    )
-    if status != ApplicationStatus.APPLIED:
-        session.add(
-            AppEvent(
-                user_id=user_id,
-                application_id=application.id,
-                kind=AppEventKind.STATUS_CHANGE,
-                occurred_at=messages[-1].received_at,
-                payload={
-                    "from": ApplicationStatus.APPLIED.value,
-                    "to": status.value,
-                    "trigger": (
-                        StatusChangeTrigger.MANUAL.value
-                        if overridden
-                        else StatusChangeTrigger.AUTO_FROM_EMAIL.value
-                    ),
-                    "is_forward": status != ApplicationStatus.CLOSED,
-                    "notes": (
-                        "Stage set by you at track time"
-                        if overridden
-                        else "Stage derived from the email timeline"
-                    ),
-                },
-                actor="email_process_tracker",
-            )
-        )
 
     linked_threads: set[int] = set()
     for msg in messages:

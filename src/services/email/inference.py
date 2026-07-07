@@ -450,56 +450,33 @@ async def _create_job_from_receipt(
 
 
 async def _scrape_posting_url(session: AsyncSession, *, user_id: int, url: str) -> Job | None:
-    """The real add-by-URL pipeline, headless (mirrors the Discover modal)."""
-    import hashlib
+    """The real add-by-URL pipeline, headless (mirrors the Discover modal).
 
-    from llm import LLMProviderError, get_provider
-    from scraper.crawl4ai_client import Crawl4AIClient
-    from scraper.types import RawJob
-    from scraper.url_guard import is_safe_destination
+    Plan 95 § 3.7 extracted the guard→fetch→extract stages into
+    `services.jobs.add_by_url` (shared with the URL-first manual modal);
+    the receipt path keeps its persist-immediately behavior here.
+    """
     from services import jobs as job_service
-    from services import settings as settings_service
-    from services.jobs.extractor import enrich_raw_job
+    from services.jobs.add_by_url import AddByUrlError, fetch_and_extract
 
-    safe, reason = is_safe_destination(url)
-    if not safe:
-        log.info("receipt posting URL rejected (%s): %s", reason, url)
-        return None
-    client = Crawl4AIClient(rate_limit_per_minute=30.0, random_delay_seconds=(0.0, 0.1))
-    html = await client.fetch_html(url)
-    if not html:
-        return None
-    title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
-    page_title = (title_match.group(1).strip()[:160] if title_match else "") or "Unknown role"
-    seed_role, seed_company = page_title, "Unknown"
-    for sep in (" | ", " – ", " — ", " - ", " · "):
-        if sep in page_title:
-            left, right = page_title.split(sep, 1)
-            seed_role = left.strip() or "Unknown role"
-            seed_company = right.strip() or "Unknown"
-            break
-    external_id = f"email-{hashlib.sha1(url.encode()).hexdigest()[:12]}"
-    raw_job = RawJob(
-        source=JobSource.EMAIL,
-        external_id=external_id,
-        source_url=url,
-        board=ApplicationBoard.MANUAL,
-        url_type="email_receipt",
-        company_name=seed_company,
-        position_title=seed_role,
-        description_html=html,
-    )
-    settings = await settings_service.get_or_create(session, user_id=user_id)
     try:
-        provider = get_provider(settings)
-        raw_job = await enrich_raw_job(session, user_id=user_id, provider=provider, raw_job=raw_job)
-    except LLMProviderError:
-        pass
+        raw_job = await fetch_and_extract(
+            session,
+            user_id=user_id,
+            url=url,
+            source=JobSource.EMAIL,
+            board=ApplicationBoard.MANUAL,
+            url_type="email_receipt",
+            external_prefix="email",
+        )
+    except AddByUrlError as exc:
+        log.info("receipt posting URL not fetchable (%s): %s", exc, url)
+        return None
     job, _created = await job_service.upsert_job(
         session,
         user_id=user_id,
         source=JobSource.EMAIL,
-        external_id=external_id,
+        external_id=raw_job.external_id,
         raw=raw_job.to_upsert_payload(),
     )
     return job

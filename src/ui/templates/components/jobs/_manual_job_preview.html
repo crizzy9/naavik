@@ -1,0 +1,72 @@
+{# _manual_job_preview.html — editable parse preview (plan 95 § 3.7 B).
+
+   Args (either):
+     parse_error : str — guarded/failed fetch message (typed tab still works)
+     parsed      : dict — url, company, role, location, description,
+                   salary_min, salary_max, board
+     stand_options : list[(value, label)] — "Where does this stand?"
+
+   Swap unit for POST /api/v1/jobs/manual/parse (hx-target="#manual-job-preview").
+   Nothing persists until "Confirm & add" — bad extractions die here.
+#}
+<div id="manual-job-preview" data-testid="manual-job-preview">
+  {% if parse_error %}
+    <div class="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-amber-200"
+         data-testid="manual-parse-error">
+      {{ parse_error }}
+    </div>
+  {% elif parsed %}
+    <form id="manual-job-confirm-form"
+          hx-post="/api/v1/jobs/manual/confirm"
+          hx-headers='{"X-CSRF-Token": "{{ csrf_token | default("") }}"}'
+          hx-swap="none"
+          class="flex flex-col gap-3 rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-3"
+          data-testid="manual-parse-preview">
+      <div class="text-xs text-indigo-200">Parsed from the posting — correct anything, then confirm:</div>
+      <input type="hidden" name="url" value="{{ parsed.url }}">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          {% with label="COMPANY", for_id="preview-company" %}{% include "components/common/field_label.html" %}{% endwith %}
+          {% with name="company", id="preview-company", type="text", required=true, value=parsed.company %}{% include "components/common/input.html" %}{% endwith %}
+        </div>
+        <div>
+          {% with label="ROLE", for_id="preview-role" %}{% include "components/common/field_label.html" %}{% endwith %}
+          {% with name="role", id="preview-role", type="text", required=true, value=parsed.role %}{% include "components/common/input.html" %}{% endwith %}
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          {% with label="LOCATION", for_id="preview-location", hint="optional" %}{% include "components/common/field_label.html" %}{% endwith %}
+          {% with name="location", id="preview-location", type="text", value=parsed.location or "" %}{% include "components/common/input.html" %}{% endwith %}
+        </div>
+        <div class="text-xs text-slate-500 self-end pb-2">
+          {% if parsed.salary_min or parsed.salary_max %}salary: {{ parsed.salary_min or "?" }}–{{ parsed.salary_max or "?" }} ·{% endif %}
+          board: {{ parsed.board }}
+        </div>
+      </div>
+      <div>
+        {% with label="DESCRIPTION", for_id="preview-description" %}{% include "components/common/field_label.html" %}{% endwith %}
+        {% with name="description", id="preview-description", type="textarea", required=true, value=parsed.description %}{% include "components/common/input.html" %}{% endwith %}
+      </div>
+      {# § 3.7 — "Where does this stand?" (default To review, owner decision). #}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          {% with label="WHERE DOES THIS STAND?", for_id="preview-stand" %}{% include "components/common/field_label.html" %}{% endwith %}
+          {% with name="stand", id="preview-stand", type="select", value="to_review", options=stand_options %}{% include "components/common/input.html" %}{% endwith %}
+        </div>
+        <div>
+          {% with label="APPLIED ON", for_id="preview-applied-at", hint="for applied/interview states" %}{% include "components/common/field_label.html" %}{% endwith %}
+          {% with name="applied_at", id="preview-applied-at", type="date" %}{% include "components/common/input.html" %}{% endwith %}
+        </div>
+      </div>
+      <div class="flex items-center justify-end">
+        <button type="submit"
+                class="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium"
+                data-testid="manual-parse-confirm">
+          <i data-lucide="check" class="h-4 w-4" stroke-width="1.5"></i>
+          Confirm &amp; add
+        </button>
+      </div>
+    </form>
+  {% endif %}
+</div>

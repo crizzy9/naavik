@@ -1,5 +1,44 @@
-{# _manual_job_entry_modal.html — `+ Add manually` flow on Tracking (plan 53 § B). #}
+{# _manual_job_entry_modal.html — `+ Add manually` flow on Tracking (plan 53 § B).
+
+   Plan 95 § 3.7 reworked this URL-first: paste → the existing add-by-URL
+   pipeline (guard → fetch → LLM extract) → editable preview → confirm.
+   The typed-fields form stays as the fallback for walled postings. #}
 {% set _body %}
+  {# ── URL-first path (§ 3.7 B) ─────────────────────────────────────── #}
+  <form id="manual-job-parse-form"
+        hx-post="/api/v1/jobs/manual/parse"
+        hx-headers='{"X-CSRF-Token": "{{ csrf_token | default("") }}"}'
+        hx-target="#manual-job-preview"
+        hx-swap="outerHTML"
+        hx-disabled-elt="find button"
+        hx-indicator="#manual-parse-indicator"
+        class="flex flex-col gap-2 mb-1">
+    {% with label="PASTE THE POSTING URL", for_id="manual-job-parse-url" %}
+      {% include "components/common/field_label.html" %}
+    {% endwith %}
+    <div class="flex items-start gap-2">
+      {% with name="url", id="manual-job-parse-url", type="text", mono=true, required=true,
+              placeholder="https://boards.greenhouse.io/…" %}
+        {% include "components/common/input.html" %}
+      {% endwith %}
+      <button type="submit"
+              class="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium"
+              data-testid="manual-job-parse">
+        <i data-lucide="sparkles" class="h-4 w-4" stroke-width="1.5"></i>
+        Fetch &amp; parse
+        <span id="manual-parse-indicator" class="htmx-indicator">
+          <i data-lucide="loader-2" class="h-4 w-4 animate-spin" stroke-width="1.5"></i>
+        </span>
+      </button>
+    </div>
+    <p class="text-xs text-slate-500">Company, role and description get extracted for you (3–8s) — you correct instead of transcribe.</p>
+  </form>
+
+  <div id="manual-job-preview" data-testid="manual-job-preview"></div>
+
+  {# ── Typed-fields fallback (auth walls, PDFs) ─────────────────────── #}
+  <details class="mt-2">
+  <summary class="list-none cursor-pointer text-xs text-slate-500 hover:text-slate-300 mb-3">▸ Or type the fields manually (for postings that can't be fetched)</summary>
   <form id="manual-job-form"
         hx-target-error="#manual-job-error"
         hx-post="/api/v1/jobs/manual"
@@ -93,8 +132,37 @@
       </div>
     </div>
 
+    {# Plan 95 § 3.7 — "Where does this stand?" on the typed path too. #}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        {% with label="WHERE DOES THIS STAND?", for_id="manual-job-stand" %}
+          {% include "components/common/field_label.html" %}
+        {% endwith %}
+        {% with name="stand", id="manual-job-stand", type="select", value="to_review",
+                options=[
+                  ("to_review", "To review (default)"),
+                  ("saved", "Todo / saved"),
+                  ("applied", "Applied"),
+                  ("recruiter_screen", "Recruiter screen"),
+                  ("onsite_loop", "Interview stage"),
+                  ("offer", "Offer"),
+                ] %}
+          {% include "components/common/input.html" %}
+        {% endwith %}
+      </div>
+      <div>
+        {% with label="APPLIED ON", for_id="manual-job-applied-at", hint="for applied/interview states" %}
+          {% include "components/common/field_label.html" %}
+        {% endwith %}
+        {% with name="applied_at", id="manual-job-applied-at", type="date" %}
+          {% include "components/common/input.html" %}
+        {% endwith %}
+      </div>
+    </div>
+
     <div id="manual-job-result" class="text-xs text-slate-400 min-h-[20px]"></div>
   </form>
+  </details>
 {% endset %}
 
 {% set _footer %}

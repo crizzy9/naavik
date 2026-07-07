@@ -24,6 +24,7 @@ from api.auth import require_csrf
 from db.session import get_session
 from models import (
     ApplicationBoard,
+    ApplicationStatus,
     JobCreate,
     JobRead,
     JobScrapeRun,
@@ -31,6 +32,7 @@ from models import (
     RemotePolicy,
     User,
 )
+from models.enums import JobQueueState, StatusChangeTrigger
 from services import jobs as job_service
 from services.auth import require_authed_session
 from ui import jobs_ctx
@@ -140,6 +142,149 @@ async def manual_job_modal(request: Request):
     )
 
 
+# Plan 95 § 3.7 — "Where does this stand?" vocabulary → effect.
+_STAND_QUEUE_STATES = {
+    "to_review": JobQueueState.UNSWIPED,
+    "saved": JobQueueState.SAVED,
+    "applied": JobQueueState.APPLIED,
+    "recruiter_screen": JobQueueState.APPLIED,
+    "onsite_loop": JobQueueState.APPLIED,
+    "offer": JobQueueState.APPLIED,
+}
+_STAND_STATUSES = {
+    "applied": ApplicationStatus.APPLIED,
+    "recruiter_screen": ApplicationStatus.RECRUITER_SCREEN,
+    "onsite_loop": ApplicationStatus.ONSITE_LOOP,
+    "offer": ApplicationStatus.OFFER,
+}
+
+_STAND_OPTIONS = [
+    ("to_review", "To review (default)"),
+    ("saved", "Todo / saved"),
+    ("applied", "Applied"),
+    ("recruiter_screen", "Recruiter screen"),
+    ("onsite_loop", "Interview stage"),
+    ("offer", "Offer"),
+]
+
+
+async def _apply_stand(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    job,
+    stand: str,
+    applied_at_raw: str,
+) -> None:
+    """Initial-state selection (§ 3.7): queue-state flip + mid-stage
+    Application with the back-dated trail via the SAME helper as
+    `processes.track_process` — the funnel sees one shape."""
+    import contextlib
+    from datetime import UTC, datetime
+
+    from services import applications as applications_service
+
+    if stand not in _STAND_QUEUE_STATES:
+        raise HTTPException(status_code=422, detail=f"invalid stand: {stand}")
+    target_queue = _STAND_QUEUE_STATES[stand]
+    if target_queue != JobQueueState.UNSWIPED:
+        await job_service.set_queue_state(session, job.id, user_id=user_id, state=target_queue)
+
+    status = _STAND_STATUSES.get(stand)
+    if status is None:
+        return
+    applied_at = datetime.now(UTC)
+    if applied_at_raw.strip():
+        # Bad date → today; the picker constrains this in practice.
+        with contextlib.suppress(ValueError):
+            applied_at = datetime.fromisoformat(applied_at_raw.strip()).replace(tzinfo=UTC)
+    await applications_service.create_tracked_application(
+        session,
+        user_id=user_id,
+        job=job,
+        status=status,
+        applied_at=applied_at,
+        actor="manual_add",
+        first_note="Added manually (back-filled)",
+        stage_note="Stage set by you at add time",
+        first_trigger=StatusChangeTrigger.MANUAL,
+        stage_trigger=StatusChangeTrigger.MANUAL,
+    )
+
+
+@router.post("/api/v1/jobs/manual/parse", response_class=HTMLResponse, name="jobs_manual_parse")
+async def post_job_manual_parse(
+    request: Request,
+    url: Annotated[str, Form(min_length=8, max_length=2000)],
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """URL → editable preview (plan 95 § 3.7 B). SSRF-guarded; NOTHING
+    persists here — the human confirms (or corrects) first."""
+    from services.jobs.add_by_url import AddByUrlError, parse_posting
+
+    ctx: dict[str, object] = {"stand_options": _STAND_OPTIONS}
+    try:
+        parsed = await parse_posting(session, user_id=_effective_user_id(user), url=url.strip())
+    except AddByUrlError as exc:
+        ctx["parse_error"] = str(exc)
+        return templates.TemplateResponse(request, "components/jobs/_manual_job_preview.html", ctx)
+    except Exception as exc:  # noqa: BLE001 — degrade in-fragment, never a 500
+        log.warning("manual parse failed for %r: %s", url, exc)
+        ctx["parse_error"] = "Something went wrong fetching that URL — type the fields instead."
+        return templates.TemplateResponse(request, "components/jobs/_manual_job_preview.html", ctx)
+    await session.commit()  # ApiUsage row from the extraction call
+    ctx["parsed"] = {
+        "url": parsed.url,
+        "company": parsed.company,
+        "role": parsed.role,
+        "location": parsed.location,
+        "description": parsed.description,
+        "salary_min": parsed.salary_min,
+        "salary_max": parsed.salary_max,
+        "board": parsed.board,
+    }
+    return templates.TemplateResponse(request, "components/jobs/_manual_job_preview.html", ctx)
+
+
+@router.post("/api/v1/jobs/manual/confirm", name="jobs_manual_confirm")
+async def post_job_manual_confirm(
+    company: Annotated[str, Form()],
+    role: Annotated[str, Form()],
+    description: Annotated[str, Form()],
+    url: Annotated[str, Form()],
+    location: Annotated[str | None, Form()] = None,
+    stand: Annotated[str, Form()] = "to_review",
+    applied_at: Annotated[str, Form()] = "",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Confirm the parsed preview (§ 3.7): persist the Job + initial state."""
+    if not (company.strip() and role.strip() and description.strip()):
+        raise HTTPException(status_code=422, detail="company, role, description required")
+    try:
+        payload = JobCreate(
+            company=company.strip(),
+            role=role.strip(),
+            description=description.strip(),
+            url=url.strip() or f"manual://entry/{uuid.uuid4().hex[:12]}",
+            location=(location or "").strip() or None,
+            board=ApplicationBoard.MANUAL,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    user_id = _effective_user_id(user)
+    job = await job_service.create_manual_job(session, payload, user_id=user_id)
+    await _apply_stand(session, user_id=user_id, job=job, stand=stand, applied_at_raw=applied_at)
+    await session.commit()
+    response = Response(status_code=204)
+    response.headers["HX-Redirect"] = "/tracking"
+    return response
+
+
 @router.post("/api/v1/jobs/manual", name="jobs_manual")
 async def post_job_manual(
     company: Annotated[str, Form()],
@@ -149,11 +294,14 @@ async def post_job_manual(
     location: Annotated[str | None, Form()] = None,
     source: Annotated[str, Form()] = "manual",
     remote_policy: Annotated[str, Form()] = "unknown",
+    stand: Annotated[str, Form()] = "to_review",
+    applied_at: Annotated[str, Form()] = "",
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
     _csrf: None = Depends(require_csrf),
 ):
-    """Create a manually-entered Job (plan 53 § B.2)."""
+    """Create a manually-entered Job (plan 53 § B.2; typed fallback in the
+    plan 95 § 3.7 URL-first modal — same initial-state selection)."""
     if not (company.strip() and role.strip() and description.strip()):
         raise HTTPException(status_code=422, detail="company, role, description required")
 
@@ -175,11 +323,9 @@ async def post_job_manual(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    await job_service.create_manual_job(
-        session,
-        payload,
-        user_id=_effective_user_id(user),
-    )
+    user_id = _effective_user_id(user)
+    job = await job_service.create_manual_job(session, payload, user_id=user_id)
+    await _apply_stand(session, user_id=user_id, job=job, stand=stand, applied_at_raw=applied_at)
     await session.commit()
     response = Response(status_code=204)
     response.headers["HX-Redirect"] = "/tracking"

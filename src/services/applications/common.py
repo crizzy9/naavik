@@ -48,6 +48,7 @@ async def _emit_event(
     kind: AppEventKind,
     payload: dict[str, Any] | None = None,
     actor: str | None = None,
+    occurred_at: datetime | None = None,
 ) -> AppEvent:
     ev = AppEvent(
         user_id=user_id,
@@ -55,7 +56,7 @@ async def _emit_event(
         kind=kind,
         payload=payload or {},
         actor=actor,
-        occurred_at=datetime.now(UTC),
+        occurred_at=occurred_at or datetime.now(UTC),
     )
     session.add(ev)
     await session.flush()

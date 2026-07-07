@@ -111,6 +111,7 @@ from services.applications.state import (
     BULK_MAX_IDS,
     bulk_archive,
     bulk_update_status,
+    create_tracked_application,
     update_status,
 )
 from services.applications.state import _is_forward_transition as _is_forward_transition
@@ -161,6 +162,7 @@ __all__ = [
     "snooze_staleness",
     "staleness_sweep",
     "create_planned_rounds",
+    "create_tracked_application",
     "derive_stage_from_rounds",
     "list_rounds",
     "round_chip",

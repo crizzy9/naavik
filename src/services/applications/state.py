@@ -133,6 +133,93 @@ async def update_status(
     return application
 
 
+# ── Mid-stage creation with an honest trail (plan 95 §§ 3.7 / surface 5) ─
+
+
+async def create_tracked_application(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    job,
+    status: ApplicationStatus,
+    applied_at: datetime,
+    closed_reason: ClosedReason | None = None,
+    submission_artifacts: dict | None = None,
+    actor: str,
+    first_note: str,
+    stage_note: str | None = None,
+    stage_occurred_at: datetime | None = None,
+    first_trigger: StatusChangeTrigger = StatusChangeTrigger.AUTO_FROM_EMAIL,
+    stage_trigger: StatusChangeTrigger = StatusChangeTrigger.AUTO_FROM_EMAIL,
+) -> Application:
+    """Create an Application already mid-pipeline WITH the back-dated
+    APPLIED → stage AppEvent trail, so KPI queries and the timeline see the
+    same shape as an application the pipeline observed live.
+
+    The one shared way to enter mid-stage — used by the detected-process
+    "Track it" flow and the § 3.7 manual-add "Where does this stand?"
+    control; a second trail-writing dialect would skew the funnel.
+    """
+    from models import DocsState, RecruiterState, ReferralState
+
+    now = datetime.now(UTC)
+    application = Application(
+        user_id=user_id,
+        job_id=job.id,
+        company=job.company,
+        role=job.role,
+        team=job.team,
+        location=job.location,
+        board=job.board,
+        external_url=job.url if not str(job.url).startswith("manual://") else None,
+        status=status,
+        closed_reason=closed_reason,
+        docs_state=DocsState.NONE,
+        referral_state=ReferralState.NONE,
+        recruiter_state=RecruiterState.NONE,
+        applied_at=applied_at,
+        submission_artifacts=submission_artifacts or {},
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(application)
+    await session.flush()
+
+    await _emit_event(
+        session,
+        user_id=user_id,
+        application_id=application.id,
+        kind=AppEventKind.STATUS_CHANGE,
+        occurred_at=applied_at,
+        actor=actor,
+        payload={
+            "from": None,
+            "to": ApplicationStatus.APPLIED.value,
+            "trigger": first_trigger.value,
+            "is_forward": True,
+            "notes": first_note,
+        },
+    )
+    if status != ApplicationStatus.APPLIED:
+        await _emit_event(
+            session,
+            user_id=user_id,
+            application_id=application.id,
+            kind=AppEventKind.STATUS_CHANGE,
+            occurred_at=stage_occurred_at or now,
+            actor=actor,
+            payload={
+                "from": ApplicationStatus.APPLIED.value,
+                "to": status.value,
+                "trigger": stage_trigger.value,
+                "is_forward": status != ApplicationStatus.CLOSED,
+                "notes": stage_note or first_note,
+            },
+        )
+    await session.flush()
+    return application
+
+
 # ── Email-suggestion human-confirm seam (plan 90 / 0.5.0.03) ────────────
 
 
