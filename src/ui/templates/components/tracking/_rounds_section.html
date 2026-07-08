@@ -79,6 +79,15 @@
   {% if rounds %}
     <ol class="flex flex-col gap-1.5" data-testid="rounds-list">
       {% for r in rounds %}
+        {# Plan 96d — several interviews may ride ONE calendar event; the
+           first rider carries the container header (owner 2026-07-08). #}
+        {% if r.container_label %}
+          <li class="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wide text-sky-400/80 mt-1"
+              data-testid="round-container-{{ r.id }}">
+            <i data-lucide="calendar-clock" class="h-3 w-3" stroke-width="1.5"></i>
+            {{ r.container_label }}
+          </li>
+        {% endif %}
         <li class="flex items-start gap-2.5 text-sm rounded-md px-2 py-1.5 {{ 'bg-emerald-500/5' if r.state == 'completed' else 'bg-slate-900/60' }}"
             data-testid="round-row-{{ r.id }}">
           {# Plan 96a / R5 — mark-done IS the state icon: clicking the open

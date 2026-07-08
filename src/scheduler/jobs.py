@@ -433,6 +433,11 @@ async def sync_calendars() -> None:
 
     Re-fetches every connected secret-ICS calendar. Per-connection failures
     flip `status=fetch_failed` + record `last_error`; nothing propagates.
+
+    Plan 96d rider: past-due scheduled rounds complete here — deterministic
+    time-passage is the one evidence class with no email trigger, and it
+    rides this cron instead of getting one of its own. Separate session so
+    a rider failure never rolls back the calendar sync (and vice versa).
     """
     from sqlmodel import select as _select
 
@@ -453,12 +458,22 @@ async def sync_calendars() -> None:
             if connection.status != "ok":
                 failed += 1
         await session.commit()
+    completed = 0
+    try:
+        from services import applications as applications_service
+
+        async with async_session() as session:
+            completed = await applications_service.complete_past_due_rounds(session)
+            await session.commit()
+    except Exception as exc:  # noqa: BLE001 — the rider must not sink the cron
+        log.warning("past-due round completion failed: %s", exc)
     log.info(
-        "sync_calendars connections=%d events=%d new=%d failed=%d",
+        "sync_calendars connections=%d events=%d new=%d failed=%d rounds_completed=%d",
         len(connections),
         total,
         new,
         failed,
+        completed,
     )
 
 

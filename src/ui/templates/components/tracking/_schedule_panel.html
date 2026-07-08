@@ -1,0 +1,43 @@
+{# _schedule_panel.html — upcoming interviews, grouped by calendar event
+   (plan 96d; owner decision 2026-07-08 — the scheduling axis).
+
+   Args:
+     upcoming_schedule : list — build_tracking_ctx dicts (application_id,
+                         company, role, date_label, time_label,
+                         entries [{label, time_label}], detail_url, dom_id)
+
+   Same panel family as the suggestions strip. One row per calendar event;
+   the rounds it carries are itemized beneath (one event may hold several
+   interviews). Rows open the job surface. Renders nothing when empty.
+#}
+{% if upcoming_schedule %}
+<section class="rounded-lg bg-sky-500/5 border border-sky-500/30 px-4 py-3 flex flex-col gap-2" data-testid="upcoming-schedule-panel">
+  <div class="flex items-center gap-2 text-sm text-sky-100">
+    <i data-lucide="calendar-clock" class="h-4 w-4 text-sky-300" stroke-width="1.5"></i>
+    Upcoming interviews
+  </div>
+  <ul class="flex flex-col gap-1.5">
+    {% for g in upcoming_schedule %}
+      <li id="{{ g.dom_id }}" class="rounded-md bg-slate-950/50 px-3 py-2 cursor-pointer hover:bg-slate-900/70 transition"
+          data-testid="{{ g.dom_id }}"
+          hx-get="/_modal/application/{{ g.application_id }}"
+          hx-target="body"
+          hx-swap="beforeend"
+          hx-push-url="{{ g.detail_url }}">
+        <div class="flex items-baseline gap-2 text-sm">
+          <span class="font-mono text-xs text-sky-300 shrink-0">{{ g.date_label }}</span>
+          <span class="font-medium text-slate-100 truncate">{{ g.company }}</span>
+          <span class="text-xs text-slate-500 shrink-0 ml-auto">{{ g.time_label }}</span>
+        </div>
+        <ul class="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+          {% for e in g.entries %}
+            <li class="text-xs text-slate-400">
+              · {{ e.label }}{% if e.time_label %} <span class="text-slate-600">({{ e.time_label }})</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

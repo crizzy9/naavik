@@ -233,6 +233,17 @@ async def _post_classify_dispatch(
         except Exception as exc:  # noqa: BLE001 — rounds must not sink classify
             log.warning("round upsert failed for message %s: %s", msg.id, exc)
 
+    # Plan 96d — the message may carry calendar invites that sync ingested
+    # before linking existed; stamp them with the now-known application and
+    # re-derive the invite-chain schedule (idempotent).
+    from services.email import invites as invites_service
+
+    try:
+        if await invites_service.adopt_message_invites(session, msg):
+            await invites_service.apply_invites_for_application(session, application=application)
+    except Exception as exc:  # noqa: BLE001 — invites must not sink classify
+        log.warning("invite adoption failed for message %s: %s", msg.id, exc)
+
     transition = email_status_mapper.suggest_status(
         application,
         classification,

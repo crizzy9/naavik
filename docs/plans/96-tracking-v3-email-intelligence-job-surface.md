@@ -543,3 +543,44 @@ Logged during execution session 1 (2026-07-08, slices 96a → 96c3).
 11. **96c — surface ctx resolves the application through
     `services.applications.get_application`** (not `session.get`) so the
     sample-data shims intercept — same seam discipline as the routes.
+
+Logged during execution session 2 (2026-07-08, slices 96d → close-out).
+
+12. **96d — the Headway acceptance fixture was not a reschedule chain, and
+    the round model was re-decided.** The three "Interview with Headway"
+    invites carry three DISTINCT ICS UIDs (all SEQUENCE:0) — a final loop
+    split across three events, not one rescheduled event. Owner decision
+    (2026-07-08, session 2): **rounds are the per-interview unit; invites
+    are a separate scheduling axis** — one calendar event may carry several
+    interviews (Chime: 5 in one invite), so `interview_round.invite_uid` is
+    deliberately NON-unique, a container reschedule shifts every riding
+    round by the delta, and the plan-95 clubbed-loop sessions posture is
+    inverted (itemized rounds; `sessions` JSONB stays legacy-only). The
+    sketched `email_invite.interview_round_id` FK was dropped as
+    wrong-shaped. Division of labor per owner: 96d guarantees one
+    deterministic round per live container; 96e's thread pass itemizes the
+    interviews inside (adopt/rewrite-in-place for duplicates, per owner).
+13. **96d — "Upcoming interviews" schedule panel added to Tracking**
+    (owner-requested during session 2; new scope): scheduled rounds grouped
+    by calendar event → date, deep-linking to the job surface; rounds
+    resequence chronologically (`round_no` = interview order) and round/
+    panel time labels render in the host's local timezone (the owner's
+    calendar follows the device; a Settings override ships with 96f).
+14. **96d — `recurrence_id` stores `''` (not NULL)** for non-recurring
+    instances so the chain key is a plain UNIQUE constraint instead of a
+    coalesce() functional index.
+15. **96d — `METHOD:PUBLISH` invites are ledger-only.** `resolve_final`
+    counts only REQUESTs: GoodTime-class schedulers deliver per-attendee
+    PUBLISH copies with DISTINCT UIDs (four identical "Headway Interview"
+    copies live in the dev inbox) — scheduling from them would mint
+    duplicate rounds.
+16. **96d — the backfill recovers missing `imap_uid` via IMAP Message-ID
+    HEADER search** (pre-95l mail has none — the entire Chime fixture);
+    recovered UIDs are not written back (read-path only). Live run:
+    217/217 messages fetched, 73 invites, 21 applications integrated.
+17. **96d — `nix build` was already red on main** (nixpkgs'
+    `pythonRuntimeDepsCheck` rejects ~12 pyproject deps never mirrored into
+    `nix/package.nix`; `crawl4ai` isn't in nixpkgs, so the list cannot be
+    completed). Disabled the hook with rationale in `package.nix`;
+    `icalendar` floored at `>=6.3` because nixpkgs ships 6.3.2 (invite
+    tests pass on both 6.3.2 and 7.2.0; uv locks 7.x).

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -78,16 +78,35 @@ async def list_rounds(session: AsyncSession, *, application_id: int) -> list[Int
 
 
 def _find_matching_round(
-    rounds: list[InterviewRound], *, kind: str, scheduled_date: date | None
+    rounds: list[InterviewRound],
+    *,
+    kind: str,
+    scheduled_date: date | None,
+    invite_uid: str | None = None,
 ) -> InterviewRound | None:
-    """Upsert key: application + kind + scheduled-date (§ 3.1).
+    """Upsert key: application + kind + scheduled-date (§ 3.1); plan 96d adds
+    `invite_uid` as a stronger evidence key on the same seam.
 
-    A dateless signal (reminder emails) reuses any open round of the kind;
-    a dated signal matches the same date first, then fills the date into an
-    open dateless round. Only when every same-kind round is completed does a
-    new one get created (a genuine second round of that kind).
+    A round already riding the invite's calendar event is THE match
+    regardless of date (the invite is scheduling ground truth). Otherwise a
+    dateless signal (reminder emails) reuses any open round of the kind; a
+    dated signal matches the same date first, then fills the date into an
+    open dateless round. Rounds riding a DIFFERENT calendar event are never
+    adopted. Only when every same-kind round is completed does a new one get
+    created (a genuine second round of that kind).
     """
-    candidates = [r for r in rounds if r.kind == kind and r.state != "cancelled"]
+    if invite_uid is not None:
+        for r in rounds:
+            if r.invite_uid == invite_uid and r.kind == kind and r.state != "cancelled":
+                return r
+        # Never steal a round riding a DIFFERENT calendar event; several
+        # rounds legitimately share ONE event (owner 2026-07-08), so a
+        # same-uid different-kind upsert creates a sibling rider instead.
+        candidates = [
+            r for r in rounds if r.kind == kind and r.state != "cancelled" and r.invite_uid is None
+        ]
+    else:
+        candidates = [r for r in rounds if r.kind == kind and r.state != "cancelled"]
     if scheduled_date is not None:
         for r in candidates:
             if r.scheduled_at is not None and r.scheduled_at.date() == scheduled_date:
@@ -129,13 +148,16 @@ async def upsert_round(
     sessions: list | None = None,
     email_message_id: int | None = None,
     calendar_event_id: int | None = None,
+    invite_uid: str | None = None,
 ) -> InterviewRound:
     """Idempotent producer entry — reminders never duplicate rounds."""
     if kind not in ROUND_KINDS:
         kind, title = "other", title or kind
     rounds = await list_rounds(session, application_id=application.id or 0)
     scheduled_date = scheduled_at.date() if scheduled_at is not None else None
-    row = _find_matching_round(rounds, kind=kind, scheduled_date=scheduled_date)
+    row = _find_matching_round(
+        rounds, kind=kind, scheduled_date=scheduled_date, invite_uid=invite_uid
+    )
     now = datetime.now(UTC)
 
     if row is None:
@@ -151,6 +173,7 @@ async def upsert_round(
             source=source,
             email_message_id=email_message_id,
             calendar_event_id=calendar_event_id,
+            invite_uid=invite_uid,
             created_at=now,
             updated_at=now,
         )
@@ -174,10 +197,113 @@ async def upsert_round(
         row.email_message_id = email_message_id
     if calendar_event_id is not None and row.calendar_event_id is None:
         row.calendar_event_id = calendar_event_id
+    if invite_uid is not None and row.invite_uid is None:
+        row.invite_uid = invite_uid
     row.updated_at = now
     session.add(row)
     await session.flush()
     return row
+
+
+async def resequence_rounds(session: AsyncSession, *, application_id: int) -> None:
+    """Renumber `round_no` chronologically (plan 96d, owner 2026-07-08):
+    "round 1" must be the interview that happened first, not the row created
+    first. Dated rounds order by time; dateless rounds keep their relative
+    order after every dated one."""
+    rounds = await list_rounds(session, application_id=application_id)
+    now = datetime.now(UTC)
+
+    def _key(r: InterviewRound):
+        return (r.scheduled_at is None, r.scheduled_at or datetime.max, r.round_no, r.id or 0)
+
+    for position, r in enumerate(sorted(rounds, key=_key), start=1):
+        if r.round_no != position:
+            r.round_no = position
+            r.updated_at = now
+            session.add(r)
+    await session.flush()
+
+
+async def complete_past_due_rounds(session: AsyncSession, *, now: datetime | None = None) -> int:
+    """Plan 96d time-passage rider (rides `tracking.sync_calendars`) —
+    completion-by-time is the one evidence class with no email trigger.
+
+    A `scheduled` round whose evidenced end has passed (+1h overrun grace)
+    completes with `outcome=pending`. End evidence, strongest first: the
+    final invite of the round's chain (`ends_at`), the matched calendar
+    event's `ends_at`, else `scheduled_at` + 1h default duration. Completed
+    rounds feed the same forward-only stage derivation as every producer.
+    """
+    from models import CalendarEvent, EmailInvite
+    from services.email.invites import group_chains, resolve_final
+
+    now = now or datetime.now(UTC)
+    grace = timedelta(hours=1)
+    default_duration = timedelta(hours=1)
+
+    rows = (
+        await session.exec(
+            select(InterviewRound).where(
+                InterviewRound.state == "scheduled",
+                InterviewRound.scheduled_at.is_not(None),  # type: ignore[union-attr]
+                InterviewRound.scheduled_at <= now,  # type: ignore[operator]
+            )
+        )
+    ).all()
+    if not rows:
+        return 0
+
+    invite_uids = {r.invite_uid for r in rows if r.invite_uid}
+    finals: dict[str, EmailInvite] = {}
+    if invite_uids:
+        invites = (
+            await session.exec(
+                select(EmailInvite).where(EmailInvite.ics_uid.in_(invite_uids))  # type: ignore[union-attr]
+            )
+        ).all()
+        for (uid, _rid), chain in group_chains(list(invites)).items():
+            final = resolve_final(chain)
+            if final is not None:
+                finals[uid] = final
+
+    def _aware(dt: datetime | None) -> datetime | None:
+        # sqlite round-trips drop tzinfo; stored values are UTC by contract.
+        if dt is not None and dt.tzinfo is None:
+            return dt.replace(tzinfo=UTC)
+        return dt
+
+    completed = 0
+    touched_apps: set[int] = set()
+    for r in rows:
+        end: datetime | None = None
+        if r.invite_uid and r.invite_uid in finals:
+            end = _aware(finals[r.invite_uid].ends_at)
+        if end is None and r.calendar_event_id is not None:
+            event = await session.get(CalendarEvent, r.calendar_event_id)
+            if event is not None:
+                end = _aware(event.ends_at)
+        if end is None and r.scheduled_at is not None:
+            end = _aware(r.scheduled_at) + default_duration
+        if end is None or now < end + grace:
+            continue
+        r.state = "completed"
+        r.outcome = r.outcome or "pending"
+        r.updated_at = now
+        session.add(r)
+        completed += 1
+        touched_apps.add(r.application_id)
+
+    if completed:
+        await session.flush()
+    for app_id in touched_apps:
+        application = await session.get(Application, app_id)
+        if application is None:
+            continue
+        try:
+            await derive_stage_from_rounds(session, application=application)
+        except Exception as exc:  # noqa: BLE001 — derivation must not sink the cron
+            log.warning("past-due stage derivation failed for app %s: %s", app_id, exc)
+    return completed
 
 
 async def create_planned_rounds(

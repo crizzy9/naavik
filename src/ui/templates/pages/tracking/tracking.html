@@ -70,6 +70,9 @@
     {% endfor %}
   </section>
 
+  {# Upcoming interviews grouped by calendar event (plan 96d). #}
+  {% include "components/tracking/_schedule_panel.html" %}
+
   {# Pending email-status suggestions (plan 96a / B2) — visible at page
      level, not just inside the slide-over conversation. #}
   {% include "components/tracking/_suggestions_strip.html" %}

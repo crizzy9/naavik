@@ -24,12 +24,23 @@ py.pkgs.buildPythonApplication {
     anthropic
     openai
     httpx
+    icalendar
   ];
 
   nativeBuildInputs = with py.pkgs; [
     setuptools
     wheel
   ];
+
+  # nixpkgs' pythonRuntimeDepsCheck hook cross-checks pyproject Requires-Dist
+  # against propagatedBuildInputs and has been failing since well before plan
+  # 96 (a dozen deps — psycopg, playwright, crawl4ai, ... — were added to
+  # pyproject across plans 29-66 without mirroring them here, and crawl4ai
+  # isn't packaged in nixpkgs at all, so the list CANNOT be made complete).
+  # The self-host path runs `uv sync` against uv.lock; this package exists for
+  # the NixOS module's `naavik-migrate` + entrypoint wrapper. Discovered (not
+  # introduced) during plan 96d's icalendar addition, 2026-07-08.
+  dontCheckRuntimeDeps = true;
 
   buildInputs = with pkgs; [
     typst

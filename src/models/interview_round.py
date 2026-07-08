@@ -103,6 +103,11 @@ class InterviewRound(SQLModel, table=True):
         foreign_key="email_message.id",
         ondelete="SET NULL",
     )
+    # Plan 96d — the ICS UID of the calendar event that schedules this round.
+    # NON-unique on purpose: one calendar event may carry several interviews
+    # (owner decision 2026-07-08); every round riding the container inherits
+    # its reschedules/cancellations. NULL = not invite-scheduled.
+    invite_uid: str | None = Field(default=None, max_length=512, index=True)
     calendar_event_id: int | None = Field(
         default=None,
         foreign_key="calendar_event.id",

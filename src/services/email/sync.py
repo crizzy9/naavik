@@ -38,6 +38,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import EmailAccount, EmailAccountStatus, EmailMessage, EmailThread
 from services.email import credentials as email_credentials
+from services.email import invites as invites_service
 from services.email.imap_host_guard import (
     SAFE_ERROR_MESSAGE as _ERR_HOST,
 )
@@ -395,6 +396,26 @@ async def sync_account(
             )
             session.add(row)
             result.new += 1
+
+            # Plan 96d — invites parse at sync time (the raw MIME is in hand;
+            # no extra IMAP round-trips). A malformed invite degrades to a
+            # log line; sync never fails on it. Round integration runs here
+            # only when the thread already carries the application — the
+            # classify tick re-applies once linking happens.
+            if invites_service.has_calendar_part(msg):
+                await session.flush()
+                try:
+                    ingested = await invites_service.ingest_message_invites(session, row, msg)
+                    if ingested and row.application_id is not None:
+                        from models import Application
+
+                        application = await session.get(Application, row.application_id)
+                        if application is not None:
+                            await invites_service.apply_invites_for_application(
+                                session, application=application
+                            )
+                except Exception as exc:  # noqa: BLE001 — invites must not sink sync
+                    log.warning("invite ingest failed for uid=%s: %s", uid, exc)
         except Exception as exc:  # noqa: BLE001
             log.warning("email_sync: skipping malformed message uid=%s err=%s", uid, exc)
             result.errors.append(f"parse-uid-{uid}: {exc}")

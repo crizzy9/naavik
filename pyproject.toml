@@ -65,6 +65,15 @@ dependencies = [
     # `services/ats_parser_fidelity.py` to round-trip the generated resume
     # PDF and score recovery of 8 canonical fields.
     "pdfplumber>=0.11.0,<0.12",
+    # RFC 5545 invite parsing for calendar-invite ground truth (plan 96d).
+    # Parses text/calendar MIME parts + .ics attachments (UID / SEQUENCE /
+    # METHOD / TZID) that the hand-rolled `calendar_sync` VEVENT parser
+    # deliberately doesn't cover. Floor at 6.3 because our pinned nixpkgs
+    # ships python312Packages.icalendar 6.3.2 (`nix build` runtime-deps check
+    # enforces the band); uv locks 7.x. The API surface we use
+    # (Calendar.from_ical / walk / .dt with TZID resolution) is stable across
+    # both — tests pass against 6.3.2 and 7.2.0.
+    "icalendar>=6.3,<8",
 ]
 
 [project.optional-dependencies]

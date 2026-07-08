@@ -219,9 +219,13 @@ _ROUND_STATE_ICONS = {
 def round_to_row(r) -> dict[str, object]:
     scheduled_label = None
     if r.scheduled_at is not None:
-        when = _aware(r.scheduled_at)
+        # Local wall-clock like the schedule panel (plan 96d) — rounds carry
+        # real invite times now and a bare UTC "18:00" reads as a 6pm slot.
+        when = _aware(r.scheduled_at).astimezone()
         scheduled_label = when.strftime("%b %d") + (
-            when.strftime(" · %H:%M") if (when.hour or when.minute) else ""
+            when.strftime(" · %-I:%M %p").lower() + when.strftime(" %Z")
+            if (when.hour or when.minute)
+            else ""
         )
     sessions = [
         str(s.get("title", "")).strip()
@@ -240,6 +244,10 @@ def round_to_row(r) -> dict[str, object]:
         "scheduled_label": scheduled_label,
         "source": r.source,
         "sessions": sessions,
+        # Plan 96d — the calendar event scheduling this round (None when not
+        # invite-scheduled); several rounds may share one (owner 2026-07-08).
+        "invite_uid": getattr(r, "invite_uid", None),
+        "container_label": None,
     }
 
 
@@ -352,9 +360,33 @@ async def build_rounds_ctx(session: AsyncSession, application: Application) -> d
     """Ctx for `_rounds_section.html` — shared by the slide-over include and
     the parse/save/state fragment routes."""
     rounds = await applications.list_rounds(session, application_id=application.id or 0)
+    rows = [round_to_row(r) for r in rounds]
+    # Plan 96d — when several rounds ride ONE calendar event (owner
+    # 2026-07-08: one invite may carry many interviews), the first rider
+    # gets a container header so the grouping is visible in the checklist.
+    counts: dict[str, int] = {}
+    for row in rows:
+        uid = row.get("invite_uid")
+        if uid:
+            counts[uid] = counts.get(uid, 0) + 1
+    seen: set[str] = set()
+    for row in rows:
+        uid = row.get("invite_uid")
+        if not uid or counts.get(uid, 0) < 2 or uid in seen:
+            continue
+        seen.add(uid)
+        member_times = [
+            r.scheduled_at
+            for r in rounds
+            if getattr(r, "invite_uid", None) == uid and r.scheduled_at is not None
+        ]
+        label = f"{counts[uid]} interviews · one calendar event"
+        if member_times:
+            label = f"{_aware(min(member_times)).strftime('%a %b %-d')} · {label}"
+        row["container_label"] = label
     return {
         "application": {"id": application.id, "company": application.company},
-        "rounds": [round_to_row(r) for r in rounds],
+        "rounds": rows,
     }
 
 
@@ -411,6 +443,13 @@ async def build_tracking_ctx(
             else f"→ {application_status_label(s.suggested_status)}?"
         )
         suggestion_chips.setdefault(s.application_id, label)
+
+    # Plan 96d — "what interviews are on what date": scheduled rounds grouped
+    # by the calendar event that carries them (owner decision 2026-07-08 —
+    # invites are the scheduling axis; rounds are the interview axis).
+    from services.email import invites as invites_service
+
+    schedule_groups = await invites_service.upcoming_interview_schedule(session, user_id=user_id)
 
     columns = _columns_for_board(
         all_apps,
@@ -540,6 +579,24 @@ async def build_tracking_ctx(
         ],
         "process_merge_targets": merge_targets,
         "track_stage_options": track_stage_options,
+        # Plan 96d — one row per upcoming calendar event on the schedule panel.
+        "upcoming_schedule": [
+            {
+                "application_id": g.application_id,
+                "company": g.company,
+                "role": g.role,
+                "date_label": g.date_label,
+                "time_label": g.time_label,
+                "entries": [{"label": e.label, "time_label": e.time_label} for e in g.entries],
+                "detail_url": (
+                    f"/jobs/{g.job_id}?application={g.application_id}"
+                    if g.job_id is not None
+                    else f"/tracking/{g.application_id}"
+                ),
+                "dom_id": f"schedule-group-{index}",
+            }
+            for index, g in enumerate(schedule_groups)
+        ],
         # Plan 96a / B2 — one row per pending suggestion on the strip.
         "pending_suggestions": [
             {

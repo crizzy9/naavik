@@ -137,14 +137,23 @@ detected process, never linked by agency name, ZERO notifications; parking
 consults rules/seeds at read time, so pre-existing rows park without a
 re-classify.
 
-## Interview rounds (plan 95 § 3.1)
+## Interview rounds (plan 95 § 3.1; round model re-decided 2026-07-08, plan 96d)
 
 `InterviewRound` — rounds WITHIN a stage; a round never IS a stage, it
 EVIDENCES one. `kind` is a string + CHECK vocabulary (extensible by two-line
-migration; 10 starting kinds incl. `builder_interview` and `onsite_loop`);
-clubbed onsite blocks are ONE `onsite_loop` round whose `sessions` JSONB
-itemizes the segments. Three producers, one consumer
-(`services/applications/rounds.py`):
+migration; 10 starting kinds incl. `builder_interview` and `onsite_loop`).
+
+**Rounds are the per-INTERVIEW unit; calendar invites are the per-EVENT
+scheduling axis** (owner decision 2026-07-08, superseding the 2026-07-07
+clubbed-loop posture): every distinct interview is its own round — even when
+several ride one calendar event (Chime's 5-segment onsite rode ONE invite;
+Headway's 4 final interviews rode THREE). Rounds link to their scheduling
+container via non-unique `invite_uid`; `round_no` renumbers chronologically
+(`resequence_rounds`) so "Round 1" is the interview that happened first. The
+`sessions` JSONB remains for legacy rows/sub-agenda notes but new pipeline
+writes itemize rounds instead of clubbing.
+
+Four producers, one consumer (`services/applications/rounds.py`):
 
 1. **Email** — classifier `round_kind` upserts on the linked application.
    Upsert key: application + kind + scheduled-date; dateless reminders reuse
@@ -155,11 +164,45 @@ itemizes the segments. Three producers, one consumer
    calendar then check them off (planned → scheduled → completed).
 3. **Calendar** — a matched event whose title looks like a round upserts
    `state=scheduled` with the event link.
+4. **Invites** (plan 96d) — `invite_uid` is the strongest evidence key on the
+   same upsert seam; see "Calendar-invite ground truth" below.
 
 Stage derivation stays downstream: a completed round of an onsite-evidence
 kind implies ONSITE_LOOP via the same forward-only `update_status` path. UI:
-Rounds checklist on the slide-over; `2/5 · system design` chip on the board
-card.
+Rounds checklist on the job surface (container header when several rounds
+share one calendar event); `2/5 · system design` chip on the board card;
+the "Upcoming interviews" Tracking panel groups scheduled rounds by calendar
+event → date.
+
+## Calendar-invite ground truth (plan 96d)
+
+`EmailInvite` (0047) — one row per observed (ics_uid, recurrence_id,
+sequence, method) VEVENT, parsed at sync time from `text/calendar` MIME
+parts + `.ics` attachments of the already-fetched RFC822 (`icalendar` lib;
+no extra IMAP round-trips; malformed invites degrade to a log line). The
+ledger is append-upsert (idempotent on the chain key — Google's duplicate
+inline+attachment copies and re-deliveries collapse).
+
+- **Supersedence is derived, never stored** (`invites.resolve_final`, pure):
+  the final invite of a chain is the max-SEQUENCE non-cancelled REQUEST; a
+  CANCEL at ≥ that sequence kills the chain. `METHOD:PUBLISH` invites are
+  ledger-only — GoodTime-class schedulers send per-attendee PUBLISH copies
+  with DISTINCT UIDs, which would otherwise mint duplicate rounds.
+- **Chain → rounds** (`invites.apply_invites_for_application`, idempotent):
+  a live chain guarantees ≥1 riding round (adopting the round the carrying
+  message already produced when possible — kind from the message's
+  `extracted_round_kind`, falling back to title heuristics); a container
+  reschedule SHIFTS every open rider by the container delta (segment offsets
+  survive); a cancellation without replacement reverts riders to `planned`.
+  Runs at sync (thread already linked), at classify (linking just happened),
+  and from the one-shot backfill (PEEK by `imap_uid`, recovering missing
+  UIDs via IMAP Message-ID HEADER search for pre-95l rows).
+- **Completion-by-time** rides the 45-min `tracking.sync_calendars` cron
+  (`complete_past_due_rounds`): a `scheduled` round whose evidenced end
+  (final invite `ends_at` > calendar event `ends_at` > `scheduled_at`+1h)
+  passed over an hour ago completes with `outcome=pending` and feeds the
+  same forward-only stage derivation. The one evidence class with no email
+  trigger — deterministic, no LLM, no new cron.
 
 ## Manual precedence: the status pin (plan 95 § 3.8)
 
@@ -202,7 +245,10 @@ back to the provider deep-link). With `email_account.store_body_excerpt`
 (default OFF), sync persists a 2,000-char plaintext excerpt that the chain
 expands instantly and the classifier uses instead of the snippet — the
 single biggest classification-context lever. Full RFC822 blobs at rest stay
-rejected.
+rejected. **Structured invite metadata at rest (owner-approved 2026-07-08,
+plan 96d):** `email_invite` rows persist times/organizer/attendees/sequence
+parsed from calendar parts, cascade-deleted with the carrying message; body
+text posture unchanged.
 
 ## Cross-source identity (plan 95 § 3.10)
 
@@ -244,3 +290,8 @@ links) never moves. Human-typed descriptions are never touched.
   `settings.auto_close_ghosted_after_days` (opt-in, NULL = off).
 - **0045** (95l) — `email_message.imap_uid`, `email_message.body_excerpt`,
   `email_account.store_body_excerpt` (default false).
+- **0046** (96c1) — `email_thread.job_id` (denormalized thread→job link,
+  backfilled from linked applications).
+- **0047** (96d) — `email_invite` (the invite ledger; UNIQUE chain key on
+  user/uid/recurrence/sequence/method), `interview_round.invite_uid`
+  (non-unique scheduling-container link).
