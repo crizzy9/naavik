@@ -1,5 +1,5 @@
 ---
-Status: ACTIVE
+Status: EXECUTED 2026-07-08 — plan 96 authored + approved (rev 2); successor: docs/prompts/96-tracking-v3-execution.md
 Type: prompt (planning handoff — investigate + discuss + author plan 96; do NOT implement yet)
 Authored: 2026-07-08
 Predecessor: docs/prompts/archive/95-tracking-v2.md (executed), docs/plans/archive/95-tracking-v2-interview-rounds-and-signal-quality.md
