@@ -366,6 +366,11 @@ async def classify_emails() -> None:
 
     async with async_session() as session:
         n = await classify_unprocessed(session, limit=200)
+        # Commit before inference: classifications and their ApiUsage rows
+        # must survive an inference failure. A single tick-wide transaction
+        # let one poison receipt roll back — and silently re-bill — every
+        # LLM call in the tick, every 10 minutes (2026-07-07 crash loop).
+        await session.commit()
         # Item 5 (2026-07): application-receipt inference rides the same
         # tick — deterministic, so it works even when classification
         # degraded to NO_PROVIDER_CONFIGURED.

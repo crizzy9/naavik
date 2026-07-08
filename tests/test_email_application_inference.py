@@ -415,3 +415,83 @@ async def test_infer_unprocessed_skips_non_receipts(session):
     assert created == 0
     msg = (await session.exec(select(EmailMessage))).one()
     assert msg.inference_processed_at is not None  # examined exactly once
+
+
+async def test_receipt_on_job_with_live_draft_application_links_instead_of_crashing(session):
+    """Regression — 2026-07-07 classify-tick crash loop. A DRAFT application
+    is invisible to the company matcher (`status != DRAFT` filter), but its
+    job IS found by the library-job matcher, so creation collided with the
+    (user_id, job_id) alive-unique index. The receipt must link to the
+    existing application instead."""
+    from sqlmodel import select
+
+    from models import Application
+    from models.enums import ApplicationStatus
+
+    job = _make_job(company="Path AI", role="Senior Software Engineer - Fullstack")
+    session.add(job)
+    await session.flush()
+    draft = Application(
+        user_id=1,
+        job_id=job.id,
+        company="Path AI",
+        role="Senior Software Engineer - Fullstack",
+        status=ApplicationStatus.DRAFT,
+    )
+    session.add(draft)
+    await session.flush()
+
+    msg, thread = await _seed_message(
+        session,
+        subject="Thank you for applying to Path AI",
+        sender="no-reply@greenhouse.io",
+    )
+    created = await inference.infer_from_message(session, msg)
+    assert created is None  # linked, not created
+    assert msg.application_id == draft.id
+    assert thread.application_id == draft.id
+    apps = (await session.exec(select(Application))).all()
+    assert len(apps) == 1
+
+
+async def test_infer_unprocessed_survives_poison_message(session, monkeypatch):
+    """Regression — the except handler itself crashed (expired ORM attribute
+    after a failed flush), letting the exception escape the cron: the tick
+    rolled back wholesale and retried forever. One poison message must not
+    stall the others, and the session must stay usable afterwards."""
+    from sqlmodel import select
+
+    from models import Application
+
+    poison_msg, _ = await _seed_message(
+        session,
+        subject="PoisonCo confirmation",
+        sender="no-reply@ashbyhq.com",
+    )
+    await _seed_message(
+        session,
+        subject="Thanks for applying to Initech!",
+        sender="no-reply@ashbyhq.com",
+    )
+    # Poison first in the received_at-desc scan; commit the seed rows the
+    # way sync does in production, so the handler's rollback returns to a
+    # state where both messages still exist.
+    poison_msg.received_at = datetime(2026, 7, 2, 12, 0, tzinfo=UTC)
+    session.add(poison_msg)
+    await session.commit()
+
+    real = inference.infer_from_message
+
+    async def poisoned(sess, msg):
+        if "PoisonCo" in (msg.subject or ""):
+            raise RuntimeError("boom")
+        return await real(sess, msg)
+
+    monkeypatch.setattr(inference, "infer_from_message", poisoned)
+
+    created = await inference.infer_unprocessed(session)
+    assert created == 1  # Initech processed despite the poison row
+
+    # Session usable after the rollback path — the fix's core contract.
+    apps = (await session.exec(select(Application))).all()
+    assert [a.company for a in apps] == ["Initech"]

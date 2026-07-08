@@ -582,6 +582,36 @@ async def infer_from_message(session: AsyncSession, msg: EmailMessage) -> Applic
     if job is None:
         job = await _create_job_from_receipt(session, user_id=msg.user_id, msg=msg, hit=hit)
 
+    # A live application may already hang off this job even though step 1
+    # missed it: the company matcher excludes DRAFT rows, and upsert_job's
+    # dedup can return an already-tracked job. Inserting a second one
+    # violates ix_application_user_job_alive_unique (the 2026-07-07
+    # classify-tick crash loop) — link instead.
+    existing_on_job = (
+        await session.exec(
+            select(Application).where(
+                Application.user_id == msg.user_id,
+                Application.job_id == job.id,
+                Application.deleted_at.is_(None),
+            )
+        )
+    ).first()
+    if existing_on_job is not None:
+        msg.application_id = existing_on_job.id
+        thread = await session.get(EmailThread, msg.thread_id)
+        if thread is not None and thread.application_id is None:
+            thread.application_id = existing_on_job.id
+            session.add(thread)
+        session.add(msg)
+        await session.flush()
+        log.info(
+            "receipt linked to existing application %s on job %s (%s)",
+            existing_on_job.id,
+            job.id,
+            company,
+        )
+        return None
+
     application = await _create_inferred_application(session, user_id=msg.user_id, job=job, msg=msg)
     msg.application_id = application.id
     thread = await session.get(EmailThread, msg.thread_id)
@@ -603,9 +633,9 @@ async def infer_from_message(session: AsyncSession, msg: EmailMessage) -> Applic
 async def infer_unprocessed(session: AsyncSession, *, limit: int = 100) -> int:
     """Cron entry — examine messages the detector hasn't seen. Returns the
     number of NEW proposed applications created."""
-    rows = (
+    ids = (
         await session.exec(
-            select(EmailMessage)
+            select(EmailMessage.id)
             .where(
                 EmailMessage.inference_processed_at.is_(None),
                 EmailMessage.application_id.is_(None),
@@ -615,12 +645,22 @@ async def infer_unprocessed(session: AsyncSession, *, limit: int = 100) -> int:
         )
     ).all()
     created = 0
-    for msg in rows:
+    for msg_id in ids:
         try:
+            msg = await session.get(EmailMessage, msg_id)
+            if msg is None:
+                continue
             if await infer_from_message(session, msg) is not None:
                 created += 1
         except Exception as exc:  # noqa: BLE001 — one bad message never stalls the cron
-            log.warning("inference failed for message %s: %s", msg.id, exc)
+            # Roll back FIRST: a failed flush leaves the session unusable and
+            # its ORM instances expired — the old handler touched msg.id on an
+            # expired row, re-raised, and the escaping exception rolled back
+            # the whole tick (classifications included) every 10 minutes.
+            # Iterating plain ids + re-fetching keeps later iterations off
+            # expired instances after a rollback.
+            await session.rollback()
+            log.warning("inference failed for message %s: %s", msg_id, exc)
     return created
 
 
