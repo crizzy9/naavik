@@ -247,27 +247,41 @@ async def move(
     """Tracking-board column move (drag-drop status change).
 
     Plan 85 / 0.4.0.21 — IDOR boundary: 404 on cross-user / missing app.
-    Empty / malformed payloads still short-circuit to 204 (pre-IDOR
-    behavior preserved — the IDOR check fires once we have an app_id).
+    Plan 96a / B1 — malformed payloads are 422s, never a silent 204: the
+    board drag looked like it worked for months because empty POSTs
+    short-circuited to success.
     """
     if not payload:
-        return Response(status_code=204)
-    app_id = int(payload.get("application_id", 0))
+        raise HTTPException(status_code=422, detail="JSON body required")
+    try:
+        app_id = int(payload.get("application_id", 0))
+    except (TypeError, ValueError):
+        app_id = 0
     target = payload.get("target_status")
     if not (app_id and target):
-        return Response(status_code=204)
+        raise HTTPException(status_code=422, detail="`application_id` and `target_status` required")
     await owned_application_or_404(session, app_id, current_user.id, allow_deleted=True)
     try:
         new_status = ApplicationStatus(target)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail="Bad status") from exc
+        raise HTTPException(status_code=422, detail=f"Unknown status {target!r}") from exc
     closed_reason = None
     if new_status == ApplicationStatus.CLOSED:
         cr = payload.get("closed_reason")
         if cr:
-            closed_reason = ClosedReason(cr)
+            try:
+                closed_reason = ClosedReason(cr)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"Unknown closed_reason {cr!r}"
+                ) from exc
     try:
         await svc.update_status(session, app_id, new_status, closed_reason=closed_reason)
+    except svc.ValidationError as exc:
+        # e.g. CLOSED without a reason — legible for the drag handler's toast.
+        raise HTTPException(
+            status_code=409, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
     except svc.ApplicationServiceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()

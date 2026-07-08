@@ -45,6 +45,7 @@
       {{ status_dot(a.status) }}
       <span>{{ a.status_label | default((a.status or '') | replace('_', ' ')) }}</span>
     </span>
+    {% if a.suggestion_chip %}{{ chip(a.suggestion_chip, tone="amber") }}{% endif %}
     {% if a.round_chip %}{{ chip(a.round_chip, tone="indigo") }}{% endif %}
     {% if a.quiet_chip %}{{ chip(a.quiet_chip, tone="amber") }}{% endif %}
     {% if a.pin_chip %}{{ chip(a.pin_chip, tone="slate") }}{% endif %}

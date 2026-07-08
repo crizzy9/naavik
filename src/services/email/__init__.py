@@ -21,8 +21,10 @@ Seam tiers:
 from __future__ import annotations
 
 from services.email.service import (
+    PendingSuggestion,
     get_thread,
     list_accounts,
+    list_pending_suggestions,
     list_threads,
     list_threads_for_application,
     recent_signals,
@@ -35,9 +37,11 @@ from services.email.sync import (
 )
 
 __all__ = [
+    "PendingSuggestion",
     "SyncResult",
     "get_thread",
     "list_accounts",
+    "list_pending_suggestions",
     "list_threads",
     "list_threads_for_application",
     "recent_signals",

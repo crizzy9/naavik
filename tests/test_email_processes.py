@@ -412,3 +412,60 @@ async def test_dismiss_process_stamps_messages(session, user):
     n = await processes.dismiss_process(session, user_id=user.id, company="Scribd")
     assert n == 1
     assert await processes.list_detected_processes(session, user_id=user.id) == []
+
+
+# ── CLOSED override (plan 96a / B4) ─────────────────────────────────────
+
+
+async def test_track_process_with_closed_override_supplies_reason(session, user):
+    """Plan 96a / B4 — an explicit human CLOSED pick at track time must pass
+    a closed_reason through to the trail writer (the override path used to
+    null it, which would crash `create_tracked_application`'s CLOSED hop)."""
+    from models.enums import ApplicationStatus, ClosedReason, EmailClassification
+    from services.email import processes
+
+    await _seed_signal(
+        session,
+        user_id=user.id,
+        company="Google",
+        classification=EmailClassification.INTERVIEW_REQUEST,
+        stage="interview",
+        offset_days=2,
+    )
+    application = await processes.track_process(
+        session,
+        user_id=user.id,
+        company="Google",
+        status_override=ApplicationStatus.CLOSED,
+    )
+    assert application is not None
+    assert application.status == ApplicationStatus.CLOSED
+    assert application.closed_reason == ClosedReason.REJECTED_BY_THEM
+
+
+async def test_track_process_derived_closed_keeps_timeline_reason(session, user):
+    """A rejection-bearing timeline derives CLOSED itself; tracking it (no
+    override) must carry the derived rejected_by_them reason unchanged."""
+    from models.enums import ApplicationStatus, ClosedReason, EmailClassification
+    from services.email import processes
+
+    await _seed_signal(
+        session,
+        user_id=user.id,
+        company="Google",
+        classification=EmailClassification.INTERVIEW_REQUEST,
+        stage="interview",
+        offset_days=3,
+    )
+    await _seed_signal(
+        session,
+        user_id=user.id,
+        company="Google",
+        classification=EmailClassification.REJECTION,
+        offset_days=1,
+        subject="Update on your Google application",
+    )
+    application = await processes.track_process(session, user_id=user.id, company="Google")
+    assert application is not None
+    assert application.status == ApplicationStatus.CLOSED
+    assert application.closed_reason == ClosedReason.REJECTED_BY_THEM

@@ -83,6 +83,7 @@ def application_to_card(
     *,
     round_chip: str | None = None,
     quiet_chip: str | None = None,
+    suggestion_chip: str | None = None,
 ) -> dict[str, object]:
     initial, color = _initial_color(a.company)
     chip, tone = _context_chip(a)
@@ -106,6 +107,8 @@ def application_to_card(
         "round_chip": round_chip,
         # Plan 95 § 3.2 — amber "no signal for N d" chip on quiet cards.
         "quiet_chip": quiet_chip,
+        # Plan 96a / B2 — pending email suggestion, visible from the board.
+        "suggestion_chip": suggestion_chip,
         "sub_state_pills": [],
     }
 
@@ -134,6 +137,7 @@ def _columns_for_board(
     show_closed: bool,
     round_chips: dict[int, str] | None = None,
     quiet_chips: dict[int, str] | None = None,
+    suggestion_chips: dict[int, str] | None = None,
 ) -> list[dict[str, object]]:
     visible = [
         ApplicationStatus.APPLIED,
@@ -145,11 +149,15 @@ def _columns_for_board(
         visible.append(ApplicationStatus.CLOSED)
     chips = round_chips or {}
     q_chips = quiet_chips or {}
+    s_chips = suggestion_chips or {}
     out = []
     for status in visible:
         cards = [
             application_to_card(
-                a, round_chip=chips.get(a.id or 0), quiet_chip=q_chips.get(a.id or 0)
+                a,
+                round_chip=chips.get(a.id or 0),
+                quiet_chip=q_chips.get(a.id or 0),
+                suggestion_chip=s_chips.get(a.id or 0),
             )
             for a in apps
             if a.status == status
@@ -357,8 +365,27 @@ async def build_tracking_ctx(
         for q in going_quiet
         if q.application.id is not None
     }
+
+    # Plan 96a / B2 — pending email suggestions, visible from the OUTSIDE:
+    # an amber chip on the card + the strip at the top of the page. The
+    # Apply/Dismiss affordances used to exist only inside the slide-over
+    # conversation, so pending rejections sat invisible for days.
+    pending = await email_service.list_pending_suggestions(session, user_id=user_id)
+    suggestion_chips: dict[int, str] = {}
+    for s in pending:
+        label = (
+            "rejection?"
+            if s.suggested_status == ApplicationStatus.CLOSED
+            else f"→ {application_status_label(s.suggested_status)}?"
+        )
+        suggestion_chips.setdefault(s.application_id, label)
+
     columns = _columns_for_board(
-        all_apps, show_closed=show_closed, round_chips=round_chips, quiet_chips=quiet_chips
+        all_apps,
+        show_closed=show_closed,
+        round_chips=round_chips,
+        quiet_chips=quiet_chips,
+        suggestion_chips=suggestion_chips,
     )
 
     followup = await applications.list_in_followup(session, user_id)
@@ -435,6 +462,9 @@ async def build_tracking_ctx(
     merge_targets = sorted(
         {a.company for a in visible_apps if a.company} | {p.company for p in detected if p.company}
     )
+    # Plan 96a / B4 — CLOSED is representable: a group whose timeline derives
+    # CLOSED must not silently render as "Applied" (the browser picks the
+    # first option when none matches).
     track_stage_options = [
         {"value": s.value, "label": application_status_label(s)}
         for s in (
@@ -442,6 +472,7 @@ async def build_tracking_ctx(
             ApplicationStatus.RECRUITER_SCREEN,
             ApplicationStatus.ONSITE_LOOP,
             ApplicationStatus.OFFER,
+            ApplicationStatus.CLOSED,
         )
     ]
 
@@ -477,6 +508,23 @@ async def build_tracking_ctx(
         ],
         "process_merge_targets": merge_targets,
         "track_stage_options": track_stage_options,
+        # Plan 96a / B2 — one row per pending suggestion on the strip.
+        "pending_suggestions": [
+            {
+                "application_id": s.application_id,
+                "message_id": s.message_id,
+                "company": s.company,
+                "role": s.role,
+                "current_label": application_status_label(s.current_status),
+                "suggested_label": application_status_label(s.suggested_status),
+                "is_rejection": s.suggested_status == ApplicationStatus.CLOSED,
+                "subject": s.subject,
+                "suggested_at_label": _relative_label(s.suggested_at),
+                "pinned": s.pinned,
+                "dom_id": f"pending-suggestion-{s.message_id}",
+            }
+            for s in pending
+        ],
         "going_quiet": [
             {
                 "id": q.application.id,

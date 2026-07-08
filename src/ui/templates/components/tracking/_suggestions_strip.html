@@ -1,0 +1,64 @@
+{# _suggestions_strip.html — pending email-status suggestions (plan 96a / B2).
+
+   Args:
+     pending_suggestions : list — build_tracking_ctx dicts (application_id,
+                           message_id, company, role, current_label,
+                           suggested_label, is_rejection, subject,
+                           suggested_at_label, pinned, dom_id)
+
+   Same panel pattern as detected-processes / going-quiet. Apply / Dismiss
+   post to the existing email-suggestion routes; "Apply & resume" appears
+   only on pinned applications (§ 3.8.6). Renders nothing when empty.
+#}
+{% if pending_suggestions %}
+<section class="rounded-lg bg-amber-500/5 border border-amber-500/30 px-4 py-3 flex flex-col gap-2" data-testid="pending-suggestions-strip">
+  <div class="flex items-center gap-2 text-sm text-amber-100">
+    <i data-lucide="mail-question" class="h-4 w-4 text-amber-300" stroke-width="1.5"></i>
+    {{ pending_suggestions | length }} email suggestion{{ "s" if pending_suggestions | length != 1 }} waiting for your call.
+  </div>
+  <ul class="flex flex-col gap-1.5">
+    {% for s in pending_suggestions %}
+      <li id="{{ s.dom_id }}" class="flex items-center gap-3 rounded-md bg-slate-950/50 px-3 py-2" data-testid="{{ s.dom_id }}">
+        <div class="flex-1 min-w-0">
+          <div class="text-sm text-slate-100 truncate">
+            <span class="font-medium">{{ s.company }}</span>{% if s.role %} · {{ s.role }}{% endif %}
+            <span class="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide {{ 'bg-rose-500/15 text-rose-300' if s.is_rejection else 'bg-amber-500/15 text-amber-200' }}">
+              {{ s.current_label }} → {{ s.suggested_label }}{{ " (rejection)" if s.is_rejection }}
+            </span>
+          </div>
+          <div class="text-xs text-slate-500 truncate">suggested {{ s.suggested_at_label }} · “{{ s.subject }}”</div>
+        </div>
+        <button type="button"
+                class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-medium"
+                hx-post="/api/v1/applications/{{ s.application_id }}/email-suggestion/{{ s.message_id }}/apply"
+                hx-swap="none"
+                hx-disabled-elt="this"
+                data-testid="{{ s.dom_id }}-apply">
+          <i data-lucide="check" class="h-3.5 w-3.5" stroke-width="2"></i>
+          Apply
+        </button>
+        {% if s.pinned %}
+          {# § 3.8.6 — accepting the machine's next call lifts the pin too. #}
+          <button type="button"
+                  class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-indigo-100 bg-indigo-500/40 hover:bg-indigo-500/60 font-medium"
+                  hx-post="/api/v1/applications/{{ s.application_id }}/email-suggestion/{{ s.message_id }}/apply?resume=1"
+                  hx-swap="none"
+                  hx-disabled-elt="this"
+                  data-testid="{{ s.dom_id }}-apply-resume">
+            Apply &amp; resume auto-tracking
+          </button>
+        {% endif %}
+        <button type="button"
+                class="shrink-0 px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                hx-post="/api/v1/applications/{{ s.application_id }}/email-suggestion/{{ s.message_id }}/dismiss"
+                hx-swap="none"
+                hx-disabled-elt="this"
+                hx-on::after-request="if(event.detail.successful) this.closest('li').remove()"
+                data-testid="{{ s.dom_id }}-dismiss">
+          Dismiss
+        </button>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

@@ -310,7 +310,16 @@ async def track_process(
     status, closed_reason = status_mapper.status_for_email_timeline(timeline)
     overridden = status_override is not None and status_override != status
     if overridden and status_override is not None:
-        status, closed_reason = status_override, None
+        # Plan 96a / B4 — an explicit human CLOSED pick needs a reason for
+        # the trail writer; the timeline can only have derived one when it
+        # already said CLOSED (in which case there is no override), so the
+        # human pick defaults to rejected_by_them.
+        if status_override == ApplicationStatus.CLOSED:
+            from models.enums import ClosedReason
+
+            status, closed_reason = status_override, ClosedReason.REJECTED_BY_THEM
+        else:
+            status, closed_reason = status_override, None
     roles = [m.extracted_role for m in messages if m.extracted_role]
     role = roles[-1] if roles else None
     display_company = messages[-1].extracted_company or company

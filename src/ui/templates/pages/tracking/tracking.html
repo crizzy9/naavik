@@ -70,6 +70,10 @@
     {% endfor %}
   </section>
 
+  {# Pending email-status suggestions (plan 96a / B2) — visible at page
+     level, not just inside the slide-over conversation. #}
+  {% include "components/tracking/_suggestions_strip.html" %}
+
   {# Inferred applications awaiting confirmation (item 5) — the inbox found
      receipts for applications Naavik wasn't tracking. #}
   {% if inferred_pending %}

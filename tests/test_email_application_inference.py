@@ -495,3 +495,95 @@ async def test_infer_unprocessed_survives_poison_message(session, monkeypatch):
     # Session usable after the rollback path — the fix's core contract.
     apps = (await session.exec(select(Application))).all()
     assert [a.company for a in apps] == ["Initech"]
+
+
+# ── Receipt-on-DRAFT advance (plan 96a) ─────────────────────────────────
+
+
+async def test_receipt_advances_draft_to_applied(session):
+    """Plan 96a — a receipt on a DRAFT application is decisive evidence the
+    human applied: DRAFT auto-advances to APPLIED (trigger=AUTO_FROM_EMAIL)
+    instead of ending linked-but-invisible (the Path AI case)."""
+    from sqlmodel import select
+
+    from models import AppEvent, Application
+    from models.enums import AppEventKind, ApplicationStatus, StatusChangeTrigger
+
+    job = _make_job(company="Path AI", role="Senior Software Engineer - Fullstack")
+    session.add(job)
+    await session.flush()
+    draft = Application(
+        user_id=1,
+        job_id=job.id,
+        company="Path AI",
+        role="Senior Software Engineer - Fullstack",
+        status=ApplicationStatus.DRAFT,
+    )
+    session.add(draft)
+    await session.flush()
+
+    msg, _thread = await _seed_message(
+        session,
+        subject="Thank you for applying to Path AI",
+        sender="no-reply@greenhouse.io",
+    )
+    created = await inference.infer_from_message(session, msg)
+    assert created is None  # linked, never a second application
+
+    refreshed = await session.get(Application, draft.id)
+    assert refreshed.status == ApplicationStatus.APPLIED
+    assert refreshed.applied_at is not None
+    events = (await session.exec(select(AppEvent))).all()
+    status_changes = [e for e in events if e.kind == AppEventKind.STATUS_CHANGE]
+    assert any(
+        e.payload.get("to") == ApplicationStatus.APPLIED.value
+        and e.payload.get("trigger") == StatusChangeTrigger.AUTO_FROM_EMAIL.value
+        for e in status_changes
+    )
+    suggested = [e for e in events if e.kind == AppEventKind.EMAIL_STATUS_SUGGESTED]
+    assert len(suggested) == 1
+    assert suggested[0].payload["applied"] is True
+
+
+async def test_receipt_draft_advance_respects_pin(session):
+    """§ 3.8 pin-respecting: a human who dragged the card back to DRAFT
+    pinned APPLIED — the receipt must not re-apply it; the suppressed move
+    still emits EMAIL_STATUS_SUGGESTED (rule 5)."""
+    from sqlmodel import select
+
+    from models import AppEvent, Application
+    from models.enums import AppEventKind, ApplicationStatus
+
+    job = _make_job(company="Path AI", role="Senior Software Engineer - Fullstack")
+    session.add(job)
+    await session.flush()
+    draft = Application(
+        user_id=1,
+        job_id=job.id,
+        company="Path AI",
+        role="Senior Software Engineer - Fullstack",
+        status=ApplicationStatus.DRAFT,
+        submission_artifacts={
+            "status_pin": {"rejected": "APPLIED", "at": "2026-07-01T00:00:00+00:00"}
+        },
+    )
+    session.add(draft)
+    await session.flush()
+
+    msg, _thread = await _seed_message(
+        session,
+        subject="Thank you for applying to Path AI",
+        sender="no-reply@greenhouse.io",
+    )
+    await inference.infer_from_message(session, msg)
+
+    refreshed = await session.get(Application, draft.id)
+    assert refreshed.status == ApplicationStatus.DRAFT  # pin held
+    suggested = [
+        e
+        for e in (await session.exec(select(AppEvent))).all()
+        if e.kind == AppEventKind.EMAIL_STATUS_SUGGESTED
+    ]
+    assert len(suggested) == 1
+    assert suggested[0].payload["applied"] is False
+    assert suggested[0].payload["suppressed_by_pin"] is True

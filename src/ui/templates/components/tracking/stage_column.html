@@ -14,10 +14,14 @@
     <span class="text-slate-200">{{ _label }}</span>
     <span class="ml-auto font-mono text-slate-500 tabular-nums">{{ cards | length }}</span>
   </header>
+  {# Drag persistence lives in base.js § 2 (shared Sortable group + onEnd
+     fetch) — the old hx-post/hx-trigger="end" pair fired on the SOURCE
+     column with no payload and never moved anything (plan 96a / B1). #}
   <div id="{{ column_id }}"
        data-sortable="true" data-column="{{ status }}"
-       hx-post="/api/v1/applications/move"
-       hx-trigger="end"
+       {% if status == "CLOSED" %}
+       data-closed-reasons='[{"value": "rejected_by_them", "label": "They rejected me"}, {"value": "withdrawn_by_me", "label": "I withdrew"}, {"value": "ghosted", "label": "Ghosted — no response"}, {"value": "accepted_other", "label": "Accepted another offer"}]'
+       {% endif %}
        class="flex flex-col gap-2 min-h-[200px]">
     {% for c in cards %}
       {% with application=c %}{% include "components/tracking/tracking_card.html" %}{% endwith %}

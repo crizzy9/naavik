@@ -541,6 +541,58 @@ def is_unconfirmed_inferred(application: Application) -> bool:
     return isinstance(inferred, dict) and not inferred.get("confirmed", False)
 
 
+async def _advance_draft_on_receipt(
+    session: AsyncSession, application: Application, msg: EmailMessage
+) -> None:
+    """Plan 96a — a receipt landing on a DRAFT application is decisive
+    evidence the human applied: auto-apply DRAFT → APPLIED (forward move,
+    `trigger=AUTO_FROM_EMAIL`), § 3.8 pin-respecting. Without this the Path
+    AI case ends linked-but-invisible: the receipt attaches, the card stays
+    an off-board draft, and the owner never sees it."""
+    from services.applications.pins import auto_transition_allowed, get_status_pin
+
+    if application.status != ApplicationStatus.DRAFT:
+        return
+    allowed = auto_transition_allowed(application, ApplicationStatus.APPLIED)
+    if allowed:
+        from services import applications as applications_service
+
+        had_applied_at = application.applied_at is not None
+        application = await applications_service.update_status(
+            session,
+            application.id,
+            ApplicationStatus.APPLIED,
+            trigger=StatusChangeTrigger.AUTO_FROM_EMAIL,
+        )
+        if not had_applied_at:
+            # The receipt's timestamp is when the human actually applied —
+            # more honest than update_status's "now" default.
+            application.applied_at = msg.received_at
+            session.add(application)
+    # § 3.8 rule 5 — record the suggestion either way; a pin-suppressed
+    # advance must be auditable, never silently swallowed.
+    session.add(
+        AppEvent(
+            user_id=application.user_id,
+            application_id=application.id,
+            kind=AppEventKind.EMAIL_STATUS_SUGGESTED,
+            occurred_at=datetime.now(UTC),
+            payload={
+                "message_id": msg.id,
+                "classification": "receipt",
+                "current_status": ApplicationStatus.DRAFT.value,
+                "suggested_status": ApplicationStatus.APPLIED.value,
+                "reason": "Application receipt landed on a draft",
+                "applied": allowed,
+                "dismissed": False,
+                "suppressed_by_pin": (not allowed and get_status_pin(application) is not None),
+            },
+            actor="email_application_inference",
+        )
+    )
+    await session.flush()
+
+
 # ── Entry points ────────────────────────────────────────────────────────
 
 
@@ -604,6 +656,9 @@ async def infer_from_message(session: AsyncSession, msg: EmailMessage) -> Applic
             session.add(thread)
         session.add(msg)
         await session.flush()
+        # Plan 96a — step 1's matcher excludes DRAFT, so only this path can
+        # link a receipt to a draft; the receipt proves the human applied.
+        await _advance_draft_on_receipt(session, existing_on_job, msg)
         log.info(
             "receipt linked to existing application %s on job %s (%s)",
             existing_on_job.id,

@@ -617,6 +617,9 @@ _TRACK_STATUS_OVERRIDES = {
     ApplicationStatus.RECRUITER_SCREEN,
     ApplicationStatus.ONSITE_LOOP,
     ApplicationStatus.OFFER,
+    # Plan 96a / B4 — a group whose timeline derives CLOSED must be
+    # trackable as closed; track_process supplies the closed_reason.
+    ApplicationStatus.CLOSED,
 }
 
 

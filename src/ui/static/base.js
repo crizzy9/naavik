@@ -49,20 +49,143 @@
   // 2. Sortable.js auto-init                                         //
   // Initialize every `[data-sortable="true"]` after settle. Marker   //
   // `el._sortable` prevents double-init.                             //
+  //                                                                  //
+  // Tracking-board columns (plan 96a / B1): every column carries     //
+  // [data-column], joins ONE shared group (SortableJS rejects        //
+  // cross-list drops without it), and persists drops via an onEnd    //
+  // fetch — the old `hx-trigger="end"` declaration fired on the      //
+  // SOURCE column with an empty body (silent 204, no move).          //
   // ---------------------------------------------------------------- //
   function initSortables() {
     if (!window.Sortable) return;
     document.querySelectorAll('[data-sortable="true"]').forEach(function (el) {
       if (el._sortable) return;
-      el._sortable = window.Sortable.create(el, {
+      var opts = {
         handle: '.drag-handle',
         animation: 150,
         ghostClass: 'opacity-40',
-      });
+      };
+      if (el.dataset.column) {
+        opts.group = 'tracking-board';
+        opts.onEnd = trackingBoardDrop;
+      }
+      el._sortable = window.Sortable.create(el, opts);
     });
   }
   document.addEventListener('DOMContentLoaded', initSortables);
   document.body.addEventListener('htmx:afterSettle', initSortables);
+
+  function readCookie(name) {
+    var m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  // Optimistic move per INTERACTIONS.md § H.4: Sortable already moved the
+  // DOM node; a non-2xx puts the card back at its old index and toasts the
+  // server's detail (a 409 must be legible, never a silent snap-back).
+  function trackingBoardDrop(evt) {
+    if (evt.from === evt.to) return; // within-column reorder is cosmetic
+    var appId = parseInt(evt.item.dataset.appId || '', 10);
+    var target = evt.to.dataset.column;
+
+    function revert() {
+      var siblings = Array.prototype.filter.call(evt.from.children, function (n) {
+        return n !== evt.item;
+      });
+      var ref = siblings[evt.oldIndex];
+      if (ref) { evt.from.insertBefore(evt.item, ref); } else { evt.from.appendChild(evt.item); }
+    }
+
+    if (!appId || !target) { revert(); return; }
+
+    var payload = { application_id: appId, target_status: target };
+    if (target === 'CLOSED') {
+      var reasons = [];
+      try { reasons = JSON.parse(evt.to.dataset.closedReasons || '[]'); } catch (err) { reasons = []; }
+      promptClosedReason(reasons).then(function (reason) {
+        if (!reason) { revert(); return; }
+        payload.closed_reason = reason;
+        postTrackingMove(payload, revert);
+      });
+      return;
+    }
+    postTrackingMove(payload, revert);
+  }
+
+  function postTrackingMove(payload, revert) {
+    fetch('/api/v1/applications/move', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': readCookie('naavik_csrf'),
+      },
+      body: JSON.stringify(payload),
+    }).then(function (res) {
+      if (res.ok) {
+        // Re-sync column counts + card chips; the card itself already sits
+        // in the right column, so the swap is visually stable.
+        if (window.htmx && document.getElementById('tracking-main')) {
+          var params = new URLSearchParams(window.location.search);
+          var qs = [];
+          if (params.get('show_closed') === '1') qs.push('show_closed=1');
+          if (params.get('show_drafts') === '1') qs.push('show_drafts=1');
+          window.htmx.ajax('GET', '/_fragments/tracking/board' + (qs.length ? '?' + qs.join('&') : ''), {
+            target: '#tracking-main',
+            swap: 'innerHTML',
+          });
+        }
+        return;
+      }
+      return res.json().catch(function () { return null; }).then(function (body) {
+        var detail = body && body.detail;
+        var msg = typeof detail === 'string' ? detail : (detail && detail.message) || 'Move failed';
+        revert();
+        showToast('danger', msg);
+      });
+    }).catch(function () {
+      revert();
+      showToast('danger', 'Network error — the move was not saved.');
+    });
+  }
+
+  // Closed-column drops need a `closed_reason` (the state machine refuses
+  // CLOSED without one) — same dialog shape as confirm_modal.html, with a
+  // reason picker. Resolves null on cancel/backdrop so the drop reverts.
+  function promptClosedReason(reasons) {
+    return new Promise(function (resolve) {
+      var dlg = document.createElement('dialog');
+      dlg.setAttribute('open', '');
+      dlg.setAttribute('data-testid', 'closed-reason-modal');
+      dlg.className = 'bg-slate-900 border border-slate-800 rounded-xl shadow-2xl shadow-black/45 p-0 w-full max-w-[520px] fixed inset-0 m-auto h-fit z-50';
+      var options = (reasons || []).map(function (r) {
+        return '<option value="' + escapeHtml(r.value) + '">' + escapeHtml(r.label) + '</option>';
+      }).join('');
+      dlg.innerHTML =
+        '<div class="fixed inset-0 -z-10 bg-black/40" aria-hidden="true" data-close-reason-cancel></div>' +
+        '<div class="px-6 pt-6 pb-4">' +
+          '<h3 class="text-lg font-semibold text-slate-50">Close this application?</h3>' +
+          '<p class="mt-2 text-sm text-slate-300 leading-relaxed">Pick why it closed — the reason feeds your funnel analytics.</p>' +
+          '<select class="mt-3 w-full rounded-md bg-slate-950 border border-slate-700 text-sm text-slate-200 px-2 py-1.5" data-closed-reason-select>' + options + '</select>' +
+        '</div>' +
+        '<footer class="px-6 py-4 flex items-center justify-end gap-3 border-t border-slate-800 bg-slate-950/30">' +
+          '<button type="button" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-slate-50 hover:bg-slate-800 transition" data-close-reason-cancel>Cancel</button>' +
+          '<button type="button" class="px-4 py-2 rounded-lg text-sm font-medium bg-rose-500 hover:bg-rose-400 text-white transition" data-close-reason-confirm>Close application</button>' +
+        '</footer>';
+      function done(value) {
+        dlg.remove();
+        resolve(value);
+      }
+      dlg.addEventListener('click', function (e) {
+        if (e.target.closest('[data-close-reason-cancel]')) { done(null); return; }
+        if (e.target.closest('[data-close-reason-confirm]')) {
+          var sel = dlg.querySelector('[data-closed-reason-select]');
+          done(sel && sel.value ? sel.value : null);
+        }
+      });
+      document.body.appendChild(dlg);
+    });
+  }
 
   // ---------------------------------------------------------------- //
   // 3. Modal-close listener                                          //

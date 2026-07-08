@@ -81,9 +81,26 @@
       {% for r in rounds %}
         <li class="flex items-start gap-2.5 text-sm rounded-md px-2 py-1.5 {{ 'bg-emerald-500/5' if r.state == 'completed' else 'bg-slate-900/60' }}"
             data-testid="round-row-{{ r.id }}">
-          <i data-lucide="{{ r.state_icon }}"
-             class="h-4 w-4 shrink-0 mt-0.5 {{ 'text-emerald-400' if r.state == 'completed' else ('text-sky-400' if r.state == 'scheduled' else ('text-slate-600' if r.state == 'cancelled' else 'text-slate-500')) }}"
-             stroke-width="1.5"></i>
+          {# Plan 96a / R5 — mark-done IS the state icon: clicking the open
+             checkbox completes the round (the side button is gone). #}
+          {% if r.state in ("planned", "scheduled") %}
+            <button type="button"
+                    data-testid="round-mark-done-{{ r.id }}"
+                    title="Mark this round done"
+                    aria-label="Mark round done"
+                    hx-post="/api/v1/applications/{{ application.id }}/rounds/{{ r.id }}/state"
+                    hx-vals='{"state": "completed"}'
+                    hx-target="#detail-rounds"
+                    hx-swap="outerHTML"
+                    hx-disabled-elt="this"
+                    class="shrink-0 mt-0.5 rounded p-0 leading-none {{ 'text-sky-400' if r.state == 'scheduled' else 'text-slate-500' }} hover:text-emerald-300 transition">
+              <i data-lucide="{{ r.state_icon }}" class="h-4 w-4" stroke-width="1.5"></i>
+            </button>
+          {% else %}
+            <i data-lucide="{{ r.state_icon }}"
+               class="h-4 w-4 shrink-0 mt-0.5 {{ 'text-emerald-400' if r.state == 'completed' else ('text-slate-600' if r.state == 'cancelled' else 'text-slate-500') }}"
+               stroke-width="1.5"></i>
+          {% endif %}
           <div class="flex-1 min-w-0">
             <div class="text-slate-200 {{ 'line-through text-slate-500' if r.state == 'cancelled' }}">
               {{ r.title or r.kind_label }}
@@ -104,18 +121,6 @@
               </details>
             {% endif %}
           </div>
-          {% if r.state in ("planned", "scheduled") %}
-            <button type="button"
-                    data-testid="round-mark-done-{{ r.id }}"
-                    hx-post="/api/v1/applications/{{ application.id }}/rounds/{{ r.id }}/state"
-                    hx-vals='{"state": "completed"}'
-                    hx-target="#detail-rounds"
-                    hx-swap="outerHTML"
-                    hx-disabled-elt="this"
-                    class="shrink-0 px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide text-slate-400 bg-slate-800 hover:bg-slate-700 hover:text-slate-200 transition">
-              mark done
-            </button>
-          {% endif %}
         </li>
       {% endfor %}
     </ol>

@@ -8,11 +8,14 @@ accessors that lived in `src/db/sample_data.py`.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from models import EmailThread
-from models.enums import EmailClassification
+from models.enums import ApplicationStatus, EmailClassification
 
 
 async def list_accounts(session: AsyncSession, user_id: int) -> list:
@@ -67,6 +70,70 @@ async def list_threads_for_application(
     )
     rows = (await session.exec(stmt)).all()
     return list(rows)
+
+
+@dataclass(slots=True)
+class PendingSuggestion:
+    """One email-status suggestion awaiting the owner's Apply/Dismiss
+    (plan 96a / B2 — surfaced on the board strip + card chip, not just
+    buried inside the conversation section)."""
+
+    application_id: int
+    message_id: int
+    company: str
+    role: str | None
+    current_status: ApplicationStatus
+    suggested_status: ApplicationStatus
+    subject: str
+    suggested_at: datetime | None
+    pinned: bool
+
+
+async def list_pending_suggestions(
+    session: AsyncSession, *, user_id: int
+) -> list[PendingSuggestion]:
+    """Pending email-status suggestions across the user's live applications.
+
+    Pending = `suggested_status` set, neither applied nor dismissed, on an
+    alive application. Suggestions the pipeline has since caught up with
+    (application already at the suggested status) are skipped — showing
+    them would ask the owner to confirm a no-op.
+    """
+    from models import Application, EmailMessage
+    from services.applications.pins import get_status_pin
+
+    rows = (
+        await session.exec(
+            select(EmailMessage, Application)
+            .where(
+                EmailMessage.user_id == user_id,
+                EmailMessage.application_id == Application.id,
+                EmailMessage.suggested_status.is_not(None),
+                EmailMessage.suggestion_applied_at.is_(None),
+                EmailMessage.suggestion_dismissed_at.is_(None),
+                Application.deleted_at.is_(None),
+            )
+            .order_by(EmailMessage.suggested_at.desc())
+        )
+    ).all()
+    out: list[PendingSuggestion] = []
+    for msg, application in rows:
+        if msg.suggested_status == application.status:
+            continue
+        out.append(
+            PendingSuggestion(
+                application_id=application.id,
+                message_id=msg.id,
+                company=application.company,
+                role=application.role,
+                current_status=application.status,
+                suggested_status=msg.suggested_status,
+                subject=msg.subject,
+                suggested_at=msg.suggested_at,
+                pinned=get_status_pin(application) is not None,
+            )
+        )
+    return out
 
 
 async def recent_signals(

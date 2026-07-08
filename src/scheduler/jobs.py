@@ -376,7 +376,56 @@ async def classify_emails() -> None:
         # degraded to NO_PROVIDER_CONFIGURED.
         inferred = await infer_unprocessed(session, limit=200)
         await session.commit()
+        if n == 0:
+            await _alert_on_classify_stall(session)
     log.info("classify_emails classified=%d inferred_applications=%d", n, inferred)
+
+
+async def _alert_on_classify_stall(session) -> None:
+    """Plan 96a / B3 residual — a tick that classifies 0 rows while
+    untouched mail is waiting must page, not idle: the 2026-07 crash loop
+    stalled classification silently for 37 hours.
+
+    Backlog = `classification IS NULL AND unclassified_reason IS NULL` —
+    rows the classifier never even stamped. Degraded-but-honest states
+    (NO_PROVIDER_CONFIGURED / RATE_LIMITED / LLM_FAILED) carry a reason and
+    don't page. Best-effort: alerting must never sink the tick.
+    """
+    from sqlalchemy import func
+    from sqlmodel import select as _select
+
+    from models import EmailMessage, Settings
+    from services.notify import notify_admin_error
+
+    try:
+        backlog = (
+            await session.exec(
+                _select(func.count())
+                .select_from(EmailMessage)
+                .where(
+                    EmailMessage.classification.is_(None),
+                    EmailMessage.unclassified_reason.is_(None),
+                )
+            )
+        ).one()
+        if not backlog:
+            return
+        log.error(
+            "classify_emails processed 0 rows with %d unclassified messages waiting — "
+            "the classify tick may be stalled",
+            backlog,
+        )
+        settings_rows = (await session.exec(_select(Settings))).all()
+        for settings in settings_rows:
+            await notify_admin_error(
+                settings=settings,
+                message=(
+                    f"Email classification stalled: 0 rows processed this tick, "
+                    f"{backlog} messages waiting."
+                ),
+            )
+    except Exception as exc:  # noqa: BLE001 — the alert must never sink the tick
+        log.warning("classify-stall alert failed: %s", exc)
 
 
 async def sync_calendars() -> None:
