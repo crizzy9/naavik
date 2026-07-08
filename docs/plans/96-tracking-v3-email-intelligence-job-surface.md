@@ -1,7 +1,7 @@
-`Status:` DRAFT — owner review
+`Status:` APPROVED — all open items resolved (owner review rounds 1–2, 2026-07-08); ready for execution kickoff
 `Type:` design
 `Authored:` 2026-07-08
-`Last updated:` 2026-07-08 (rev 1 — diagnosis complete with live evidence; all 12 open questions resolved with the owner; § 8 implementation guide drafted)
+`Last updated:` 2026-07-08 (rev 2 — owner review round 2: reconciler now event-driven per-application (#13), `/emails` confirmed (#14), job surface pulled forward to 96c (#15); slices renumbered, § 5 reordered to execution order)
 `Depends on:` plan 95 (tracking v2, archived), `docs/design/TRACKING_PIPELINE.md`, hotfix 2b867f3 (`fix(tracking/96-pre)`)
 
 # Plan 96 — Tracking v3: email intelligence, scheduling, and the job surface
@@ -63,7 +63,7 @@ Inflection AI (msg 350 → app 19; the owner found and applied it from inside
 the slide-over conversation on Jul 8 03:09, which is exactly the reported
 friction) and Snorkel AI (msg 475 → app 22, **pending right now** with zero
 board indication). The other nine rejections link to applications that were
-*created already-CLOSED* by Track-it (the rejection was folded into the
+_created already-CLOSED_ by Track-it (the rejection was folded into the
 derived stage — no suggestion needed). So the classifier→suggestion path is
 healthy; the only mounts for Apply/Dismiss live inside
 `_conversation_section.html`. Nothing on `tracking_card.html`, nothing at
@@ -113,26 +113,29 @@ group derives CLOSED, no `<option>` matches `p.status`, so the browser
 silently renders the first option — "Applied", the exact reported symptom.
 Live case: the Google group (one real rejection, "Re: Google Interview prep
 Information", plus Google Play receipts polluting the same canonical key —
-noted for § 5.4 grouping quality). Additionally `track_process`'s override
+noted for § 5.5 grouping quality). Additionally `track_process`'s override
 path nulls `closed_reason`, so merely adding the option would crash
 `create_tracked_application`'s CLOSED trail.
 
 ## 4. Decisions — resolved with the owner (2026-07-08)
 
-| # | Question | Decision |
-|---|---|---|
-| 1 | Live crash-loop handling | **Hotfix in the planning session** — landed as 2b867f3 |
-| 2 | Sequencing | **96a bug slice first**, then design slices |
-| 3 | Rejection posture (B2) | **Keep human-confirm, make it visible** — suggestion chip on the card + pending-suggestions strip; auto-apply rejected |
-| 4 | Email visibility (B3) | **Full email-log page** — all synced mail, classification, link state, correction affordances |
-| 5 | R1 autonomy ladder | **Detect → suggest slots → draft in owner's voice; owner sends.** No send capability in v3 |
-| 6 | Mail/calendar access | **Stay read-only** (IMAP PEEK + ICS). No SMTP, no Gmail send scope, no OAuth app |
-| 7 | Invite parsing at rest | **Yes — full structured invite rows** (times, organizer, attendees, sequence/status), cascade-deleted with the account |
-| 8 | Reconciler authority | **Forward moves auto, § 3.8 pin-respecting** — the same contract email transitions already have |
-| 9 | R4 shape | **One state-dependent body template, rendered as expandable modal AND `/jobs/{id}` page; tracking slide-over replaced** |
-| 10 | R4 v1 deferrals | Interview-prep section, outreach integration, scheduling panel all deferred (IA reserves their slots) |
-| 11 | 2k excerpt opt-in | **Enabled 2026-07-08** on the owner's account (no backfill) |
-| 12 | R2 extra mechanisms | **Thread-level LLM pass inside the reconciler**; embedding chain-linking stays deferred (like 95g) |
+| #   | Question                 | Decision                                                                                                                |
+| --- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| 1   | Live crash-loop handling | **Hotfix in the planning session** — landed as 2b867f3                                                                  |
+| 2   | Sequencing               | **96a bug slice first**, then design slices                                                                             |
+| 3   | Rejection posture (B2)   | **Keep human-confirm, make it visible** — suggestion chip on the card + pending-suggestions strip; auto-apply rejected  |
+| 4   | Email visibility (B3)    | **Full email-log page** — all synced mail, classification, link state, correction affordances                           |
+| 5   | R1 autonomy ladder       | **Detect → suggest slots → draft in owner's voice; owner sends.** No send capability in v3                              |
+| 6   | Mail/calendar access     | **Stay read-only** (IMAP PEEK + ICS). No SMTP, no Gmail send scope, no OAuth app                                        |
+| 7   | Invite parsing at rest   | **Yes — full structured invite rows** (times, organizer, attendees, sequence/status), cascade-deleted with the account  |
+| 8   | Reconciler authority     | **Forward moves auto, § 3.8 pin-respecting** — the same contract email transitions already have                         |
+| 9   | R4 shape                 | **One state-dependent body template, rendered as expandable modal AND `/jobs/{id}` page; tracking slide-over replaced** |
+| 10  | R4 v1 deferrals          | Interview-prep section, outreach integration, scheduling panel all deferred (IA reserves their slots)                   |
+| 11  | 2k excerpt opt-in        | **Enabled 2026-07-08** on the owner's account (no backfill)                                                             |
+| 12  | R2 extra mechanisms      | **Thread-level LLM pass inside the reconciler**; embedding chain-linking stays deferred (like 95g)                      |
+| 13  | Reconciler cadence       | **Event-driven, per-application** — triggered only by new evidence (classified mail, invite, correction, applied suggestion) and only for the affected job; no standing cron. Deterministic time-passage (past-due rounds) rides the existing calendar-sync cron |
+| 14  | Email-log route          | **`/emails`** confirmed                                                                                                 |
+| 15  | Job-surface ordering     | **Pulled forward** — lands as 96c, before invites/reconciler/scheduling                                                 |
 
 ## 5. Proposal
 
@@ -231,105 +234,7 @@ Settings.
 - Pagination keyset on `(received_at, id)`, 50/page. IDOR: all queries
   user-scoped; fragment-granularity guard tests.
 
-### 5.3 96c — calendar-invite ground truth (owner decisions #7)
-
-**New table `email_invite`** (migration 0046):
-
-```
-EmailInvite
-  id, user_id, email_message_id FK CASCADE, application_id FK?, interview_round_id FK?
-  ics_uid          str      — VEVENT UID (stable across reschedules)
-  recurrence_id    str?     — instance key for recurring events
-  sequence         int      — RFC 5545 SEQUENCE (bumps on reschedule)
-  method           str CHECK: request | cancel | reply | counter | publish
-  status           str CHECK: confirmed | tentative | cancelled
-  summary, location, organizer_email, attendee_emails JSONB
-  starts_at, ends_at timestamptz, tz str
-  created_at, updated_at
-  UNIQUE (user_id, ics_uid, coalesce(recurrence_id,''), sequence, method)
-```
-
-- **Sync** parses `text/calendar` MIME parts + `.ics` attachments from the
-  already-fetched RFC822 (no extra IMAP round-trips) via the `icalendar`
-  library (new dependency — pyproject + flake). Parse failures degrade to a
-  log line; sync never fails on a malformed invite.
-- **Supersedence is derived, not stored:** the *final invite* for an
-  (ics_uid, recurrence_id) is the max-sequence non-cancelled REQUEST; a
-  CANCEL at ≥ sequence kills the chain. One pure function
-  (`invites.resolve_final`) with exhaustive unit tests — this is the
-  reschedule/cancel state machine.
-- **Rounds integration:** an invite on a linked application upserts the
-  round by **ics_uid** (a new nullable `interview_round.invite_uid`
-  evidence key, same migration) — reschedules MOVE the round's
-  `scheduled_at` instead of spawning date-keyed siblings; cancellation
-  without replacement flips the round back to `planned`; kind comes from
-  the carrying message's `extracted_round_kind`, falling back to title
-  heuristics (the calendar-producer regexes in `calendar_sync` today).
-  Past-`ends_at` scheduled rounds complete automatically (outcome stays
-  `pending` — the reconciler's cheapest wins).
-- Backfill task: parse invites for already-stored messages that have
-  `imap_uid` (PEEK by UID, bounded, one-shot) so the Headway chain gets its
-  ground truth without waiting for new mail.
-- Privacy: `TRACKING_PIPELINE.md` body-posture section gains "structured
-  invite metadata at rest (owner-approved 2026-07-08); body text posture
-  unchanged".
-
-### 5.4 96d — the process reconciler (owner decisions #8, #12)
-
-New cron `tracking.reconcile_processes` (hourly, offset +5): for every
-application (and detected-process group) with new evidence since its last
-reconcile stamp, **re-derive rounds + stage from ALL evidence** —
-classifications, extractions, invite chains (final invites only), calendar
-matches, corrections, the pin — instead of trusting only incremental
-dispatch order.
-
-- **Deterministic core first:** re-run grouping with current aliases +
-  sender rules (heals the "rejection landed in a different group" class),
-  re-fold the (classification, stage) timeline, re-resolve invite chains,
-  and diff against current rounds/status.
-- **Thread-level LLM pass** (owner #12): only for threads with new mail
-  since their last pass, one `tracked_call` per thread over the FULL
-  conversation (subjects + excerpts, newest-first, capped) with schema
-  `{process_stage, rounds: [{kind, date, state}], rejection: bool,
-  needs_scheduling: bool}` — the conversation-coherent read that
-  per-message snippets can't give. Prompt in `llm/prompts/`, eval-harness
-  cases from day one, daily cost cap honored.
-- **Writes ride existing seams only:** rounds through the 95d upsert
-  producers; stage through `update_status` — forward-only,
-  `trigger=AUTO_FROM_EMAIL`-class provenance (new
-  `trigger=RECONCILED` for auditability), § 3.8 pin suppression to
-  suggestions, CLOSED absolute, every suppressed move still emits
-  `EMAIL_STATUS_SUGGESTED`. The reconciler can never do anything a
-  well-ordered email stream couldn't.
-- **Idempotence pinned by test:** two consecutive runs with no new evidence
-  produce zero writes; flapping is the failure mode to design against.
-
-### 5.5 96e — scheduling assistant (owner decisions #5, #6)
-
-Detect → suggest → draft; **Naavik never sends**. No new scopes.
-
-- **Detect:** classifier schema gains `action_needed:
-  none | send_availability | pick_slot | confirm_time` (deterministic
-  keyword post-check like `end_client`); the thread pass (96d) sets
-  `needs_scheduling` at conversation level. Either mounts a "Needs
-  scheduling" strip row on Tracking (same panel pattern; urgency-ordered).
-- **Suggest slots:** free-slot computation from the read-only calendar —
-  synced events + final invites block; working hours + timezone from two
-  new Settings fields (`scheduling_timezone`, `scheduling_window`,
-  defaulted from the profile city); propose the next N conflict-free slots
-  across 5 business days. Pure function, heavily unit-tested (DST edges).
-- **Draft:** one `tracked_call` (`llm/prompts/draft_scheduling_reply.py`)
-  — owner-voice reply embedding the chosen slots, grounded on the thread
-  excerpt; renders in a panel with **Copy** and **Open in mail client**
-  (Gmail compose deep-link `view=cm` with prefilled to/subject/body — a
-  URL, not an API). Nothing persists except an AppEvent noting a draft was
-  produced (auditability without storing prose).
-- The send rung stays designed-but-unbuilt: this slice's seams (detection
-  field, slot engine, draft prompt) are exactly what a later consented
-  send step would reuse; the plan deliberately reserves
-  `Settings.scheduling_autonomy` naming for it.
-
-### 5.6 96f — entity reachability + the job surface (R3, R4, owner #9, #10)
+### 5.3 96c — entity reachability + the job surface (R3, R4, owner #9, #10; pulled forward per owner review)
 
 **R3 — the FK graph today** (audited): everything hangs off
 `application_id` — `EmailThread`/`EmailMessage`, `InterviewRound`,
@@ -341,7 +246,7 @@ job with no application yet is unreachable from the job; (c) multiple
 applications per job are legal (re-applications) and must all surface.
 
 **Resolution (option chosen: thread-level job link, not message-level):**
-nullable `email_thread.job_id` (migration 0047) set whenever a thread links
+nullable `email_thread.job_id` (migration 0046) set whenever a thread links
 to an application (denormalized from it) or when detected-process mail is
 resolvable to a library job pre-application; messages reach the job via
 their thread. Read-time company-key grouping stays for unresolved mail.
@@ -353,8 +258,9 @@ churn for zero new capability).
 
 - `src/ui/job_surface_ctx.py` builds one context: job, its applications
   (newest primary), threads+messages (+ per-email signal detail from 96b),
-  rounds+invites, contacts, docs used at apply time (from
-  `submission_artifacts`), score/tailoring state, timeline.
+  rounds (invite chains join the same section when 96d lands), contacts,
+  docs used at apply time (from `submission_artifacts`), score/tailoring
+  state, timeline.
 - `pages/jobs/_job_surface.html` renders `view=pre_apply|post_apply`
   (derived: no application or DRAFT → pre; APPLIED+ → post; CLOSED → post
   with closed banner) with a manual tab switch — composed from the
@@ -382,6 +288,124 @@ churn for zero new capability).
   at most two visible chips + a `+N` overflow that opens the modal.
   Design-token pass only; no new components.
 
+### 5.4 96d — calendar-invite ground truth (owner decision #7)
+
+**New table `email_invite`** (migration 0047):
+
+```
+EmailInvite
+  id, user_id, email_message_id FK CASCADE, application_id FK?, interview_round_id FK?
+  ics_uid          str      — VEVENT UID (stable across reschedules)
+  recurrence_id    str?     — instance key for recurring events
+  sequence         int      — RFC 5545 SEQUENCE (bumps on reschedule)
+  method           str CHECK: request | cancel | reply | counter | publish
+  status           str CHECK: confirmed | tentative | cancelled
+  summary, location, organizer_email, attendee_emails JSONB
+  starts_at, ends_at timestamptz, tz str
+  created_at, updated_at
+  UNIQUE (user_id, ics_uid, coalesce(recurrence_id,''), sequence, method)
+```
+
+- **Sync** parses `text/calendar` MIME parts + `.ics` attachments from the
+  already-fetched RFC822 (no extra IMAP round-trips) via the `icalendar`
+  library (new dependency — pyproject + flake). Parse failures degrade to a
+  log line; sync never fails on a malformed invite.
+- **Supersedence is derived, not stored:** the _final invite_ for an
+  (ics_uid, recurrence_id) is the max-sequence non-cancelled REQUEST; a
+  CANCEL at ≥ sequence kills the chain. One pure function
+  (`invites.resolve_final`) with exhaustive unit tests — this is the
+  reschedule/cancel state machine.
+- **Rounds integration:** an invite on a linked application upserts the
+  round by **ics_uid** (a new nullable `interview_round.invite_uid`
+  evidence key, same migration) — reschedules MOVE the round's
+  `scheduled_at` instead of spawning date-keyed siblings; cancellation
+  without replacement flips the round back to `planned`; kind comes from
+  the carrying message's `extracted_round_kind`, falling back to title
+  heuristics (the calendar-producer regexes in `calendar_sync` today).
+  Past-`ends_at` scheduled rounds complete automatically (outcome stays
+  `pending`) — completion-by-time is the one evidence class with no email
+  trigger, so it rides the existing 45-min `tracking.sync_calendars` cron
+  as a deterministic rider (no LLM, no new cron; see § 5.5).
+- Backfill task: parse invites for already-stored messages that have
+  `imap_uid` (PEEK by UID, bounded, one-shot) so the Headway chain gets its
+  ground truth without waiting for new mail.
+- Privacy: `TRACKING_PIPELINE.md` body-posture section gains "structured
+  invite metadata at rest (owner-approved 2026-07-08); body text posture
+  unchanged".
+
+### 5.5 96e — the process reconciler (owner decisions #8, #12, #13)
+
+**Event-driven, per-application — no standing cron** (owner decision #13:
+"trigger only when there is new information, and only for that job").
+`services/email/reconcile.py` exposes `reconcile_application(session,
+application_id)` (and a group variant for detected processes); it runs at
+the end of any operation that produced new evidence, scoped to exactly the
+applications/groups that evidence touched:
+
+- the classify tick's `_post_classify_dispatch` collects the set of
+  applications its messages linked/affected this tick and reconciles each
+  once (batch-dedup — ten emails about one application still mean one
+  reconcile);
+- invite ingest (96d) reconciles the invite's application;
+- a recorded correction (reclassify / unlink / merge / flag-sender)
+  reconciles the affected application or group — corrections are new
+  information too;
+- applying a suggestion reconciles that application.
+
+What a reconcile does: **re-derive rounds + stage from ALL evidence** —
+classifications, extractions, invite chains (final invites only), calendar
+matches, corrections, the pin — instead of trusting incremental dispatch
+order alone.
+
+- **Deterministic core first:** re-run grouping with current aliases +
+  sender rules (heals the "rejection landed in a different group" class),
+  re-fold the (classification, stage) timeline, re-resolve invite chains,
+  and diff against current rounds/status.
+- **Thread-level LLM pass** (owner #12): only for the triggering threads —
+  the ones with new mail — one `tracked_call` per thread over the FULL
+  conversation (subjects + excerpts, newest-first, capped) with schema
+  `{process_stage, rounds: [{kind, date, state}], rejection: bool,
+  needs_scheduling: bool}` — the conversation-coherent read that
+  per-message snippets can't give. Prompt in `llm/prompts/`, eval-harness
+  cases from day one, daily cost cap honored.
+- **Writes ride existing seams only:** rounds through the 95d upsert
+  producers; stage through `update_status` — forward-only,
+  `trigger=AUTO_FROM_EMAIL`-class provenance (new
+  `trigger=RECONCILED` for auditability), § 3.8 pin suppression to
+  suggestions, CLOSED absolute, every suppressed move still emits
+  `EMAIL_STATUS_SUGGESTED`. The reconciler can never do anything a
+  well-ordered email stream couldn't.
+- **Idempotence pinned by test:** reconciling twice with no new evidence
+  produces zero writes; flapping is the failure mode to design against.
+- **Time-passage rider:** past-due scheduled rounds completing (§ 5.4) is
+  deterministic and rides the existing calendar-sync cron — the only
+  reconciler-adjacent work not gated on an email arriving.
+
+### 5.6 96f — scheduling assistant (owner decisions #5, #6)
+
+Detect → suggest → draft; **Naavik never sends**. No new scopes.
+
+- **Detect:** classifier schema gains `action_needed:
+  none | send_availability | pick_slot | confirm_time` (deterministic
+  keyword post-check like `end_client`); the thread pass (96e) sets
+  `needs_scheduling` at conversation level. Either mounts a "Needs
+  scheduling" strip row on Tracking (same panel pattern; urgency-ordered).
+- **Suggest slots:** free-slot computation from the read-only calendar —
+  synced events + final invites block; working hours + timezone from two
+  new Settings fields (`scheduling_timezone`, `scheduling_window`,
+  defaulted from the profile city); propose the next N conflict-free slots
+  across 5 business days. Pure function, heavily unit-tested (DST edges).
+- **Draft:** one `tracked_call` (`llm/prompts/draft_scheduling_reply.py`)
+  — owner-voice reply embedding the chosen slots, grounded on the thread
+  excerpt; renders in a panel with **Copy** and **Open in mail client**
+  (Gmail compose deep-link `view=cm` with prefilled to/subject/body — a
+  URL, not an API). Nothing persists except an AppEvent noting a draft was
+  produced (auditability without storing prose).
+- The send rung stays designed-but-unbuilt: this slice's seams (detection
+  field, slot engine, draft prompt) are exactly what a later consented
+  send step would reuse; the plan deliberately reserves
+  `Settings.scheduling_autonomy` naming for it.
+
 ### 5.7 What this plan explicitly does NOT do
 
 No mail sending, no SMTP/OAuth scopes, no calendar write, no embedding
@@ -391,36 +415,39 @@ rejections.
 
 ## 6. Risks
 
-| Risk | Mitigation |
-|---|---|
-| Drag rewrite regresses the one thing that "worked" (within-column reorder) | It never persisted anything; Playwright gesture test in CI-surrogate QA per 96a acceptance |
-| SortableJS group enables accidental cross-column drops | `handle:` stays (grip-only); 409 rollback restores; backward moves keep needing the card menu (state machine unchanged) |
-| ICS parsing variance (Outlook/Google METHOD, TZID, forwarded invites) | `icalendar` lib + `zoneinfo`; parse failures degrade to log; supersedence is a pure function with vendor-fixture tests (Google, Outlook, Greenhouse samples from the owner's own inbox) |
-| Invite dedup: same invite forwarded / re-delivered | UNIQUE key on (uid, recurrence, sequence, method); idempotent upsert |
-| Reconciler flaps or fights the human | Forward-only + pin + idempotence test (zero writes on unchanged evidence); every move carries `trigger=RECONCILED` provenance; suggestions for everything suppressed |
-| Thread-pass LLM cost creep | Only threads with new mail since last pass; excerpt-capped prompt; daily cost cap already enforced by `llm_tracker`; ApiUsage now durable (2b867f3) |
-| Slide-over replacement breaks the UI test surface | Slide-over tests migrate slice-locally with the routes; push-URL contract (`/tracking/{id}`) redirects to `/jobs/{id}?application={id}` so bookmarks survive |
-| Email-log page leaks another user's mail | User-scoped queries + IDOR tests, same pattern as every tracking route |
-| Free-slot suggestions cross DST/timezone edges wrong | Slot engine is a pure function on `zoneinfo`; DST-transition unit tests; suggested slots always render with explicit tz label |
-| Gmail compose deep-link body length limits (~2k URL) | Draft panel's primary affordance is Copy; the deep-link truncates gracefully with a toast |
-| One-template/two-mounts drifts into page-vs-modal divergence | Single `_job_surface.html` body include pinned by a render-equivalence test (same ctx → same body HTML in both mounts) |
-| 0046/0047 migrations against live dev data | Additive-only; tested upgrade+downgrade against a dev-DB snapshot before applying (never destructive fixtures at the dev DB) |
+| Risk                                                                       | Mitigation                                                                                                                                                                              |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drag rewrite regresses the one thing that "worked" (within-column reorder) | It never persisted anything; Playwright gesture test in CI-surrogate QA per 96a acceptance                                                                                              |
+| SortableJS group enables accidental cross-column drops                     | `handle:` stays (grip-only); 409 rollback restores; backward moves keep needing the card menu (state machine unchanged)                                                                 |
+| ICS parsing variance (Outlook/Google METHOD, TZID, forwarded invites)      | `icalendar` lib + `zoneinfo`; parse failures degrade to log; supersedence is a pure function with vendor-fixture tests (Google, Outlook, Greenhouse samples from the owner's own inbox) |
+| Invite dedup: same invite forwarded / re-delivered                         | UNIQUE key on (uid, recurrence, sequence, method); idempotent upsert                                                                                                                    |
+| Reconciler flaps or fights the human                                       | Forward-only + pin + idempotence test (zero writes on unchanged evidence); every move carries `trigger=RECONCILED` provenance; suggestions for everything suppressed                    |
+| Thread-pass LLM cost creep                                                 | Only threads with new mail since last pass; excerpt-capped prompt; daily cost cap already enforced by `llm_tracker`; ApiUsage now durable (2b867f3)                                     |
+| Slide-over replacement breaks the UI test surface                          | Slide-over tests migrate slice-locally with the routes; push-URL contract (`/tracking/{id}`) redirects to `/jobs/{id}?application={id}` so bookmarks survive                            |
+| Email-log page leaks another user's mail                                   | User-scoped queries + IDOR tests, same pattern as every tracking route                                                                                                                  |
+| Free-slot suggestions cross DST/timezone edges wrong                       | Slot engine is a pure function on `zoneinfo`; DST-transition unit tests; suggested slots always render with explicit tz label                                                           |
+| Gmail compose deep-link body length limits (~2k URL)                       | Draft panel's primary affordance is Copy; the deep-link truncates gracefully with a toast                                                                                               |
+| One-template/two-mounts drifts into page-vs-modal divergence               | Single `_job_surface.html` body include pinned by a render-equivalence test (same ctx → same body HTML in both mounts)                                                                  |
+| 0046/0047 migrations against live dev data                                 | Additive-only; tested upgrade+downgrade against a dev-DB snapshot before applying (never destructive fixtures at the dev DB)                                                            |
+| Event-driven reconciler misses evidence with no email trigger (time passing) | Past-due-round completion is deterministic and rides the existing 45-min calendar-sync cron; staleness sweep (95e) already covers long silence — no evidence class is left uncovered   |
 
 ## 7. Suggested build sequence
 
-| Slice | Contents | Size |
-|---|---|---|
-| 96a | § 5.1 bug slice: drag rewire, suggestion chip + strip, CLOSED in picker, B3 residual guards, receipt-on-DRAFT advance, round-row mark-done | M |
-| 96b | § 5.2 email log + per-email signal detail component | M |
-| 96c | § 5.3 invite parsing (0046), supersedence, round integration, backfill | L |
-| 96d | § 5.4 reconciler + thread-level pass (`trigger=RECONCILED`) | L |
-| 96e | § 5.5 scheduling detect/slots/draft strip | M–L |
-| 96f | § 5.6 thread job-link (0047), job_surface ctx + template + both mounts, slide-over retirement, card refresh | XL — execute as f1 (data+ctx), f2 (surface+mounts), f3 (retirement+card) |
+| Slice | Contents                                                                                                                                   | Size                                                                     |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| 96a   | § 5.1 bug slice: drag rewire, suggestion chip + strip, CLOSED in picker, B3 residual guards, receipt-on-DRAFT advance, round-row mark-done | M                                                                        |
+| 96b   | § 5.2 email log + per-email signal detail component                                                                                        | M                                                                        |
+| 96c   | § 5.3 thread job-link (0046), job_surface ctx + template + both mounts, slide-over retirement, card refresh                                | XL — execute as c1 (data+ctx), c2 (surface+mounts), c3 (retirement+card) |
+| 96d   | § 5.4 invite parsing (0047), supersedence, round integration, backfill                                                                     | L                                                                        |
+| 96e   | § 5.5 event-driven reconciler + thread-level pass (`trigger=RECONCILED`)                                                                   | L                                                                        |
+| 96f   | § 5.6 scheduling detect/slots/draft strip                                                                                                  | M–L                                                                      |
 
-Dependencies: 96b's signal-detail component is reused by 96f's conversation;
-96d consumes 96c's invite chains; 96e consumes 96c (busy slots) and 96d's
-`needs_scheduling`; 96f is independent of 96c–e (can be pulled forward after
-96b if the owner wants the surface sooner).
+Ordering per owner review: the job surface lands before the email-
+intelligence slices. Dependencies: 96b's signal-detail component is reused
+by 96c's conversation; 96e consumes 96d's invite chains; 96f consumes 96d
+(busy slots) and 96e's `needs_scheduling`. The job surface renders rounds
+from the existing 95d producers on day one; invite chains and reconciler
+output enrich it in place when 96d/96e land — no rework.
 
 ## 8. Implementation guide (per slice — files, tests, acceptance)
 
@@ -436,16 +463,16 @@ loading + toast feedback; Lucide stroke 1.5; deviations logged the moment
 implementation diverges and promoted into `## Deviations from plan` at
 archive time.
 
-| Slice | Touch | Tests | Acceptance |
-|---|---|---|---|
-| **96a** | `base.js` (group + onEnd fetch + rollback), `stage_column.html` (drop dead hx attrs), `api/applications.py` (422 on malformed move; closed_reason), `tracking_ctx.py` + `tracking_card.html` (suggestion_chip), new `components/tracking/_suggestions_strip.html` + ctx + tracking.html mount, `tracking_ctx.track_stage_options` + `routes/tracking._TRACK_STATUS_OVERRIDES` + `processes.track_process` (closed_reason through override), `inference.py` (DRAFT→APPLIED advance), `_rounds_section.html` (mark-done on row) | Playwright drag gesture (cross-column persists after reload; 409 snaps back with toast); strip + chip render tests; picker render test over every derivable status; move-route 422/409/pin contract tests; DRAFT-advance unit test | Owner can drag a card and it sticks; the Snorkel suggestion is visible on the board and applies in one click; the Google group defaults to Closed and tracks as CLOSED/rejected_by_them |
-| **96b** | `pages/email/email_log.html`, `components/email/*` (row, signal-detail, filters), `src/ui/routes/email_log.py` (or extend `routes/email.py`), `email_log_ctx.py`, sidebar nav, keyset pagination | render + filter + pagination tests; IDOR; fragment guard; signal-detail component test (transition outcome renders from event payload) | Every synced email findable in ≤2 clicks with its classification, link state, and what it did; reclassify/flag work from the row |
-| **96c** | migration 0046 (`email_invite`, `interview_round.invite_uid`); `services/email/invites.py` (parse, `resolve_final`, round upsert wiring); sync MIME hook; `icalendar` dep (pyproject + flake); one-shot backfill task; TRACKING_PIPELINE amendment | vendor-fixture parse tests; supersedence pure-fn matrix (reschedule, cancel, counter, recurring instance); round-moves-not-duplicates test; sync-degrades-on-malformed test | The Headway chain shows ONE technical-screen round at the final invite's time; a reschedule email moves it; a cancellation reverts it to planned |
-| **96d** | `services/email/reconcile.py` (+ package export), cron registration (hourly +5), `llm/prompts/classify_thread.py`, `StatusChangeTrigger.RECONCILED`, per-application reconcile stamp (JSONB slot), eval-harness cases | idempotence (no-new-evidence → zero writes); pin-suppression contract; forward-only; thread-pass only on changed threads; cost-cap honored | ByteDance/Camber-class drift self-heals within an hour of evidence landing; nothing moves backward; every reconciler move is auditable on the timeline |
-| **96e** | classifier schema `action_needed` (+ post-check), `services/scheduling/` (slot engine, draft), `llm/prompts/draft_scheduling_reply.py`, Settings fields (tz/window), "Needs scheduling" strip + draft panel | slot-engine DST/tz unit matrix; detection post-check tests; strip render; draft prompt eval smoke; no-send static guard (no smtplib/send scope anywhere) | A "send your availability" email surfaces on the strip with 3 valid slots and a copyable owner-voice draft; Naavik demonstrably cannot send it |
-| **96f1** | migration 0047 (`email_thread.job_id` + backfill from applications), `job_surface_ctx.py` | ctx aggregation tests (multi-application job; mail-no-application job; detected-only) | Every entity class about a job reachable from one ctx call |
-| **96f2** | `pages/jobs/_job_surface.html` + view components, `/_modal/job/{id}` + `/jobs/{id}` mounts, expand affordance, reserved-slot placeholders | render-equivalence (modal vs page body); pre/post view derivation; fragment guard; Playwright visual QA both mounts | One surface answers "everything about this job", composition flips on state |
-| **96f3** | slide-over route re-point + `_application_detail.html` retirement, `/tracking/{id}` redirect, `tracking_card.html` hierarchy pass, test migration | redirect contract; card render (chip collapse + overflow); full Playwright board pass | No orphaned routes/templates; the board card is legible at a glance |
+| Slice    | Touch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Tests                                                                                                                                                                                                                              | Acceptance                                                                                                                                                                              |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **96a**  | `base.js` (group + onEnd fetch + rollback), `stage_column.html` (drop dead hx attrs), `api/applications.py` (422 on malformed move; closed_reason), `tracking_ctx.py` + `tracking_card.html` (suggestion_chip), new `components/tracking/_suggestions_strip.html` + ctx + tracking.html mount, `tracking_ctx.track_stage_options` + `routes/tracking._TRACK_STATUS_OVERRIDES` + `processes.track_process` (closed_reason through override), `inference.py` (DRAFT→APPLIED advance), `_rounds_section.html` (mark-done on row) | Playwright drag gesture (cross-column persists after reload; 409 snaps back with toast); strip + chip render tests; picker render test over every derivable status; move-route 422/409/pin contract tests; DRAFT-advance unit test | Owner can drag a card and it sticks; the Snorkel suggestion is visible on the board and applies in one click; the Google group defaults to Closed and tracks as CLOSED/rejected_by_them |
+| **96b**  | `pages/email/email_log.html`, `components/email/*` (row, signal-detail, filters), `src/ui/routes/email_log.py` (or extend `routes/email.py`), `email_log_ctx.py`, sidebar nav, keyset pagination                                                                                                                                                                                                                                                                                                                              | render + filter + pagination tests; IDOR; fragment guard; signal-detail component test (transition outcome renders from event payload)                                                                                             | Every synced email findable in ≤2 clicks with its classification, link state, and what it did; reclassify/flag work from the row                                                        |
+| **96c1** | migration 0046 (`email_thread.job_id` + backfill from applications), `job_surface_ctx.py` | ctx aggregation tests (multi-application job; mail-no-application job; detected-only) | Every entity class about a job reachable from one ctx call |
+| **96c2** | `pages/jobs/_job_surface.html` + view components, `/_modal/job/{id}` + `/jobs/{id}` mounts, expand affordance, reserved-slot placeholders | render-equivalence (modal vs page body); pre/post view derivation; fragment guard; Playwright visual QA both mounts | One surface answers "everything about this job", composition flips on state |
+| **96c3** | slide-over route re-point + `_application_detail.html` retirement, `/tracking/{id}` redirect, `tracking_card.html` hierarchy pass, test migration | redirect contract; card render (chip collapse + overflow); full Playwright board pass | No orphaned routes/templates; the board card is legible at a glance |
+| **96d**  | migration 0047 (`email_invite`, `interview_round.invite_uid`); `services/email/invites.py` (parse, `resolve_final`, round upsert wiring); sync MIME hook; `icalendar` dep (pyproject + flake); past-due-round rider on `tracking.sync_calendars`; one-shot backfill task; TRACKING_PIPELINE amendment | vendor-fixture parse tests; supersedence pure-fn matrix (reschedule, cancel, counter, recurring instance); round-moves-not-duplicates test; sync-degrades-on-malformed test; past-due completion test | The Headway chain shows ONE technical-screen round at the final invite's time; a reschedule email moves it; a cancellation reverts it to planned |
+| **96e**  | `services/email/reconcile.py` (+ package export) with `reconcile_application` / group variant; trigger wiring in `_post_classify_dispatch` (batch-dedup per tick), invite ingest, corrections, suggestion-apply; `llm/prompts/classify_thread.py`, `StatusChangeTrigger.RECONCILED`, per-application reconcile stamp (JSONB slot), eval-harness cases | triggered only for evidence-touched applications (no global sweep); idempotence (no-new-evidence → zero writes); pin-suppression contract; forward-only; thread-pass only on triggering threads; cost-cap honored | ByteDance/Camber-class drift self-heals within minutes of the evidence classifying; nothing moves backward; every reconciler move is auditable on the timeline |
+| **96f**  | classifier schema `action_needed` (+ post-check), `services/scheduling/` (slot engine, draft), `llm/prompts/draft_scheduling_reply.py`, Settings fields (tz/window), "Needs scheduling" strip + draft panel | slot-engine DST/tz unit matrix; detection post-check tests; strip render; draft prompt eval smoke; no-send static guard (no smtplib/send scope anywhere) | A "send your availability" email surfaces on the strip with 3 valid slots and a copyable owner-voice draft; Naavik demonstrably cannot send it |
 
 **Done criteria for the whole plan:** all slices merged with green gates;
 `docs/design/TRACKING_PIPELINE.md` updated (invites, reconciler, scheduling
@@ -453,11 +480,14 @@ posture, email log, job surface); this plan flipped to EXECUTED and archived
 with a non-empty `## Deviations from plan`; kickoff prompt archived to
 `docs/prompts/archive/`.
 
-## 9. Open items for owner review
+## 9. Open items — all resolved (owner review, 2026-07-08)
 
-1. Reconciler cadence — hourly proposed; weekly-plus-on-demand is the
-   cheaper alternative if hourly feels noisy.
-2. Email-log route name — `/emails` proposed (`/inbox` implies send/reply
-   semantics we deliberately don't have).
-3. 96f pull-forward — say the word if the job surface should land before
-   96c–e; the dependency graph allows it.
+1. Reconciler cadence → **event-driven, per-application** (decision #13,
+   § 5.5): triggered only by new information about a specific job — never a
+   standing sweep. Deterministic time-passage (past-due rounds) rides the
+   existing calendar-sync cron.
+2. Email-log route name → **`/emails`** (decision #14).
+3. Job-surface ordering → **pulled forward to 96c**, ahead of
+   invites/reconciler/scheduling (decision #15, § 7).
+
+No open items remain; the plan is ready to hand to an execution session.
