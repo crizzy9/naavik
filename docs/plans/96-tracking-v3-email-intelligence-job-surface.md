@@ -1,4 +1,4 @@
-`Status:` APPROVED — all open items resolved (owner review rounds 1–2, 2026-07-08); ready for execution kickoff
+`Status:` IN EXECUTION — 96a, 96b, 96c1–c3 landed 2026-07-08 (commits c7f8ebf, d50d829, 4acfa72, ac266ee, 9de68db; all gates green, live-QA'd); 96d/96e/96f + close-out continue in a follow-up session — see `docs/prompts/96-tracking-v3-execution-2-kickoff.md`
 `Type:` design
 `Authored:` 2026-07-08
 `Last updated:` 2026-07-08 (rev 2 — owner review round 2: reconciler now event-driven per-application (#13), `/emails` confirmed (#14), job surface pulled forward to 96c (#15); slices renumbered, § 5 reordered to execution order)
@@ -491,3 +491,55 @@ with a non-empty `## Deviations from plan`; kickoff prompt archived to
    invites/reconciler/scheduling (decision #15, § 7).
 
 No open items remain; the plan is ready to hand to an execution session.
+
+## Deviations from plan (running — promoted to final form at archive time)
+
+Logged during execution session 1 (2026-07-08, slices 96a → 96c3).
+
+1. **96a — the Snorkel acceptance fixture was dead on arrival.** Msg 475's
+   application (22) had been soft-deleted 2026-07-06;
+   `list_pending_suggestions` deliberately excludes deleted applications
+   (a strip row whose Apply targets a deleted app would 404). Live
+   acceptance used the other real pending rejection: Anthuria
+   (msg 546 → app 89). No design impact.
+2. **96a — closed-reason picker is a client-built dialog, not
+   `/_modal/confirm`.** The confirm modal has a fixed action URL and no
+   input slot; the drop handler needs a `<select>` resolved back into its
+   fetch. Same visual shell; the vocabulary is server-rendered on the
+   CLOSED column via `data-closed-reasons` (pinned ⊆ `ClosedReason` by
+   test).
+3. **96a — post-drop board refresh added.** A successful move re-fetches
+   `/_fragments/tracking/board` — pure optimistic UX left column counts
+   and the card's own status pill stale.
+4. **96a — stall-alert backlog is `classification IS NULL AND
+   unclassified_reason IS NULL`.** Stamped degraded states
+   (NO_PROVIDER_CONFIGURED / RATE_LIMITED / LLM_FAILED) must not page
+   every tick; only never-stamped rows (the crash-loop signature) do.
+5. **96a — DRAFT-advance stamps `applied_at = msg.received_at`** when the
+   draft had none; `update_status`'s "now" default would misdate the
+   funnel.
+6. **96a/96c — app 63 (Path AI) advanced by a one-shot script.** Its
+   receipt (msg 540) was linked by hotfix 2b867f3 BEFORE the 96a advance
+   existed, and inference never revisits processed messages; the fix ran
+   `_advance_draft_on_receipt` once via the production path
+   (auditable AppEvent trail).
+7. **96c — re-applications are soft-deleted history, not parallel alive
+   rows.** `ix_application_user_job_alive_unique` allows one alive
+   application per (user, job); "all must surface" (R3 gap c) is honored
+   by listing deleted siblings with an `is_removed` flag; primary =
+   newest alive.
+8. **96c — pre-apply "resume/cover-letter embeds" shipped as document
+   links + workspace deep-link,** not inline PDF iframes (off-viewport/
+   headless-render bug class; the Discover review workspace already
+   embeds them). Reserved-slot placeholders unaffected.
+9. **96c — failure banner + DRAFT discover-jump render view-independently.**
+   The plan's pre/post split would have hidden a stuck DRAFT's
+   "Stuck in queue" banner (DRAFT derives pre_apply); plan-79/81
+   contracts outrank the split.
+10. **96c — bullet-overrides extracted to its own partial** as the PUT
+    route's swap unit; the old route returned the whole slide-over into a
+    section slot (pre-existing granularity quirk, fixed in passing).
+    `sample_data_models.Job` gained the apply-resolver fields for parity.
+11. **96c — surface ctx resolves the application through
+    `services.applications.get_application`** (not `session.get`) so the
+    sample-data shims intercept — same seam discipline as the routes.
