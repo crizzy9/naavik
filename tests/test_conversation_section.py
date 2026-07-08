@@ -1,4 +1,4 @@
-"""Conversation section on the application slide-over — plan 95 § 3.9 (95i).
+"""Conversation section on the job surface — plan 95 § 3.9, migrated in 96c3.
 
 The evidence surface: threads + snippets that produced the status, inline
 suggestion state, and the § 3.4 reclassify/unlink mounts.
@@ -186,11 +186,11 @@ async def test_conversation_section_template_renders(session, user, application)
         session, user_id=user.id, application_id=application.id
     )
     conversation = await tctx.build_conversation_ctx(session, application)
-    template = templates.env.get_template("components/tracking/_conversation_section.html")
+    template = templates.env.get_template("components/jobs/_surface_conversation.html")
     html = template.render(
-        a={"id": application.id, "company": application.company},
-        application={"id": application.id},
+        application={"id": application.id, "company": application.company},
         conversation_threads=conversation,
+        unlinked_job_threads=[],
         status_pin={"rejected_label": "Interview Stage"},
         csrf_token="tok",
     )
@@ -200,7 +200,7 @@ async def test_conversation_section_template_renders(session, user, application)
     assert f'data-testid="suggestion-dismiss-{pending.id}"' in html
     assert f'data-testid="reclassify-{pending.id}-rejection"' in html
     assert f'data-testid="conversation-unlink-{thread.id}"' in html
-    assert "→ Interview Stage · auto" in html
+    assert "auto-applied" in html  # 96b signal-detail outcome chip
 
 
 async def test_conversation_section_empty_state(session, user, application):
@@ -208,11 +208,11 @@ async def test_conversation_section_empty_state(session, user, application):
     from ui.templates_setup import templates
 
     conversation = await tctx.build_conversation_ctx(session, application)
-    template = templates.env.get_template("components/tracking/_conversation_section.html")
+    template = templates.env.get_template("components/jobs/_surface_conversation.html")
     html = template.render(
-        a={"id": application.id, "company": application.company},
-        application={"id": application.id},
+        application={"id": application.id, "company": application.company},
         conversation_threads=conversation,
+        unlinked_job_threads=[],
         status_pin=None,
         csrf_token="tok",
     )
@@ -240,5 +240,5 @@ def test_slide_over_fragment_contains_conversation_section():
     client.cookies.set("naavik_session", "fake-1")
     r = client.get(f"/_fragments/tracking/application/{app_id}")
     assert r.status_code == 200
-    assert 'data-testid="detail-conversation"' in r.text
+    assert 'data-testid="surface-conversation"' in r.text
     assert "<html" not in r.text.lower()  # fragment granularity holds

@@ -315,15 +315,35 @@ async def get_tracking_detail(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
+    """Plan 96c3 — the slide-over deep-link survives as a redirect: jobs get
+    the canonical surface page; job-less manual applications render the
+    tracking page with the surface MODAL open (they have no page mount)."""
+    from fastapi.responses import RedirectResponse
+
+    from ui import job_surface_ctx
+
     application = await _application_or_404(session, application_id, user)
+    if application.job_id is not None:
+        from services import jobs as job_service
+
+        job = await job_service.get_job(session, application.job_id)
+        if job is not None and job.deleted_at is None:
+            return RedirectResponse(
+                f"/jobs/{application.job_id}?application={application_id}",
+                status_code=302,
+            )
+    surface_ctx = await job_surface_ctx.build_job_surface_ctx(
+        session, user_id=_effective_user_id(user), application_id=application_id
+    )
+    if surface_ctx is None:
+        raise HTTPException(status_code=404, detail="Application not found")
     base_ctx = await tctx.build_tracking_ctx(
         session, user_id=_effective_user_id(user), view="board"
     )
-    detail_ctx = await tctx.build_application_detail_ctx(session, application)
-    ctx = {**base_ctx, **detail_ctx}
+    ctx = {**base_ctx, **surface_ctx}
     ctx["active_sidebar"] = "tracking"
     ctx["active_template_path"] = "/tracking"
-    ctx["slide_over_open"] = True
+    ctx["surface_modal_open"] = True
     return templates.TemplateResponse(request, "pages/tracking/tracking.html", ctx)
 
 
@@ -338,9 +358,17 @@ async def fragment_application(
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
-    application = await _application_or_404(session, application_id, user)
-    ctx = await tctx.build_application_detail_ctx(session, application)
-    return templates.TemplateResponse(request, "components/tracking/_application_detail.html", ctx)
+    """Plan 96c3 — re-pointed: the old slide-over partial is retired; this
+    returns the job-surface modal so legacy callers keep working."""
+    from ui import job_surface_ctx
+
+    await _application_or_404(session, application_id, user)
+    ctx = await job_surface_ctx.build_job_surface_ctx(
+        session, user_id=_effective_user_id(user), application_id=application_id
+    )
+    if ctx is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return templates.TemplateResponse(request, "components/jobs/_job_surface_modal.html", ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -1057,11 +1085,13 @@ async def put_bullet_override(
     session.add(application)
     await session.commit()
 
+    # Plan 96c3 — the swap unit is the section itself, not the retired
+    # slide-over: the toggle sits inside the job surface now.
     detail_ctx = await tctx.build_application_detail_ctx(session, application)
     return templates.TemplateResponse(
         request,
-        "components/tracking/_application_detail.html",
-        {**detail_ctx, "csrf_token": ""},
+        "components/tracking/_bullet_overrides_section.html",
+        detail_ctx,
     )
 
 

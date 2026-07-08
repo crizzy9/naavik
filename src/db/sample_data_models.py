@@ -211,6 +211,11 @@ class Job(_Base):
     apply_url: str | None = None
     apply_kind: str | None = None
     apply_resolved_at: datetime | None = None
+    # Apply-target resolver bookkeeping (parity with models.Job — the 96c
+    # job surface renders these via jobs_ctx for shim-backed rows too).
+    apply_resolved_via: str | None = None
+    apply_resolve_attempts: int = 0
+    apply_next_resolve_at: datetime | None = None
 
     company: str
     role: str

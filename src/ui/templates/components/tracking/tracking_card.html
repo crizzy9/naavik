@@ -2,19 +2,24 @@
 {#
   tracking_card.html — single application card on Tracking board.
 
+  Plan 96c3 hierarchy (R5): identity row, ONE metric row (match + salary),
+  ONE status row — status pill + at most two chips + a `+N` overflow
+  (clicking anywhere opens the job surface, which holds the rest).
+
   Args:
-    application : dict — id, company, company_initial, company_color, role, team,
-                  score (0–100), salary_range, status, sub_state_pills (list),
-                  context_chip (str)
+    application : dict — id, job_id, company, company_initial, company_color,
+                  role, team, score (0–100), salary_range, status,
+                  status_label, status_chips (list of {label, tone}),
+                  detail_url, sub_state_pills (list)
 #}
 {% set a = application %}
 <article class="flex flex-col gap-2 p-3 bg-slate-950 border border-slate-800 rounded-lg cursor-pointer hover:border-slate-700 transition group"
          data-app-id="{{ a.id }}"
          data-testid="tracking-card"
-         hx-get="/_fragments/tracking/application/{{ a.id }}"
-         hx-target="#tracking-slide-over-mount"
-         hx-swap="innerHTML"
-         hx-push-url="/tracking/{{ a.id }}">
+         hx-get="/_modal/application/{{ a.id }}"
+         hx-target="body"
+         hx-swap="beforeend"
+         hx-push-url="{{ a.detail_url }}">
   <header class="flex items-start gap-2.5">
     {% with kind="company", text=a.company_initial | default(a.company[:1] | upper), size="sm", color_override=a.company_color | default("bg-slate-700") %}
       {% include "components/common/avatar.html" %}
@@ -40,18 +45,19 @@
       <span class="font-mono text-xs text-slate-400">{{ a.salary_range }}</span>
     {% endif %}
   </div>
+  {% set _chips = (a.status_chips or []) + (a.sub_state_pills or []) %}
   <div class="flex items-center gap-1.5 flex-wrap">
     <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-medium uppercase tracking-wide text-slate-300">
       {{ status_dot(a.status) }}
       <span>{{ a.status_label | default((a.status or '') | replace('_', ' ')) }}</span>
     </span>
-    {% if a.suggestion_chip %}{{ chip(a.suggestion_chip, tone="amber") }}{% endif %}
-    {% if a.round_chip %}{{ chip(a.round_chip, tone="indigo") }}{% endif %}
-    {% if a.quiet_chip %}{{ chip(a.quiet_chip, tone="amber") }}{% endif %}
-    {% if a.pin_chip %}{{ chip(a.pin_chip, tone="slate") }}{% endif %}
-    {% if a.context_chip %}{{ chip(a.context_chip, tone=a.context_chip_tone | default("slate")) }}{% endif %}
-    {% for p in a.sub_state_pills or [] %}
-      {{ chip(p.label, tone=p.tone | default("slate")) }}
+    {% for c in _chips[:2] %}
+      {{ chip(c.label, tone=c.tone | default("slate")) }}
     {% endfor %}
+    {% if _chips | length > 2 %}
+      <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono bg-slate-800 text-slate-400"
+            title="{{ _chips[2:] | map(attribute='label') | join(' · ') }}"
+            data-testid="card-chip-overflow">+{{ _chips | length - 2 }}</span>
+    {% endif %}
   </div>
 </article>

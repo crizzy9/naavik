@@ -46,7 +46,11 @@ async def build_job_surface_ctx(
     selected: Application | None = None
 
     if application_id is not None:
-        selected = await session.get(Application, application_id)
+        # Through the service seam (not session.get) so the conftest
+        # sample-data shims intercept — same reason the routes do it.
+        from services import applications as applications_service
+
+        selected = await applications_service.get_application(session, application_id)
         if selected is None or selected.user_id != user_id:
             return None
         if job_id is not None and selected.job_id != job_id:
@@ -78,6 +82,10 @@ async def build_job_surface_ctx(
             )
         ).all()
         applications = sorted(rows, key=lambda a: a.deleted_at is not None)
+        # Shimmed/test sessions may not surface the selected row via the
+        # job query — the selected application must always be listed.
+        if selected is not None and all(a.id != selected.id for a in applications):
+            applications.insert(0, selected)
     elif selected is not None:
         applications = [selected]
     else:

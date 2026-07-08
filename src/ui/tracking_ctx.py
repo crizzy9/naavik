@@ -88,8 +88,27 @@ def application_to_card(
     initial, color = _initial_color(a.company)
     chip, tone = _context_chip(a)
     pin = applications.get_status_pin(a)
+    # Plan 96c3 / R5 — ONE status row: chips collapse into at most two
+    # visible + a `+N` overflow (the card opens the job surface for the
+    # rest). Priority order: suggestion > rounds > quiet > pin > context.
+    status_chips = [
+        c
+        for c in (
+            # Plan 96a / B2 — pending email suggestion, visible from the board.
+            {"label": suggestion_chip, "tone": "amber"} if suggestion_chip else None,
+            # Plan 95 § 3.1 — compact `2/5 · system design` chip.
+            {"label": round_chip, "tone": "indigo"} if round_chip else None,
+            # Plan 95 § 3.2 — amber "no signal for N d" chip.
+            {"label": quiet_chip, "tone": "amber"} if quiet_chip else None,
+            # Plan 95 § 3.8.6 — visible pin state.
+            {"label": "auto-paused", "tone": "slate"} if pin else None,
+            {"label": chip, "tone": tone} if chip else None,
+        )
+        if c is not None
+    ]
     return {
         "id": a.id,
+        "job_id": a.job_id,
         "company": a.company,
         "company_initial": initial,
         "company_color": color,
@@ -99,16 +118,12 @@ def application_to_card(
         "salary_range": _salary_range(a),
         "status": a.status.value,
         "status_label": application_status_label(a.status).lower(),
-        "context_chip": chip,
-        "context_chip_tone": tone,
-        # Plan 95 § 3.8.6 — visible pin state ("auto-tracking paused").
-        "pin_chip": "auto-paused" if pin else None,
-        # Plan 95 § 3.1 — compact `2/5 · system design` chip when rounds exist.
-        "round_chip": round_chip,
-        # Plan 95 § 3.2 — amber "no signal for N d" chip on quiet cards.
-        "quiet_chip": quiet_chip,
-        # Plan 96a / B2 — pending email suggestion, visible from the board.
-        "suggestion_chip": suggestion_chip,
+        "status_chips": status_chips,
+        # Plan 96c3 — the card opens the job surface; bookmarks get the
+        # page URL when a job exists, else the tracking deep-link.
+        "detail_url": (
+            f"/jobs/{a.job_id}?application={a.id}" if a.job_id is not None else f"/tracking/{a.id}"
+        ),
         "sub_state_pills": [],
     }
 

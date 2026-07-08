@@ -1,0 +1,39 @@
+{# _bullet_overrides_section.html — per-application bullet override toggles
+   (plan 86 § W3.2; extracted in 96c3 as the PUT route's swap unit).
+
+   Args:
+     application  : dict — id (a.* shape)
+     bullets_used : list — {id, text, override}
+     csrf_token   : str
+
+   Swap unit for PUT /api/v1/applications/{id}/bullet-override
+   (hx-target="closest section", outerHTML).
+#}
+{% set a = application %}
+{% if bullets_used %}
+  <section data-testid="detail-bullet-overrides">
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mb-2">Bullets in resume</div>
+    <ul class="flex flex-col gap-1.5">
+      {% for b in bullets_used %}
+        <li class="flex items-start justify-between gap-2 text-sm" data-testid="bullet-override-row-{{ b.id }}">
+          <span class="text-slate-300 flex-1 min-w-0 truncate">{{ b.text }}</span>
+          <button type="button"
+                  data-testid="bullet-override-toggle-{{ b.id }}"
+                  hx-put="/api/v1/applications/{{ a.id }}/bullet-override"
+                  hx-vals='{"bullet_id": {{ b.id }}, "current": "{{ b.override or '' }}"}'
+                  hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                  hx-target="closest section"
+                  hx-swap="outerHTML"
+                  class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide transition
+                         {% if b.override == 'always_include' %}bg-emerald-500/30 text-emerald-100 hover:bg-emerald-500/40
+                         {% elif b.override == 'never_include' %}bg-rose-500/30 text-rose-100 hover:bg-rose-500/40
+                         {% else %}bg-slate-800 text-slate-400 hover:bg-slate-700{% endif %}">
+            {% if b.override == 'always_include' %}always
+            {% elif b.override == 'never_include' %}never
+            {% else %}auto{% endif %}
+          </button>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}

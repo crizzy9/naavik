@@ -47,15 +47,14 @@
   <td class="px-4 py-3 align-middle text-xs text-slate-400 font-mono">{{ a.last_activity | default("") }}</td>
   <td class="px-4 py-3 align-middle text-xs text-slate-500">{{ a.source | default("manual") }}</td>
   <td class="px-2 py-3 align-middle text-right">
-    {# Open the application detail slide-over — mirrors tracking_card.html so
-       the list view has working row detail (was a dead "More actions" button
-       with no handler). #}
+    {# Open the job surface modal — mirrors tracking_card.html (plan 96c3;
+       the slide-over is retired). #}
     <button type="button"
             class="p-1.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800"
             aria-label="View application details"
-            hx-get="/_fragments/tracking/application/{{ a.id }}"
-            hx-target="#tracking-slide-over-mount"
-            hx-swap="innerHTML"
+            hx-get="/_modal/application/{{ a.id }}"
+            hx-target="body"
+            hx-swap="beforeend"
             hx-push-url="/tracking/{{ a.id }}">
       <i data-lucide="more-vertical" class="h-4 w-4" stroke-width="1.5"></i>
     </button>

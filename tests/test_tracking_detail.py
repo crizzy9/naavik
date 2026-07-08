@@ -46,15 +46,17 @@ def known_application_id() -> int:
 
 
 def test_tracking_detail_full_page_renders(client: TestClient, known_application_id: int) -> None:
-    """GET /tracking/{id} as owner returns 200 with detail content embedded."""
+    """Plan 96c3 — GET /tracking/{id} redirects to the job-surface page for
+    applications with a live job (bookmarks survive the slide-over
+    retirement); the surface body renders at the target."""
     assert known_application_id is not None, "no sample application available"
-    r = client.get(f"/tracking/{known_application_id}")
-    assert r.status_code == 200
-    body = r.text
-    assert "Tracking" in body
-    assert 'data-testid="tracking-slide-over"' in body
-    assert "tracking-slide-over-mount" in body
-    assert 'id="application-detail-title"' in body
+    r = client.get(f"/tracking/{known_application_id}", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"].startswith("/jobs/")
+    assert f"application={known_application_id}" in r.headers["location"]
+    followed = client.get(f"/tracking/{known_application_id}")
+    assert followed.status_code == 200
+    assert 'data-testid="job-surface"' in followed.text
 
 
 def test_tracking_detail_full_page_contains_company_role(
@@ -78,14 +80,15 @@ def test_tracking_detail_full_page_contains_company_role(
 def test_tracking_detail_fragment_naked_partial(
     client: TestClient, known_application_id: int
 ) -> None:
-    """GET /_fragments/tracking/application/{id} returns just the partial (no base shell)."""
+    """Plan 96c3 — the legacy fragment route now returns the job-surface
+    MODAL, still as a bare partial (no base shell)."""
     r = client.get(f"/_fragments/tracking/application/{known_application_id}")
     assert r.status_code == 200
     body = r.text
-    assert 'data-testid="tracking-slide-over"' in body
+    assert 'data-testid="job-surface-modal"' in body
+    assert 'data-testid="job-surface"' in body
     # No base shell — no <html> / <body> tags wrapping the fragment.
     assert "<html" not in body.lower()
-    assert 'id="application-detail-title"' in body
 
 
 def test_tracking_detail_nonexistent_returns_404(client: TestClient) -> None:
@@ -157,13 +160,14 @@ def test_tracking_detail_idor_cross_user_returns_404(
 
 
 def test_tracking_card_wires_slide_over_hx(client: TestClient) -> None:
-    """tracking_card renders with HTMX attrs targeting the slide-over mount."""
+    """Plan 96c3 — cards open the job-surface modal; bookmarks push the
+    canonical page URL when the application has a job."""
     r = client.get("/tracking")
     assert r.status_code == 200
     body = r.text
-    assert 'hx-target="#tracking-slide-over-mount"' in body
-    assert 'hx-get="/_fragments/tracking/application/' in body
-    assert 'id="tracking-slide-over-mount"' in body
+    assert 'hx-get="/_modal/application/' in body
+    assert 'hx-target="body"' in body
+    assert 'hx-push-url="/jobs/' in body
 
 
 def test_tracking_detail_renders_status_timeline(

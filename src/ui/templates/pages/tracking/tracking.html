@@ -374,12 +374,10 @@
   </div>
 </div>
 
-{# Slide-over mount point. `tracking_card` HTMX-swaps its detail partial here.
-   When `slide_over_open` is set (page-load deep-link), the partial renders
-   server-side on first paint. #}
-<div id="tracking-slide-over-mount">
-  {% if slide_over_open and application %}
-    {% include "components/tracking/_application_detail.html" %}
-  {% endif %}
-</div>
+{# Plan 96c3 — the slide-over is retired; job-less application deep-links
+   (`/tracking/{id}`) render the job-surface modal open on first paint.
+   Card clicks swap the same modal into <body> via /_modal/application. #}
+{% if surface_modal_open and surface %}
+  {% include "components/jobs/_job_surface_modal.html" %}
+{% endif %}
 {% endblock %}

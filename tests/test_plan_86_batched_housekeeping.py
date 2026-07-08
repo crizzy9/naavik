@@ -379,14 +379,17 @@ async def test_kpis_by_tag_skips_apps_without_bullet_provenance(
 
 def test_regen_button_renders_on_detail_slide_over() -> None:
     """The Regenerate button is present in the detail-slide-over template."""
-    template = Path("src/ui/templates/components/tracking/_application_detail.html").read_text()
+    template = Path("src/ui/templates/pages/jobs/_job_surface.html").read_text()
     assert 'data-testid="regenerate-bundle"' in template
     assert 'hx-post="/api/v1/applications/{{ a.id }}/generate-bundle"' in template
 
 
 def test_bullet_override_section_renders_when_bullets_present() -> None:
-    """The bullet-override section + per-bullet toggle is in the template."""
-    template = Path("src/ui/templates/components/tracking/_application_detail.html").read_text()
+    """The bullet-override section + per-bullet toggle is in the template
+    (96c3 extracted it into its own partial — the PUT route's swap unit)."""
+    template = Path(
+        "src/ui/templates/components/tracking/_bullet_overrides_section.html"
+    ).read_text()
     assert 'data-testid="detail-bullet-overrides"' in template
     assert 'data-testid="bullet-override-toggle-' in template
     # Three pill states should be referenced.
@@ -710,7 +713,7 @@ async def test_generate_bundle_regenerate_kind_cover_letter_skips_resume(
 
 def test_regenerate_button_template_uses_cover_letter_kind() -> None:
     """The Regenerate button template MUST send `regenerate_kind=cover_letter`."""
-    template = Path("src/ui/templates/components/tracking/_application_detail.html").read_text()
+    template = Path("src/ui/templates/pages/jobs/_job_surface.html").read_text()
     assert "Regenerate cover letter" in template
     assert '"regenerate_kind": "cover_letter"' in template
 

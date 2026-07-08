@@ -86,6 +86,54 @@
     </div>
   {% endif %}
 
+  {# ── Stuck-in-queue banner — view-independent: a failed DRAFT renders
+        pre_apply but the failure must never hide (plan 79 contract). ── #}
+  {% if last_failure %}
+    <div class="mb-4">
+      {% set _failure_body %}
+        <div>{{ last_failure.message }}</div>
+        <div class="mt-1 text-xs text-rose-300/70 font-mono">kind: {{ last_failure.kind }}</div>
+        <div class="mt-2 flex items-center gap-2 flex-wrap">
+          {% if postmortem_ts %}
+            <button type="button"
+                    data-testid="view-postmortem"
+                    hx-get="/_modal/postmortem/{{ a.id }}/{{ postmortem_ts }}"
+                    hx-target="body"
+                    hx-swap="beforeend"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-slate-200 bg-slate-800 hover:bg-slate-700 transition">
+              <i data-lucide="file-search" class="h-3 w-3" stroke-width="1.5"></i>
+              View postmortem
+            </button>
+          {% endif %}
+          <button type="button"
+                  data-testid="retry-failed-application"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs text-rose-100 bg-rose-500/30 hover:bg-rose-500/40 transition"
+                  hx-post="/api/v1/applications/{{ a.id }}/retry"
+                  hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                  hx-swap="none"
+                  hx-confirm="Re-queue this draft for auto-apply?">
+            <i data-lucide="refresh-cw" class="h-3 w-3" stroke-width="1.5"></i>
+            Retry
+          </button>
+        </div>
+      {% endset %}
+      {% with tone="danger", icon="alert-triangle", title="Stuck in queue", body=_failure_body %}
+        {% include "components/common/info_card.html" %}
+      {% endwith %}
+    </div>
+  {% endif %}
+
+  {# ── Draft workspace jump (plan 81 § D.3) — view-independent. ── #}
+  {% if a and a.status == "DRAFT" and a.job_id %}
+    <div class="mb-4" data-testid="detail-discover-jump">
+      <a href="/discover/{{ a.job_id }}"
+         class="inline-flex items-center gap-1.5 text-sm text-indigo-300 hover:text-indigo-200">
+        <i data-lucide="edit" class="h-4 w-4" stroke-width="1.5"></i>
+        Continue editing on Discover
+      </a>
+    </div>
+  {% endif %}
+
   {% if s.view == "pre_apply" %}
     {# ── PRE-APPLY: today's /jobs/{id} concerns, re-homed. ── #}
     {% include "pages/jobs/_job_detail_body.html" %}
@@ -115,38 +163,6 @@
     {# ── POST-APPLY: the process — conversation, rounds, evidence. ── #}
     <div class="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       <div class="flex flex-col gap-5 min-w-0">
-
-        {% if last_failure %}
-          {% set _failure_body %}
-            <div>{{ last_failure.message }}</div>
-            <div class="mt-1 text-xs text-rose-300/70 font-mono">kind: {{ last_failure.kind }}</div>
-            <div class="mt-2 flex items-center gap-2 flex-wrap">
-              {% if postmortem_ts %}
-                <button type="button"
-                        data-testid="view-postmortem"
-                        hx-get="/_modal/postmortem/{{ a.id }}/{{ postmortem_ts }}"
-                        hx-target="body"
-                        hx-swap="beforeend"
-                        class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-slate-200 bg-slate-800 hover:bg-slate-700 transition">
-                  <i data-lucide="file-search" class="h-3 w-3" stroke-width="1.5"></i>
-                  View postmortem
-                </button>
-              {% endif %}
-              <button type="button"
-                      data-testid="retry-failed-application"
-                      class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs text-rose-100 bg-rose-500/30 hover:bg-rose-500/40 transition"
-                      hx-post="/api/v1/applications/{{ a.id }}/retry"
-                      hx-swap="none"
-                      hx-confirm="Re-queue this draft for auto-apply?">
-                <i data-lucide="refresh-cw" class="h-3 w-3" stroke-width="1.5"></i>
-                Retry
-              </button>
-            </div>
-          {% endset %}
-          {% with tone="danger", icon="alert-triangle", title="Stuck in queue", body=_failure_body %}
-            {% include "components/common/info_card.html" %}
-          {% endwith %}
-        {% endif %}
 
         {# § 3.8.6 — visible pin state with one-click unpin. #}
         {% if status_pin %}
@@ -321,6 +337,9 @@
             {% endif %}
           </section>
         {% endif %}
+
+        {# Plan 86 § W3.2 — per-application bullet override toggles. #}
+        {% include "components/tracking/_bullet_overrides_section.html" %}
 
         {% if screener_answers %}
           <section data-testid="detail-screeners">
