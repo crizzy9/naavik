@@ -856,6 +856,40 @@ async def get_rounds_fragment(
 
 
 @router.post(
+    "/_fragments/tracking/scheduling/{application_id}",
+    response_class=HTMLResponse,
+    name="fragment_scheduling_draft",
+)
+async def post_scheduling_draft_fragment(
+    request: Request,
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+    _csrf: None = Depends(require_csrf),
+):
+    """Plan 96f — free slots + owner-voice draft for a scheduling ask.
+
+    POST (not GET): it spends an LLM call and stamps the NOTE_ADDED audit
+    event. Degrades in-fragment (no provider / no slots → slots-only panel
+    with a reason line, never a 500). Naavik never sends — the panel offers
+    Copy and a Gmail compose deep-link.
+    """
+    from services import scheduling as scheduling_service
+
+    await _application_or_404(session, application_id, user)
+    try:
+        draft = await scheduling_service.build_scheduling_draft(
+            session, user_id=_effective_user_id(user), application_id=application_id
+        )
+    except scheduling_service.SchedulingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    return templates.TemplateResponse(
+        request, "components/tracking/_scheduling_draft_panel.html", {"draft": draft}
+    )
+
+
+@router.post(
     "/api/v1/applications/{application_id}/rounds/parse-plan",
     response_class=HTMLResponse,
     name="api_rounds_parse_plan",

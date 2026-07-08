@@ -76,6 +76,15 @@ class Settings(SQLModel, table=True):
     staleness_stale_days: int = Field(default=30)
     auto_close_ghosted_after_days: int | None = None
 
+    # Plan 96f — scheduling assistant (detect → suggest → draft; NEVER
+    # sends). Timezone NULL = auto: follow the host's current timezone, the
+    # way the owner's calendar follows the device (owner decision
+    # 2026-07-08). Window is the working-hours band "HH:MM-HH:MM".
+    # `scheduling_autonomy` naming stays reserved for a future consented
+    # send rung (§ 5.6) — deliberately NOT added here.
+    scheduling_timezone: str | None = Field(default=None, max_length=64)
+    scheduling_window: str = Field(default="10:00-18:00", max_length=11)
+
     # Notifications
     notify_threshold: float = Field(default=0.80)
     notify_on_errors: bool = Field(default=True)

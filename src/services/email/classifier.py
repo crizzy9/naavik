@@ -437,6 +437,13 @@ async def classify_unprocessed(
             end_client = None
         msg.extracted_end_client = end_client
 
+        # Plan 96f — the scheduling ask, gated by the deterministic keyword
+        # post-check (same posture as end_client: the model can't claim an
+        # ask the text never makes).
+        from services.scheduling import action_needed_post_check
+
+        msg.action_needed = action_needed_post_check(parsed.action_needed, text=seen_text)
+
         # User rule > deterministic seed > the LLM guess above.
         if msg.user_id not in rules_cache:
             rules_cache[msg.user_id] = await sender_rules.load_rules(session, user_id=msg.user_id)

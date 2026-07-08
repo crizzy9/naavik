@@ -1,0 +1,52 @@
+{# _scheduling_draft_panel.html — slots + owner-voice draft (plan 96f).
+
+   Args:
+     draft : dict — company, slot_labels, tz_label, body, to, subject,
+             gmail_url, degraded_reason
+
+   Swap unit for GET /_fragments/tracking/scheduling/{application_id}
+   (hx-target the row's #scheduling-panel-N slot). Copy is the primary
+   affordance; the Gmail link is a compose deep-link (view=cm) — a URL the
+   owner's browser opens. Naavik cannot send (static no-send guard).
+#}
+<div class="mt-2 rounded-lg border border-violet-500/30 bg-slate-950/70 p-3 flex flex-col gap-2" data-testid="scheduling-draft-panel">
+  <div class="text-xs uppercase tracking-wide text-violet-300 font-medium">Open slots ({{ draft.tz_label }})</div>
+  {% if draft.slot_labels %}
+    <ul class="flex flex-wrap gap-1.5">
+      {% for label in draft.slot_labels %}
+        <li class="px-2 py-1 rounded bg-violet-500/10 text-violet-100 text-xs font-mono" data-testid="scheduling-slot">{{ label }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  {% if draft.degraded_reason %}
+    <p class="text-xs text-amber-300/90" data-testid="scheduling-degraded">{{ draft.degraded_reason }}</p>
+  {% endif %}
+  {% if draft.body %}
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium mt-1">Draft reply{% if draft.to %} · to {{ draft.to }}{% endif %}</div>
+    <textarea id="scheduling-draft-text-{{ draft.application_id }}"
+              readonly
+              rows="7"
+              class="w-full rounded-md bg-slate-900 border border-slate-800 text-sm text-slate-200 p-2.5 font-mono leading-relaxed"
+              data-testid="scheduling-draft-body">{{ draft.body }}</textarea>
+    <div class="flex items-center gap-2">
+      <button type="button"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-500 hover:bg-violet-400 text-white text-xs font-medium"
+              onclick="navigator.clipboard.writeText(document.getElementById('scheduling-draft-text-{{ draft.application_id }}').value).then(() => { this.querySelector('span').textContent = 'Copied ✓'; setTimeout(() => { this.querySelector('span').textContent = 'Copy draft'; }, 1500); })"
+              data-testid="scheduling-copy">
+        <i data-lucide="copy" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+        <span>Copy draft</span>
+      </button>
+      {% if draft.gmail_url %}
+        <a href="{{ draft.gmail_url }}"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-slate-200 bg-slate-800 hover:bg-slate-700 font-medium"
+           data-testid="scheduling-gmail-link">
+          <i data-lucide="external-link" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+          Open in Gmail
+        </a>
+      {% endif %}
+      <span class="text-[10px] text-slate-500 ml-auto">Naavik never sends — you do.</span>
+    </div>
+  {% endif %}
+</div>

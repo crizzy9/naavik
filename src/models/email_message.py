@@ -111,6 +111,11 @@ class EmailMessage(SQLModel, table=True):
     )
     unclassified_reason: UnclassifiedReason | None = None
     urgency: str | None = None
+    # Plan 96f — what the job seeker must DO about scheduling, per the
+    # latest state of this email: none | send_availability | pick_slot |
+    # confirm_time. Deterministically post-checked (like end_client) so the
+    # model can't invent an ask the text doesn't make.
+    action_needed: str | None = Field(default=None, max_length=20)
 
     suggested_status: ApplicationStatus | None = None
     suggested_at: datetime | None = Field(

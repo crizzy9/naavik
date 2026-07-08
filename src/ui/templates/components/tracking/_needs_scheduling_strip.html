@@ -1,0 +1,55 @@
+{# _needs_scheduling_strip.html — the ball is in your court (plan 96f).
+
+   Args:
+     needs_scheduling : list — build_tracking_ctx dicts (application_id,
+                        company, role, action_label, subject,
+                        detected_label, urgency, dom_id)
+
+   Same panel family as suggestions/schedule. "Suggest times" loads the
+   slot + owner-voice-draft panel inline (LLM call — indicator shown).
+   Naavik NEVER sends; the panel offers Copy and a Gmail compose link.
+   Renders nothing when empty.
+#}
+{% if needs_scheduling %}
+<section class="rounded-lg bg-violet-500/5 border border-violet-500/30 px-4 py-3 flex flex-col gap-2" data-testid="needs-scheduling-strip">
+  <div class="flex items-center gap-2 text-sm text-violet-100">
+    <i data-lucide="calendar-plus" class="h-4 w-4 text-violet-300" stroke-width="1.5"></i>
+    {{ needs_scheduling | length }} interview{{ "s" if needs_scheduling | length != 1 }} waiting on your availability.
+  </div>
+  <ul class="flex flex-col gap-1.5">
+    {% for n in needs_scheduling %}
+      <li id="{{ n.dom_id }}" class="rounded-md bg-slate-950/50 px-3 py-2" data-testid="{{ n.dom_id }}">
+        <div class="flex items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-slate-100 truncate">
+              <span class="font-medium">{{ n.company }}</span>{% if n.role %} · {{ n.role }}{% endif %}
+              <span class="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide bg-violet-500/15 text-violet-200">
+                {{ n.action_label }}
+              </span>
+              {% if n.urgency == "high" %}
+                <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide bg-rose-500/15 text-rose-300">urgent</span>
+              {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 truncate">{{ n.detected_label }} · “{{ n.subject }}”</div>
+          </div>
+          <button type="button"
+                  class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-500 hover:bg-violet-400 text-white text-xs font-medium"
+                  hx-post="/_fragments/tracking/scheduling/{{ n.application_id }}"
+                  hx-target="#scheduling-panel-{{ n.application_id }}"
+                  hx-swap="innerHTML"
+                  hx-disabled-elt="this"
+                  hx-indicator="#scheduling-indicator-{{ n.application_id }}"
+                  data-testid="{{ n.dom_id }}-suggest">
+            <i data-lucide="calendar-clock" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+            Suggest times
+            <span id="scheduling-indicator-{{ n.application_id }}" class="htmx-indicator">
+              <i data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin" stroke-width="1.5"></i>
+            </span>
+          </button>
+        </div>
+        <div id="scheduling-panel-{{ n.application_id }}"></div>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

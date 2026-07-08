@@ -69,6 +69,13 @@ Also extract:
   subject or body ("Camo People coordinating your Ripple interview" →
   "Ripple"). null when no end company is named. For employer/ats senders
   always null (company already carries the employer).
+- action_needed: what the job seeker must DO about scheduling, judged from
+  the LATEST state of this email — "send_availability" (the sender asks for
+  the job seeker's availability / times that work), "pick_slot" (a booking
+  link or a list of offered slots to choose from), "confirm_time" (a
+  specific proposed time awaiting the job seeker's confirmation), or "none"
+  (nothing to do, already booked, or not about scheduling). Confirmations
+  and reminders of an already-booked interview are "none".
 
 For agency_recruiter / platform / outplacement senders, `company` is the
 agency/platform organization itself, NOT a guess at who they might represent.
@@ -86,3 +93,4 @@ class EmailClassificationResult(BaseModel):
     round_kind: str | None = None
     sender_type: str | None = None
     end_client: str | None = None
+    action_needed: str | None = None

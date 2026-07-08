@@ -613,3 +613,19 @@ Logged during execution session 2 (2026-07-08, slices 96d → close-out).
     a thread the human unlinked (the `kind="unlink"` correction is the
     durable objection — caught live when the post-unlink reconcile
     immediately re-linked the just-detached thread by company match).
+21. **96f — `action_needed` persists on `email_message`** (migration 0048;
+    the plan only named the schema field, but the strip needs it at rest),
+    and a detection counts only while its message is the LAST word in its
+    thread. `scheduling_timezone` semantics per owner (2026-07-08): NULL =
+    follow the host's current zone the way the calendar follows the device
+    — resolved via TZ env → the `/etc/localtime` symlink, because
+    `datetime.now().astimezone()` yields a fixed-offset object that can't
+    drive DST-correct slots (live-caught: the panel rendered UTC);
+    `scheduling_window` defaults 10:00-18:00 (owner). Settings fields ship
+    without a Settings-page form, same as 95e's staleness fields.
+22. **96f — the slots+draft panel is a POST fragment** (not a passive GET):
+    it spends an LLM call and stamps the NOTE_ADDED audit event, so it
+    rides CSRF like every state-changing control. Live QA: the engine
+    dodged the real OnePay interview block (third slot jumped 11:00 →
+    12:30 EDT) and the draft signed off with a title-cased first name
+    (the resume-style all-caps profile name must not shout).

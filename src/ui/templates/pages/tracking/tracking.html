@@ -70,6 +70,9 @@
     {% endfor %}
   </section>
 
+  {# Interviews waiting on the owner's availability (plan 96f). #}
+  {% include "components/tracking/_needs_scheduling_strip.html" %}
+
   {# Upcoming interviews grouped by calendar event (plan 96d). #}
   {% include "components/tracking/_schedule_panel.html" %}
 

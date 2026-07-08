@@ -451,6 +451,13 @@ async def build_tracking_ctx(
 
     schedule_groups = await invites_service.upcoming_interview_schedule(session, user_id=user_id)
 
+    # Plan 96f — the ball is in the owner's court: scheduling asks detected
+    # per-message (`action_needed`, keyword-gated) or per-conversation (the
+    # reconciler's stamp). Detect → suggest → draft; Naavik never sends.
+    from services import scheduling as scheduling_service
+
+    needs_scheduling_rows = await scheduling_service.list_needs_scheduling(session, user_id=user_id)
+
     columns = _columns_for_board(
         all_apps,
         show_closed=show_closed,
@@ -579,6 +586,21 @@ async def build_tracking_ctx(
         ],
         "process_merge_targets": merge_targets,
         "track_stage_options": track_stage_options,
+        # Plan 96f — one row per application waiting on the owner's
+        # availability.
+        "needs_scheduling": [
+            {
+                "application_id": n.application_id,
+                "company": n.company,
+                "role": n.role,
+                "action_label": n.action_label,
+                "subject": n.subject,
+                "detected_label": _relative_label(n.detected_at),
+                "urgency": n.urgency,
+                "dom_id": f"needs-scheduling-{n.application_id}",
+            }
+            for n in needs_scheduling_rows
+        ],
         # Plan 96d — one row per upcoming calendar event on the schedule panel.
         "upcoming_schedule": [
             {
