@@ -1,10 +1,13 @@
-# Tracking Pipeline — email-driven application tracking (2026-07 redesign + tracking v2)
+# Tracking Pipeline — email-driven application tracking (2026-07 redesign + tracking v2 + v3)
 
 Canonical design for how Naavik turns inbox signal into pipeline state. It
 supersedes plan 90's "human-confirm-all" posture for forward transitions and
 documents the single status pipeline every tracking source feeds. Plan 95
 ("tracking v2") layered on interview rounds, sender rules, the correction
-loop, the manual-precedence pin, staleness, and the full-body opt-in.
+loop, the manual-precedence pin, staleness, and the full-body opt-in. Plan
+96 ("tracking v3") layered on calendar-invite ground truth, the
+event-driven reconciler, the scheduling assistant (draft-only), the
+`/emails` log, and the canonical job surface.
 
 ## Design principles
 
@@ -223,6 +226,95 @@ inline+attachment copies and re-deliveries collapse).
    card/slide-over, "Apply & resume auto-tracking" on the suggestion
    (`?resume=1`), and auto-clear when the human advances to/past the pin.
 
+## The process reconciler (plan 96e — event-driven, per-application)
+
+`services/email/reconcile.py` re-derives an application's rounds + stage
+from ALL evidence instead of trusting incremental dispatch order. **No
+standing cron** (owner decision #13): a reconcile fires only on new
+information about a specific application —
+
+- the classify tick, batch-deduped per application at end-of-tick (ten
+  emails about one application still mean one reconcile), best-effort so
+  one bad reconcile never stalls the tick;
+- a recorded correction (reclassify / unlink / merge / flag-sender);
+- applying an email suggestion;
+- new invites (they arrive on messages the classify tick carries).
+
+Each reconcile: **deterministic core** — alias/sender-rule re-grouping
+links stray mail that canonicalizes to the application (never a thread the
+human unlinked — the `kind="unlink"` correction is a durable objection;
+role-token disambiguation guards parallel processes at one company),
+invite chains re-resolve, the (classification, stage) timeline re-folds
+and diffs forward-only. **Conversation-coherent LLM pass** — ONE
+application-level `tracked_call` (`llm/prompts/classify_thread.py`) over
+every signal conversation, fired only when a triggering thread carries
+mail newer than its stamp in `submission_artifacts["reconcile"]` (the
+stamp gates cost AND idempotence); the result is the canonical itemized
+interview list plus `{process_stage, rejection, needs_scheduling}`.
+Derived interviews ADOPT/REWRITE existing rounds in place (matched by
+kind/container; generic rows upgraded; container times anchor to the
+final invite's start; a future round can never be(come) "completed";
+nothing is ever deleted).
+
+Write authority is exactly the email stream's: `update_status`
+forward-only with `trigger=RECONCILED` (distinct for auditability), § 3.8
+pin suppression downgrades to suggestions (EMAIL_STATUS_SUGGESTED with
+`suppressed_by_pin`), CLOSED is absolute, rejection stays human-confirm,
+OTHER mail never evidences a stage. Idempotence is the design invariant:
+re-running with no new evidence makes zero LLM calls and zero writes.
+
+## Scheduling assistant (plan 96f — detect → suggest → draft; NEVER sends)
+
+Owner decisions #5/#6: **read-only mail/calendar posture; the owner
+sends.** No SMTP, no send scopes — pinned by the static no-send guard test
+(`tests/test_no_send_guard.py`), which any future consented send rung must
+consciously edit.
+
+- **Detect:** classifier `action_needed` (none | send_availability |
+  pick_slot | confirm_time), persisted per-message behind a deterministic
+  keyword post-check (the `end_client` posture); counts only while its
+  message is the last word in its thread. The reconciler's
+  conversation-level `needs_scheduling` stamp fills the gaps. Both feed
+  the urgency-ordered "Needs scheduling" strip on Tracking.
+- **Suggest:** `services/scheduling/slots.py` — a pure free-slot engine on
+  zoneinfo (the working window is wall-clock; DST moves the UTC offset,
+  never the 10 am; fall-back and spring-forward pinned by unit matrix).
+  Busy = synced calendar events + final invites. `Settings.
+  scheduling_timezone` (NULL = follow the host zone, resolved TZ env →
+  /etc/localtime) and `Settings.scheduling_window` (default 10:00-18:00).
+  Slots always render with an explicit zone label.
+- **Draft:** one `tracked_call` (`llm/prompts/draft_scheduling_reply.py`)
+  writes an owner-voice reply embedding the exact slot labels; the panel
+  offers Copy (primary) and a Gmail COMPOSE deep-link (`view=cm` — a URL
+  the owner's browser opens, not an API). Nothing persists but a
+  NOTE_ADDED AppEvent (`{"source": "scheduling_draft"}` — drafted flag +
+  slots, never the prose). `Settings.scheduling_autonomy` naming stays
+  reserved for the future send rung — deliberately unbuilt.
+
+## Surfaces (plan 96b/c) — the email log and the job surface
+
+- **`/emails`** (96b): the full email log — every synced message with its
+  classification (incl. `pending`), link state (linked → company /
+  detected / parked / dismissed), filters (classification, link state,
+  account, date, sender), row actions (reclassify, flag sender, provider
+  link, body PEEK), and the per-email signal detail (what the email
+  contributed: extraction chips + the transition it caused/suggested with
+  its outcome). Keyset pagination on `(received_at, id)`. The
+  unclassified-backlog badge makes a B3-class stall visible in a day.
+- **The job surface** (96c): ONE state-dependent body
+  (`pages/jobs/_job_surface.html`) rendered as an expandable modal
+  (`/_modal/job/{id}`, `/_modal/application/{id}`) AND the `/jobs/{id}`
+  page (render-equivalence pinned by test); pre-apply view (JD, score,
+  tailoring, docs) flips to post-apply (conversation, rounds checklist
+  with calendar-event container headers, contacts, docs-used, timeline)
+  on state. The tracking slide-over is retired; `/tracking/{id}`
+  redirects. Threads carry a denormalized `job_id` (0046) so everything
+  about a job is reachable from the job.
+- **Tracking strips** (96a/d/f): pending-suggestions, "Upcoming
+  interviews" (scheduled rounds grouped by calendar event → date, local
+  tz), and "Needs scheduling" — one panel family, all deep-linking into
+  the job surface.
+
 ## Staleness — silence as a signal (plan 95 § 3.2)
 
 `services/applications/staleness.py` + weekly `tracking.staleness_sweep`.
@@ -295,3 +387,6 @@ links) never moves. Human-typed descriptions are never touched.
 - **0047** (96d) — `email_invite` (the invite ledger; UNIQUE chain key on
   user/uid/recurrence/sequence/method), `interview_round.invite_uid`
   (non-unique scheduling-container link).
+- **0048** (96f) — `settings.scheduling_timezone` (NULL = host zone),
+  `settings.scheduling_window` (default 10:00-18:00),
+  `email_message.action_needed`.

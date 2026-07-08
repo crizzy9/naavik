@@ -1,4 +1,4 @@
-`Status:` IN EXECUTION — 96a, 96b, 96c1–c3 landed 2026-07-08 (commits c7f8ebf, d50d829, 4acfa72, ac266ee, 9de68db; all gates green, live-QA'd); 96d/96e/96f + close-out continue in a follow-up session — see `docs/prompts/96-tracking-v3-execution-2-kickoff.md`
+`Status:` EXECUTED — session 1 (2026-07-08): 96a, 96b, 96c1–c3 (commits c7f8ebf, d50d829, 4acfa72, ac266ee, 9de68db); session 2 (2026-07-08): 96d 186456b, 96e fc6df58, 96f 703f6a0 + close-out. All gates green per slice (ruff + full pytest + nix build + live Playwright QA); 22 deviations logged below; `docs/design/TRACKING_PIPELINE.md` updated to v3
 `Type:` design
 `Authored:` 2026-07-08
 `Last updated:` 2026-07-08 (rev 2 — owner review round 2: reconciler now event-driven per-application (#13), `/emails` confirmed (#14), job surface pulled forward to 96c (#15); slices renumbered, § 5 reordered to execution order)
@@ -492,9 +492,10 @@ with a non-empty `## Deviations from plan`; kickoff prompt archived to
 
 No open items remain; the plan is ready to hand to an execution session.
 
-## Deviations from plan (running — promoted to final form at archive time)
+## Deviations from plan
 
-Logged during execution session 1 (2026-07-08, slices 96a → 96c3).
+Final form (archived 2026-07-08). Entries 1–11 from execution session 1
+(96a → 96c3); 12–22 from session 2 (96d → 96f).
 
 1. **96a — the Snorkel acceptance fixture was dead on arrival.** Msg 475's
    application (22) had been soft-deleted 2026-07-06;
