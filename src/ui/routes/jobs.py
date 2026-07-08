@@ -16,7 +16,7 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -75,19 +75,144 @@ async def _last_scrape_run(session: AsyncSession, scrape_run_id: int | None) -> 
     return await job_service.get_scrape_run(session, scrape_run_id)
 
 
+async def _surface_ctx_or_404(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    job_id: int | None = None,
+    application_id: int | None = None,
+    view: str | None = None,
+):
+    from fastapi import HTTPException
+
+    from ui import job_surface_ctx
+
+    ctx = await job_surface_ctx.build_job_surface_ctx(
+        session,
+        user_id=user_id,
+        job_id=job_id,
+        application_id=application_id,
+        view_override=view or None,
+    )
+    if ctx is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return ctx
+
+
 @router.get("/jobs/{job_id}", response_class=HTMLResponse, name="job_detail")
 async def get_job_detail(
     request: Request,
     job_id: int,
+    application: Annotated[int | None, Query()] = None,
+    view: Annotated[str, Query(max_length=12)] = "",
     session: AsyncSession = Depends(get_session),
     user: User | None = Depends(require_authed_session),
 ):
-    job = await _job_or_404(session, job_id, _effective_user_id(user))
-    scrape_run = await _last_scrape_run(session, job.last_scrape_run_id)
-    ctx = await jobs_ctx.build_job_detail_ctx(session, job=job, scrape_run=scrape_run)
+    """The job surface, page mount (plan 96c2 — one body, two mounts).
+
+    Pre-apply view carries everything the old job-detail page showed; the
+    post-apply view is the process surface that replaced the tracking
+    slide-over. Deep-linkable: ?application= selects among re-applications,
+    ?view= is the manual tab override.
+    """
+    ctx = await _surface_ctx_or_404(
+        session,
+        user_id=_effective_user_id(user),
+        job_id=job_id,
+        application_id=application,
+        view=view,
+    )
     ctx["active_sidebar"] = "jobs"
     ctx["active_template_path"] = "/jobs/:id"
-    return templates.TemplateResponse(request, "pages/jobs/job_detail.html", ctx)
+    return templates.TemplateResponse(request, "pages/jobs/job_surface_page.html", ctx)
+
+
+@router.get("/_modal/job/{job_id}", response_class=HTMLResponse, name="job_surface_modal")
+async def get_job_surface_modal(
+    request: Request,
+    job_id: int,
+    application: Annotated[int | None, Query()] = None,
+    view: Annotated[str, Query(max_length=12)] = "",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Modal mount — same body as the page (render-equivalence pinned)."""
+    ctx = await _surface_ctx_or_404(
+        session,
+        user_id=_effective_user_id(user),
+        job_id=job_id,
+        application_id=application,
+        view=view,
+    )
+    return templates.TemplateResponse(request, "components/jobs/_job_surface_modal.html", ctx)
+
+
+@router.get(
+    "/_modal/application/{application_id}",
+    response_class=HTMLResponse,
+    name="application_surface_modal",
+)
+async def get_application_surface_modal(
+    request: Request,
+    application_id: int,
+    view: Annotated[str, Query(max_length=12)] = "",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Modal mount by application — manual applications may have no job."""
+    ctx = await _surface_ctx_or_404(
+        session,
+        user_id=_effective_user_id(user),
+        application_id=application_id,
+        view=view,
+    )
+    return templates.TemplateResponse(request, "components/jobs/_job_surface_modal.html", ctx)
+
+
+@router.get(
+    "/_fragments/job-surface/{job_id}",
+    response_class=HTMLResponse,
+    name="job_surface_fragment",
+)
+async def get_job_surface_fragment(
+    request: Request,
+    job_id: int,
+    application: Annotated[int | None, Query()] = None,
+    view: Annotated[str, Query(max_length=12)] = "",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    """Body-only re-render for tab / application switches — targets
+    #job-surface-body identically in both mounts."""
+    ctx = await _surface_ctx_or_404(
+        session,
+        user_id=_effective_user_id(user),
+        job_id=job_id,
+        application_id=application,
+        view=view,
+    )
+    return templates.TemplateResponse(request, "pages/jobs/_job_surface.html", ctx)
+
+
+@router.get(
+    "/_fragments/job-surface/application/{application_id}",
+    response_class=HTMLResponse,
+    name="application_surface_fragment",
+)
+async def get_application_surface_fragment(
+    request: Request,
+    application_id: int,
+    view: Annotated[str, Query(max_length=12)] = "",
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(require_authed_session),
+):
+    ctx = await _surface_ctx_or_404(
+        session,
+        user_id=_effective_user_id(user),
+        application_id=application_id,
+        view=view,
+    )
+    return templates.TemplateResponse(request, "pages/jobs/_job_surface.html", ctx)
 
 
 @router.get(

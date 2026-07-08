@@ -55,8 +55,15 @@ async def build_job_surface_ctx(
 
     if job_id is not None:
         job = await job_service.get_job(session, job_id)
-        if job is None or job.user_id != user_id:
-            return None
+        if job is None or job.user_id != user_id or job.deleted_at is not None:
+            if selected is None:
+                return None
+            # The application outlives its (archived) job — degrade to the
+            # application-only surface instead of 404ing a live process.
+            job = None
+            job_id = None
+
+    if job_id is not None:
         # ALL applications on the job — the alive-unique index means
         # re-applications live as soft-deleted history; they must still
         # surface (R3 gap c). Alive first, newest first.

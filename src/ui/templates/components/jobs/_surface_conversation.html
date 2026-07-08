@@ -1,0 +1,173 @@
+{# _surface_conversation.html — the job surface's email chain (plan 96c2).
+
+   Supersedes components/tracking/_conversation_section.html (retired in
+   96c3): collapsible threads with expand/collapse-all (R5), the 96b
+   per-email signal detail on every message, and the job's
+   application-less threads (96c1 gap b) at the bottom.
+
+   Args:
+     application          : dict | none — a.* (id needed for the routes)
+     conversation_threads : list — build_conversation_ctx dicts
+     unlinked_job_threads : list — {id, subject, classification,
+                            classification_tone, latest_label, message_count}
+     status_pin           : optional dict — enables "Apply & resume"
+     csrf_token           : str
+#}
+{% from "components/common/_macros.html" import chip %}
+<section data-testid="surface-conversation" data-collapse-root data-collapse-expanded="false">
+  <div class="flex items-baseline justify-between mb-2 gap-3">
+    <div class="text-xs uppercase tracking-wide text-slate-400 font-medium">
+      Conversation{% if conversation_threads %} · <span class="font-mono">{{ conversation_threads | length }}</span>{% endif %}
+    </div>
+    {% if conversation_threads | length > 1 %}
+      {# R5 — one-click expand/collapse-all; pure client-side. #}
+      <button type="button"
+              data-testid="conversation-expand-all"
+              class="text-xs text-slate-500 hover:text-slate-300"
+              onclick="var root=this.closest('section');var open=root.getAttribute('data-collapse-expanded')!=='true';root.setAttribute('data-collapse-expanded',open?'true':'false');root.querySelectorAll('details[data-thread]').forEach(function(d){d.open=open;});this.textContent=open?'Collapse all':'Expand all';">
+        Expand all
+      </button>
+    {% endif %}
+  </div>
+  {% if conversation_threads %}
+    <ul class="flex flex-col gap-2">
+      {% for t in conversation_threads %}
+        <li class="rounded-md bg-slate-900/60 border border-slate-800" data-testid="conversation-thread-{{ t.id }}">
+          <details data-thread>
+            <summary class="list-none cursor-pointer px-3 py-2 flex items-center gap-2 hover:bg-slate-900 rounded-md">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-slate-200 truncate">{{ t.subject }}</div>
+                <div class="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  {% if t.classification %}{{ chip(t.classification | replace("_", " "), tone=t.classification_tone) }}{% endif %}
+                  <span class="text-xs text-slate-500">{{ t.message_count }} message{{ "s" if t.message_count != 1 }} · {{ t.latest_label }}</span>
+                </div>
+              </div>
+              {% if application %}
+              <button type="button"
+                      class="shrink-0 px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                      title="This conversation is not about this application"
+                      hx-post="/api/v1/email/threads/{{ t.id }}/unlink"
+                      hx-confirm="Unlink this conversation from {{ application.company }}?"
+                      hx-swap="none"
+                      hx-on::after-request="if(event.detail.successful) this.closest('li').remove()"
+                      data-testid="conversation-unlink-{{ t.id }}">
+                unlink
+              </button>
+              {% endif %}
+              <i data-lucide="chevron-down" class="h-3.5 w-3.5 text-slate-600 shrink-0" stroke-width="1.5"></i>
+            </summary>
+            <ul class="px-3 pb-2 flex flex-col gap-2">
+              {% for m in t.messages %}
+                <li class="border-t border-slate-800/70 pt-2 text-sm" data-testid="conversation-message-{{ m.id }}">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-slate-300 truncate">{{ m.sender }}</span>
+                    <span class="text-xs text-slate-500">{{ m.received_label }}</span>
+                    {% if m.classification %}{{ chip(m.classification | replace("_", " "), tone=m.classification_tone) }}{% endif %}
+                    {# Reclassify — the correction mount. #}
+                    <details class="relative ml-auto shrink-0">
+                      <summary class="list-none cursor-pointer px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                               data-testid="reclassify-toggle-{{ m.id }}">
+                        reclassify…
+                      </summary>
+                      <div class="absolute right-0 z-20 mt-1 w-44 rounded-lg border border-slate-700 bg-slate-900 p-1 flex flex-col shadow-xl">
+                        {% for label in ["interview_request", "assessment", "offer", "rejection", "follow_up", "other"] %}
+                          <button type="button"
+                                  class="text-left px-2 py-1 rounded text-xs text-slate-300 hover:bg-slate-800 {{ 'opacity-40' if m.classification == label }}"
+                                  hx-post="/api/v1/email/messages/{{ m.id }}/reclassify"
+                                  hx-vals='{"classification": "{{ label }}"}'
+                                  hx-swap="none"
+                                  hx-disabled-elt="this"
+                                  data-testid="reclassify-{{ m.id }}-{{ label }}">
+                            {{ label | replace("_", " ") }}
+                          </button>
+                        {% endfor %}
+                      </div>
+                    </details>
+                  </div>
+                  <p class="mt-1 text-xs text-slate-400 leading-relaxed">{{ m.snippet }}</p>
+                  {# 96b — what this email DID (extraction + transition outcome). #}
+                  {% include "components/email/_signal_detail.html" %}
+                  {% if m.body_excerpt %}
+                    <details class="mt-1">
+                      <summary class="text-[11px] text-slate-500 cursor-pointer hover:text-slate-300 list-none">Show more ▸</summary>
+                      <div class="mt-1 max-h-64 overflow-y-auto rounded-md bg-slate-950/70 px-2.5 py-2 text-xs text-slate-300 leading-relaxed whitespace-pre-wrap"
+                           data-testid="message-excerpt-{{ m.id }}">{{ m.body_excerpt }}</div>
+                    </details>
+                  {% elif m.can_fetch_body %}
+                    <div id="message-body-slot-{{ m.id }}">
+                      <button type="button"
+                              class="mt-1 text-[11px] text-slate-500 hover:text-slate-300"
+                              hx-post="/api/v1/email/messages/{{ m.id }}/body"
+                              hx-target="#message-body-slot-{{ m.id }}"
+                              hx-swap="innerHTML"
+                              hx-disabled-elt="this"
+                              data-testid="load-body-{{ m.id }}">
+                        Load full text (fetched live, never stored) ▸
+                      </button>
+                    </div>
+                  {% endif %}
+                  {% if application and m.suggestion and m.suggestion.pending %}
+                    <div class="mt-1.5 flex items-center gap-2 flex-wrap" data-testid="suggestion-actions-{{ m.id }}">
+                      <span class="text-xs text-amber-200">Suggests → {{ m.suggestion.status_label }}</span>
+                      <button type="button"
+                              class="px-2 py-0.5 rounded text-xs text-slate-950 bg-amber-400 hover:bg-amber-300 font-medium"
+                              hx-post="/api/v1/applications/{{ application.id }}/email-suggestion/{{ m.id }}/apply"
+                              hx-swap="none"
+                              hx-disabled-elt="this"
+                              data-testid="suggestion-apply-{{ m.id }}">
+                        Apply
+                      </button>
+                      {% if status_pin %}
+                        <button type="button"
+                                class="px-2 py-0.5 rounded text-xs text-indigo-100 bg-indigo-500/40 hover:bg-indigo-500/60 font-medium"
+                                hx-post="/api/v1/applications/{{ application.id }}/email-suggestion/{{ m.id }}/apply?resume=1"
+                                hx-swap="none"
+                                hx-disabled-elt="this"
+                                data-testid="suggestion-apply-resume-{{ m.id }}">
+                          Apply &amp; resume auto-tracking
+                        </button>
+                      {% endif %}
+                      <button type="button"
+                              class="px-2 py-0.5 rounded text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                              hx-post="/api/v1/applications/{{ application.id }}/email-suggestion/{{ m.id }}/dismiss"
+                              hx-swap="none"
+                              hx-disabled-elt="this"
+                              data-testid="suggestion-dismiss-{{ m.id }}">
+                        Dismiss
+                      </button>
+                    </div>
+                  {% endif %}
+                  {% if m.provider_link %}
+                    <a href="{{ m.provider_link }}" target="_blank" rel="noopener" hx-boost="false"
+                       class="mt-1 inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300">
+                      <i data-lucide="external-link" class="h-3 w-3" stroke-width="1.5"></i>
+                      Open in mail
+                    </a>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          </details>
+        </li>
+      {% endfor %}
+    </ul>
+  {% elif not unlinked_job_threads %}
+    <p class="text-sm text-slate-500">No linked email yet — messages attach automatically as the classifier maps them here.</p>
+  {% endif %}
+
+  {# 96c1 gap (b) — mail on this JOB with no application link yet. #}
+  {% if unlinked_job_threads %}
+    <div class="mt-3" data-testid="surface-job-threads">
+      <div class="text-[10px] font-mono uppercase tracking-wide text-slate-500 mb-1.5">More mail about this job</div>
+      <ul class="flex flex-col gap-1.5">
+        {% for t in unlinked_job_threads %}
+          <li class="flex items-center gap-2 rounded-md bg-slate-900/40 border border-slate-800/60 px-3 py-1.5 text-sm" data-testid="job-thread-{{ t.id }}">
+            <span class="flex-1 min-w-0 text-slate-300 truncate">{{ t.subject }}</span>
+            {% if t.classification %}{{ chip(t.classification | replace("_", " "), tone=t.classification_tone) }}{% endif %}
+            <span class="text-xs text-slate-500 shrink-0">{{ t.message_count }} · {{ t.latest_label }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+</section>

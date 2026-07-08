@@ -1,0 +1,33 @@
+{# _job_surface_modal.html — modal mount of the job surface (plan 96c2).
+
+   Same body as /jobs/{id} (render-equivalence pinned by test); wide
+   dialog with an "expand" affordance to the full page when one exists
+   (job-less applications have no page — their deep-link stays /tracking).
+#}
+<dialog
+  id="job-surface-modal"
+  open
+  data-testid="job-surface-modal"
+  class="bg-slate-950 border border-slate-800 rounded-xl shadow-2xl shadow-black/45 p-0 w-full max-w-5xl fixed inset-0 m-auto h-fit max-h-[92vh] flex flex-col z-40">
+  <div class="fixed inset-0 -z-10 bg-black/40" aria-hidden="true"
+       hx-on:click="document.getElementById('job-surface-modal').remove()"></div>
+  <div class="flex items-center justify-end gap-1 px-3 pt-2 shrink-0">
+    {% if surface.page_url %}
+      <a href="{{ surface.page_url }}"
+         data-testid="surface-expand"
+         title="Open as a full page"
+         class="p-1.5 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-800">
+        <i data-lucide="maximize-2" class="h-4 w-4" stroke-width="1.5"></i>
+      </a>
+    {% endif %}
+    <button type="button"
+            aria-label="Close"
+            class="p-1.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+            hx-on:click="document.getElementById('job-surface-modal').remove()">
+      <i data-lucide="x" class="h-4 w-4" stroke-width="1.5"></i>
+    </button>
+  </div>
+  <div class="px-5 pb-5 overflow-y-auto">
+    {% include "pages/jobs/_job_surface.html" %}
+  </div>
+</dialog>
