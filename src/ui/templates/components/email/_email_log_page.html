@@ -1,0 +1,42 @@
+{# _email_log_page.html — one keyset page of /emails rows + the load-more
+   footer (plan 96b). The fragment route returns exactly this partial:
+   filter swaps replace #email-log-list's innerHTML with page 1; the
+   load-more button outerHTML-swaps ITSELF with the next page, so older
+   rows append in place.
+
+   Args: rows, has_more, next_cursor, filters
+#}
+{% if rows %}
+  <ul class="flex flex-col gap-1.5" data-email-log-page>
+    {% for m in rows %}
+      {% include "components/email/email_log_row.html" %}
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="text-sm text-slate-500 px-1 py-6 text-center" data-testid="email-log-empty">
+    No emails match — clear a filter, or connect an inbox under Tracking → Integrations.
+  </p>
+{% endif %}
+<div id="email-log-load-more" class="flex justify-center py-3">
+  {% if has_more %}
+    {% set _qs = "cursor=" ~ (next_cursor | urlencode)
+       ~ "&classification=" ~ (filters.classification | urlencode)
+       ~ "&link_state=" ~ (filters.link_state | urlencode)
+       ~ "&account_id=" ~ (filters.account_id | urlencode)
+       ~ "&date_from=" ~ (filters.date_from | urlencode)
+       ~ "&date_to=" ~ (filters.date_to | urlencode)
+       ~ "&sender_q=" ~ (filters.sender_q | urlencode) %}
+    <button type="button"
+            hx-get="/_fragments/email/log?{{ _qs }}"
+            hx-target="#email-log-load-more"
+            hx-swap="outerHTML"
+            hx-disabled-elt="this"
+            data-testid="email-log-load-more"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:bg-slate-800">
+      <i data-lucide="chevron-down" class="h-3.5 w-3.5" stroke-width="1.5"></i>
+      Load older
+    </button>
+  {% elif rows %}
+    <span class="text-[11px] font-mono text-slate-600">— end of log —</span>
+  {% endif %}
+</div>

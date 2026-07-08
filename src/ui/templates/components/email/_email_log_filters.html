@@ -1,0 +1,63 @@
+{# _email_log_filters.html — /emails filter bar (plan 96b).
+
+   Args: filters, classification_options, link_state_options, accounts
+
+   The form re-fetches page 1 into #email-log-list on any change; the
+   sender search debounces. Default view is EVERYTHING (owner decision #4).
+#}
+<form hx-get="/_fragments/email/log"
+      hx-target="#email-log-list"
+      hx-swap="innerHTML"
+      hx-trigger="change, keyup changed delay:400ms from:find input[name='sender_q'], submit"
+      hx-indicator="#email-log-filter-indicator"
+      data-testid="email-log-filters"
+      class="flex items-center gap-2 flex-wrap rounded-lg bg-slate-900 border border-slate-800 px-3 py-2"
+      onsubmit="return false">
+  <select name="classification" aria-label="Classification filter"
+          class="rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-300 px-1.5 py-1"
+          data-testid="email-log-filter-classification">
+    <option value="">All classifications</option>
+    <option value="pending" {% if filters.classification == "pending" %}selected{% endif %}>pending</option>
+    {% for c in classification_options %}
+      <option value="{{ c }}" {% if filters.classification == c %}selected{% endif %}>{{ c | replace("_", " ") }}</option>
+    {% endfor %}
+  </select>
+  <select name="link_state" aria-label="Link state filter"
+          class="rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-300 px-1.5 py-1"
+          data-testid="email-log-filter-link-state">
+    <option value="">All link states</option>
+    {% for s in link_state_options %}
+      <option value="{{ s }}" {% if filters.link_state == s %}selected{% endif %}>{{ "unlinked" if s == "none" else s }}</option>
+    {% endfor %}
+  </select>
+  {% if accounts | length > 1 %}
+    <select name="account_id" aria-label="Account filter"
+            class="rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-300 px-1.5 py-1"
+            data-testid="email-log-filter-account">
+      <option value="">All accounts</option>
+      {% for a in accounts %}
+        <option value="{{ a.id }}" {% if filters.account_id | string == a.id | string %}selected{% endif %}>{{ a.label }}</option>
+      {% endfor %}
+    </select>
+  {% endif %}
+  <label class="inline-flex items-center gap-1 text-[11px] text-slate-500">
+    from
+    <input type="date" name="date_from" value="{{ filters.date_from }}"
+           class="rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-300 px-1.5 py-1"
+           data-testid="email-log-filter-from">
+  </label>
+  <label class="inline-flex items-center gap-1 text-[11px] text-slate-500">
+    to
+    <input type="date" name="date_to" value="{{ filters.date_to }}"
+           class="rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-300 px-1.5 py-1"
+           data-testid="email-log-filter-to">
+  </label>
+  <input type="search" name="sender_q" value="{{ filters.sender_q }}"
+         placeholder="Search sender…"
+         aria-label="Sender search"
+         class="flex-1 min-w-36 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-300 px-2 py-1 placeholder:text-slate-600"
+         data-testid="email-log-filter-sender">
+  <span id="email-log-filter-indicator" class="htmx-indicator">
+    <i data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin text-slate-500" stroke-width="1.5"></i>
+  </span>
+</form>

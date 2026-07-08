@@ -27,6 +27,7 @@ from ui.routes import (
     design,
     discover,
     email,
+    email_log,
     fragments,
     integrations,
     jobs,
@@ -111,6 +112,7 @@ app.include_router(ui_settings.router)
 app.include_router(fragments.router)
 app.include_router(integrations.router)
 app.include_router(email.router)
+app.include_router(email_log.router)
 app.include_router(design.router)
 app.include_router(setup_help.router)
 

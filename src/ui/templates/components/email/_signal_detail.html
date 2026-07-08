@@ -1,0 +1,46 @@
+{# _signal_detail.html — WHAT one email contributed to the pipeline
+   (plan 96b / R5). One component, mounted on the /emails row expand and
+   (96c) the job-surface conversation.
+
+   Args:
+     m : dict — extracted_company, extracted_role, extracted_end_client,
+         extracted_stage, extracted_round_kind, extracted_sender_type,
+         urgency, suggestion ({from_label, status_label, outcome} | none)
+#}
+{% from "components/common/_macros.html" import chip %}
+<div class="flex flex-col gap-1.5" data-testid="signal-detail-{{ m.id }}">
+  {% set _has_extraction = m.extracted_company or m.extracted_role or m.extracted_end_client
+     or m.extracted_stage or m.extracted_round_kind or m.extracted_sender_type %}
+  {% if _has_extraction %}
+    <div class="flex items-center gap-1.5 flex-wrap">
+      <span class="text-[10px] font-mono uppercase tracking-wide text-slate-500 shrink-0">extracted</span>
+      {% if m.extracted_company %}{{ chip("company · " ~ m.extracted_company, tone="slate") }}{% endif %}
+      {% if m.extracted_end_client %}{{ chip("end client · " ~ m.extracted_end_client, tone="cyan") }}{% endif %}
+      {% if m.extracted_role %}{{ chip("role · " ~ m.extracted_role, tone="slate") }}{% endif %}
+      {% if m.extracted_stage %}{{ chip("stage · " ~ m.extracted_stage, tone="indigo") }}{% endif %}
+      {% if m.extracted_round_kind %}{{ chip("round · " ~ m.extracted_round_kind | replace("_", " "), tone="indigo") }}{% endif %}
+      {% if m.extracted_sender_type %}{{ chip("sender · " ~ m.extracted_sender_type | replace("_", " "), tone="slate") }}{% endif %}
+      {% if m.urgency == "high" %}{{ chip("urgent", tone="rose") }}{% endif %}
+    </div>
+  {% endif %}
+  {% if m.suggestion %}
+    <div class="flex items-center gap-1.5 flex-wrap text-xs" data-testid="signal-transition-{{ m.id }}">
+      <span class="text-[10px] font-mono uppercase tracking-wide text-slate-500 shrink-0">transition</span>
+      <span class="text-slate-300">
+        {% if m.suggestion.from_label %}{{ m.suggestion.from_label }} → {% endif %}{{ m.suggestion.status_label }}
+      </span>
+      {% if m.suggestion.outcome == "applied" %}
+        {{ chip("auto-applied", tone="emerald") }}
+      {% elif m.suggestion.outcome == "suppressed_by_pin" %}
+        {{ chip("held by your pin", tone="amber") }}
+      {% elif m.suggestion.outcome == "dismissed" %}
+        {{ chip("dismissed", tone="slate") }}
+      {% else %}
+        {{ chip("awaiting your call", tone="amber") }}
+      {% endif %}
+    </div>
+  {% endif %}
+  {% if not _has_extraction and not m.suggestion %}
+    <p class="text-xs text-slate-500">No pipeline signal extracted from this email.</p>
+  {% endif %}
+</div>

@@ -1,0 +1,128 @@
+{# email_log_row.html — one /emails row (plan 96b).
+
+   Args:
+     m : dict — email_log_ctx row (id, received_label, received_title,
+         sender_name, sender_domain, subject, snippet, classification,
+         classification_tone, is_pending, unclassified_reason, link_state,
+         linked_company, application_id, extracted_*, suggestion,
+         body_excerpt, can_fetch_body, provider_link)
+#}
+{% from "components/common/_macros.html" import chip %}
+<li id="email-row-{{ m.id }}" class="rounded-md bg-slate-900/60 border border-slate-800" data-testid="email-row-{{ m.id }}">
+  <details>
+    <summary class="list-none cursor-pointer px-3 py-2 flex items-center gap-3 hover:bg-slate-900 rounded-md">
+      <span class="shrink-0 w-16 text-xs text-slate-500 font-mono" title="{{ m.received_title }}">{{ m.received_label }}</span>
+      <span class="shrink-0 w-44 min-w-0 hidden md:block">
+        <span class="block text-xs text-slate-300 truncate">{{ m.sender_name }}</span>
+        <span class="block text-[10px] font-mono text-slate-600 truncate">{{ m.sender_domain }}</span>
+      </span>
+      <span class="flex-1 min-w-0 text-sm text-slate-200 truncate">{{ m.subject }}</span>
+      {# classification chip — "pending" (amber) for NULL, per the B3 lesson. #}
+      {% if m.is_pending %}
+        <span title="{{ m.unclassified_reason or 'not classified yet' }}">{{ chip("pending", tone="amber") }}</span>
+      {% else %}
+        {{ chip(m.classification | replace("_", " "), tone=m.classification_tone) }}
+      {% endif %}
+      {# link-state chip #}
+      {% if m.link_state == "linked" %}
+        <a href="/tracking/{{ m.application_id }}" hx-boost="false"
+           class="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 text-[11px] font-medium text-indigo-200 hover:bg-indigo-500/30"
+           data-testid="email-row-{{ m.id }}-linked"
+           onclick="event.stopPropagation()">
+          linked → {{ m.linked_company }}
+        </a>
+      {% elif m.link_state == "detected" %}
+        {{ chip("detected", tone="amber") }}
+      {% elif m.link_state == "parked" %}
+        {{ chip("parked", tone="slate") }}
+      {% elif m.link_state == "dismissed" %}
+        {{ chip("dismissed", tone="slate") }}
+      {% else %}
+        <span class="shrink-0 text-xs text-slate-600">—</span>
+      {% endif %}
+      {# round/stage extraction on the row, when present #}
+      {% if m.extracted_round_kind %}
+        {{ chip(m.extracted_round_kind | replace("_", " "), tone="indigo") }}
+      {% elif m.extracted_stage %}
+        {{ chip(m.extracted_stage, tone="indigo") }}
+      {% endif %}
+      <i data-lucide="chevron-down" class="h-3.5 w-3.5 text-slate-600 shrink-0" stroke-width="1.5"></i>
+    </summary>
+    <div class="px-3 pb-2.5 pt-1 border-t border-slate-800/70 flex flex-col gap-2">
+      <p class="text-xs text-slate-400 leading-relaxed">{{ m.snippet }}</p>
+      {% include "components/email/_signal_detail.html" %}
+      {# Full text: stored excerpt instantly; else live PEEK (95l); else provider link only. #}
+      {% if m.body_excerpt %}
+        <details>
+          <summary class="text-[11px] text-slate-500 cursor-pointer hover:text-slate-300 list-none">Show full text ▸</summary>
+          <div class="mt-1 max-h-64 overflow-y-auto rounded-md bg-slate-950/70 px-2.5 py-2 text-xs text-slate-300 leading-relaxed whitespace-pre-wrap"
+               data-testid="log-excerpt-{{ m.id }}">{{ m.body_excerpt }}</div>
+        </details>
+      {% elif m.can_fetch_body %}
+        <div id="log-body-slot-{{ m.id }}">
+          <button type="button"
+                  class="text-[11px] text-slate-500 hover:text-slate-300"
+                  hx-post="/api/v1/email/messages/{{ m.id }}/body"
+                  hx-target="#log-body-slot-{{ m.id }}"
+                  hx-swap="innerHTML"
+                  hx-disabled-elt="this"
+                  data-testid="log-load-body-{{ m.id }}">
+            Load full text (fetched live, never stored) ▸
+          </button>
+        </div>
+      {% endif %}
+      <div class="flex items-center gap-2 flex-wrap">
+        {# Reclassify — six labels, the 95b correction routes' third mount. #}
+        <details class="relative shrink-0">
+          <summary class="list-none cursor-pointer px-2 py-1 rounded text-[10px] font-mono uppercase tracking-wide text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                   data-testid="log-reclassify-toggle-{{ m.id }}">
+            reclassify…
+          </summary>
+          <div class="absolute left-0 z-20 mt-1 w-44 rounded-lg border border-slate-700 bg-slate-900 p-1 flex flex-col shadow-xl">
+            {% for label in ["interview_request", "assessment", "offer", "rejection", "follow_up", "other"] %}
+              <button type="button"
+                      class="text-left px-2 py-1 rounded text-xs text-slate-300 hover:bg-slate-800 {{ 'opacity-40' if m.classification == label }}"
+                      hx-post="/api/v1/email/messages/{{ m.id }}/reclassify"
+                      hx-vals='{"classification": "{{ label }}"}'
+                      hx-swap="none"
+                      hx-disabled-elt="this"
+                      data-testid="log-reclassify-{{ m.id }}-{{ label }}">
+                {{ label | replace("_", " ") }}
+              </button>
+            {% endfor %}
+          </div>
+        </details>
+        {# Flag sender — the 95c rules, retroactive for the domain. #}
+        {% if m.sender_domain %}
+        <details class="relative shrink-0">
+          <summary class="list-none cursor-pointer px-2 py-1 rounded text-[10px] font-mono uppercase tracking-wide text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                   data-testid="log-flag-toggle-{{ m.id }}">
+            flag sender…
+          </summary>
+          <div class="absolute left-0 z-20 mt-1 w-52 rounded-lg border border-slate-700 bg-slate-900 p-1 flex flex-col shadow-xl">
+            <div class="px-2 py-1 text-[10px] uppercase tracking-wide font-mono text-slate-500 truncate">{{ m.sender_domain }}</div>
+            {% for opt in [("agency", "Agency / staffing"), ("ignore", "Not job-related"), ("employer", "Actually an employer")] %}
+              <button type="button"
+                      class="text-left px-2 py-1.5 rounded text-xs text-slate-300 hover:bg-slate-800"
+                      hx-post="/api/v1/email/senders/flag"
+                      hx-vals='{"domain": {{ m.sender_domain | tojson }}, "treatment": "{{ opt[0] }}", "from_message_id": {{ m.id }}}'
+                      hx-swap="none"
+                      hx-disabled-elt="this"
+                      data-testid="log-flag-{{ m.id }}-{{ opt[0] }}">
+                {{ opt[1] }}
+              </button>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+        {% if m.provider_link %}
+          <a href="{{ m.provider_link }}" target="_blank" rel="noopener" hx-boost="false"
+             class="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300">
+            <i data-lucide="external-link" class="h-3 w-3" stroke-width="1.5"></i>
+            Open in mail
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  </details>
+</li>
