@@ -242,6 +242,10 @@ class StatusChangeTrigger(StrEnum):
     DISCARD = "discard"
     ATS_CALLBACK = "ats_callback"
     CLEANUP_STALE = "cleanup_stale"
+    # Plan 96e — the event-driven reconciler re-derived this move from ALL
+    # evidence (timeline re-fold / thread pass). Same authority as
+    # AUTO_FROM_EMAIL (forward-only, pin-gated), distinct for auditability.
+    RECONCILED = "reconciled"
 
 
 class OutreachStatus(StrEnum):

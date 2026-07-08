@@ -41,8 +41,10 @@ def _tables():
         ClassificationCorrection,
         CompanyAlias,
         EmailAccount,
+        EmailInvite,
         EmailMessage,
         EmailThread,
+        InterviewRound,
         Job,
         SenderRule,
         User,
@@ -56,6 +58,10 @@ def _tables():
         EmailThread.__table__,
         EmailAccount.__table__,
         EmailMessage.__table__,
+        # Plan 96e — corrections now trigger a reconcile, which reads
+        # invites and rounds.
+        EmailInvite.__table__,
+        InterviewRound.__table__,
         ClassificationCorrection.__table__,
         CompanyAlias.__table__,
         SenderRule.__table__,

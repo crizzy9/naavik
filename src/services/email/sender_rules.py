@@ -193,5 +193,21 @@ async def flag_sender(
             )
         )
     await session.flush()
+    # Plan 96e — the retro-treatment is new information for every application
+    # the flagged domain's mail links to (one reconcile each, best-effort).
+    touched: dict[int, set[int]] = {}
+    for msg in affected:
+        if msg.application_id is not None:
+            touched.setdefault(msg.application_id, set()).add(msg.thread_id)
+    if touched:
+        from services.email import reconcile as reconcile_service
+
+        for app_id, thread_ids in touched.items():
+            try:
+                await reconcile_service.reconcile_application(
+                    session, application_id=app_id, triggering_thread_ids=thread_ids
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning("post-flag reconcile failed for application %s: %s", app_id, exc)
     log.info("sender rule %s → %s (retro-applied to %d messages)", domain, treatment, len(affected))
     return len(affected)

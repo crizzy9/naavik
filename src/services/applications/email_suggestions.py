@@ -83,6 +83,17 @@ async def apply_email_suggestion(
     msg.suggestion_applied_at = now
     session.add(msg)
     await session.flush()
+
+    # Plan 96e — accepting a suggestion is new information: re-derive the
+    # application (rounds/invites may have context the applied flip didn't).
+    from services.email import reconcile as reconcile_service
+
+    try:
+        await reconcile_service.reconcile_application(
+            session, application_id=application_id, triggering_thread_ids={msg.thread_id}
+        )
+    except Exception as exc:  # noqa: BLE001 — the applied flip must survive
+        log.warning("post-suggestion reconcile failed for application %s: %s", application_id, exc)
     return application
 
 

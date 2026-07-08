@@ -584,3 +584,32 @@ Logged during execution session 2 (2026-07-08, slices 96d → close-out).
     completed). Disabled the hook with rationale in `package.nix`;
     `icalendar` floored at `>=6.3` because nixpkgs ships 6.3.2 (invite
     tests pass on both 6.3.2 and 7.2.0; uv locks 7.x).
+18. **96e — ONE application-level LLM pass, not one per thread.** The
+    per-thread sketch was built and live-tested first: N independent calls
+    read the same process from partial views and their outputs merged into
+    duplicate/conflicting rounds (three riders with three kinds on one
+    Headway container). The pass now renders every signal conversation of
+    the application in one `tracked_call` — dedup happens where the context
+    lives, and it costs less. The per-thread stamps
+    (`submission_artifacts["reconcile"].threads`) still gate firing (only
+    when a TRIGGERING thread carries unseen mail) and idempotence.
+19. **96e — the reconciler holds narrow in-place rewrite authority over
+    rounds** (kind/title/time/state on rows it adopts), required by the
+    owner's adopt/rewrite-in-place decision — the plan's "writes only via
+    95d upserts" cannot change a row's kind. Bounded by deterministic
+    guards: container times anchor to the final invite's start (stated
+    clock times are tz-ambiguous — Gmail renders the owner's tz, invites
+    the organizer's; live-tested 3h drift on the Headway Jul-16 fixture),
+    a round whose resolved time is in the future can never be(come)
+    "completed", and nothing is ever deleted.
+20. **96e — trigger-site details:** `flag_sender` also reconciles every
+    application the flagged domain's mail links to; `reconcile_group`
+    reduces to find-application-and-delegate (detected processes derive
+    their state at read time, so an application-less group has nothing to
+    write); OTHER-classified mail is excluded from the timeline fold (a
+    mislinked newsletter must not move the pipeline); leaving DRAFT on
+    reconciled evidence stamps `applied_at` from the earliest signal
+    message (96a deviation-5 consistency); and the regroup NEVER re-adopts
+    a thread the human unlinked (the `kind="unlink"` correction is the
+    durable objection — caught live when the post-unlink reconcile
+    immediately re-linked the just-detached thread by company match).

@@ -326,6 +326,11 @@ async def classify_unprocessed(
     ).all()
     processed = 0
     rules_cache: dict[int, list] = {}
+    # Plan 96e — collect the applications this tick's messages touched;
+    # each reconciles ONCE at end-of-tick (ten emails about one application
+    # still mean one reconcile), with the LLM thread pass scoped to the
+    # threads that actually carried the new mail.
+    reconcile_targets: dict[int, set[int]] = {}
     for msg in pending:
         settings = await _get_settings(session, user_id=msg.user_id)
         if settings is None:
@@ -451,4 +456,20 @@ async def classify_unprocessed(
 
         await _post_classify_dispatch(session, msg, settings=settings, stage=stage)
         processed += 1
+        if msg.application_id is not None:
+            reconcile_targets.setdefault(msg.application_id, set()).add(msg.thread_id)
+
+    # Plan 96e — event-driven reconcile, batch-deduped per application.
+    # Best-effort: one bad reconcile must never stall the tick (the 37-hour
+    # crash loop is the cautionary tale).
+    if reconcile_targets:
+        from services.email import reconcile as reconcile_service
+
+        for app_id, thread_ids in reconcile_targets.items():
+            try:
+                await reconcile_service.reconcile_application(
+                    session, application_id=app_id, triggering_thread_ids=thread_ids
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning("reconcile failed for application %s: %s", app_id, exc)
     return processed

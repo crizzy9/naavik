@@ -110,6 +110,9 @@ async def reclassify_message(
         emit_received=False,
     )
     await session.flush()
+    # Plan 96e — a correction is new information: re-derive the affected
+    # application from ALL evidence under the corrected label.
+    await _reconcile_after_correction(session, msg.application_id, thread_id=msg.thread_id)
     log.info(
         "reclassified message %s: %s → %s",
         message_id,
@@ -117,6 +120,25 @@ async def reclassify_message(
         to_classification.value,
     )
     return msg
+
+
+async def _reconcile_after_correction(
+    session: AsyncSession, application_id: int | None, *, thread_id: int | None = None
+) -> None:
+    """Plan 96e trigger — best-effort; a correction must land even when the
+    follow-up reconcile trips."""
+    if application_id is None:
+        return
+    from services.email import reconcile as reconcile_service
+
+    try:
+        await reconcile_service.reconcile_application(
+            session,
+            application_id=application_id,
+            triggering_thread_ids={thread_id} if thread_id is not None else None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("post-correction reconcile failed for application %s: %s", application_id, exc)
 
 
 async def unlink_thread(session: AsyncSession, *, user_id: int, thread_id: int) -> int:
@@ -128,6 +150,7 @@ async def unlink_thread(session: AsyncSession, *, user_id: int, thread_id: int) 
     thread = await session.get(EmailThread, thread_id)
     if thread is None or thread.user_id != user_id or thread.application_id is None:
         raise CorrectionError("No linked thread to unlink")
+    detached_from = thread.application_id
 
     messages = (
         await session.exec(
@@ -163,6 +186,9 @@ async def unlink_thread(session: AsyncSession, *, user_id: int, thread_id: int) 
             )
         )
     await session.flush()
+    # Plan 96e — losing a conversation is new information for the application
+    # it was detached from (its stage may have rested on that evidence).
+    await _reconcile_after_correction(session, detached_from)
     log.info("unlinked thread %s (%d messages)", thread_id, len(messages))
     return len(messages)
 
@@ -245,6 +271,19 @@ async def merge_company(
                 linked_threads.add(msg.thread_id)
 
     await session.flush()
+    # Plan 96e — the merged evidence changes what the target application's
+    # timeline says; the relinked threads are the triggering conversations.
+    if application is not None and relinked:
+        from services.email import reconcile as reconcile_service
+
+        try:
+            await reconcile_service.reconcile_application(
+                session,
+                application_id=application.id or 0,
+                triggering_thread_ids={m.thread_id for m in merged},
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("post-merge reconcile failed for application %s: %s", application.id, exc)
     log.info(
         "company alias %r → %r (merged=%d relinked=%d)",
         alias_key,
