@@ -614,13 +614,15 @@ async def infer_from_message(session: AsyncSession, msg: EmailMessage) -> Applic
         log.info("receipt without company (msg %s): %r", msg.id, msg.subject)
         return None
 
+    from services.email.service import link_thread
+
     # 1. Existing application → just link (status signals start flowing).
     existing = await _find_existing_application(session, user_id=msg.user_id, company=company)
     if existing is not None:
         msg.application_id = existing.id
         thread = await session.get(EmailThread, msg.thread_id)
         if thread is not None and thread.application_id is None:
-            thread.application_id = existing.id
+            link_thread(thread, existing)
             session.add(thread)
         session.add(msg)
         await session.flush()
@@ -652,7 +654,7 @@ async def infer_from_message(session: AsyncSession, msg: EmailMessage) -> Applic
         msg.application_id = existing_on_job.id
         thread = await session.get(EmailThread, msg.thread_id)
         if thread is not None and thread.application_id is None:
-            thread.application_id = existing_on_job.id
+            link_thread(thread, existing_on_job)
             session.add(thread)
         session.add(msg)
         await session.flush()
@@ -671,7 +673,7 @@ async def infer_from_message(session: AsyncSession, msg: EmailMessage) -> Applic
     msg.application_id = application.id
     thread = await session.get(EmailThread, msg.thread_id)
     if thread is not None and thread.application_id is None:
-        thread.application_id = application.id
+        link_thread(thread, application)
         session.add(thread)
     session.add(msg)
     await session.flush()

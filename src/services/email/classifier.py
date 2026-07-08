@@ -134,7 +134,9 @@ async def _link_by_company(session: AsyncSession, msg: EmailMessage) -> None:
     session.add(msg)
     thread = await session.get(EmailThread, msg.thread_id)
     if thread is not None and thread.application_id is None:
-        thread.application_id = application.id
+        from services.email.service import link_thread
+
+        link_thread(thread, application)
         session.add(thread)
 
 

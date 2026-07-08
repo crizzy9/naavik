@@ -18,6 +18,22 @@ from models import EmailThread
 from models.enums import ApplicationStatus, EmailClassification
 
 
+def link_thread(thread: EmailThread, application) -> None:
+    """Set both link facts on a thread (plan 96c1): the application AND the
+    denormalized job — messages reach the job via their thread, so every
+    link site must write both or the job surface goes blind."""
+    thread.application_id = application.id
+    if getattr(application, "job_id", None) is not None:
+        thread.job_id = application.job_id
+
+
+def unlink_thread_links(thread: EmailThread) -> None:
+    """Clear both link facts — a human unlink says the association is
+    wrong, which covers the job as much as the application."""
+    thread.application_id = None
+    thread.job_id = None
+
+
 async def list_accounts(session: AsyncSession, user_id: int) -> list:
     """Live (non-deleted) EmailAccount rows for the user.
 

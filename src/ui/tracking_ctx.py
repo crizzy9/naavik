@@ -267,12 +267,20 @@ async def build_conversation_ctx(
         for m in msgs:
             suggestion = None
             if m.suggested_status is not None:
+                pending = m.suggestion_applied_at is None and m.suggestion_dismissed_at is None
                 suggestion = {
                     "status_label": application_status_label(m.suggested_status),
                     "applied": m.suggestion_applied_at is not None,
                     "dismissed": m.suggestion_dismissed_at is not None,
-                    "pending": (
-                        m.suggestion_applied_at is None and m.suggestion_dismissed_at is None
+                    "pending": pending,
+                    # Plan 96b/96c — outcome vocabulary for _signal_detail.html
+                    # (pin-suppression shows as pending here; the pin banner
+                    # above the conversation carries that context).
+                    "from_label": None,
+                    "outcome": (
+                        "applied"
+                        if m.suggestion_applied_at is not None
+                        else ("dismissed" if m.suggestion_dismissed_at is not None else "pending")
                     ),
                 }
             rows.append(
@@ -292,6 +300,15 @@ async def build_conversation_ctx(
                         m.classification.value if m.classification else "", "slate"
                     ),
                     "suggestion": suggestion,
+                    # Plan 96c — per-email signal detail (the 96b component)
+                    # rides the job-surface conversation.
+                    "extracted_company": m.extracted_company,
+                    "extracted_role": m.extracted_role,
+                    "extracted_stage": m.extracted_stage,
+                    "extracted_round_kind": m.extracted_round_kind,
+                    "extracted_sender_type": m.extracted_sender_type,
+                    "extracted_end_client": m.extracted_end_client,
+                    "urgency": m.urgency,
                     # Gmail rfc822msgid search — the deep link out for full text.
                     "provider_link": (
                         "https://mail.google.com/mail/u/0/#search/rfc822msgid:"

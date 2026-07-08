@@ -137,7 +137,9 @@ async def unlink_thread(session: AsyncSession, *, user_id: int, thread_id: int) 
         )
     ).all()
 
-    thread.application_id = None
+    from services.email.service import unlink_thread_links
+
+    unlink_thread_links(thread)
     thread.updated_at = datetime.now(UTC)
     session.add(thread)
     for msg in messages:
@@ -236,7 +238,9 @@ async def merge_company(
             if msg.thread_id not in linked_threads:
                 thread = await session.get(EmailThread, msg.thread_id)
                 if thread is not None and thread.application_id is None:
-                    thread.application_id = application.id
+                    from services.email.service import link_thread
+
+                    link_thread(thread, application)
                     session.add(thread)
                 linked_threads.add(msg.thread_id)
 

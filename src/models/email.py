@@ -44,6 +44,15 @@ class EmailThread(SQLModel, table=True):
         ondelete="SET NULL",
         index=True,
     )
+    # Plan 96c1 — thread-level job link (denormalized from the linked
+    # application; messages reach the job via their thread). Nullable:
+    # unresolved mail keeps grouping by company key at read time.
+    job_id: int | None = Field(
+        default=None,
+        foreign_key="job.id",
+        ondelete="SET NULL",
+        index=True,
+    )
     contact_id: int | None = Field(
         default=None,
         foreign_key="contact.id",

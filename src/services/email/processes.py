@@ -368,6 +368,8 @@ async def track_process(
         ),
     )
 
+    from services.email.service import link_thread
+
     linked_threads: set[int] = set()
     for msg in messages:
         msg.application_id = application.id
@@ -375,7 +377,7 @@ async def track_process(
         if msg.thread_id not in linked_threads:
             thread = await session.get(EmailThread, msg.thread_id)
             if thread is not None and thread.application_id is None:
-                thread.application_id = application.id
+                link_thread(thread, application)
                 session.add(thread)
             linked_threads.add(msg.thread_id)
     await session.flush()
